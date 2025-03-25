@@ -19,6 +19,11 @@ export enum NodeType {
   Comment = 'Comment'
 }
 
+//
+// Abstract Syntax Tree
+//
+// AST nodes are used to represent TOML data
+//
 export type AST = Iterable<Block>;
 
 //
@@ -26,11 +31,11 @@ export type AST = Iterable<Block>;
 //
 // Top-level document that stores AST nodes
 //
-export interface Document extends Node {
+export interface Document extends TreeNode {
   type: NodeType.Document;
   items: Array<Block>;
 }
-export function isDocument(node: Node): node is Document {
+export function isDocument(node: TreeNode): node is Document {
   return node.type === NodeType.Document;
 }
 
@@ -47,12 +52,12 @@ export function isDocument(node: Node): node is Document {
 //      ^--|
 // [b]
 //
-export interface Table extends Node {
+export interface Table extends TreeNode {
   type: NodeType.Table;
   key: TableKey;
   items: Array<KeyValue | Comment>;
 }
-export function isTable(node: Node): node is Table {
+export function isTable(node: TreeNode): node is Table {
   return node.type === NodeType.Table;
 }
 
@@ -66,11 +71,11 @@ export function isTable(node: Node): node is Table {
 // [  key  ]
 // ^-------^
 //
-export interface TableKey extends Node {
+export interface TableKey extends TreeNode {
   type: NodeType.TableKey;
   item: Key;
 }
-export function isTableKey(node: Node): node is TableKey {
+export function isTableKey(node: TreeNode): node is TableKey {
   return node.type === NodeType.TableKey;
 }
 
@@ -87,12 +92,12 @@ export function isTableKey(node: Node): node is TableKey {
 //         ^-|
 // [[array]]
 //
-export interface TableArray extends Node {
+export interface TableArray extends TreeNode {
   type: NodeType.TableArray;
   key: TableArrayKey;
   items: Array<KeyValue | Comment>;
 }
-export function isTableArray(node: Node): node is TableArray {
+export function isTableArray(node: TreeNode): node is TableArray {
   return node.type === NodeType.TableArray;
 }
 
@@ -105,11 +110,11 @@ export function isTableArray(node: Node): node is TableArray {
 // [[  key  ]]
 // ^---------^
 //
-export interface TableArrayKey extends Node {
+export interface TableArrayKey extends TreeNode {
   type: NodeType.TableArrayKey;
   item: Key;
 }
-export function isTableArrayKey(node: Node): node is TableArrayKey {
+export function isTableArrayKey(node: TreeNode): node is TableArrayKey {
   return node.type === NodeType.TableArrayKey;
 }
 
@@ -121,7 +126,7 @@ export function isTableArrayKey(node: Node): node is TableArrayKey {
 // key="value" # note
 // ^---------^
 //
-export interface KeyValue extends Node {
+export interface KeyValue extends TreeNode {
   type: NodeType.KeyValue;
   key: Key;
   value: Value;
@@ -129,7 +134,7 @@ export interface KeyValue extends Node {
   // Column index (0-based) of equals sign
   equals: number;
 }
-export function isKeyValue(node: Node): node is KeyValue {
+export function isKeyValue(node: TreeNode): node is KeyValue {
   return node.type === NodeType.KeyValue;
 }
 
@@ -138,7 +143,7 @@ export function isKeyValue(node: Node): node is KeyValue {
 //
 // Store raw key and parts (from dots)
 //
-export interface Key extends Node {
+export interface Key extends TreeNode {
   type: NodeType.Key;
   raw: string;
 
@@ -146,7 +151,7 @@ export interface Key extends Node {
   // e.g. a.b -> raw = 'a.b', value = ['a', 'b']
   value: string[];
 }
-export function isKey(node: Node): node is Key {
+export function isKey(node: TreeNode): node is Key {
   return node.type === NodeType.Key;
 }
 
@@ -158,50 +163,50 @@ export function isKey(node: Node): node is Key {
 // a = "string"
 //     ^------^
 //
-export interface String extends Node {
+export interface String extends TreeNode {
   type: NodeType.String;
   raw: string;
   value: string;
 }
-export function isString(node: Node): node is String {
+export function isString(node: TreeNode): node is String {
   return node.type === NodeType.String;
 }
 
 //
 // Integer
 //
-export interface Integer extends Node {
+export interface Integer extends TreeNode {
   type: NodeType.Integer;
   raw: string;
   value: number;
 }
-export function isInteger(node: Node): node is Integer {
+export function isInteger(node: TreeNode): node is Integer {
   return node.type === NodeType.Integer;
 }
 
 //
 // Float
 //
-export interface Float extends Node {
+export interface Float extends TreeNode {
   type: NodeType.Float;
   raw: string;
   value: number;
 }
-export function isFloat(node: Node): node is Float {
+export function isFloat(node: TreeNode): node is Float {
   return node.type === NodeType.Float;
 }
 
 //
 // Boolean
 //
-export interface Boolean extends Node {
+export interface Boolean extends TreeNode {
   type: NodeType.Boolean;
 
   // Only `true` and `false` are permitted
   // -> don't need separate raw and value
   value: boolean;
 }
-export function isBoolean(node: Node): node is Boolean {
+export function isBoolean(node: TreeNode): node is Boolean {
   return node.type === NodeType.Boolean;
 }
 
@@ -211,23 +216,23 @@ export function isBoolean(node: Node): node is Boolean {
 // Note: Currently, Offset Date-Time, Local Date-Time, Local Date, and Local Time
 // are handled via raw
 //
-export interface DateTime extends Node {
+export interface DateTime extends TreeNode {
   type: NodeType.DateTime;
   raw: string;
   value: Date;
 }
-export function isDateTime(node: Node): node is DateTime {
+export function isDateTime(node: TreeNode): node is DateTime {
   return node.type === NodeType.DateTime;
 }
 
 //
 // InlineArray
 //
-export interface InlineArray<TItem = Node> extends Node {
+export interface InlineArray<TItem = TreeNode> extends TreeNode {
   type: NodeType.InlineArray;
   items: InlineArrayItem<TItem>[];
 }
-export function isInlineArray(node: Node): node is InlineArray {
+export function isInlineArray(node: TreeNode): node is InlineArray {
   return node.type === NodeType.InlineArray;
 }
 
@@ -240,25 +245,25 @@ export function isInlineArray(node: Node): node is InlineArray {
 // [ "a"  ,"b", "c"  ]
 //   ^---^ ^-^  ^-^
 //
-export interface InlineItem<TItem = Node> extends Node {
+export interface InlineItem<TItem = TreeNode> extends TreeNode {
   type: NodeType.InlineItem;
   item: TItem;
   comma: boolean;
 }
-export function isInlineItem(node: Node): node is InlineItem {
+export function isInlineItem(node: TreeNode): node is InlineItem {
   return node.type === NodeType.InlineItem;
 }
 
-export interface InlineArrayItem<TItem = Node> extends InlineItem<TItem> {}
+export interface InlineArrayItem<TItem = TreeNode> extends InlineItem<TItem> {}
 
 //
 // InlineTable
 //
-export interface InlineTable extends Node {
+export interface InlineTable extends TreeNode {
   type: NodeType.InlineTable;
   items: InlineTableItem[];
 }
-export function isInlineTable(node: Node): node is InlineTable {
+export function isInlineTable(node: TreeNode): node is InlineTable {
   return node.type === NodeType.InlineTable;
 }
 
@@ -280,11 +285,11 @@ export interface InlineTableItem extends InlineItem<KeyValue> {}
 // # comment here
 // ^------------^
 //
-export interface Comment extends Node {
+export interface Comment extends TreeNode {
   type: NodeType.Comment;
   raw: string;
 }
-export function isComment(node: Node): node is Comment {
+export function isComment(node: TreeNode): node is Comment {
   return node.type === NodeType.Comment;
 }
 
@@ -292,10 +297,10 @@ export function isComment(node: Node): node is Comment {
 // Combinations
 //
 
-export interface WithItems extends Node {
-  items: Node[];
+export interface WithItems extends TreeNode {
+  items: TreeNode[];
 }
-export function hasItems(node: Node): node is WithItems {
+export function hasItems(node: TreeNode): node is WithItems {
   return (
     isDocument(node) ||
     isTable(node) ||
@@ -305,19 +310,19 @@ export function hasItems(node: Node): node is WithItems {
   );
 }
 
-export interface WithItem extends Node {
-  item: Node;
+export interface WithItem extends TreeNode {
+  item: TreeNode;
 }
-export function hasItem(node: Node): node is WithItem {
+export function hasItem(node: TreeNode): node is WithItem {
   return isTableKey(node) || isTableArrayKey(node) || isInlineItem(node);
 }
 
 export type Block = KeyValue | Table | TableArray | Comment;
-export function isBlock(node: Node): node is Block {
+export function isBlock(node: TreeNode): node is Block {
   return isKeyValue(node) || isTable(node) || isTableArray(node) || isComment(node);
 }
 
-export type Value<TInlineArrayItem = Node> =
+export type Value<TInlineArrayItem = TreeNode> =
   | String
   | Integer
   | Float
@@ -325,7 +330,7 @@ export type Value<TInlineArrayItem = Node> =
   | DateTime
   | InlineArray<TInlineArrayItem>
   | InlineTable;
-export function isValue(node: Node): node is Value {
+export function isValue(node: TreeNode): node is Value {
   return (
     isString(node) ||
     isInteger(node) ||
@@ -337,7 +342,7 @@ export function isValue(node: Node): node is Value {
   );
 }
 
-export interface Node {
+export interface TreeNode {
   type: NodeType;
   loc: Location;
 }

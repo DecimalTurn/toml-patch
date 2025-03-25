@@ -8,7 +8,7 @@ import {
   WithItems,
   KeyValue,
   isTable,
-  Node,
+  TreeNode,
   Document,
   isDocument,
   Block,
@@ -67,7 +67,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         }
       }
 
-      let parent: Node;
+      let parent: TreeNode;
       if (isTable(child)) {
         parent = original;
       } else if (is_table_array) {
