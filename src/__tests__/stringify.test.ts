@@ -84,3 +84,34 @@ test('should stringify simple example with simple value at the end', () => {
 });
 
 
+// Simple toml with empty object and a simple value
+// {
+//   foo: {},
+//   bar: 'baz'
+// }
+test('should stringify simple example with empty object', () => {
+  
+  //Splitting the stringnify process into two steps
+
+  const toml = parseJS(
+    {
+      foo: {},
+      bar: 'baz'
+    }
+  );
+
+  //console.log(toml);
+  let ouput = toTOML(toml.items);
+
+  let expectedOutput = dedent`
+    bar = "baz"
+
+    [foo]
+    ` + '\n';
+
+  const x = [...parseTOML(expectedOutput)];
+
+  expect(ouput).toEqual(expectedOutput);
+
+});
+
