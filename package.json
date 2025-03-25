@@ -27,10 +27,12 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
+    "@types/dedent": "^0.7.2",
     "@types/glob": "^7",
     "@types/jest": "^24",
     "@types/js-yaml": "^3",
     "benchmark": "^2",
+    "dedent": "^1.5.3",
     "glob": "^7",
     "jest": "^24",
     "js-yaml": "^3",
