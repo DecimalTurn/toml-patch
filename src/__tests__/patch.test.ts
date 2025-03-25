@@ -1,6 +1,7 @@
 import patch from '../patch';
 import { parse } from '../';
 import { example } from '../__fixtures__';
+import dedent from 'dedent';
 
 test('it should apply edit to key-value', () => {
   const value = parse(example);
@@ -68,12 +69,12 @@ test('should rename key-value in table', () => {
 });
 
 test('should patch readme example', () => {
-  const existing = `
-# This is a TOML document
+  const existing = dedent`
+    # This is a TOML document
 
-title = "TOML example"
-owner.name = "Bob"
-`;
+    title = "TOML example"
+    owner.name = "Bob"
+    `;
   const patched = patch(existing, {
     title: 'TOML example',
     owner: {
@@ -81,10 +82,111 @@ owner.name = "Bob"
     }
   });
 
-  expect(patched).toEqual(`
-# This is a TOML document
+  expect(patched).toEqual(dedent`
+    # This is a TOML document
 
-title = "TOML example"
-owner.name = "Tim"
-`);
+    title = "TOML example"
+    owner.name = "Tim"
+    ` + '\n');
+
+});
+
+//A simple toml with a global key-value and a table
+test('should patch example 1', () => {
+  
+  const existing = dedent`
+    bar = "baz"
+
+    [foo]
+    a = "b"
+
+    ` + '\n';
+
+  const newObject = {
+    bar: 'baz',
+    foo: {
+      a: 'b'
+    }
+  };
+
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    bar = "baz"
+
+    [foo]
+    a = "b"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+// Here we check if switching the order of the properties in the newObject
+// will still produce the same output
+test('should patch example 2', () => {
+  const existing = dedent`
+    bar = "baz"
+
+    [foo]
+    a = "b"
+
+    ` + '\n';
+
+  const newObject = {
+    foo: {
+      a: 'b'
+    },
+    bar: 'baz'
+  };
+
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    bar = "baz"
+
+    [foo]
+    a = "b"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+
+// A reasonable JSON object to patch a simpler toml file
+// This seems to cause a problem with the [src] table appearing at the top
+test('should patch example 3', () => {
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    ` + '\n';
+
+  const newObject = {
+    project: {
+      name: "Simple",
+      version: "0.0.0",
+      authors: ["Joe Bloggs"],
+      target: {
+        type: "xlsm",
+        path: "../targets/xlsm"
+      }
+    },
+    src: {
+      Module1: "../src/Module1.bas"
+    }
+  };
+
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = [ "Joe Bloggs" ]
+    target = { type = "xlsm", path = "../targets/xlsm" }
+
+    [src]
+    Module1 = "../src/Module1.bas"
+    ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
 });
