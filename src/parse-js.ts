@@ -25,6 +25,9 @@ export default function parseJS(value: any, format: Format = {}): Document {
   format = Object.assign({}, default_format, format);
   value = toJSON(value);
 
+  // Reorder the elements in the object
+  value = reorderElements(value);
+
   const document = generateDocument();
   for (const item of walkObject(value, format)) {
     insert(document, document, item);
@@ -42,6 +45,30 @@ export default function parseJS(value: any, format: Format = {}): Document {
   );
 
   return formatted;
+}
+
+/** 
+This function makes sure that properties that are simple values (not objects or arrays) are ordered first,
+and that objects and arrays are ordered last. This makes parseJS more reliable and easier to test.
+*/
+function reorderElements(value:any) : Object {
+  let result: Record<string, any> = {};
+  
+  // First add all simple values
+  for (const key in value) {
+    if (!isObject(value[key]) && !Array.isArray(value[key])) {
+      result[key] = value[key];
+    }
+  }
+  
+  // Then add all objects and arrays
+  for (const key in value) {
+    if (isObject(value[key]) || Array.isArray(value[key])) {
+      result[key] = value[key];
+    }
+  }
+  
+  return result;
 }
 
 function* walkObject(object: any, format: Format): IterableIterator<KeyValue> {
