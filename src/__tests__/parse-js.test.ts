@@ -38,7 +38,7 @@ test('it should remove leading empty lines', () => {
 
 test('simple JS Parsing', () => {
   const value = {
-    a: 1
+    ab: 1
   };
 
   const parsed = parseJS(value);
@@ -54,7 +54,7 @@ test('simple JS Parsing', () => {
           },
           end: {
               line: 1,
-              column: 5
+              column: 6
           }
       },
       items: [
@@ -67,7 +67,7 @@ test('simple JS Parsing', () => {
                   },
                   end: {
                       line: 1,
-                      column: 5
+                      column: 6
                   }
               },
               key: {
@@ -79,25 +79,25 @@ test('simple JS Parsing', () => {
                       },
                       end: {
                           line: 1,
-                          column: 1
+                          column: 2
                       }
                   },
-                  raw: "a",
+                  raw: "ab",
                   value: [
-                      "a"
+                      "ab"
                   ]
               },
-              equals: 2,
+              equals: 3,
               value: {
                   type: "Integer",
                   loc: {
                       start: {
                           line: 1,
-                          column: 4
+                          column: 5
                       },
                       end: {
                           line: 1,
-                          column: 5
+                          column: 6
                       }
                   },
                   raw: "1",
