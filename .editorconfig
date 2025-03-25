@@ -1,0 +1,13 @@
+root = true
+
+[*.js, *.ts]
+indent_style = tab
+indent_size = 4
+
+[*.md]
+indent_style = space
+indent_size = 2
+
+[*.{json,yml,yaml-tmlanguage}]
+indent_style = space
+indent_size = 2
