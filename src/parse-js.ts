@@ -105,6 +105,28 @@ function walkInlineTable(value: object, format: Format): InlineTable | Value {
   return inline_table;
 }
 
+/**
+ * Handles custom object serialization by checking for and using toJSON methods
+ * 
+ * @param value - The value to potentially convert
+ * @returns The result of value.toJSON() if available, otherwise the original value
+ */
 function toJSON(value: any): any {
-  return value && !isDate(value) && typeof value.toJSON === 'function' ? value.toJSON() : value;
+  // Skip null/undefined values
+  if (!value) {
+    return value;
+  }
+  
+  // Skip Date objects (they have special handling)
+  if (isDate(value)) {
+    return value;
+  }
+  
+  // Use object's custom toJSON method if available
+  if (typeof value.toJSON === 'function') {
+    return value.toJSON();
+  }
+  
+  // Otherwise return unmodified
+  return value;
 }
