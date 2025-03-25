@@ -154,11 +154,64 @@ test('should patch example 2', () => {
 
 // A reasonable JSON object to patch a simpler toml file
 // This seems to cause a problem with the [src] table appearing at the top
-test('should patch example 3', () => {
+test('should patch example with src table', () => {
+
+  
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    
+    [src]
+    Module1 = "src/Module1.bas"
+    ` + '\n';
+
+  const newObject = {
+    project: {
+      name: "Simple",
+      version: "0.0.0",
+      authors: ["Joe Bloggs"],
+      target: {
+        type: "xlsm",
+        path: "../targets/xlsm"
+      }
+    },
+    src: {
+      Module1: "../src/Module1.bas"
+    }
+  };
+
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = [ "Joe Bloggs" ]
+    target = { type = "xlsm", path = "../targets/xlsm" }
+
+    [src]
+    Module1 = "../src/Module1.bas"
+    ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
+});
+
+// A reasonable JSON object to patch a simpler toml file
+// This seems to cause a problem with the [src] table appearing at the top
+test('should patch example with missing src table', () => {
   const existing = dedent`
     [project]
     name = "Simple"
     ` + '\n';
+
+  // This form doesn't cause the problem
+  // const existing = dedent`
+  //   [project]
+  //   name = "Simple"
+    
+  //   [src]
+  //   Module1 = "src/Module1.bas"
+  //   ` + '\n';
 
   const newObject = {
     project: {

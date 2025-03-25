@@ -131,7 +131,7 @@ export interface KeyValue extends TreeNode {
   key: Key;
   value: Value;
 
-  // Column index (0-based) of equals sign
+  // Column index (0-based) of the equals sign
   equals: number;
 }
 export function isKeyValue(node: TreeNode): node is KeyValue {
