@@ -16,12 +16,22 @@ import {
   isTableArray,
   isInlineArray,
   hasItem,
-  InlineItem
+  InlineItem,
+  AST
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
+
+export function toDocument(ast: AST) : Document  {
+  const items = [...ast];
+  return  {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    items
+  };
+}
 
 export default function patch(existing: string, updated: any, format?: Format): string {
   const existing_ast = parseTOML(existing);
