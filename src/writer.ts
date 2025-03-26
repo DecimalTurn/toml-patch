@@ -102,7 +102,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
 
-  index = index != null ? index : parent.items.length;
+  index = (index != null && typeof index === 'number') ? index : parent.items.length; 
 
   let shift: Span;
   let offset: Span;
@@ -419,6 +419,7 @@ export function applyWrites(root: TreeNode) {
         (offset.columns[node.loc.end.line] || 0) + exiting.columns;
     }
   }
+
   const shiftLocation = {
     enter: shiftStart,
     exit: shiftEnd
