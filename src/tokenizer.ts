@@ -174,7 +174,9 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
         next_item === '.' ||
         next_item === ']' ||
         next_item === '}' ||
-        next_item === '=')
+        next_item === '=' ||
+        next_item === '#'
+      )
     );
   };
 
