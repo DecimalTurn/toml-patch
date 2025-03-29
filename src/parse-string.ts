@@ -41,7 +41,29 @@ export function parseString(raw: string): string {
 }
 
 export function escapeDoubleQuotes(value: string): string {
-  return value.replace(/\"/g, '\\"');
+  let result = '';
+  let precedingBackslashes = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+
+    if (char === '"' && precedingBackslashes % 2 === 0) {
+      // If the current character is a quote and it is not escaped, escape it
+      result += '\\"';
+    } else {
+      // Otherwise, add the character as is
+      result += char;
+    }
+
+    // Update the count of consecutive backslashes
+    if (char === '\\') {
+      precedingBackslashes++;
+    } else {
+      precedingBackslashes = 0; // Reset if the character is not a backslash
+    }
+  }
+
+  return result;
 }
 
 export function unescapeLargeUnicode(escaped: string): string {
@@ -55,7 +77,16 @@ export function unescapeLargeUnicode(escaped: string): string {
     return trim(JSON.stringify(as_string), 1);
   });
 
-  return JSON.parse(`"${json_escaped}"`);
+  const fixed_json_escaped = escapeTabsForJSON(json_escaped);
+
+  // Parse the properly escaped JSON string
+  const parsed = JSON.parse(`"${fixed_json_escaped}"`);
+  return parsed;
+}
+
+function escapeTabsForJSON(value: string): string {
+  return value
+    .replace(/\t/g, '\\t')
 }
 
 export function escape(value: string): string {
@@ -63,7 +94,7 @@ export function escape(value: string): string {
 }
 
 function trim(value: string, count: number): string {
-  return value.substr(count, value.length - count * 2);
+  return value.slice(count, value.length - count);
 }
 
 function trimLeadingWhitespace(value: string): string {

@@ -103,7 +103,9 @@ function multiline(
   cursor.next();
   cursor.next();
 
-  while (!cursor.done && !checkThree(input, cursor.index, multiline_char)) {
+  // The reason why we need to check if there is more than three is because we have to match the last 3 quotes, not the first 3 that appears consecutively
+  // See spec-string-basic-multiline-9.toml
+  while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
     raw += cursor.value;
     cursor.next();
   }
@@ -219,11 +221,53 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
   };
 }
 
+/**
+ * Check if the current character and the next two characters are the same
+ * and not escaped.
+ *
+ * @param input - The input string.
+ * @param current - The current index in the input string.
+ * @param check - The character to check for.
+ * @returns ⚠️The character if found, otherwise false.
+ */
 function checkThree(input: string, current: number, check: string): false | string {
+  if (!check) {
+    return false;
+  }
+
+  const has3 =
+    input[current] === check &&
+    input[current + 1] === check &&
+    input[current + 2] === check;
+
+  if (!has3) {
+    return false;
+  }
+
+  // Check if the sequence is escaped
+  const precedingText = input.slice(0, current); // Get the text before the current position
+  const backslashes  = precedingText.match(/\\+$/); // Match trailing backslashes
+
+  if (!backslashes) {
+    return check; // No backslashes means not escaped
+  }
+ 
+  const isEscaped = backslashes[0].length % 2 !== 0; // Odd number of backslashes means escaped
+
+  return isEscaped ? false : check; // Return `check` if not escaped, otherwise `false`
+}
+
+export function CheckMoreThanThree(input: string, current: number, check: string): boolean {
+  
+  if (!check) {
+    return false;
+  }
+
   return (
     input[current] === check &&
     input[current + 1] === check &&
     input[current + 2] === check &&
-    check
-  );
+    input[current + 3] === check
+  )
+
 }

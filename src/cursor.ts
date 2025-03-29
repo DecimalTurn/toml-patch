@@ -45,7 +45,7 @@ export default class Cursor<T> implements Iterator<T | undefined> {
 
     this.index += 1;
     this.value = result.value;
-    this.done = result.done;
+    this.done = result.done ?? false;
     this.peeked = null;
 
     return result;
