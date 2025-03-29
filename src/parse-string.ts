@@ -8,7 +8,10 @@ const CRLF = '\\r\\n';
 const IS_CRLF = /\r\n/g;
 const IS_LF = /\n/g;
 const IS_LEADING_NEW_LINE = /^(\r\n|\n)/;
-const IS_LINE_ENDING_BACKSLASH = /\\\s*[\n\r\n]\s*/g;
+// This regex is used to match an odd number of backslashes followed by a line ending
+// It uses a negative lookbehind to ensure that the backslash is not preceded by another backslash.
+// We need an odd number of backslashes so that the last one is not escaped.
+const IS_LINE_ENDING_BACKSLASH = /(?<!\\)(?:\\\\)*(\\\s*[\n\r\n]\s*)/g;
 
 export function parseString(raw: string): string {
   if (raw.startsWith(TRIPLE_SINGLE_QUOTE)) {
@@ -59,7 +62,7 @@ function trim(value: string, count: number): string {
 }
 
 function trimLeadingWhitespace(value: string): string {
-  return IS_LEADING_NEW_LINE.test(value) ? value.substr(1) : value;
+  return value.replace(IS_LEADING_NEW_LINE, '');
 }
 
 function escapeNewLines(value: string): string {
@@ -67,5 +70,5 @@ function escapeNewLines(value: string): string {
 }
 
 function lineEndingBackslash(value: string): string {
-  return value.replace(IS_LINE_ENDING_BACKSLASH, '');
+  return value.replace(IS_LINE_ENDING_BACKSLASH, (match, group) => match.replace(group, ''));
 }

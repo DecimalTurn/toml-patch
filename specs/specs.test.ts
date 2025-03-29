@@ -44,7 +44,8 @@ test.each(spec_test)('spec-test - %s', async (_name, input_file, expected_file) 
   const input = await readFile(input_file, 'utf8');
   const expected = safeLoad(await readFile(expected_file, 'utf8'));
 
-  expect(parse(input)).toEqual(expected);
+  const actual = parse(input);
+  expect(actual).toEqual(expected);
 });
 
 function expandJSON(value: any): any {
