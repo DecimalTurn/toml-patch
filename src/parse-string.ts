@@ -27,19 +27,24 @@ export function parseString(raw: string): string {
       trimLeadingWhitespace,
       lineEndingBackslash,
       escapeNewLines,
-      unescape
+      escapeDoubleQuotes,
+      unescapeLargeUnicode
     );
   } else if (raw.startsWith(DOUBLE_QUOTE)) {
     return pipe(
       trim(raw, 1),
-      unescape
+      unescapeLargeUnicode
     );
   } else {
     return raw;
   }
 }
 
-export function unescape(escaped: string): string {
+export function escapeDoubleQuotes(value: string): string {
+  return value.replace(/\"/g, '\\"');
+}
+
+export function unescapeLargeUnicode(escaped: string): string {
   // JSON.parse handles everything except \UXXXXXXXX
   // replace those instances with code point, escape that, and then parse
   const LARGE_UNICODE = /\\U[a-fA-F0-9]{8}/g;
