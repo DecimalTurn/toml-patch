@@ -46,7 +46,7 @@
     "rollup-plugin-typescript": "^1",
     "ts-jest": "^24",
     "tslib": "^1",
-    "typescript": "^3"
+    "typescript": "^3.9"
   },
   "jest": {
     "testEnvironment": "node",
