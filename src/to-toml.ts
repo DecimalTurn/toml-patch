@@ -79,7 +79,7 @@ export default function toTOML(ast: AST, newline: string = '\n'): string {
 }
 
 function write(lines: string[], loc: Location, raw: string) {
-  const raw_lines = raw.split(BY_NEW_LINE);
+  const raw_lines = raw.split(BY_NEW_LINE).filter(line => line !== '\n' && line !== '\r\n');
   const expected_lines = loc.end.line - loc.start.line + 1;
 
   if (raw_lines.length !== expected_lines) {

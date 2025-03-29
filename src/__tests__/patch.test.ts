@@ -243,3 +243,45 @@ test('should patch example with missing src table', () => {
 
     expect(patched).toEqual(expectedOutput);
 });
+
+
+test('should patch example with triple quotes', () => {
+  const existing = dedent`
+    [package]
+    name = "lipsum"
+    version = "0.8.0"
+    authors = ["Martin Geisler <martin@geisler.net>"]
+    description = """
+    Lipsum is a lorem ipsum text generation library. Use this if you need
+    filler or dummy text for your application.
+    
+    The text is generated using a simple Markov chain, which you can also
+    instantiate to generate your own pieces of pseudo-random text.
+    """
+    documentation = "https://docs.rs/lipsum/"
+    repository = "https://github.com/mgeisler/lipsum/"
+    readme = "README.md"
+    ` + '\n';
+
+  const obj  = parse(existing);
+  obj.package.version = "0.8.1";
+  const patched = patch(existing, obj);
+  let expectedOutput = dedent`
+    [package]
+    name = "lipsum"
+    version = "0.8.1"
+    authors = ["Martin Geisler <martin@geisler.net>"]
+    description = """
+    Lipsum is a lorem ipsum text generation library. Use this if you need
+    filler or dummy text for your application.
+    
+    The text is generated using a simple Markov chain, which you can also
+    instantiate to generate your own pieces of pseudo-random text.
+    """
+    documentation = "https://docs.rs/lipsum/"
+    repository = "https://github.com/mgeisler/lipsum/"
+    readme = "README.md"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
