@@ -44,7 +44,7 @@ export type Root = Document | TreeNode;
 type Offsets = WeakMap<TreeNode, Span>;
 
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
-const getEnter = (root: Root) => {
+const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {
     enter_offsets.set(root, new WeakMap());
   }
@@ -52,13 +52,13 @@ const getEnter = (root: Root) => {
 };
 
 const exit_offsets: WeakMap<Root, Offsets> = new WeakMap();
-const getExit = (root: Root) => {
+const getExitOffsets = (root: Root) => {
   if (!exit_offsets.has(root)) {
     exit_offsets.set(root, new WeakMap());
   }
   return exit_offsets.get(root)!;
 };
-
+//TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
   // First, replace existing node
   // (by index for items, item, or key/value)
@@ -94,7 +94,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     columns: replacement_span.columns - existing_span.columns
   };
 
-  addOffset(offset, getExit(root), replacement, existing);
+  addOffset(offset, getExitOffsets(root), replacement, existing);
 }
 
 export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number) {
@@ -122,7 +122,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   // if the previous element has an offset, need to position relative to that
   // -> Move previous offset to child's offset
   const previous = parent.items[index - 1];
-  const previous_offset = previous && getExit(root).get(previous);
+  const previous_offset = previous && getExitOffsets(root).get(previous);
   if (previous_offset) {
     offset.lines += previous_offset.lines;
     offset.columns += previous_offset.columns;
@@ -138,10 +138,10 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
       offset.columns -= 2;
     }
 
-    getExit(root).delete(previous!);
+    getExitOffsets(root).delete(previous!);
   }
 
-  const offsets = getExit(root);
+  const offsets = getExitOffsets(root);
   offsets.set(child, offset);
 }
 
@@ -340,8 +340,8 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
 
   // Apply offsets after preceding node or before children of parent node
   const target = previous || parent;
-  const target_offsets = previous ? getExit(root) : getEnter(root);
-  const node_offsets = getExit(root);
+  const target_offsets = previous ? getExitOffsets(root) : getEnterOffsets(root);
+  const node_offsets = getExitOffsets(root);
   const previous_offset = target_offsets.get(target);
   if (previous_offset) {
     offset.lines += previous_offset.lines;
@@ -366,11 +366,11 @@ export function applyBracketSpacing(
   if (!node.items.length) return;
 
   // Apply enter to node so that items are affected
-  addOffset({ lines: 0, columns: 1 }, getEnter(root), node);
+  addOffset({ lines: 0, columns: 1 }, getEnterOffsets(root), node);
 
   // Apply exit to last node in items
   const last_item = last(node.items as TreeNode[])!;
-  addOffset({ lines: 0, columns: 1 }, getExit(root), last_item);
+  addOffset({ lines: 0, columns: 1 }, getExitOffsets(root), last_item);
 }
 
 export function applyTrailingComma(
@@ -385,12 +385,20 @@ export function applyTrailingComma(
   const last_item = last(node.items)!;
   last_item.comma = true;
 
-  addOffset({ lines: 0, columns: 1 }, getExit(root), last_item);
+  addOffset({ lines: 0, columns: 1 }, getExitOffsets(root), last_item);
 }
 
+/**
+ * Applies all accumulated write offsets (enter and exit) to the given AST node.
+ * This function adjusts the start and end locations of each node in the tree based on
+ * the offsets stored in the `enter` and `exit` maps. It ensures that the tree's location
+ * data is consistent after modifications.
+ *
+ * @param root - The root node of the AST tree to which the write offsets will be applied.
+ */
 export function applyWrites(root: TreeNode) {
-  const enter = getEnter(root);
-  const exit = getExit(root);
+  const enter = getEnterOffsets(root);
+  const exit = getExitOffsets(root);
 
   const offset: { lines: number; columns: { [index: number]: number } } = {
     lines: 0,
