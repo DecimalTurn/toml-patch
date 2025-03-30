@@ -18,7 +18,8 @@ export default function toJS(ast: AST, input: string = ''): any {
       try {
         validateKey(result, key, node.type, { tables, table_arrays, defined });
       } catch (err) {
-        throw new ParseError(input, node.key.loc.start, err.message);
+        const e = err as Error;
+        throw new ParseError(input, node.key.loc.start, e.message);
       }
 
       const joined_key = joinKey(key);
@@ -34,7 +35,8 @@ export default function toJS(ast: AST, input: string = ''): any {
       try {
         validateKey(result, key, node.type, { tables, table_arrays, defined });
       } catch (err) {
-        throw new ParseError(input, node.key.loc.start, err.message);
+        const e = err as Error;
+        throw new ParseError(input, node.key.loc.start, e.message);
       }
 
       const joined_key = joinKey(key);
@@ -52,7 +54,8 @@ export default function toJS(ast: AST, input: string = ''): any {
         try {
           validateKey(active, key, node.type, { tables, table_arrays, defined });
         } catch (err) {
-          throw new ParseError(input, node.key.loc.start, err.message);
+          const e = err as Error;
+          throw new ParseError(input, node.key.loc.start, e.message);
         }
 
         const value = toValue(node.value);
