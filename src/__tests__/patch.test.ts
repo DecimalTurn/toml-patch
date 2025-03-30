@@ -285,3 +285,39 @@ test('should patch example with triple quotes', () => {
 
   expect(patched).toEqual(expectedOutput);
 });
+
+
+test('should patch example with removal of an array element', () => {
+  const existing = dedent`
+  baseUrl = "https://example.com/"
+  languageCode = "en-us"
+  languageLang = "en"
+  title = "this is the title"
+  DefaultContentLanguage = "en"
+  disableLanguages = ["he", "hu", "zh", "nb", "da", "ro", "do", "fi"]
+  ` + '\n';
+
+  let value = parse(existing)
+
+  console.log (value.disableLanguages)
+  for (var i = 0; i < value.disableLanguages.length; i++) {
+          if (value.disableLanguages[i] === 'he') {
+              value.disableLanguages.splice(i, 1);
+              i--;
+          }
+      }
+  console.log (value.disableLanguages)
+
+  const patched = (patch(existing, value));
+
+  let expectedOutput = dedent`
+    baseUrl = "https://example.com/"
+    languageCode = "en-us"
+    languageLang = "en"
+    title = "this is the title"
+    DefaultContentLanguage = "en"
+    disableLanguages = ["hu", "zh", "nb", "da", "ro", "do", "fi"]
+    ` + '\n';
+  
+  expect(patched).toEqual(expectedOutput);
+});
