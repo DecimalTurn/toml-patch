@@ -45,11 +45,41 @@ export default function patch(existing: string, updated: any, format?: Format): 
   };
 
   const updated_document = parseJS(updated, format);
-  const changes = diff(existing_js, updated);
+  const changes = reorder(diff(existing_js, updated));
+
+
 
   const patched_document = applyChanges(existing_document, updated_document, changes);
 
   return toTOML(patched_document.items);
+}
+
+function reorder(changes: Change[]): Change[] {
+  //Reorder deletions among themselves to avoid index issues
+  // We want the path to be looking at the last item in the array first and go down from there
+ 
+  let sorted = false;
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i];
+    if (isRemove(change)) {
+      let j = i + 1;
+      while (j < changes.length) {
+        const next_change = changes[j];
+        if (isRemove(next_change) && next_change.path[0] === change.path[0]  && 
+            next_change.path[1] > change.path[1]) {
+          changes.splice(j, 1);
+          changes.splice(i, 0, next_change);
+          // We reset i to the beginning of the loop to avoid skipping any changes
+          i = 0
+          break;
+        }
+        j++;
+      }
+    }
+  }
+  
+  return changes;
+
 }
 
 function applyChanges(original: Document, updated: Document, changes: Change[]): Document {

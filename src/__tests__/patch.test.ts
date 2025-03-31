@@ -299,14 +299,9 @@ test('should patch example with removal of an array element', () => {
 
   let value = parse(existing)
 
-  console.log (value.disableLanguages)
-  for (var i = 0; i < value.disableLanguages.length; i++) {
-          if (value.disableLanguages[i] === 'he') {
-              value.disableLanguages.splice(i, 1);
-              i--;
-          }
-      }
-  console.log (value.disableLanguages)
+
+  // Remove the first element from the array
+  removeFromArray(value.disableLanguages, ['he']);
 
   const patched = (patch(existing, value));
 
@@ -321,3 +316,36 @@ test('should patch example with removal of an array element', () => {
   
   expect(patched).toEqual(expectedOutput);
 });
+
+
+
+test('should patch example with multiple removals of an array element', () => {
+
+  
+  const existing = dedent`
+  x = ["a", "bee", "cee", "dee", "e", "f", "g", "h", "i", "j"]
+  ` + '\n';
+
+  let value = parse(existing)
+  
+  removeFromArray(value.x, ['a', 'cee', 'f']);
+  
+
+  const patched = (patch(existing, value));
+
+  let expectedOutput = dedent`
+    x = ["bee", "dee", "e", "g", "h", "i", "j"]
+    ` + '\n';
+  
+  expect(patched).toEqual(expectedOutput);
+});
+
+// Remove specific elements from an array
+function removeFromArray(array: any[], elementsToRemove: any[]) {
+  for (let i = 0; i < array.length; i++) {
+    if (elementsToRemove.includes(array[i])) {
+      array.splice(i, 1);
+      i--;
+    }
+  }
+}

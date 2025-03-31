@@ -127,17 +127,6 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     offset.lines += previous_offset.lines;
     offset.columns += previous_offset.columns;
 
-    // Account for comma overlay
-    //
-    // a = [b, e]
-    // a = [b, c, e]
-    //       ^---^
-    // a = [b, c, d, e]
-    //          ^---^
-    if (isInlineItem(child) && previous && parent.items[index + 1]) {
-      offset.columns -= 2;
-    }
-
     getExitOffsets(root).delete(previous!);
   }
 
