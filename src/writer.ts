@@ -183,6 +183,18 @@ function insertOnNewLine(
   return { shift, offset };
 }
 
+/**
+ * Inserts an inline element into an inline array or table at the specified index.
+ * This function handles positioning, comma management, and offset calculation for the inserted item.
+ * 
+ * @param parent - The inline array or table where the child will be inserted
+ * @param child - The inline item to insert
+ * @param index - The index position where to insert the child
+ * @returns An object containing shift and offset spans:
+ *          - shift: Adjustments needed to position the child correctly
+ *          - offset: Adjustments needed for elements that follow the insertion
+ * @throws Error if the child is not a compatible inline item type
+ */
 function insertInline(
   parent: InlineArray | InlineTable,
   child: InlineItem,
@@ -199,13 +211,13 @@ function insertInline(
   parent.items.splice(index, 0, child);
 
   // Add commas as-needed
-  const leading_comma = !!previous;
-  const trailing_comma = !is_last;
-  const last_comma = is_last && child.comma === true;
-  if (leading_comma) {
+  const has_seperating_comma_before = !!previous;
+  const has_seperating_comma_after = !is_last;
+  const has_trailing_comma = is_last && child.comma === true;
+  if (has_seperating_comma_before) {
     previous!.comma = true;
   }
-  if (trailing_comma) {
+  if (has_seperating_comma_after) {
     child.comma = true;
   }
 
@@ -232,7 +244,7 @@ function insertInline(
   } else {
     const skip_comma = 2;
     const skip_bracket = 1;
-    start.column += leading_comma ? skip_comma : skip_bracket;
+    start.column += has_seperating_comma_before ? skip_comma : skip_bracket;
   }
   start.line += leading_lines;
 
@@ -245,7 +257,7 @@ function insertInline(
   const child_span = getSpan(child.loc);
   const offset = {
     lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + (leading_comma || trailing_comma ? 2 : 0) + (last_comma ? 1 : 0)
+    columns: child_span.columns + (has_seperating_comma_before || has_seperating_comma_after ? 2 : 0) + (has_trailing_comma ? 1 : 0)
   };
 
   return { shift, offset };
@@ -319,10 +331,11 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     columns: -removed_span.columns
   };
 
-  // Offset for comma and remove comma from previous (if-needed)
+  // Offset for comma and remove comma that appear in front of the element (if-needed)
   if (is_inline && previous_on_same_line) {
     offset.columns -= 2;
   }
+
   if (is_inline && previous && !next) {
     (previous as InlineArrayItem | InlineTableItem).comma = false;
   }
@@ -395,8 +408,12 @@ export function applyWrites(root: TreeNode) {
   };
 
   function shiftStart(node: TreeNode) {
-    node.loc.start.line += offset.lines;
-    node.loc.start.column += offset.columns[node.loc.start.line] || 0;
+
+    const lineOffset = offset.lines;
+    node.loc.start.line += lineOffset;
+    
+    const columnOffset = offset.columns[node.loc.start.line] || 0;
+    node.loc.start.column += columnOffset
 
     const entering = enter.get(node);
     if (entering) {
@@ -405,9 +422,14 @@ export function applyWrites(root: TreeNode) {
         (offset.columns[node.loc.start.line] || 0) + entering.columns;
     }
   }
+
   function shiftEnd(node: TreeNode) {
-    node.loc.end.line += offset.lines;
-    node.loc.end.column += offset.columns[node.loc.end.line] || 0;
+
+    const lineOffset = offset.lines;
+    node.loc.end.line += lineOffset;
+    
+    const columnOffset = offset.columns[node.loc.end.line] || 0;
+    node.loc.end.column += columnOffset;
 
     const exiting = exit.get(node);
     if (exiting) {

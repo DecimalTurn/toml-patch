@@ -23,6 +23,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
+import { validate } from './validate';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -50,6 +51,9 @@ export default function patch(existing: string, updated: any, format?: Format): 
 
 
   const patched_document = applyChanges(existing_document, updated_document, changes);
+
+  // Validate the patched_document
+  //validate(patched_document);
 
   return toTOML(patched_document.items);
 }
