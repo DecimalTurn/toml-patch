@@ -2,7 +2,10 @@ import typescript from 'rollup-plugin-typescript';
 import terser from '@rollup/plugin-terser';
 import dts from 'rollup-plugin-dts';
 import filesize from 'rollup-plugin-filesize';
-import pkg from './package.json';
+import { readFileSync } from 'fs';
+
+// Load package.json using fs instead of import assertions
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
 const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${pkg.license}`;
 
