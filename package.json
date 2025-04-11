@@ -30,6 +30,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
+    "@rollup/plugin-terser": "^0.4.4",
     "@types/dedent": "^0.7.2",
     "@types/glob": "^7",
     "@types/jest": "^24",
@@ -45,7 +46,6 @@
     "rollup": "^4.38.0",
     "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-filesize": "^10",
-    "@rollup/plugin-terser": "^0.4.4",
     "rollup-plugin-typescript": "^1",
     "ts-jest": "^29",
     "tslib": "^1",
@@ -56,9 +56,9 @@
     "preset": "ts-jest",
     "testRegex": "/__tests__/.*\\.[jt]sx?$",
     "snapshotFormat": {
-        "escapeString": true,
-        "printBasicPrototype": true
-      }
+      "escapeString": true,
+      "printBasicPrototype": true
+    }
   },
   "prettier": {
     "singleQuote": true,
