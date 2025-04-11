@@ -1,10 +1,13 @@
 {
   "name": "toml-patch",
-  "version": "0.2.3",
-  "author": "Tim Hall <tim.hall.engr@gmail.com>",
+  "version": "0.3.0",
+  "contributors": [
+    "Tim Hall <tim.hall.engr@gmail.com>",
+    "Martin Leduc <31558169+DecimalTurn@users.noreply.github.com>"
+  ],
   "license": "MIT",
   "description": "Patch, parse, and stringify TOML",
-  "homepage": "https://github.com/timhall/toml-patch",
+  "homepage": "https://github.com/DecimalTurn/toml-patch",
   "keywords": [
     "toml",
     "patch",
@@ -51,7 +54,11 @@
   "jest": {
     "testEnvironment": "node",
     "preset": "ts-jest",
-    "testRegex": "/__tests__/.*\\.[jt]sx?$"
+    "testRegex": "/__tests__/.*\\.[jt]sx?$",
+    "snapshotFormat": {
+        "escapeString": true,
+        "printBasicPrototype": true
+      }
   },
   "prettier": {
     "singleQuote": true,
