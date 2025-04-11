@@ -1,4 +1,4 @@
-import { Value, NodeType, TreeNode, AST, isInlineTable } from './ast';
+import { Value, NodeType, Node, AST, isInlineTable } from './ast';
 import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
@@ -113,7 +113,7 @@ export function toValue(node: Value): any {
       return node.value;
 
     default:
-      throw new Error(`Unrecognized value type "${(node as TreeNode).type}"`);
+      throw new Error(`Unrecognized value type "${(node as Node).type}"`);
   }
 }
 

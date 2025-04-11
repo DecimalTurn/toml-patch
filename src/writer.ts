@@ -1,6 +1,6 @@
 import {
   NodeType,
-  TreeNode,
+  Node,
   Document,
   Key,
   Value,
@@ -35,13 +35,13 @@ import traverse from './traverse';
 ////////////////////////////////////////
 
 // Root node of the AST
-export type Root = Document | TreeNode;
+export type Root = Document | Node;
 
 // Store line and column offsets per node
 //
 // Some offsets are applied on enter (e.g. shift child items and next items)
 // Others are applied on exit (e.g. shift next items)
-type Offsets = WeakMap<TreeNode, Span>;
+type Offsets = WeakMap<Node, Span>;
 
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnter = (root: Root) => {
@@ -59,7 +59,7 @@ const getExit = (root: Root) => {
   return exit_offsets.get(root)!;
 };
 
-export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
+export function replace(root: Root, parent: Node, existing: Node, replacement: Node) {
   // First, replace existing node
   // (by index for items, item, or key/value)
   if (hasItems(parent)) {
@@ -97,9 +97,9 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   addOffset(offset, getExit(root), replacement, existing);
 }
 
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number) {
+export function insert(root: Root, parent: Node, child: Node, index?: number) {
   if (!hasItems(parent)) {
-    throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
+    throw new Error(`Unsupported parent type "${(parent as Node).type}" for insert`);
   }
 
   index = (index != null && typeof index === 'number') ? index : parent.items.length; 
@@ -151,7 +151,7 @@ function insertOnNewLine(
   index: number
 ): { shift: Span; offset: Span } {
   if (!isBlock(child)) {
-    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
+    throw new Error(`Incompatible child type "${(child as Node).type}"`);
   }
 
   const previous = parent.items[index - 1];
@@ -200,7 +200,7 @@ function insertInline(
   index: number
 ): { shift: Span; offset: Span } {
   if (!isInlineItem(child)) {
-    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
+    throw new Error(`Incompatible child type "${(child as Node).type}"`);
   }
 
   // Store preceding node and insert
@@ -262,7 +262,7 @@ function insertInline(
   return { shift, offset };
 }
 
-export function remove(root: Root, parent: TreeNode, node: TreeNode) {
+export function remove(root: Root, parent: Node, node: Node) {
   // Remove an element from the parent's items
   // (supports Document, Table, TableArray, InlineTable, and InlineArray
   //
@@ -369,7 +369,7 @@ export function applyBracketSpacing(
   addOffset({ lines: 0, columns: 1 }, getEnter(root), node);
 
   // Apply exit to last node in items
-  const last_item = last(node.items as TreeNode[])!;
+  const last_item = last(node.items as Node[])!;
   addOffset({ lines: 0, columns: 1 }, getExit(root), last_item);
 }
 
@@ -388,7 +388,7 @@ export function applyTrailingComma(
   addOffset({ lines: 0, columns: 1 }, getExit(root), last_item);
 }
 
-export function applyWrites(root: TreeNode) {
+export function applyWrites(root: Node) {
   const enter = getEnter(root);
   const exit = getExit(root);
 
@@ -397,7 +397,7 @@ export function applyWrites(root: TreeNode) {
     columns: {}
   };
 
-  function shiftStart(node: TreeNode) {
+  function shiftStart(node: Node) {
     node.loc.start.line += offset.lines;
     node.loc.start.column += offset.columns[node.loc.start.line] || 0;
 
@@ -408,7 +408,7 @@ export function applyWrites(root: TreeNode) {
         (offset.columns[node.loc.start.line] || 0) + entering.columns;
     }
   }
-  function shiftEnd(node: TreeNode) {
+  function shiftEnd(node: Node) {
     node.loc.end.line += offset.lines;
     node.loc.end.column += offset.columns[node.loc.end.line] || 0;
 
@@ -461,14 +461,14 @@ export function applyWrites(root: TreeNode) {
 }
 
 export function shiftNode(
-  node: TreeNode,
+  node: Node,
   span: Span,
   options: { first_line_only?: boolean } = {}
-): TreeNode {
+): Node {
   const { first_line_only = false } = options;
   const start_line = node.loc.start.line;
   const { lines, columns } = span;
-  const move = (node: TreeNode) => {
+  const move = (node: Node) => {
     if (!first_line_only || node.loc.start.line === start_line) {
       node.loc.start.column += columns;
       node.loc.end.column += columns;
@@ -508,7 +508,7 @@ function perLine(array: InlineArray): boolean {
   return span.lines > array.items.length;
 }
 
-function addOffset(offset: Span, offsets: Offsets, node: TreeNode, from?: TreeNode) {
+function addOffset(offset: Span, offsets: Offsets, node: Node, from?: Node) {
   const previous_offset = offsets.get(from || node);
   if (previous_offset) {
     offset.lines += previous_offset.lines;

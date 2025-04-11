@@ -1,9 +1,9 @@
-import { TreeNode, isKeyValue, isTable, isTableArray, hasItems, isInlineItem, hasItem } from './ast';
+import { Node, isKeyValue, isTable, isTableArray, hasItems, isInlineItem, hasItem } from './ast';
 import { arraysEqual, stableStringify } from './utils';
 
 export type Path = Array<string | number>;
 
-export default function findByPath(node: TreeNode, path: Path): TreeNode {
+export default function findByPath(node: Node, path: Path): Node {
   if (!path.length) return node;
 
   if (isKeyValue(node)) {
@@ -55,13 +55,13 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
   return found;
 }
 
-export function tryFindByPath(node: TreeNode, path: Path): TreeNode | undefined {
+export function tryFindByPath(node: Node, path: Path): Node | undefined {
   try {
     return findByPath(node, path);
   } catch (err) {}
 }
 
-export function findParent(node: TreeNode, path: Path): TreeNode {
+export function findParent(node: Node, path: Path): Node {
   let parent_path = path;
   let parent;
   while (parent_path.length && !parent) {

@@ -1,7 +1,7 @@
 import {
   NodeType,
   AST,
-  TreeNode,
+  Node,
   Document,
   Table,
   TableKey,
@@ -21,8 +21,8 @@ import {
 } from './ast';
 import { isIterable } from './utils';
 
-export type Visit<TNode = TreeNode> = (node: TNode, parent: TNode | null) => void;
-export type EnterExit<TNode = TreeNode> = { enter?: Visit<TNode>; exit?: Visit<TNode> };
+export type Visit<TNode = Node> = (node: TNode, parent: TNode | null) => void;
+export type EnterExit<TNode = Node> = { enter?: Visit<TNode>; exit?: Visit<TNode> };
 
 export type Visitor = {
   Document?: Visit<Document> | EnterExit<Document>;
@@ -46,20 +46,20 @@ export type Visitor = {
 ////////////////////////////////////////////////////////////////////////////////
 // The traverse function is used to walk the AST and call the visitor functions
 ////////////////////////////////////////////////////////////////////////////////
-export default function traverse(ast: AST | TreeNode, visitor: Visitor) {
+export default function traverse(ast: AST | Node, visitor: Visitor) {
   if (isIterable(ast)) {
     traverseArray(ast, null);
   } else {
     traverseNode(ast, null);
   }
 
-  function traverseArray(array: Iterable<TreeNode>, parent: TreeNode | null) {
+  function traverseArray(array: Iterable<Node>, parent: Node | null) {
     for (const node of array) {
       traverseNode(node, parent);
     }
   }
 
-  function traverseNode(node: TreeNode, parent: TreeNode | null) {
+  function traverseNode(node: Node, parent: Node | null) {
     const visit = visitor[node.type];
 
     if (visit && typeof visit === 'function') {
