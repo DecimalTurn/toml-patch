@@ -43,9 +43,6 @@ export type Visitor = {
   Comment?: Visit<Comment> | EnterExit<Comment>;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// The traverse function is used to walk the AST and call the visitor functions
-////////////////////////////////////////////////////////////////////////////////
 export default function traverse(ast: AST | Node, visitor: Visitor) {
   if (isIterable(ast)) {
     traverseArray(ast, null);
@@ -65,7 +62,6 @@ export default function traverse(ast: AST | Node, visitor: Visitor) {
     if (visit && typeof visit === 'function') {
       (visit as Visit)(node, parent);
     }
-
     if (visit && (visit as EnterExit).enter) {
       (visit as EnterExit).enter!(node, parent);
     }
