@@ -30,3 +30,9 @@ jobs:
       run: npm run build
     - name: Benchmark
       run: npm run benchmark -- --example
+    - name: Create build artifacts
+      uses: actions/upload-artifact@v4
+      with: 
+        path: dist/
+        name: dist
+        

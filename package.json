@@ -1,5 +1,5 @@
 {
-  "name": "toml-patch",
+  "name": "@decimalturn/toml-patch",
   "version": "0.3.0",
   "contributors": [
     "Tim Hall <tim.hall.engr@gmail.com>",
@@ -8,6 +8,9 @@
   "license": "MIT",
   "description": "Patch, parse, and stringify TOML",
   "homepage": "https://github.com/DecimalTurn/toml-patch",
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "toml",
     "patch",
