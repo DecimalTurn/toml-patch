@@ -349,3 +349,39 @@ function removeFromArray(array: any[], elementsToRemove: any[]) {
     }
   }
 }
+
+
+test('should patch example with removal of an inline-table element', () => {
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { type = "xlsm", path = "../../targets/xlsm", test = "test" }
+  ` + '\n';
+
+  let value = parse(existing)
+
+
+  // Remove the first element from the inline-table
+  removeFromObject(value.project.target, ['type']);
+
+  const patched = (patch(existing, value));
+
+  let expectedOutput = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { path = "../../targets/xlsm", test = "test" }
+    ` + '\n';
+  
+  expect(patched).toEqual(expectedOutput);
+});
+
+
+function removeFromObject(obj: any, keysToRemove: string[]) {
+  for (const key of keysToRemove) {
+    delete obj[key];
+  }
+}
