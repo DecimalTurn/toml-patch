@@ -385,3 +385,27 @@ function removeFromObject(obj: any, keysToRemove: string[]) {
     delete obj[key];
   }
 }
+
+test('should patch example of modification of an inline-table element', () => {
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { type = "xlsm", path = "targets/xlsm" }
+  ` + '\n';
+
+  let value = parse(existing)
+  // Change the path to be "target/xlsm"
+  value.project.target.path = "../../target/xlsm";
+
+  const patched = (patch(existing, value));
+  let expectedOutput = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { type = "xlsm", path = "../../target/xlsm" }
+    ` + '\n';
+  expect(patched).toEqual(expectedOutput);
+});

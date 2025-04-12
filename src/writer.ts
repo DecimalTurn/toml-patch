@@ -63,18 +63,32 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   // First, replace existing node
   // (by index for items, item, or key/value)
   if (hasItems(parent)) {
+
     const index = parent.items.indexOf(existing);
-    if (index < 0) throw new Error(`Could not find existing item in parent node for replace`);
+    if (index < 0) {
+      throw new Error(`Could not find existing item in parent node for replace`);
+    }
 
     parent.items.splice(index, 1, replacement);
+  } else if (isKeyValue(parent) && isInlineTable(parent.value)) {
+    
+    const index = parent.value.items.indexOf(existing as InlineTableItem);
+    if (index < 0) {
+      throw new Error(`Could not find existing item in parent node for replace`);
+    } 
+    parent.value.items.splice(index, 1, replacement as InlineTableItem);
   } else if (hasItem(parent)) {
+
     parent.item = replacement;
+
   } else if (isKeyValue(parent)) {
+
     if (parent.key === existing) {
       parent.key = replacement as Key;
     } else {
       parent.value = replacement as Value;
     }
+
   } else {
     throw new Error(`Unsupported parent type "${parent.type}" for replace`);
   }
