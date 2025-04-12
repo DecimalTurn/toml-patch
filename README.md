@@ -7,13 +7,13 @@ Patch, parse, and stringify TOML.
 toml-patch is dependency-free and can be installed via npm or yarn.
 
 ```
-$ npm install --save toml-patch
+$ npm install --save @decimalturn/toml-patch
 ```
 
 For browser usage, you can use unpkg:
 
 ```html
-<script src="https://unpkg.com/toml-patch"></script>
+<script src="https://unpkg.com/@decimalturn/toml-patch"></script>
 ```
 
 ## API
@@ -23,7 +23,7 @@ For browser usage, you can use unpkg:
 Patch an existing TOML string with the given updated JS/JSON value, while attempting to retain the format of the existing document, including comments, indentation, and structure.
 
 ```js
-const TOML = require('toml-patch');
+const TOML = require('@decimalturn/toml-patch');
 const assert = require('assert');
 
 const existing = `
@@ -55,7 +55,7 @@ owner.name = "Tim"
 Parse a TOML string into a JS/JSON value.
 
 ```js
-const TOML = require('toml-patch');
+const TOML = require('@decimalturn/toml-patch');
 const assert = require('assert');
 
 const parsed = TOML.parse(`
@@ -85,7 +85,7 @@ Convert a JS/JSON value to a TOML string. `options` can be provided for high-lev
 - `[bracketSpacing = true]` - `true`: `{ key = "value" }`, `false`: `{key = "value"}`
 
 ```js
-const TOML = require('toml-patch');
+const TOML = require('@decimalturn/toml-patch');
 const assert = require('assert');
 
 const toml = TOML.stringify({
