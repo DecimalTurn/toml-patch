@@ -321,7 +321,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   }
 
   // For inline tables and arrays, check whether the line should be kept
-  const is_inline = previous && isInlineItem(previous);
+  const is_inline = previous && isInlineItem(previous) || next && isInlineItem(next);
   const previous_on_same_line = previous && previous.loc.end.line === node.loc.start.line;
   const next_on_sameLine = next && next.loc.start.line === node.loc.end.line;
   const keep_line = is_inline && (previous_on_same_line || next_on_sameLine);
@@ -333,6 +333,11 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
 
   // Offset for comma and remove comma that appear in front of the element (if-needed)
   if (is_inline && previous_on_same_line) {
+    offset.columns -= 2;
+  }
+
+  // If first element in array/inline-table, remove space for comma and space after element
+  if (is_inline && !previous && next) {
     offset.columns -= 2;
   }
 
