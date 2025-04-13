@@ -409,3 +409,88 @@ test('should patch example of modification of an inline-table element', () => {
     ` + '\n';
   expect(patched).toEqual(expectedOutput);
 });
+
+// This complex example includes a replacement from Inline-Table to single string
+test('should patch complex vba-block example', () => {
+  const existing = dedent`
+    [project]
+    name = "complex"
+    version = "0.0.0"
+    authors = ["Tim Hall"]
+    target = { type = "xlsm", path = "targets/xlsm" }
+
+    [src]
+    ThisWorkbook = "src/ThisWorkbook.cls"
+    Sheet1 = "src/Sheet1.cls"
+    Sheet2 = "src/Sheet2.cls"
+    Sheet3 = "src/Sheet3.cls"
+    UserForm1 = { path = "src/UserForm1.frm", binary = "src/UserForm1.frx" }
+    Validation = "src/Validation.bas"
+    Class1 = "src/Class1.cls"
+
+    [dependencies]
+    web = "^4"
+  ` + '\n';
+
+  const jsonString = dedent`
+  {
+    "project": {
+        "name": "complex",
+        "version": "0.0.0",
+        "authors": [
+            "Tim Hall"
+        ],
+        "target": {
+            "type": "xlsm",
+            "path": "targets/xlsm"
+        }
+    },
+    "src": {
+        "ThisWorkbook": "src/ThisWorkbook.cls",
+        "Sheet1": "src/Sheet1.cls",
+        "Sheet2": "src/Sheet2.cls",
+        "Sheet3": "src/Sheet3.cls",
+        "UserForm1": "src/UserForm1.frm",
+        "Class1": "src/Class1.cls",
+        "Added": "src/Added.bas"
+    },
+    "dependencies": {
+        "web": "^4"
+    },
+    "references": {
+        "VBIDE": {
+            "version": "5.3",
+            "guid": "{0002E157-0000-0000-C000-000000000046}"
+        }
+    }
+  }
+  `
+
+  let changed = JSON.parse(jsonString)
+
+  const patched = (patch(existing, changed));
+  let expectedOutput = dedent`
+    [project]
+    name = "complex"
+    version = "0.0.0"
+    authors = ["Tim Hall"]
+    target = { type = "xlsm", path = "targets/xlsm" }
+
+    [src]
+    ThisWorkbook = "src/ThisWorkbook.cls"
+    Sheet1 = "src/Sheet1.cls"
+    Sheet2 = "src/Sheet2.cls"
+    Sheet3 = "src/Sheet3.cls"
+    UserForm1 = "src/UserForm1.frm"
+    Class1 = "src/Class1.cls"
+    Added = "src/Added.bas"
+
+    [dependencies]
+    web = "^4"
+
+    [references]
+    VBIDE = { version = "5.3", guid = "{0002E157-0000-0000-C000-000000000046}" }
+` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
