@@ -70,13 +70,18 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     }
 
     parent.items.splice(index, 1, replacement);
-  } else if (isKeyValue(parent) && isInlineTable(parent.value)) {
+
+    // This next case is a special case for Inline-Table item
+    // however due to the fact that both replacement of the whole Inline-Table and Inline-Table element will have the same parent,
+    // we need to make sure to make sure it's not an Inline-Table 
+  } else if (isKeyValue(parent) && isInlineTable(parent.value) && !isInlineTable(existing)) {
     
     const index = parent.value.items.indexOf(existing as InlineTableItem);
     if (index < 0) {
       throw new Error(`Could not find existing item in parent node for replace`);
     } 
     parent.value.items.splice(index, 1, replacement as InlineTableItem);
+
   } else if (hasItem(parent)) {
 
     parent.item = replacement;
