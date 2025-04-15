@@ -518,3 +518,65 @@ test('should patch example without introducing trailing comma', () => {
 
   expect(patched).toEqual(expectedOutput);
 });
+
+test('should allow to add an element to an inline-table', () => {
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { type = "xlsm", path = "targets/xlsm" }
+  ` + '\n';
+
+  let value = parse(existing)
+  // Add a new element to the inline-table
+  value.project.target.test = "test";
+
+  const patched = (patch(existing, value));
+  let expectedOutput = dedent`
+    [project]
+    name = "Simple"
+    version = "0.0.0"
+    authors = ["Joe Bloggs"]
+    target = { type = "xlsm", path = "targets/xlsm", test = "test" }
+    ` + '\n';
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should allow to add an element to an inline-table 2', () => {
+  const existing = dedent`
+    disabled = false
+    languageCode = "en"
+    languageName = "English"
+    weight = 1
+    title = "Blowfish"
+   
+    [params]
+    displayName = "EN"
+    isoCode = "en"
+    rtl = false
+    dateFormat = "2 January 2006"
+    author = { name = "Abel" }
+  ` + '\n';
+
+  let value = parse(existing)
+  // Add a new element to the inline-table
+  value.params.author["image"] = "me.jpg";
+
+  const patched = (patch(existing, value));
+  let expectedOutput = dedent`
+    disabled = false
+    languageCode = "en"
+    languageName = "English"
+    weight = 1
+    title = "Blowfish"
+
+    [params]
+    displayName = "EN"
+    isoCode = "en"
+    rtl = false
+    dateFormat = "2 January 2006"
+    author = { name = "Abel", image = "me.jpg" }
+    ` + '\n';
+  expect(patched).toEqual(expectedOutput);
+});
