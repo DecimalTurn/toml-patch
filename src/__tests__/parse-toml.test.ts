@@ -1,6 +1,7 @@
 import parseTOML from '../parse-toml';
 import { Table, KeyValue, InlineArray, DateTime, Document, AST } from '../ast';
 import { example, fruit, hard_example, hard_example_unicode, kitchen_sink } from '../__fixtures__';
+import dedent from 'dedent';
 
 test('it should parse inline table', () => {
   expect([...parseTOML(`key = { end = true}`)]).toMatchSnapshot();
@@ -49,4 +50,25 @@ test('should parse newlines in string', () => {
     b = """value\\n"""
   `)
   ]).toMatchSnapshot();
+});
+
+test('should return correct error for invalid toml', () => {
+  const invalid_toml = dedent`
+  [package]
+  name: Package Name
+  `;
+
+  const expected_error = dedent`
+  Error parsing TOML (2, 7):
+
+  name: Package Name
+        ^
+  Expected "=" for key-value, found Package
+  `;
+
+  // Expect that calling parseTOML with invalid_toml throws an error
+  expect(() => {
+    // Convert generator to array to force execution
+    Array.from(parseTOML(invalid_toml));
+  }).toThrow(expected_error);
 });
