@@ -543,7 +543,8 @@ test('should allow to add an element to an inline-table', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
-test('should allow to add an element to an inline-table 2', () => {
+//Ref: https://github.com/nunocoracao/blowfish-tools/issues/77
+test('should allow to add elements to a unexisting inline-table', () => {
   const existing = dedent`
     disabled = false
     languageCode = "en"
@@ -555,12 +556,12 @@ test('should allow to add an element to an inline-table 2', () => {
     displayName = "EN"
     isoCode = "en"
     rtl = false
-    dateFormat = "2 January 2006"
-    author = { name = "Abel" }
+    dateFormat = "2 January 2006"    
   ` + '\n';
 
   let value = parse(existing)
   // Add a new element to the inline-table
+  value.params.author = { name: "Abel" };
   value.params.author["image"] = "me.jpg";
 
   const patched = (patch(existing, value));
@@ -578,5 +579,27 @@ test('should allow to add an element to an inline-table 2', () => {
     dateFormat = "2 January 2006"
     author = { name = "Abel", image = "me.jpg" }
     ` + '\n';
+  expect(patched).toEqual(expectedOutput);
+});
+
+//Ref: https://github.com/toml-rs/toml/issues/163
+test('dotted key-values should keep the order', () => {
+  const existing = dedent`
+  hello.world = "a"
+  goodbye = "b"
+  hello.moon = "c"
+  ` + '\n';
+
+  const value = parse(existing);
+  value.hello.world = "a1";
+  value.goodbye = "b2";
+  value.hello.moon = "c3";
+
+  const patched = patch(existing, value);
+  let expectedOutput = dedent`
+  hello.world = "a1"
+  goodbye = "b2"
+  hello.moon = "c3"
+  ` + '\n';
   expect(patched).toEqual(expectedOutput);
 });
