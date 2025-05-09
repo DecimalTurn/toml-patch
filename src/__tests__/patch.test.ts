@@ -494,3 +494,27 @@ test('should patch complex vba-block example', () => {
 
   expect(patched).toEqual(expectedOutput);
 });
+
+test('should patch example without introducing trailing comma', () => {
+  const existing = dedent`
+    [db.pooler]
+    enabled = false
+    ` + '\n';
+
+  const newObject = {
+    db: {
+      pooler: {
+        enabled: true
+      }
+    }
+  };
+
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    [db.pooler]
+    enabled = true
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
