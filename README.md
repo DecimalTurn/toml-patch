@@ -2,6 +2,9 @@
 
 Patch, parse, and stringify TOML.
 
+Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project and perform dependancy updates. 
+Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
+
 ## Installation
 
 toml-patch is dependency-free and can be installed via npm or yarn.
@@ -112,3 +115,5 @@ name = "Tim"`
 4. Test: `npm test`
 5. Specs compliance: `npm run specs`
 6. Benchmark: `npm run benchmark [<filter>] [--help] [--example] [--reference]`
+
+[^1]: Tim Hall has been inactive on most of his open source projects for more than 3 years. The sentence wording was inspired by the npm-run-all2 project.
