@@ -35,7 +35,7 @@
   "devDependencies": {
     "@rollup/plugin-terser": "^0.4.4",
     "@types/dedent": "^0.7.2",
-    "@types/glob": "^7",
+    "@types/glob": "^8.0.0",
     "@types/jest": "^24",
     "@types/js-yaml": "^3",
     "benchmark": "^2",
