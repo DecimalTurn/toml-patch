@@ -27,6 +27,7 @@ jobs:
         run: npm install
         env:
           CI: true
+          
       - name: Typecheck
         run: npm run typecheck
 
