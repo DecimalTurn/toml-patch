@@ -5,7 +5,7 @@
 
 Patch, parse, and stringify TOML.
 
-Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project and perform dependency updates. 
+Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project and perform dev-dependencies updates. 
 Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
 
 ## Installation
