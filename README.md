@@ -1,5 +1,8 @@
 # toml-patch
 
+![NPM Version](https://img.shields.io/npm/v/%40decimalturn%2Ftoml-patch?logo=npm&logoColor=white&labelColor=red&color=blue)
+![GitHub branch status](https://img.shields.io/github/checks-status/DecimalTurn/toml-patch/next)
+
 Patch, parse, and stringify TOML.
 
 Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project and perform dependancy updates. 
