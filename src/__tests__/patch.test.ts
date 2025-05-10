@@ -603,3 +603,25 @@ test('dotted key-values should keep the order', () => {
   ` + '\n';
   expect(patched).toEqual(expectedOutput);
 });
+
+test('should patch example without introducing trailing comma', () => {
+  const existing = dedent`
+    [db.pooler]
+    enabled = false
+    # Port to use for the local connection pooler.
+    port = 54329
+    ` + '\n';
+
+  const newObject = parse(existing);
+  newObject.db.pooler.enabled = true;
+  const patched = patch(existing, newObject);
+
+  let expectedOutput = dedent`
+    [db.pooler]
+    enabled = true
+    # Port to use for the local connection pooler.
+    port = 54329
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
