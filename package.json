@@ -44,7 +44,7 @@
     "jest": "^29.7.0",
     "js-yaml": "^3",
     "mri": "^1",
-    "npm-run-all": "^4",
+    "npm-run-all2": "^5.0.0",
     "rimraf": "^2",
     "rollup": "^4.38.0",
     "rollup-plugin-dts": "^6.2.1",
