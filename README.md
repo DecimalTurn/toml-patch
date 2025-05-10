@@ -1,7 +1,7 @@
 # toml-patch
 
-![NPM Version](https://img.shields.io/npm/v/%40decimalturn%2Ftoml-patch?logo=npm&logoColor=white&labelColor=red&color=blue)
-![GitHub branch status](https://img.shields.io/github/checks-status/DecimalTurn/toml-patch/next)
+[![NPM Version](https://img.shields.io/npm/v/%40decimalturn%2Ftoml-patch?logo=npm&logoColor=white&labelColor=red&color=blue)](https://www.npmjs.com/package/@decimalturn/toml-patch)
+[![GitHub branch status](https://img.shields.io/github/checks-status/DecimalTurn/toml-patch/next)](https://github.com/DecimalTurn/toml-patch/actions/workflows/test-and-build.yml)
 
 Patch, parse, and stringify TOML.
 
