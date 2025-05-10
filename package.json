@@ -41,7 +41,7 @@
     "@types/js-yaml": "^3",
     "benchmark": "^2",
     "dedent": "^1.5.3",
-    "glob": "^7",
+    "glob": "^11.0.0",
     "jest": "^29.7.0",
     "js-yaml": "^3",
     "mri": "^1",
