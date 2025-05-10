@@ -15,6 +15,7 @@ import {
   NodeType,
   isTableArray,
   isInlineArray,
+  isInlineItem,
   hasItem,
   InlineItem,
   AST
@@ -149,6 +150,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;
+      } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
+        // Sometimes, the replacement looks like it could be an inline item, but the original is a key-value
+        // In this case, we convert the replacement to a key-value to match the original
+        parent = existing;
+        existing = existing.value;
+        replacement = replacement.item.value;
       } else {
         parent = findParent(original, change.path);
       }

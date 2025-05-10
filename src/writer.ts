@@ -73,7 +73,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
 
     // This next case is a special case for Inline-Table item
     // however due to the fact that both replacement of the whole Inline-Table and Inline-Table element will have the same parent,
-    // we need to make sure to make sure it's not an Inline-Table 
+    // we need to make sure it's not an Inline-Table 
   } else if (isKeyValue(parent) && isInlineTable(parent.value) && !isInlineTable(existing)) {
     
     const index = parent.value.items.indexOf(existing as InlineTableItem);
