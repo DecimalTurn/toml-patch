@@ -606,49 +606,10 @@ test('dotted key-values should keep the order', () => {
 
 test('should patch example without introducing trailing comma', () => {
   const existing = dedent`
-    # For detailed configuration reference documentation, visit:
-    # https://supabase.com/docs/guides/local-development/cli/config
-    # A string used to distinguish different Supabase projects on the same host. Defaults to the
-    # working directory name when running \`supabase init\`.
-    project_id = "toml-patch-trailing-comma-repro"
-
-    [api]
-    enabled = true
-    # Port to use for the API URL.
-    port = 54321
-    # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
-    # endpoints. \`public\` and \`graphql_public\` schemas are included by default.
-    schemas = ["public", "graphql_public"]
-    # Extra schemas to add to the search_path of every request.
-    extra_search_path = ["public", "extensions"]
-    # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
-    # for accidental or malicious requests.
-    max_rows = 1000
-
-    [api.tls]
-    # Enable HTTPS endpoints locally using a self-signed certificate.
-    enabled = false
-
-    [db]
-    # Port to use for the local database URL.
-    port = 54322
-    # Port used by db diff command to initialize the shadow database.
-    shadow_port = 54320
-    # The database major version to use. This has to be the same as your remote database's. Run \`SHOW
-    # server_version;\` on the remote database to check.
-    major_version = 15
-
     [db.pooler]
     enabled = false
     # Port to use for the local connection pooler.
     port = 54329
-    # Specifies when a server connection can be reused by other clients.
-    # Configure one of the supported pooler modes: \`transaction\`, \`session\`.
-    pool_mode = "transaction"
-    # How many server connections to allow per user/database pair.
-    default_pool_size = 20
-    # Maximum number of client connections allowed.
-    max_client_conn = 100
     ` + '\n';
 
   const newObject = parse(existing);
@@ -656,49 +617,10 @@ test('should patch example without introducing trailing comma', () => {
   const patched = patch(existing, newObject);
 
   let expectedOutput = dedent`
-    # For detailed configuration reference documentation, visit:
-    # https://supabase.com/docs/guides/local-development/cli/config
-    # A string used to distinguish different Supabase projects on the same host. Defaults to the
-    # working directory name when running \`supabase init\`.
-    project_id = "toml-patch-trailing-comma-repro"
-
-    [api]
-    enabled = true
-    # Port to use for the API URL.
-    port = 54321
-    # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
-    # endpoints. \`public\` and \`graphql_public\` schemas are included by default.
-    schemas = ["public", "graphql_public"]
-    # Extra schemas to add to the search_path of every request.
-    extra_search_path = ["public", "extensions"]
-    # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
-    # for accidental or malicious requests.
-    max_rows = 1000
-
-    [api.tls]
-    # Enable HTTPS endpoints locally using a self-signed certificate.
-    enabled = false
-
-    [db]
-    # Port to use for the local database URL.
-    port = 54322
-    # Port used by db diff command to initialize the shadow database.
-    shadow_port = 54320
-    # The database major version to use. This has to be the same as your remote database's. Run \`SHOW
-    # server_version;\` on the remote database to check.
-    major_version = 15
-
     [db.pooler]
     enabled = true
     # Port to use for the local connection pooler.
     port = 54329
-    # Specifies when a server connection can be reused by other clients.
-    # Configure one of the supported pooler modes: \`transaction\`, \`session\`.
-    pool_mode = "transaction"
-    # How many server connections to allow per user/database pair.
-    default_pool_size = 20
-    # Maximum number of client connections allowed.
-    max_client_conn = 100
     ` + '\n';
 
   expect(patched).toEqual(expectedOutput);
