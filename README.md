@@ -3,7 +3,7 @@
 [![NPM Version](https://img.shields.io/npm/v/%40decimalturn%2Ftoml-patch?logo=npm&logoColor=white&labelColor=red&color=blue)](https://www.npmjs.com/package/@decimalturn/toml-patch)
 [![GitHub branch status](https://img.shields.io/github/check-runs/DecimalTurn/toml-patch/next)](https://github.com/DecimalTurn/toml-patch/actions/workflows/test-and-build.yml)
 
-Patch, parse, and stringify TOML.
+Patch, parse, and stringify [TOML](https://toml.io/en/).
 
 Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project and perform dev-dependencies updates. 
 Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
