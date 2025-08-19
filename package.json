@@ -1,12 +1,12 @@
 {
   "name": "@decimalturn/toml-patch",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "contributors": [
     "Tim Hall <tim.hall.engr@gmail.com>",
     "Martin Leduc <31558169+DecimalTurn@users.noreply.github.com>"
   ],
   "license": "MIT",
-  "description": "Patch, parse, and stringify TOML",
+  "description": "Patch, parse, and stringify TOML while preserving comments.",
   "homepage": "https://github.com/DecimalTurn/toml-patch",
   "publishConfig": {
     "access": "public"
