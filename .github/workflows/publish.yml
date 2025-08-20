@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish Package
 
 on:
   workflow_dispatch:
@@ -10,6 +10,9 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Might be used by jsr for authentication purposes
     steps:
 
       - name: Checkout
@@ -38,3 +41,6 @@ jobs:
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to jsr
+        run: npx jsr publish
