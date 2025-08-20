@@ -2,8 +2,5 @@
   "name": "@decimalturn/toml-patch",
   "version": "0.3.5",
   "license": "MIT",
-  "exports": {
-    ".": "./src/index.ts",    
-    "./types": "./dist/toml-patch.d.ts"
-  }
+  "exports": "./src/index.ts"
 }
