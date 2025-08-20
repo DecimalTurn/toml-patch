@@ -43,4 +43,4 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to jsr
-        run: npx jsr publish
+        run: npx -y jsr publish
