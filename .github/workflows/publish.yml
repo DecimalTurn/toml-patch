@@ -38,9 +38,12 @@ jobs:
         run: npm run build
            
       - name: Publish to npm
+        id: npm-publish
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
 
       - name: Publish to jsr
         run: npx -y jsr publish
+        if: success() || steps.npm-publish.outcome == 'failure'
