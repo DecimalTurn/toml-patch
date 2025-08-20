@@ -35,6 +35,19 @@ export function toDocument(ast: AST) : Document  {
   };
 }
 
+/**
+ * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
+ * 
+ * This function preserves formatting and comments from the existing TOML document while
+ * applying changes from the updated data structure. It performs a diff between the existing
+ * and updated data, then strategically applies only the necessary changes to maintain the
+ * original document structure as much as possible.
+ * 
+ * @param existing - The original TOML document as a string
+ * @param updated - The updated JavaScript object with desired changes
+ * @param format - Optional formatting options to apply to new or modified sections
+ * @returns A new TOML string with the changes applied
+ */
 export default function patch(existing: string, updated: any, format?: Format): string {
   const existing_ast = parseTOML(existing);
   const items = [...existing_ast];
