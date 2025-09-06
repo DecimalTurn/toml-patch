@@ -6,7 +6,7 @@
     "Martin Leduc <31558169+DecimalTurn@users.noreply.github.com>"
   ],
   "license": "MIT",
-  "description": "Patch, parse, and stringify TOML while preserving comments.",
+  "description": "Patch, parse, and stringify TOML while preserving comments and formatting.",
   "homepage": "https://github.com/DecimalTurn/toml-patch",
   "publishConfig": {
     "access": "public"
