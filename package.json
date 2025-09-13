@@ -51,7 +51,7 @@
     "rollup-plugin-filesize": "^10",
     "ts-jest": "^29",
     "tslib": "^2.0.0",
-    "typescript": "5.8"
+    "typescript": "5.9"
   },
   "jest": {
     "testEnvironment": "node",
