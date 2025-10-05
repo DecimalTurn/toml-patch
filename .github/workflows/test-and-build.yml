@@ -4,6 +4,7 @@ on:
     branches:
       - latest
       - master
+      - dev
   pull_request:
   workflow_dispatch:
 
@@ -19,8 +20,13 @@ jobs:
       uses: actions/setup-node@v5
       with:
         node-version: 22.x
+    # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
+    - uses: socketdev/action@0a8642c1a20cd548c5e7e7632d115b683a4f5a24 # v1.1.5
+      with:
+        mode: firewall
+        firewall-version: latest # or use a pinned version (see releases)
     - name: Install
-      run: npm install
+      run: sfw npm install
       env:
         CI: true
     - name: Typecheck
