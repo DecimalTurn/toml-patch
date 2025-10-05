@@ -2,7 +2,7 @@ import { promisify } from 'util';
 import { join, basename } from 'path';
 import { readFile as _readFile, existsSync } from 'fs';
 import { sync as glob } from 'glob';
-import { safeLoad } from 'js-yaml';
+import { load } from 'js-yaml';
 import { parse } from '../src/';
 
 const readFile = promisify(_readFile);
@@ -42,7 +42,7 @@ test.each(toml_test)('toml-test - %s', async (_name, input_file, expected_file) 
 
 test.each(spec_test)('spec-test - %s', async (_name, input_file, expected_file) => {
   const input = await readFile(input_file, 'utf8');
-  const expected = safeLoad(await readFile(expected_file, 'utf8'));
+  const expected = load(await readFile(expected_file, 'utf8'));
 
   const actual = parse(input);
   expect(actual).toEqual(expected);
