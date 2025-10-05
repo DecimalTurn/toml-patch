@@ -39,7 +39,7 @@ jobs:
            
       - name: Publish to npm
         id: npm-publish
-        run: npm publish
+        run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
