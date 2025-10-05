@@ -625,3 +625,55 @@ test('should patch example without introducing trailing comma', () => {
 
   expect(patched).toEqual(expectedOutput);
 });
+
+test('should correctly add new sections', () => {
+  // Test case based on a reported issue where adding new sections would result in incorrect TOML formatting
+  const existing = dedent`
+    project_id = "xxxxxxxxxxx"
+
+    [auth]
+    enabled = true
+    site_url = "https://siteurl.com"
+    additional_redirect_urls = ["http://127.0.0.1:8080", "https://127.0.0.1:8080", "http://localhost:8080", "https://localhost:8080"]
+
+    [auth.external.github]
+    enabled = true
+    client_id = "env(GITHUB_OAUTH_CLIENT_ID)"
+    secret = "env(GITHUB_OAUTH_CLIENT_SECRET)"
+    redirect_uri = "http://localhost:54321/auth/v1/callback"
+    ` + '\n';
+
+  // Parse the existing TOML
+  const value = parse(existing);
+  
+  // Add the new sections
+  value.edge_runtime = { policy: "per_worker" };
+  value.db = { pooler: { enabled: true, pool_mode: "transaction" } };
+
+  // Apply the patch
+  const patched = patch(existing, value);
+
+  // Expected result should maintain the original structure plus add the new sections
+  const expectedOutput = dedent`
+    project_id = "xxxxxxxxxxx"
+
+    [auth]
+    enabled = true
+    site_url = "https://siteurl.com"
+    additional_redirect_urls = ["http://127.0.0.1:8080", "https://127.0.0.1:8080", "http://localhost:8080", "https://localhost:8080"]
+
+    [auth.external.github]
+    enabled = true
+    client_id = "env(GITHUB_OAUTH_CLIENT_ID)"
+    secret = "env(GITHUB_OAUTH_CLIENT_SECRET)"
+    redirect_uri = "http://localhost:54321/auth/v1/callback"
+
+    [edge_runtime]
+    policy = "per_worker"
+
+    [db]
+    pooler = { enabled = true, pool_mode = "transaction" }
+    ` + '\n';
+  
+  expect(patched).toEqual(expectedOutput);
+});
