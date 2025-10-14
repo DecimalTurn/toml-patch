@@ -21,7 +21,7 @@ jobs:
       with:
         node-version: 22.x
     # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
-    - uses: socketdev/action@5d96858722636452306752590794679d7a3d6083 # v1.1.7
+    - uses: socketdev/action@4337a545deecc20f19a909e52db7a2f6ba292f42 # v1.2.0
       with:
         mode: firewall
         firewall-version: latest # or use a pinned version (see releases)
