@@ -31,7 +31,6 @@
     "benchmark": "npm-run-all2 benchmark:*",
     "benchmark:parse": "node benchmark/parse-benchmark.js",
     "benchmark:stringify": "node benchmark/stringify-benchmark.js",
-    "benchmark:detailed": "node benchmark/detailed-benchmark.js",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },

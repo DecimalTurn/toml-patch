@@ -137,3 +137,20 @@ const implementationsToRun = package !== undefined ?
     });
   }
 })();
+
+// Just in case we want memory/time profiling later
+function profileFunction(fn, name) {
+  console.time(name);
+  const startMem = process.memoryUsage().heapUsed / 1024 / 1024;
+  try {
+    const result = fn();
+    const endMem = process.memoryUsage().heapUsed / 1024 / 1024;
+    console.timeEnd(name);
+    console.log(`Memory usage for ${name}: ${(endMem - startMem).toFixed(2)} MB`);
+    return result;
+  } catch (error) {
+    console.timeEnd(name);
+    console.log(`Error in ${name}: ${error.message}`);
+    return null;
+  }
+}
