@@ -19,14 +19,17 @@ const mri = require('mri');
 // Define TOML implementations to test
 const TOML_IMPLEMENTATIONS = [
   { 
-    name: 'toml-patch',
+    name: 'toml-patch (current)',
     path: '../dist/toml-patch.es.js'
+  },
+  { 
+    name: 'toml-patch (published)',
+    path: '../node_modules/@decimalturn/toml-patch'
   },
   { 
     name: '@iarna/toml',
     path: '../submodules/iarna-toml/toml'
   }
-  // Add more implementations here as needed
 ];
 
 // Parse command line args
