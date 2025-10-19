@@ -118,6 +118,32 @@ name = "Tim"`
 3. Build: `npm run build`
 4. Test: `npm test`
 5. Specs compliance: `npm run specs`
-6. Benchmark: `npm run benchmark [<filter>] [--help] [--example] [--reference]`
+
+## Benchmarking
+
+The library includes benchmarking tools to measure and optimize performance:
+
+```bash
+# Run parse benchmarks
+npm run benchmark
+
+# Run stringify benchmarks
+npm run benchmark:stringify
+
+# Run detailed profiling
+npm run benchmark:detailed
+
+# Run all benchmarks
+npm run benchmark:all
+
+# Compare against reference implementation
+npm run benchmark:compare
+```
+
+See [benchmark/README.md](./benchmark/README.md) for complete documentation of the benchmarking tools.
+
+## Performance Optimization
+
+For details on recent performance optimizations and tips for improving performance further, see [performance-optimization.md](./performance-optimization.md).
 
 [^1]: Tim Hall has been inactive on most of his open source projects for more than 3 years. The sentence wording was inspired by the npm-run-all2 project.

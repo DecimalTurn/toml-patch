@@ -28,3 +28,7 @@ export function stringify(value: any, format?: Format): string {
 }
 
 export { default as patch } from './patch';
+
+// Export for benchmarking and testing purposes
+export { default as parseJS } from './parse-js';
+export { default as toTOML } from './to-toml';
