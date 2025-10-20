@@ -118,6 +118,6 @@ name = "Tim"`
 3. Build: `npm run build`
 4. Test: `npm test`
 5. Specs compliance: `npm run specs`
-6. Benchmark: `npm run benchmark [<filter>] [--help] [--example] [--reference]`
+6. Benchmark: `npm run benchmark`
 
 [^1]: Tim Hall has been inactive on most of his open source projects for more than 3 years. The sentence wording was inspired by the npm-run-all2 project.

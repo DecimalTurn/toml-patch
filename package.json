@@ -28,11 +28,14 @@
     "test": "jest",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.js",
-    "benchmark": "node benchmark/index.js",
+    "benchmark": "npm-run-all2 benchmark:*",
+    "benchmark:parse": "node benchmark/parse-benchmark.js",
+    "benchmark:stringify": "node benchmark/stringify-benchmark.js",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
+    "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@0.3.7",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/dedent": "^0.7.2",
