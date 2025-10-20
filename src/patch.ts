@@ -69,7 +69,19 @@ export default function patch(existing: string, updated: any, format?: Format): 
   // Validate the patched_document
   //validate(patched_document);
 
-  return toTOML(patched_document.items);
+  // Detect the line ending style from the original file
+  let newline = '\n'; // Default to LF
+  const lfIndex = existing.indexOf('\n');
+
+  // Even if a LF is found, it could that there is a CR right before the LF
+  if (lfIndex > 0 && existing.substring(lfIndex - 1, lfIndex) === '\r') {
+    newline = '\r\n'; // File uses CRLF
+  }
+
+  // Detect if the original string ends with a newline
+  const trailingNewline = existing.endsWith(newline);
+
+  return toTOML(patched_document.items, newline, { trailingNewline });
 }
 
 function reorder(changes: Change[]): Change[] {

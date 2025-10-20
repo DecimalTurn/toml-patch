@@ -5,7 +5,10 @@ import { SPACE } from './tokenizer';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
-export default function toTOML(ast: AST, newline: string = '\n'): string {
+export default function toTOML(ast: AST, newline: string = '\n', options?: { trailingNewline?: boolean }): string {
+
+  const trailingNewline = options?.trailingNewline ?? true;
+
   const lines: string[] = [];
 
   traverse(ast, {
@@ -75,7 +78,7 @@ export default function toTOML(ast: AST, newline: string = '\n'): string {
     }
   });
 
-  return lines.join(newline) + newline;
+  return lines.join(newline) + (trailingNewline ? newline : '');
 }
 
 function write(lines: string[], loc: Location, raw: string) {

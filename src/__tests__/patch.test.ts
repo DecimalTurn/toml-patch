@@ -68,7 +68,7 @@ test('should rename key-value in table', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
-test('should patch readme example', () => {
+test('should patch readme example (no newline at the end)', () => {
   const existing = dedent`
     # This is a TOML document
 
@@ -87,7 +87,7 @@ test('should patch readme example', () => {
 
     title = "TOML example"
     owner.name = "Tim"
-    ` + '\n');
+    `);
 
 });
 
