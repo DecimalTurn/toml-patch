@@ -1,4 +1,4 @@
-import { parse, stringify } from '../';
+import { parse, patch, stringify } from '../';
 import { readFileSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
 
@@ -13,29 +13,25 @@ function getTomlFiles(directoryPath: string): string[] {
 }
 
 /**
- * Runs a roundtrip test on a TOML file
+ * Runs a roundtrip patch test on a TOML file
  * - Parses the TOML to JS object
- * - Stringifies the JS object back to TOML
- * - Parses the new TOML again
- * - Compares the two JS objects for equality
+ * - Patches the original TOML with the same JS object
+ * - Compares the result with the original for exact match
  */
-function testRoundtrip(filePath: string) {
+function testRoundtripPatch(filePath: string) {
   const filename = basename(filePath);
   
-  test(`roundtrip: ${filename}`, () => {
+  test(`roundtrip patch: ${filename}`, () => {
     const tomlContent = readFileSync(filePath, 'utf8');
     
     // Parse TOML to JS
     const parsedObject = parse(tomlContent);
     
-    // Stringify JS back to TOML
-    const stringifiedToml = stringify(parsedObject);
+    // Patch the original TOML with the same JS object
+    const patchedToml = patch(tomlContent, parsedObject);
     
-    // Parse the new TOML
-    const reparsedObject = parse(stringifiedToml);
-    
-    // Compare the objects (this may fail, which is valuable for debugging)
-    expect(reparsedObject).toEqual(parsedObject);
+    // Compare the original and "patched" TOML for exact match
+    expect(patchedToml).toEqual(tomlContent);
   });
 }
 
@@ -50,7 +46,7 @@ const fixtureFiles = getTomlFiles(fixturesDir);
 // Combine all test files
 const allTomlFiles = [...benchmarkFiles, ...fixtureFiles];
 
-// Run roundtrip test on all files
+// Run roundtrip patch test on all files
 allTomlFiles.forEach(filePath => {
-  testRoundtrip(filePath);
+  testRoundtripPatch(filePath);
 });
