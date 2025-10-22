@@ -10,7 +10,7 @@ export default function toJS(ast: AST, input: string = ''): any {
   const defined: Set<string> = new Set();
   let active: any = result;
   let previous_active: any;
-  let skip = false;
+  let skip_depth = 0;
 
   traverse(ast, {
     [NodeType.Table](node) {
@@ -48,7 +48,7 @@ export default function toJS(ast: AST, input: string = ''): any {
 
     [NodeType.KeyValue]: {
       enter(node) {
-        if (skip) return;
+        if (skip_depth > 0) return;
 
         const key = node.key.value;
         try {
@@ -63,26 +63,20 @@ export default function toJS(ast: AST, input: string = ''): any {
 
         target[last(key)!] = value;
         defined.add(joinKey(key));
-
-        if (isInlineTable(node.value)) {
-          previous_active = active;
-          active = value;
-        }
       },
       exit(node) {
-        if (isInlineTable(node.value)) {
-          active = previous_active;
-        }
+        // InlineTable values are handled entirely by toValue()
+        // and should not affect the traversal context
       }
     },
 
     [NodeType.InlineTable]: {
       enter() {
         // Handled by toValue
-        skip = true;
+        skip_depth++;
       },
       exit() {
-        skip = false;
+        skip_depth--;
       }
     }
   });
