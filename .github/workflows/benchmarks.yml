@@ -1,15 +1,9 @@
-name: Test and Build
+name: Benchmarks
 on: 
-  push:
-    branches:
-      - latest
-      - master
-      - dev
-  pull_request:
   workflow_dispatch:
 
 jobs:
-  build:
+  benchmark:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -29,19 +23,8 @@ jobs:
       run: sfw npm install
       env:
         CI: true
-    - name: Typecheck
-      run: npm run typecheck
-    - name: Test
-      run: npm test
-    - name: Specs
-      run: npm run specs
     - name: Build
       run: npm run build
-    - name: Benchmark (Example)
-      run: npm run benchmark -- --example
-    - name: Create build artifacts
-      uses: actions/upload-artifact@v4
-      with: 
-        path: dist/
-        name: dist
-        
+    - name: Full Benchmark Suite
+      run: npm run benchmark
+    - name: Upload benchmark results
