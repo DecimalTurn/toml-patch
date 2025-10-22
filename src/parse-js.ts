@@ -52,11 +52,6 @@ This function makes sure that properties that are simple values (not objects or 
 and that objects and arrays are ordered last. This makes parseJS more reliable and easier to test.
 */
 function reorderElements(value:any) : Object {
-  if (!isObject(value) || Object.keys(value).length <= 1) {
-    // No need to reorder single-property objects or non-objects
-    return value;
-  }
-
   // Pre-sort keys to avoid multiple iterations
   const simpleKeys: string[] = [];
   const complexKeys: string[] = [];
@@ -68,11 +63,6 @@ function reorderElements(value:any) : Object {
     } else {
       simpleKeys.push(key);
     }
-  }
-  
-  // If no reordering needed, return original
-  if (simpleKeys.length === 0 || complexKeys.length === 0) {
-    return value;
   }
   
   // Create result with the correct order
