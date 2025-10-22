@@ -44,6 +44,48 @@ y = \\"z\\"
 "
 `;
 
+exports[`it should perform reordering 1`] = `
+"a = \\"1\\"
+b = 2
+c = 3.14
+d = true
+e = 1979-05-27T07:32:00.000Z
+
+[f]
+g = [ \\"h\\", \\"i\\", \\"j\\" ]
+
+[[t]]
+u = \\"v\\"
+
+[[t]]
+w = \\"x\\"
+
+[[t]]
+y = \\"z\\"
+"
+`;
+
+exports[`it should perform reordering 2`] = `
+"a = \\"1\\"
+b = 2
+c = 3.14
+d = true
+e = 1979-05-27T07:32:00.000Z
+
+[f]
+g = [\\"h\\", \\"i\\", \\"j\\",]
+
+[[t]]
+u = \\"v\\"
+
+[[t]]
+w = \\"x\\"
+
+[[t]]
+y = \\"z\\"
+"
+`;
+
 exports[`it should remove leading empty lines 1`] = `
 "[a]
 b = 2
