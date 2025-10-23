@@ -350,6 +350,12 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     columns: -removed_span.columns
   };
 
+  // If there is nothing left, don't perform any offsets
+  if(previous === undefined && next === undefined) {
+    offset.lines = 0;
+    offset.columns = 0;
+  }
+
   // Offset for comma and remove comma that appear in front of the element (if-needed)
   if (is_inline && previous_on_same_line) {
     offset.columns -= 2;
