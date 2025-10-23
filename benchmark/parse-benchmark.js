@@ -61,7 +61,8 @@ const search = example ? '0A-spec-01-example-v0.4.0.toml' :
 
 // Find benchmark files
 const benchmark_dir = join(__dirname, '../submodules/iarna-toml/benchmark');
-const benchmarks = glob(join(benchmark_dir, search)).map(path => {
+const searchPattern = join(benchmark_dir, search).replace(/\\/g, '/');
+const benchmarks = glob(searchPattern).map(path => {
   const name = basename(path, '.toml');
   const data = readFileSync(path, 'utf8');
 
