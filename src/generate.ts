@@ -122,7 +122,7 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   };
 }
 
-const IS_BARE_KEY = /[\w,\d,\_,\-]+/;
+const IS_BARE_KEY = /^[\w-]+$/;
 function keyValueToRaw(value: string[]): string {
   return value.map(part => (IS_BARE_KEY.test(part) ? part : JSON.stringify(part))).join('.');
 }
