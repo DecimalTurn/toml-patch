@@ -27,7 +27,7 @@ function testRoundtripPatch(filePath: string) {
     // Parse TOML to JS
     const parsedObject = parse(tomlContent);
     
-    // Patch the original TOML with the same JS object
+    // Patch the original TOML with the same JS object (no changes)
     const patchedToml = patch(tomlContent, parsedObject);
     
     // Compare the original and "patched" TOML for exact match
