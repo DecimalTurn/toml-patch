@@ -116,4 +116,30 @@ test('should stringify simple example with empty object', () => {
 
 });
 
+// Test for quoted key bug in table headers
+test('should stringify object with quoted key in table header correctly', () => {
+  
+  // This represents the JS object that results from parsing: [dog  .  "tater.man"]
+  const jsObject = {
+    dog: {
+      "tater.man": {
+        type: {
+          name: "pug"
+        }
+      }
+    }
+  };
+
+  const result = stringify(jsObject);
+
+  // The expected output should preserve the quoted key in the table header
+  // and not convert it to an inline table
+  const expectedOutput = dedent`
+    [dog."tater.man"]
+    type.name = "pug"
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
+
 // TODO: Add test with TOML that has no key/value pairs at top level
