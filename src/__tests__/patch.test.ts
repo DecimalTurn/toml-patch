@@ -677,3 +677,189 @@ test('should correctly add new sections', () => {
   
   expect(patched).toEqual(expectedOutput);
 });
+
+// Tests for trailing newline preservation
+test('should preserve no trailing newlines', () => {
+  const existing = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"`;
+
+  const value = parse(existing);
+  value.project.author = "John Doe";
+
+  const patched = patch(existing, value);
+
+  const expectedOutput = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"
+    author = "John Doe"`;
+
+  expect(patched).toEqual(expectedOutput);
+  expect(patched.endsWith('\n')).toBe(false);
+});
+
+test('should preserve single trailing newline', () => {
+  const existing = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"
+    ` + '\n';
+
+  const value = parse(existing);
+  value.project.author = "John Doe";
+
+  const patched = patch(existing, value);
+
+  const expectedOutput = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"
+    author = "John Doe"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+  expect(patched.endsWith('\n')).toBe(true);
+  expect(patched.endsWith('\n\n')).toBe(false);
+});
+
+test('should preserve multiple trailing newlines', () => {
+  const existing = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"
+    ` + '\n\n\n';
+
+  const value = parse(existing);
+  value.project.author = "John Doe";
+
+  const patched = patch(existing, value);
+
+  const expectedOutput = dedent`
+    [project]
+    name = "test"
+    version = "1.0.0"
+    author = "John Doe"
+    ` + '\n\n\n';
+
+  expect(patched).toEqual(expectedOutput);
+  
+  // Count trailing newlines properly
+  function countTrailingNewlines(str: string) {
+    let count = 0;
+    for (let i = str.length - 1; i >= 0; i--) {
+      if (str[i] === '\n') {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }
+  
+  expect(countTrailingNewlines(patched)).toBe(3);
+});
+
+test('should preserve CRLF line endings and trailing newlines', () => {
+  const existing = '[project]\r\nname = "test"\r\nversion = "1.0.0"\r\n\r\n';
+
+  const value = parse(existing);
+  value.project.author = "John Doe";
+
+  const patched = patch(existing, value);
+
+  expect(patched).toContain('\r\n');
+  expect(patched.endsWith('\r\n\r\n')).toBe(true);
+  
+  // Count trailing CRLF sequences
+  let count = 0;
+  let pos = patched.length;
+  while (pos >= 2 && patched.substring(pos - 2, pos) === '\r\n') {
+    count++;
+    pos -= 2;
+  }
+  expect(count).toBe(2);
+});
+
+test('should preserve exact trailing newline count with complex changes', () => {
+  const existing = dedent`
+    [database]
+    server = "192.168.1.1"
+    ports = [ 8001, 8001, 8002 ]
+    connection_max = 5000
+    enabled = true
+    
+    [servers]
+    
+    [servers.alpha]
+    ip = "10.0.0.1"
+    dc = "eqdc10"
+    ` + '\n\n\n\n\n';
+
+  const value = parse(existing);
+  value.database.server = "192.168.1.100";
+  value.database.ports.push(8003);
+  value.servers.gamma = { ip: "10.0.0.3", dc: "eqdc11" };
+
+  const patched = patch(existing, value);
+
+  // Should preserve exactly 5 trailing newlines
+  function countTrailingNewlines(str: string) {
+    let count = 0;
+    for (let i = str.length - 1; i >= 0; i--) {
+      if (str[i] === '\n') {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }
+  
+  expect(countTrailingNewlines(patched)).toBe(5);
+  expect(patched.endsWith('\n\n\n\n\n')).toBe(true);
+});
+
+test('should handle edge case with only newlines', () => {
+  const existing = '\n\n\n';
+  const value = {};
+  const patched = patch(existing, value);
+
+  expect(patched).toBe('\n\n\n');
+});
+
+test('should handle empty string', () => {
+  const existing = '';
+  const value = {};
+  const patched = patch(existing, value);
+
+  expect(patched).toBe('');
+});
+
+test('should handle mixed line endings consistently', () => {
+  // File that starts with CRLF but we want to ensure consistency
+  const existing = 'title = "test"\r\nversion = "1.0"\r\n\r\n';
+
+  const value = parse(existing);
+  value.author = "Test Author";
+
+  const patched = patch(existing, value);
+
+  // Should maintain CRLF throughout and preserve trailing count
+  expect(patched).toContain('\r\n');
+  expect(patched.endsWith('\r\n\r\n')).toBe(true);
+  
+  // Count trailing CRLF sequences
+  function countTrailingCRLF(str: string) {
+    let count = 0;
+    let pos = str.length;
+    while (pos >= 2 && str.substring(pos - 2, pos) === '\r\n') {
+      count++;
+      pos -= 2;
+    }
+    return count;
+  }
+  
+  expect(countTrailingCRLF(patched)).toBe(2);
+});
