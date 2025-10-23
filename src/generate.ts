@@ -21,6 +21,11 @@ import {
 import { zero, cloneLocation, clonePosition } from './location';
 import { shiftNode } from './writer';
 
+/**
+ * Generates a new TOML document node.
+ *
+ * @returns A new Document node.
+ */
 export function generateDocument(): Document {
   return {
     type: NodeType.Document,

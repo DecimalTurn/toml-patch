@@ -109,9 +109,11 @@ test('should stringify simple example with empty object', () => {
     [foo]
     ` + '\n';
 
+  //Ensure that parsing the expected output doesn't throw
   const x = [...parseTOML(expectedOutput)];
 
   expect(ouput).toEqual(expectedOutput);
 
 });
 
+// TODO: Add test with TOML that has no key/value pairs at top level
