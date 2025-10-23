@@ -15,17 +15,17 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
  * @param ast - The Abstract Syntax Tree representing the parsed TOML document
  * @param newline - The newline character(s) to use (\n by default)
  * @param options - Optional configuration object
- * @param options.trailingNewline - Whether to add a trailing newline (true by default)
+ * @param options.trailingNewline - Number of trailing newlines to add (1 by default)
  * @returns The reconstructed TOML document as a string
  * 
  * @example
  * ```typescript
- * const tomlString = toTOML(ast, '\n', { trailingNewline: true });
+ * const tomlString = toTOML(ast, '\n', { trailingNewline: 1 });
  * ```
  */
-export default function toTOML(ast: AST, newline: string = '\n', options?: { trailingNewline?: boolean }): string {
+export default function toTOML(ast: AST, newline: string = '\n', options?: { trailingNewline?: number }): string {
 
-  const trailingNewline = options?.trailingNewline ?? true;
+  const trailingNewline = options?.trailingNewline ?? 1;
 
   const lines: string[] = [];
 
@@ -96,7 +96,7 @@ export default function toTOML(ast: AST, newline: string = '\n', options?: { tra
     }
   });
 
-  return lines.join(newline) + (trailingNewline ? newline : '');
+  return lines.join(newline) + newline.repeat(trailingNewline);
 }
 
 /**

@@ -78,10 +78,26 @@ export default function patch(existing: string, updated: any, format?: Format): 
     newline = '\r\n'; // File uses CRLF
   }
 
-  // Detect if the original string ends with a newline
-  const trailingNewline = existing.endsWith(newline);
+  // Count consecutive trailing newlines
+  function countTrailingNewlines(str: string, newlineChar: string): number {
+    let count = 0;
+    let pos = str.length;
+    
+    while (pos >= newlineChar.length) {
+      if (str.substring(pos - newlineChar.length, pos) === newlineChar) {
+        count++;
+        pos -= newlineChar.length;
+      } else {
+        break;
+      }
+    }
+    
+    return count;
+  }
 
-  return toTOML(patched_document.items, newline, { trailingNewline });
+  const trailingNewlineCount = countTrailingNewlines(existing, newline);
+
+  return toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount });
 }
 
 function reorder(changes: Change[]): Change[] {
