@@ -142,4 +142,93 @@ test('should stringify object with quoted key in table header correctly', () => 
   expect(result).toEqual(expectedOutput);
 });
 
+// Test for special float values (Infinity, -Infinity, NaN)
+test('should stringify special float values correctly', () => {
+  const jsObject = {
+    positive_infinity: Infinity,
+    negative_infinity: -Infinity,
+    not_a_number: NaN
+  };
+
+  const result = stringify(jsObject);
+
+  const expectedOutput = dedent`
+    positive_infinity = inf
+    negative_infinity = -inf
+    not_a_number = nan
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
+
+// Test for special float values in arrays
+test('should stringify arrays with special float values correctly', () => {
+  const jsObject = {
+    special_floats: [1.5, Infinity, -Infinity, NaN, 3.14]
+  };
+
+  const result = stringify(jsObject);
+
+  const expectedOutput = dedent`
+    special_floats = [ 1.5, inf, -inf, nan, 3.14 ]
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
+
+// Test for special float values in nested objects
+test('should stringify nested objects with special float values correctly', () => {
+  const jsObject = {
+    math_constants: {
+      infinity: Infinity,
+      negative_infinity: -Infinity
+    },
+    calculations: {
+      result: NaN
+    }
+  };
+
+  const result = stringify(jsObject);
+
+  const expectedOutput = dedent`
+    [math_constants]
+    infinity = inf
+    negative_infinity = -inf
+
+    [calculations]
+    result = nan
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
+
+// Test for mixed number types including special float values
+test('should stringify mixed number types correctly', () => {
+  const jsObject = {
+    integer: 42,
+    float: 3.14159,
+    scientific: 1.23e-4,
+    positive_infinity: Infinity,
+    negative_infinity: -Infinity,
+    not_a_number: NaN,
+    zero: 0,
+    negative_zero: -0
+  };
+
+  const result = stringify(jsObject);
+
+  const expectedOutput = dedent`
+    integer = 42
+    float = 3.14159
+    scientific = 0.000123
+    positive_infinity = inf
+    negative_infinity = -inf
+    not_a_number = nan
+    zero = 0
+    negative_zero = -0.0
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
+
 // TODO: Add test with TOML that has no key/value pairs at top level

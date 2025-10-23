@@ -13,11 +13,11 @@ export function isString(value: any): value is string {
 }
 
 export function isInteger(value: any): value is number {
-  return typeof value === 'number' && value % 1 === 0;
+  return typeof value === 'number' && value % 1 === 0 && isFinite(value) && !Object.is(value, -0);
 }
 
 export function isFloat(value: any): value is number {
-  return typeof value === 'number' && !isInteger(value);
+  return typeof value === 'number' && (!isInteger(value) || !isFinite(value) || Object.is(value, -0));
 }
 
 export function isBoolean(value: any): value is boolean {

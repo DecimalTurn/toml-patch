@@ -161,7 +161,19 @@ export function generateInteger(value: number): Integer {
 }
 
 export function generateFloat(value: number): Float {
-  const raw = value.toString();
+  let raw: string;
+  
+  if (value === Infinity) {
+    raw = 'inf';
+  } else if (value === -Infinity) {
+    raw = '-inf';
+  } else if (Number.isNaN(value)) {
+    raw = 'nan';
+  } else if (Object.is(value, -0)) {
+    raw = '-0.0';
+  } else {
+    raw = value.toString();
+  }
 
   return {
     type: NodeType.Float,
