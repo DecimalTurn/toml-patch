@@ -7,6 +7,8 @@ import { Format } from './format';
 /**
  * Parses a TOML string into a JavaScript object.
  * The function converts TOML syntax to its JavaScript equivalent.
+ * This proceeds in two steps: first, it parses the TOML string into an AST,
+ * and then it converts the AST into a JavaScript object.
  * 
  * @param value - The TOML string to parse
  * @returns The parsed JavaScript object

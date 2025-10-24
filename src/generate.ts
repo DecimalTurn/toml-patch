@@ -21,6 +21,11 @@ import {
 import { zero, cloneLocation, clonePosition } from './location';
 import { shiftNode } from './writer';
 
+/**
+ * Generates a new TOML document node.
+ *
+ * @returns A new Document node.
+ */
 export function generateDocument(): Document {
   return {
     type: NodeType.Document,
@@ -117,7 +122,7 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   };
 }
 
-const IS_BARE_KEY = /[\w,\d,\_,\-]+/;
+const IS_BARE_KEY = /^[\w-]+$/;
 function keyValueToRaw(value: string[]): string {
   return value.map(part => (IS_BARE_KEY.test(part) ? part : JSON.stringify(part))).join('.');
 }
@@ -156,7 +161,19 @@ export function generateInteger(value: number): Integer {
 }
 
 export function generateFloat(value: number): Float {
-  const raw = value.toString();
+  let raw: string;
+  
+  if (value === Infinity) {
+    raw = 'inf';
+  } else if (value === -Infinity) {
+    raw = '-inf';
+  } else if (Number.isNaN(value)) {
+    raw = 'nan';
+  } else if (Object.is(value, -0)) {
+    raw = '-0.0';
+  } else {
+    raw = value.toString();
+  }
 
   return {
     type: NodeType.Float,

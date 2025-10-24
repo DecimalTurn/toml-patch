@@ -7,26 +7,26 @@ import { parse } from '../src/';
 
 const readFile = promisify(_readFile);
 
-const toml_test_dir = join(__dirname, '../submodules/toml-test/tests/valid');
-const toml_test_input = glob(join(toml_test_dir, '*.toml'));
+const toml_test_pattern = 'submodules/toml-test/tests/valid/*.toml';
+const toml_test_input = glob(toml_test_pattern);
 
 const toml_test = toml_test_input
   .map(input => {
     const name = basename(input, '.toml');
-    const expected = join(toml_test_dir, `${name}.json`);
+    const expected = join('submodules/toml-test/tests/valid', `${name}.json`);
     if (!existsSync(expected)) return;
 
     return [name, input, expected];
   })
   .filter(Boolean) as Array<string[]>;
 
-const spec_test_dir = join(__dirname, '../submodules/spec-tests/values');
-const spec_test_input = glob(join(spec_test_dir, '*.toml'));
+const spec_test_pattern = 'submodules/spec-tests/values/*.toml';
+const spec_test_input = glob(spec_test_pattern);
 
 const spec_test = spec_test_input
   .map(input => {
     const name = basename(input, '.toml');
-    const expected = join(spec_test_dir, `${name}.yaml`);
+    const expected = join('submodules/spec-tests/values', `${name}.yaml`);
     if (!existsSync(expected)) return;
 
     return [name, input, expected];

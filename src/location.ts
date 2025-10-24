@@ -82,7 +82,12 @@ export function clonePosition(position: Position): Position {
 export function cloneLocation(location: Location): Location {
   return { start: clonePosition(location.start), end: clonePosition(location.end) };
 }
-
+/**
+ * Returns a Position at line 1, column 0.
+ * This means that lines are 1-indexed and columns are 0-indexed.
+ * 
+ * @returns A Position at line 1, column 0
+ */
 export function zero(): Position {
   return { line: 1, column: 0 };
 }

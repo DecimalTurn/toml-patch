@@ -115,7 +115,14 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
 
   addOffset(offset, getExitOffsets(root), replacement, existing);
 }
-
+/**
+ * Inserts a child node into the AST.
+ *
+ * @param root - The root node of the AST
+ * @param parent - The parent node to insert the child into
+ * @param child - The child node to insert
+ * @param index - The index at which to insert the child (optional)
+ */
 export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
@@ -175,7 +182,8 @@ function insertOnNewLine(
       column: !isComment(previous) ? previous.loc.start.column : parent.loc.start.column
     }
     : clonePosition(parent.loc.start);
-
+  
+  //TODO: Check the definition for block to see if using isBlock is more appropriate
   const is_block = isTable(child) || isTableArray(child);
   let leading_lines = 0;
   if (use_first_line) {
@@ -349,6 +357,12 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     lines: -(removed_span.lines - (keep_line ? 1 : 0)),
     columns: -removed_span.columns
   };
+
+  // If there is nothing left, don't perform any offsets
+  if(previous === undefined && next === undefined) {
+    offset.lines = 0;
+    offset.columns = 0;
+  }
 
   // Offset for comma and remove comma that appear in front of the element (if-needed)
   if (is_inline && previous_on_same_line) {
