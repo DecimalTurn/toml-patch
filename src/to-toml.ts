@@ -90,6 +90,14 @@ function write(lines: string[], loc: Location, raw: string) {
 
   for (let i = loc.start.line; i <= loc.end.line; i++) {
     const line = getLine(lines, i);
+
+    //Throw if line is uninitialized
+    if (line === undefined) {
+      throw new Error(
+        `Line ${i} is uninitialized when writing "${raw}" at ${loc.start.line}:${loc.start.column} to ${loc.end.line}:${loc.end.column}`
+      );
+    }
+
     const is_start_line = i === loc.start.line;
     const is_end_line = i === loc.end.line;
 

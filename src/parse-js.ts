@@ -52,20 +52,32 @@ This function makes sure that properties that are simple values (not objects or 
 and that objects and arrays are ordered last. This makes parseJS more reliable and easier to test.
 */
 function reorderElements(value:any) : Object {
-  let result: Record<string, any> = {};
+  // Pre-sort keys to avoid multiple iterations
+  const simpleKeys: string[] = [];
+  const complexKeys: string[] = [];
   
-  // First add all simple values
+  // Separate keys in a single pass
   for (const key in value) {
-    if (!isObject(value[key]) && !Array.isArray(value[key])) {
-      result[key] = value[key];
+    if (isObject(value[key]) || Array.isArray(value[key])) {
+      complexKeys.push(key);
+    } else {
+      simpleKeys.push(key);
     }
   }
   
-  // Then add all objects and arrays
-  for (const key in value) {
-    if (isObject(value[key]) || Array.isArray(value[key])) {
-      result[key] = value[key];
-    }
+  // Create result with the correct order
+  const result: Record<string, any> = {};
+  
+  // Add simple values first
+  for (let i = 0; i < simpleKeys.length; i++) {
+    const key = simpleKeys[i];
+    result[key] = value[key];
+  }
+  
+  // Then add complex values
+  for (let i = 0; i < complexKeys.length; i++) {
+    const key = complexKeys[i];
+    result[key] = value[key];
   }
   
   return result;

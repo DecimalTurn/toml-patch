@@ -1,7 +1,6 @@
 /dist
 
 node_modules
-.vscode
 .DS_store
 toml-patch.code-workspace
 
