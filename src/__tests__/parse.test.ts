@@ -59,6 +59,7 @@ negative_infinity = -inf
 [calculations]
 result = nan
 negative_zero = -0.0
+other_negative_zero = -0 # This form should not resolve to -0 in JS Object format
 `);
 
   expect(parsed).toEqual({
@@ -69,7 +70,8 @@ negative_zero = -0.0
     },
     calculations: {
       result: NaN,
-      negative_zero: -0
+      negative_zero: -0,
+      other_negative_zero: 0
     }
   });
 
@@ -84,4 +86,6 @@ negative_zero = -0.0
   expect(parsed.math_constants.negative_infinity).toBe(-Infinity);
   expect(Number.isNaN(parsed.calculations.result)).toBe(true);
   expect(Object.is(parsed.calculations.negative_zero, -0)).toBe(true);
+  expect(Object.is(parsed.calculations.other_negative_zero, 0)).toBe(true);
+  
 });
