@@ -231,4 +231,40 @@ test('should stringify mixed number types correctly', () => {
   expect(result).toEqual(expectedOutput);
 });
 
-// TODO: Add test with TOML that has no key/value pairs at top level
+// Test for TOML that has no key/value pairs at top level (only sections)
+test('should stringify object with no top-level key/value pairs', () => {
+  const jsObject = {
+    database: {
+      server: "192.168.1.1",
+      ports: [8001, 8001, 8002],
+      connection_max: 5000,
+      enabled: true
+    },
+    servers: {
+      alpha: {
+        ip: "10.0.0.1",
+        dc: "eqdc10"
+      },
+      beta: {
+        ip: "10.0.0.2",
+        dc: "eqdc10"
+      }
+    }
+  };
+
+  const result = stringify(jsObject);
+
+  const expectedOutput = dedent`
+    [database]
+    server = "192.168.1.1"
+    ports = [ 8001, 8001, 8002 ]
+    connection_max = 5000
+    enabled = true
+
+    [servers]
+    alpha = { ip = "10.0.0.1", dc = "eqdc10" }
+    beta = { ip = "10.0.0.2", dc = "eqdc10" }
+    ` + '\n';
+
+  expect(result).toEqual(expectedOutput);
+});
