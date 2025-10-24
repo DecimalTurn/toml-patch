@@ -27,4 +27,3 @@ jobs:
       run: npm run build
     - name: Full Benchmark Suite
       run: npm run benchmark
-    - name: Upload benchmark results
