@@ -864,22 +864,6 @@ test('should handle mixed line endings consistently', () => {
   expect(countTrailingCRLF(patched)).toBe(2);
 });
 
-/* Let's write a test that makes sure that if we parse the following toml:
-/
-    [dog]
-    "tater.man" = { type = { name = "pug" } }
-    ` + '\n';
-
-    We get back the following object:
-    {
-      dog: {
-          "tater.man": {
-          type: {
-              name: "pug"
-          }
-      }
-    }
-      */
 test('should respect quoted keys when parsing', () => {
   const toml = dedent`
     [dog]

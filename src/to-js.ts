@@ -63,10 +63,6 @@ export default function toJS(ast: AST, input: string = ''): any {
 
         target[last(key)!] = value;
         defined.add(joinKey(key));
-      },
-      exit(node) {
-        // InlineTable values are handled entirely by toValue()
-        // and should not affect the traversal context
       }
     },
 

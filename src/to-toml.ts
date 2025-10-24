@@ -177,7 +177,7 @@ function write(lines: string[], loc: Location, raw: string) {
  */
 function getLine(lines: string[], index: number): string {
   if (!lines[index - 1]) {
-        for (let i = 0; i < index; i++) {
+    for (let i = 0; i < index; i++) {
       if (!lines[i]) lines[i] = '';
     }
   }
