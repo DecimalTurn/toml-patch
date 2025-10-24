@@ -28,9 +28,10 @@
     "test": "jest",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.js",
-    "benchmark": "npm-run-all2 benchmark:*",
-    "benchmark:parse": "node benchmark/parse-benchmark.js",
-    "benchmark:stringify": "node benchmark/stringify-benchmark.js",
+    "benchmark": "npm-run-all2 bench:*",
+    "benchmark:example": "npm-run-all2 \"bench:* -- --example\"",
+    "bench:parse": "node benchmark/parse-benchmark.js",
+    "bench:stringify": "node benchmark/stringify-benchmark.js",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },

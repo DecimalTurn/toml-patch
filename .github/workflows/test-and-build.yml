@@ -38,7 +38,7 @@ jobs:
     - name: Build
       run: npm run build
     - name: Benchmark (Example)
-      run: npm run benchmark -- --example
+      run: npm run benchmark:example
     - name: Create build artifacts
       uses: actions/upload-artifact@v4
       with: 
