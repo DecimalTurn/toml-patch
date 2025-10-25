@@ -83,7 +83,7 @@ export class TomlDocument {
     }
 
     // Calculate the 1-based line number and 0-based column where the first difference occurs
-    const firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
+    
     let firstDiffColumn = 0;
     
     // If we're within the bounds of both arrays, find the column where they differ
@@ -100,9 +100,16 @@ export class TomlDocument {
       }
     }
 
+    let firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
+    const { truncatedAst, lastEndPosition } = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
+
+    // Update the firstDiffLine and firstDiffColumn based on the lastEndPosition
+    firstDiffColumn = lastEndPosition ? lastEndPosition.column + 1 : 0;
+    firstDiffLine = lastEndPosition ? lastEndPosition.line : 0;
+
     // Based on the first difference, we can re-parse only the affected part
     // We will need to supply the remaining string after the first difference and the position to start parsing from
-    const remainingLines = newLines.slice(firstDiffLineIndex);
+    const remainingLines = newLines.slice(firstDiffLine - 1);
     
     // If there's a partial line match, we need to extract only the part after the first difference column
     if (remainingLines.length > 0 && firstDiffColumn > 0) {
@@ -110,7 +117,6 @@ export class TomlDocument {
     }
     
     const remainingToml = remainingLines.join(this.#newline);
-    const truncatedAst = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
     
     this.#ast = continueParsingTOML(truncatedAst, remainingToml);
     this.#currentTomlString = tomlString;

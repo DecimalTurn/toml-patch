@@ -16,12 +16,13 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate at line 3 (before section2)
-    const truncated = truncateAst(ast, 3, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 3, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({
       section1: { key1: 'value1' }
     });
+    expect(lastEndPosition).not.toBeNull();
   });
 
   it('includes all nodes when position is after the document', () => {
@@ -35,13 +36,14 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate at a position beyond the document
-    const truncated = truncateAst(ast, 100, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 100, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({
       section1: { key1: 'value1' },
       section2: { key2: 'value2' }
     });
+    expect(lastEndPosition).not.toBeNull();
   });
 
   it('returns empty AST when position is before any content', () => {
@@ -52,10 +54,11 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate at line 0 (before everything)
-    const truncated = truncateAst(ast, 0, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 0, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({});
+    expect(lastEndPosition).toBeNull();
   });
 
   it('handles comments correctly', () => {
@@ -71,12 +74,14 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate just before section2 (line 6 starts section2, so use line 5)
-    const truncated = [...truncateAst(ast, 5, 999)];
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 999);
+    const truncated = [...truncatedAst];
     
     // Should include: Comment 1, section1 (with key1 and Comment 2 inside its items)
     expect(truncated).toHaveLength(2); // Comment, Table
     expect(truncated[0].type).toBe(NodeType.Comment);
     expect(truncated[1].type).toBe(NodeType.Table);
+    expect(lastEndPosition).not.toBeNull();
   });
 
   it('truncates at exact column position', () => {
@@ -88,10 +93,11 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate at line 2, column 0 (right at the start of "b = 2")
-    const truncated = truncateAst(ast, 2, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 2, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({ a: 1, b: 2 });
+    expect(lastEndPosition).not.toBeNull();
   });
 
   it('handles table arrays', () => {
@@ -108,15 +114,16 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate to include only first two products
-    const truncated = truncateAst(ast, 6, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 6, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({
       products: [
         { name: 'Product 1' },
         { name: 'Product 2' }
       ]
     });
+    expect(lastEndPosition).not.toBeNull();
   });
 
   it('works with nested tables', () => {
@@ -133,15 +140,16 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate to include only first two children
-    const truncated = truncateAst(ast, 5, 0);
+    const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 0);
     
-    const result = toJS(truncated);
+    const result = toJS(truncatedAst);
     expect(result).toEqual({
       parent: {
         child1: { key1: 1 },
         child2: { key2: 2 }
       }
     });
+    expect(lastEndPosition).not.toBeNull();
   });
 });
 

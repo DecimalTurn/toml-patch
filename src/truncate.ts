@@ -45,26 +45,40 @@ function shouldIncludeBlock(node: Block, limit: Position): boolean {
  * @param ast - The AST to truncate
  * @param line - The line number (1-indexed) at which to truncate
  * @param column - The column number (0-indexed) at which to truncate
- * @returns A new AST containing only the nodes that start before or at the specified position
+ * @returns An object containing the truncated AST and the end position of the last included node
  * 
  * @example
  * ```typescript
  * const ast = parseTOML(tomlString);
  * // Get AST up to line 5, column 10
- * const truncated = truncateAst(ast, 5, 10);
+ * const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 10);
+ * for (const node of truncatedAst) {
+ *   // process node
+ * }
  * ```
  */
-export function* truncateAst(ast: AST, line: number, column: number): AST {
+export function truncateAst(ast: AST, line: number, column: number): { 
+  truncatedAst: AST; 
+  lastEndPosition: Position | null 
+} {
   const limit: Position = { line, column };
+  const nodes: Block[] = [];
+  let lastEndPosition: Position | null = null;
   
   for (const node of ast) {
     if (shouldIncludeBlock(node, limit)) {
-      yield node;
+      nodes.push(node);
+      lastEndPosition = node.loc.end;
     } else {
       // Once we encounter a node that starts after the limit, we can stop
       break;
     }
   }
+  
+  return {
+    truncatedAst: nodes,
+    lastEndPosition
+  };
 }
 
 /**
