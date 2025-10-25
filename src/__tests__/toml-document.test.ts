@@ -523,8 +523,9 @@ color = "gray"
       const updatedToml = kitchenSink + '\n[[products]]\nname = "Screwdriver"\nsku = 123456\n';
       doc.update(updatedToml);
 
-      expect(doc.toJsObject.products.length).toBe(4);
-      expect(doc.toJsObject.products[3].name).toBe('Screwdriver');
+      const products = doc.toJsObject.products;
+      expect(products.length).toBe(4);
+      expect(products[3].name).toBe('Screwdriver');
       expect(doc.toTomlString).toBe(updatedToml);
     });
 
@@ -645,14 +646,16 @@ color = "gray"
       const doc = new TomlDocument(kitchenSink);
       expect(doc.toJsObject.products[1]).toEqual({});
       
+      // This replacement adds empty_field to the third [[products]] element (index 2), not the second (index 1)
       const updatedToml = kitchenSink.replace(
         '[[products]]\n\n[[products]]',
         '[[products]]\n\n[[products]]\nempty_field = "not empty anymore"'
       );
       doc.update(updatedToml);
 
-      expect(doc.toJsObject.products[1].empty_field).toBeUndefined();
-      expect(doc.toJsObject.products[2].empty_field).toBe('not empty anymore');
+      const products = doc.toJsObject.products;
+      expect(products[1]).toEqual({}); // Second element should still be empty
+      expect(products[2].empty_field).toBe('not empty anymore'); // Third element gets the field
       expect(doc.toTomlString).toBe(updatedToml);
     });
 
