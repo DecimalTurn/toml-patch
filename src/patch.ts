@@ -173,7 +173,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         }
       } else {
         parent = findParent(original, change.path);
-        if (isKeyValue(parent)) parent = parent.value;
+        if (isKeyValue(parent)) {
+          parent = parent.value;
+        }
       }
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
