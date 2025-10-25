@@ -11,7 +11,7 @@ import { detectNewline, countTrailingNewlines } from './utils';
  */
 export class TomlDocument {
   #ast: AST;
-  #originalToml: string;
+  #currentTomlString: string | null
   #newline: string;
   #trailingNewlineCount: number;
 
@@ -20,24 +20,24 @@ export class TomlDocument {
    * @param tomlString - The TOML string to parse
    */
   constructor(tomlString: string) {
-    this.#originalToml = tomlString;
+    this.#currentTomlString = tomlString;
     this.#ast = parseTOML(tomlString);
     // Detect the line ending style and trailing newlines from the original file
     this.#newline = detectNewline(tomlString);
     this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
   }
 
-  /**
-   * Returns the original TOML string (read-only).
-   */
-  get originalToml(): string {
-    return this.#originalToml;
+  get toTomlString(): string {
+    if (this.#currentTomlString === null) {
+      this.#currentTomlString =  toTOML(this.#ast);
+    }
+    return this.#currentTomlString;
   }
 
   /**
    * Returns the JavaScript object representation of the TOML document.
    */
-  get JsObject(): any {
+  get toJsObject(): any {
     return toJS(this.#ast);
   }
 
@@ -57,6 +57,8 @@ export class TomlDocument {
       this.#trailingNewlineCount
     );
     this.#ast = parseTOML(patchedToml);
+    // TODO : perform check that something was changed before reseting the currentTomlString
+    this.#currentTomlString = null;
     return patchedToml;
   }
 }

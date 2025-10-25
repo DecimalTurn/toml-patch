@@ -6,12 +6,12 @@ describe('TomlDocument', () => {
 
   it('parses TOML string to JS object', () => {
     const doc = new TomlDocument(simpleToml);
-    expect(doc.JsObject).toEqual(simpleObj);
+    expect(doc.toJsObject).toEqual(simpleObj);
   });
 
   it('returns the original TOML string', () => {
     const doc = new TomlDocument(simpleToml);
-    expect(doc.originalToml).toBe(simpleToml);
+    expect(doc.toTomlString).toBe(simpleToml);
   });
 
   it('preserves newline and trailing newlines', () => {
@@ -27,7 +27,7 @@ describe('TomlDocument', () => {
     const newObj = { section: { key: 'changed', newKey: 42 } };
     const patched = doc.patch(newObj);
     const newDoc = new TomlDocument(patched);
-  expect(newDoc.JsObject).toEqual(newObj);
+  expect(newDoc.toJsObject).toEqual(newObj);
   });
 
   it('handles CRLF newlines', () => {
