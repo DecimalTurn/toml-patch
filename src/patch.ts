@@ -22,7 +22,7 @@ import {
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger } from './utils';
+import { last, isInteger, detectNewline, countTrailingNewlines } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { validate } from './validate';
 
@@ -50,6 +50,15 @@ export function toDocument(ast: AST) : Document  {
  */
 export default function patch(existing: string, updated: any, format?: Format): string {
   const existing_ast = parseTOML(existing);
+
+  // Detect the line ending style and trailing newlines from the original file
+  const newline = detectNewline(existing);
+  const trailingNewlineCount = countTrailingNewlines(existing, newline);
+
+  return patchAst(existing_ast, updated, format, newline, trailingNewlineCount)
+}
+
+export function patchAst(existing_ast:AST, updated: any, format: Format | undefined, newline: string, trailingNewlineCount: number): string {
   const items = [...existing_ast];
 
   const existing_js = toJS(items);
@@ -71,33 +80,6 @@ export default function patch(existing: string, updated: any, format?: Format): 
   // Validate the patched_document
   //validate(patched_document);
 
-  // Detect the line ending style from the original file
-  let newline = '\n'; // Default to LF
-  const lfIndex = existing.indexOf('\n');
-
-  // Even if a LF is found, it could that there is a CR right before the LF
-  if (lfIndex > 0 && existing.substring(lfIndex - 1, lfIndex) === '\r') {
-    newline = '\r\n'; // File uses CRLF
-  }
-
-  // Count consecutive trailing newlines
-  function countTrailingNewlines(str: string, newlineChar: string): number {
-    let count = 0;
-    let pos = str.length;
-    
-    while (pos >= newlineChar.length) {
-      if (str.substring(pos - newlineChar.length, pos) === newlineChar) {
-        count++;
-        pos -= newlineChar.length;
-      } else {
-        break;
-      }
-    }
-    
-    return count;
-  }
-
-  const trailingNewlineCount = countTrailingNewlines(existing, newline);
 
   return toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount });
 }
