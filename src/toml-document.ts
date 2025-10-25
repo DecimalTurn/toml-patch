@@ -2,10 +2,11 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toTOML from './to-toml';
 import toJS from './to-js';
 import { Format } from './format';
-import { AST } from './ast';
+import { AST, Block } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, countTrailingNewlines } from './utils';
 import { truncateAst } from './truncate';
+import { Position } from './location';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -101,24 +102,47 @@ export class TomlDocument {
     }
 
     let firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
-    const { truncatedAst, lastEndPosition } = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
-
-    // Update the firstDiffLine and firstDiffColumn based on the lastEndPosition
-    firstDiffColumn = lastEndPosition ? lastEndPosition.column + 1 : 0;
-    firstDiffLine = lastEndPosition ? lastEndPosition.line : 0;
-
-    // Based on the first difference, we can re-parse only the affected part
-    // We will need to supply the remaining string after the first difference and the position to start parsing from
-    const remainingLines = newLines.slice(firstDiffLine - 1);
     
-    // If there's a partial line match, we need to extract only the part after the first difference column
-    if (remainingLines.length > 0 && firstDiffColumn > 0) {
-      remainingLines[0] = remainingLines[0].substring(firstDiffColumn);
+    // We need to find the last complete block that ends BEFORE the change position
+    // If a block contains the change, we can't use it - we must exclude it and reparse
+    let truncateBeforeLine = firstDiffLine;
+    let truncateBeforeColumn = 0; // Start of line
+    
+    // Find the last block that ends before the change
+    const truncatedBlocks: Block[] = [];
+    let lastEndPosition: Position | null = null;
+    
+    for (const node of this.#ast) {
+      const nodeEndsBeforeChange = 
+        node.loc.end.line < firstDiffLine ||
+        (node.loc.end.line === firstDiffLine && node.loc.end.column < firstDiffColumn);
+      
+      if (nodeEndsBeforeChange) {
+        truncatedBlocks.push(node);
+        lastEndPosition = node.loc.end;
+      } else {
+        // This node contains or comes after the change, stop here
+        break;
+      }
+    }
+
+    // Determine where to continue parsing from in the new string
+    // If lastEndPosition exists, continue from there; otherwise from the start of the document
+    const continueFromLine = lastEndPosition ? lastEndPosition.line : 1;
+    const continueFromColumn = lastEndPosition ? lastEndPosition.column + 1 : 0;
+
+    // Based on the last valid position, we can re-parse only the affected part
+    // We will need to supply the remaining string from where we stopped
+    const remainingLines = newLines.slice(continueFromLine - 1);
+    
+    // If there's a partial line, we need to extract only the part after the continuation column
+    if (remainingLines.length > 0 && continueFromColumn > 0) {
+      remainingLines[0] = remainingLines[0].substring(continueFromColumn);
     }
     
     const remainingToml = remainingLines.join(this.#newline);
     
-    this.#ast = continueParsingTOML(truncatedAst, remainingToml);
+    this.#ast = continueParsingTOML(truncatedBlocks, remainingToml);
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
