@@ -26,21 +26,23 @@ function isPositionBeforeOrAt(pos: Position, limit: Position): boolean {
 
 /**
  * Checks if a block node should be included based on its location.
- * A block is included if its start position is before or at the limit position.
+ * A block is included if its end position is before the limit position.
+ * This ensures that only complete blocks that don't contain the change are kept.
  * @param node - The block node to check
  * @param limit - The position limit
  * @returns true if the block should be included
  */
 function shouldIncludeBlock(node: Block, limit: Position): boolean {
-  return isPositionBeforeOrAt(node.loc.start, limit);
+  return comparePositions(node.loc.end, limit) < 0;
 }
 
 /**
  * Truncates an AST based on a position (line, column) in the source string.
  * 
- * This function filters the AST to include only the nodes that start at or before
- * the specified position. This is useful for incremental parsing scenarios where
- * you want to work with a partial AST up to a certain point in the document.
+ * This function filters the AST to include only the nodes that end before
+ * the specified position. This ensures that blocks containing changes are
+ * excluded and can be reparsed. This is useful for incremental parsing scenarios
+ * where you want to keep only the unchanged portion of the AST.
  * 
  * @param ast - The AST to truncate
  * @param line - The line number (1-indexed) at which to truncate
@@ -50,7 +52,7 @@ function shouldIncludeBlock(node: Block, limit: Position): boolean {
  * @example
  * ```typescript
  * const ast = parseTOML(tomlString);
- * // Get AST up to line 5, column 10
+ * // Get AST up to line 5, column 10 (only nodes that end before this position)
  * const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 10);
  * for (const node of truncatedAst) {
  *   // process node
@@ -82,12 +84,12 @@ export function truncateAst(ast: AST, line: number, column: number): {
 }
 
 /**
- * Finds the last block node in an AST that starts at or before the specified position.
+ * Finds the last block node in an AST that ends before the specified position.
  * 
  * @param ast - The AST to search
  * @param line - The line number (1-indexed)
  * @param column - The column number (0-indexed)
- * @returns The last block node before or at the position, or undefined if no such node exists
+ * @returns The last block node that ends before the position, or undefined if no such node exists
  * 
  * @example
  * ```typescript

@@ -93,10 +93,12 @@ describe('truncateAst', () => {
     
     const ast = parseTOML(toml);
     // Truncate at line 2, column 0 (right at the start of "b = 2")
+    // With the new semantics, this should only include blocks that END before line 2, column 0
+    // So only "a = 1" which ends at line 1
     const { truncatedAst, lastEndPosition } = truncateAst(ast, 2, 0);
     
     const result = toJS(truncatedAst);
-    expect(result).toEqual({ a: 1, b: 2 });
+    expect(result).toEqual({ a: 1 });
     expect(lastEndPosition).not.toBeNull();
   });
 
@@ -139,14 +141,15 @@ describe('truncateAst', () => {
     `;
     
     const ast = parseTOML(toml);
-    // Truncate to include only first two children
+    // Truncate at line 5, column 0 (start of [parent.child2])
+    // With the new semantics, this should only include blocks that END before line 5
+    // So only [parent.child1] which ends at line 2
     const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({
       parent: {
-        child1: { key1: 1 },
-        child2: { key2: 2 }
+        child1: { key1: 1 }
       }
     });
     expect(lastEndPosition).not.toBeNull();
