@@ -773,11 +773,10 @@ color = "gray"
       doc.update(updatedToml);
       const updatedAst = doc.ast;
       
-      // Original structure: [Comment, Table, Comment]
-      // After update: [Comment (unchanged), Table (preserved), Comment (changed)]
+      // Original structure: [Comment, Table (containing a comment inside)]
+      // After update: [Comment (unchanged), Table (changed because comment inside changed)]
       expect(updatedAst[0]).toBe(originalAst[0]); // First comment unchanged
-      expect(updatedAst[1]).toBe(originalAst[1]); // Table unchanged
-      expect(updatedAst[2]).not.toBe(originalAst[2]); // Last comment changed
+      expect(updatedAst[1]).not.toBe(originalAst[1]); // Table changed (comment inside it changed)
     });
 
     it('preserves unchanged section when adding a new section after it', () => {
