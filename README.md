@@ -29,6 +29,7 @@ For browser usage, you can use unpkg:
 
 Patch an existing TOML string with the given updated JS/JSON value, while attempting to retain the format of the existing document, including comments, indentation, and structure.
 
+*Example 1*
 ```js
 const TOML = require('@decimalturn/toml-patch');
 const assert = require('assert');
@@ -45,6 +46,34 @@ const patched = TOML.patch(existing, {
     name: 'Tim'
   }
 });
+
+assert.strictEqual(
+  patched,
+  `
+# This is a TOML document
+
+title = "TOML example"
+owner.name = "Tim"
+`
+);
+```
+
+*Example 2*
+```js
+const TOML = require('@decimalturn/toml-patch');
+const assert = require('assert');
+
+const existing = `
+# This is a TOML document
+
+title = "TOML example"
+owner.name = "Bob"
+`;
+
+const jsObject = TOML.parse(existing);
+jsObject.owner.name = "Tim";
+
+const patched = TOML.patch(existing, jsObject);
 
 assert.strictEqual(
   patched,
