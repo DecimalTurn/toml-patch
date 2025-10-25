@@ -1,4 +1,4 @@
-import parseTOML from './parse-toml';
+import parseTOML, { continueParsingTOML } from './parse-toml';
 import toTOML from './to-toml';
 import toJS from './to-js';
 import { Format } from './format';
@@ -102,8 +102,18 @@ export class TomlDocument {
 
     // Based on the first difference, we can re-parse only the affected part
     // We will need to supply the remaining string after the first difference and the position to start parsing from
-    const remainingToml = newLines.slice(firstDiffLineIndex).join(this.#newline);
+    const remainingLines = newLines.slice(firstDiffLineIndex);
+    
+    // If there's a partial line match, we need to extract only the part after the first difference column
+    if (remainingLines.length > 0 && firstDiffColumn > 0) {
+      remainingLines[0] = remainingLines[0].substring(firstDiffColumn);
+    }
+    
+    const remainingToml = remainingLines.join(this.#newline);
     const truncatedAst = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
+    
+    this.#ast = continueParsingTOML(truncatedAst, remainingToml);
+    this.#currentTomlString = tomlString;
 
   }
 
