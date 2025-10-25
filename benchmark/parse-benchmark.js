@@ -33,7 +33,7 @@ const TOML_IMPLEMENTATIONS = [
 ];
 
 // Parse command line args
-const { help, example, package, file, _: filter } = mri(process.argv.slice(2), {
+const { help, example, package: packageIndex, file, _: filter } = mri(process.argv.slice(2), {
   boolean: ['help', 'example'],
   string: ['file'],
   number: ['package']
@@ -76,8 +76,8 @@ if (!benchmarks.length) {
 }
 
 // Determine which implementations to run
-const implementationsToRun = package !== undefined ? 
-  [TOML_IMPLEMENTATIONS[package]] :
+const implementationsToRun = packageIndex !== undefined ? 
+  [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
 
 // Run benchmarks for each implementation
