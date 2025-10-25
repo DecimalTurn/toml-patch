@@ -43,22 +43,19 @@ export class TomlDocument {
 
   /**
    * Applies a patch to the current AST using a modified JS object.
-   * Updates the internal AST and returns the new TOML string.
+   * Updates the internal AST. Use toTomlString getter to retrieve the updated TOML string.
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
-   * @returns The patched TOML string
    */
-  patch(updatedObject: any, format?: Format | undefined): string {
-    const patchedToml = patchAst(
+  patch(updatedObject: any, format?: Format | undefined): void {
+    const { tomlString, document } = patchAst(
       this.#ast,
       updatedObject,
       format,
       this.#newline,
       this.#trailingNewlineCount
     );
-    this.#ast = parseTOML(patchedToml);
-    // TODO : perform check that something was changed before reseting the currentTomlString
-    this.#currentTomlString = null;
-    return patchedToml;
+    this.#ast = document.items;
+    this.#currentTomlString = tomlString;
   }
 }

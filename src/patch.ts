@@ -55,10 +55,10 @@ export default function patch(existing: string, updated: any, format?: Format): 
   const newline = detectNewline(existing);
   const trailingNewlineCount = countTrailingNewlines(existing, newline);
 
-  return patchAst(existing_ast, updated, format, newline, trailingNewlineCount)
+  return patchAst(existing_ast, updated, format, newline, trailingNewlineCount).tomlString;
 }
 
-export function patchAst(existing_ast:AST, updated: any, format: Format | undefined, newline: string, trailingNewlineCount: number): string {
+export function patchAst(existing_ast:AST, updated: any, format: Format | undefined, newline: string, trailingNewlineCount: number): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
   const existing_js = toJS(items);
@@ -72,7 +72,10 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
   const changes = reorder(diff(existing_js, updated));
 
   if (changes.length === 0) {
-    return toTOML(items, newline, { trailingNewline: trailingNewlineCount });
+    return {
+      tomlString: toTOML(items, newline, { trailingNewline: trailingNewlineCount }),
+      document: existing_document
+    };
   }
 
   const patched_document = applyChanges(existing_document, updated_document, changes);
@@ -80,8 +83,10 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
   // Validate the patched_document
   //validate(patched_document);
 
-
-  return toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount });
+  return {
+    tomlString: toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount }),
+    document: patched_document
+  };
 }
 
 function reorder(changes: Change[]): Change[] {

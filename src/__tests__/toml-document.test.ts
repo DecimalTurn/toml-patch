@@ -18,22 +18,26 @@ describe('TomlDocument', () => {
     const toml = '[a]\nb = 1\n\n';
     const doc = new TomlDocument(toml);
     // Patch with a new object, should keep trailing newline count
-    const patched = doc.patch({ a: { b: 2 } });
+    doc.patch({ a: { b: 2 } });
+    const patched = doc.toTomlString;
     expect(patched.endsWith('\n\n')).toBe(true);
   });
 
   it('patches TOML with new JS object', () => {
     const doc = new TomlDocument(simpleToml);
     const newObj = { section: { key: 'changed', newKey: 42 } };
-    const patched = doc.patch(newObj);
+    doc.patch(newObj);
+    const patched = doc.toTomlString;
     const newDoc = new TomlDocument(patched);
-  expect(newDoc.toJsObject).toEqual(newObj);
+    expect(newDoc.toJsObject).toEqual(newObj);
   });
 
   it('handles CRLF newlines', () => {
     const crlfToml = '[x]\r\ny = 1\r\n';
     const doc = new TomlDocument(crlfToml);
-    const patched = doc.patch({ x: { y: 2 } });
+    doc.patch({ x: { y: 2 } });
+    const patched = doc.toTomlString;
     expect(patched.includes('\r\n')).toBe(true);
+    expect(patched).toEqual('[x]\r\ny = 2\r\n');
   });
 });
