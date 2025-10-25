@@ -58,4 +58,34 @@ export class TomlDocument {
     this.#ast = document.items;
     this.#currentTomlString = tomlString;
   }
+
+  /**
+   * Updates the internal AST by supplying a modified tomlString.
+   * Use toJsObject getter to retrieve the updated JS object representation.
+   * @param tomlString - The modified TOML string to update with
+   */
+  update(tomlString: string): void {
+    if (tomlString === this.#currentTomlString) {
+      return;
+    }
+
+    // Now, let's check where the first difference is
+    const existingLines = this.#currentTomlString ? this.#currentTomlString.split(this.#newline) : [];
+    const newLines = tomlString.split(this.#newline);
+    let firstDiffIndex = 0;
+    while (
+      firstDiffIndex < existingLines.length &&
+      firstDiffIndex < newLines.length &&
+      existingLines[firstDiffIndex] === newLines[firstDiffIndex]
+    ) {
+      firstDiffIndex++;
+    }
+
+    // Based on the first difference, we can re-parse only the affected part
+    // We will need to supply the location to the parser in a future enhancement
+    this.#ast = parseTOML(tomlString);
+    this.#currentTomlString = tomlString;
+
+  }
+
 }
