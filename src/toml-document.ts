@@ -114,7 +114,29 @@ export class TomlDocument {
     
     this.#ast = continueParsingTOML(truncatedAst, remainingToml);
     this.#currentTomlString = tomlString;
+    
+    // Update newline style and trailing newline count from the new string
+    this.#newline = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+  }
 
+  /**
+   * Overwrites the internal AST by fully re-parsing the supplied tomlString.
+   * This is simpler but slower than update() which uses incremental parsing.
+   * @param tomlString - The TOML string to overwrite with
+   */
+  overwrite(tomlString: string): void {
+    if (tomlString === this.toTomlString) {
+      return;
+    }
+
+    // Re-parse the entire document
+    this.#ast = parseTOML(tomlString);
+    this.#currentTomlString = tomlString;
+    
+    // Update newline style and trailing newline count from the new string
+    this.#newline = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
   }
 
 }
