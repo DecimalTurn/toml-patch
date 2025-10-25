@@ -63,12 +63,12 @@ export function getLine(input: string, position: Position): string {
 
 export function findLines(input: string): number[] {
   // exec is stateful, so create new regexp each time
-  const BY_NEW_LINE = /[\r\n|\n]/g;
+  const BY_NEW_LINE = /\r\n|\n/g;
   const indexes: number[] = [];
 
   let match;
   while ((match = BY_NEW_LINE.exec(input)) != null) {
-    indexes.push(match.index);
+    indexes.push(match.index + match[0].length - 1);
   }
   indexes.push(input.length + 1);
 
