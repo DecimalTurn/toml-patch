@@ -673,4 +673,314 @@ color = "gray"
       expect(doc.toTomlString).toBe(updatedToml);
     });
   });
+
+  describe('update preserves unchanged AST nodes', () => {
+    it('preserves unchanged sections when updating a different section', () => {
+      const toml = dedent`
+        [section1]
+        key1 = "value1"
+        key2 = "value2"
+        
+        [section2]
+        key3 = "value3"
+        key4 = "value4"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Update only section2
+      const updatedToml = dedent`
+        [section1]
+        key1 = "value1"
+        key2 = "value2"
+        
+        [section2]
+        key3 = "CHANGED"
+        key4 = "value4"
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // First section's AST node should be the same object reference
+      expect(updatedAst[0]).toBe(originalAst[0]);
+      // Second section's AST node should be different (was reparsed)
+      expect(updatedAst[1]).not.toBe(originalAst[1]);
+      
+      // Verify the values are correct
+      expect(doc.toJsObject.section1.key1).toBe('value1');
+      expect(doc.toJsObject.section2.key3).toBe('CHANGED');
+    });
+
+    it('preserves unchanged key-value pairs when updating later ones', () => {
+      const toml = dedent`
+        first = 1
+        second = 2
+        third = 3
+        fourth = 4
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Update only the third and fourth values
+      const updatedToml = dedent`
+        first = 1
+        second = 2
+        third = 99
+        fourth = 100
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // First two AST nodes should be preserved
+      expect(updatedAst[0]).toBe(originalAst[0]);
+      expect(updatedAst[1]).toBe(originalAst[1]);
+      // Last two should be different (reparsed)
+      expect(updatedAst[2]).not.toBe(originalAst[2]);
+      expect(updatedAst[3]).not.toBe(originalAst[3]);
+      
+      // Verify values
+      expect(doc.toJsObject.first).toBe(1);
+      expect(doc.toJsObject.second).toBe(2);
+      expect(doc.toJsObject.third).toBe(99);
+      expect(doc.toJsObject.fourth).toBe(100);
+    });
+
+    it('preserves entire AST when only a comment changes at the end', () => {
+      const toml = dedent`
+        [section]
+        key = "value"
+        
+        # Comment at the end
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Change only the comment at the end
+      const updatedToml = dedent`
+        [section]
+        key = "value"
+        
+        # Updated comment at the end
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // Section should be preserved since it ends before the comment
+      expect(updatedAst[0]).toBe(originalAst[0]);
+      // Comment node should be different
+      expect(updatedAst[1]).not.toBe(originalAst[1]);
+    });
+
+    it('preserves unchanged section when adding a new section after it', () => {
+      const toml = dedent`
+        [section1]
+        key = "value"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Add a new section after the first one
+      const updatedToml = dedent`
+        [section1]
+        key = "value"
+        
+        [section2]
+        key2 = "value2"
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // First section should be preserved
+      expect(updatedAst[0]).toBe(originalAst[0]);
+      // Second section is new
+      expect(updatedAst.length).toBe(2);
+    });
+
+    it('preserves unchanged array table elements', () => {
+      const toml = dedent`
+        [[products]]
+        name = "First"
+        sku = 111
+        
+        [[products]]
+        name = "Second"
+        sku = 222
+        
+        [[products]]
+        name = "Third"
+        sku = 333
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Update only the third product
+      const updatedToml = dedent`
+        [[products]]
+        name = "First"
+        sku = 111
+        
+        [[products]]
+        name = "Second"
+        sku = 222
+        
+        [[products]]
+        name = "Third UPDATED"
+        sku = 999
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // First two array table elements should be preserved
+      expect(updatedAst[0]).toBe(originalAst[0]);
+      expect(updatedAst[1]).toBe(originalAst[1]);
+      // Third should be different
+      expect(updatedAst[2]).not.toBe(originalAst[2]);
+      
+      // Verify values
+      expect(doc.toJsObject.products[0].name).toBe('First');
+      expect(doc.toJsObject.products[1].name).toBe('Second');
+      expect(doc.toJsObject.products[2].name).toBe('Third UPDATED');
+      expect(doc.toJsObject.products[2].sku).toBe(999);
+    });
+
+    it('preserves unchanged parts when adding new content at the end', () => {
+      const toml = dedent`
+        [section1]
+        key1 = "value1"
+        
+        [section2]
+        key2 = "value2"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      const originalLength = originalAst.length;
+      
+      // Add a new section at the end
+      const updatedToml = dedent`
+        [section1]
+        key1 = "value1"
+        
+        [section2]
+        key2 = "value2"
+        
+        [section3]
+        key3 = "value3"
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // All original nodes should be preserved
+      for (let i = 0; i < originalLength; i++) {
+        expect(updatedAst[i]).toBe(originalAst[i]);
+      }
+      
+      // Should have one new node
+      expect(updatedAst.length).toBe(originalLength + 1);
+      
+      // Verify values
+      expect(doc.toJsObject.section1.key1).toBe('value1');
+      expect(doc.toJsObject.section2.key2).toBe('value2');
+      expect(doc.toJsObject.section3.key3).toBe('value3');
+    });
+
+    it('preserves complex unchanged structures with nested tables', () => {
+      const toml = dedent`
+        title = "Document"
+        
+        [database]
+        server = "192.168.1.1"
+        ports = [ 8001, 8001, 8002 ]
+        
+        [servers.alpha]
+        ip = "10.0.0.1"
+        dc = "eqdc10"
+        
+        [servers.beta]
+        ip = "10.0.0.2"
+        dc = "eqdc10"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Update only servers.beta
+      const updatedToml = dedent`
+        title = "Document"
+        
+        [database]
+        server = "192.168.1.1"
+        ports = [ 8001, 8001, 8002 ]
+        
+        [servers.alpha]
+        ip = "10.0.0.1"
+        dc = "eqdc10"
+        
+        [servers.beta]
+        ip = "10.0.0.99"
+        dc = "eqdc99"
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // Title, database, and servers.alpha should be preserved
+      expect(updatedAst[0]).toBe(originalAst[0]); // title
+      expect(updatedAst[1]).toBe(originalAst[1]); // database
+      expect(updatedAst[2]).toBe(originalAst[2]); // servers.alpha
+      // servers.beta should be different
+      expect(updatedAst[3]).not.toBe(originalAst[3]);
+      
+      // Verify unchanged values are still correct
+      expect(doc.toJsObject.title).toBe('Document');
+      expect(doc.toJsObject.database.server).toBe('192.168.1.1');
+      expect(doc.toJsObject.servers.alpha.ip).toBe('10.0.0.1');
+      // And updated value is changed
+      expect(doc.toJsObject.servers.beta.ip).toBe('10.0.0.99');
+    });
+
+    it('overwrite does NOT preserve AST nodes (for comparison)', () => {
+      const toml = dedent`
+        [section1]
+        key1 = "value1"
+        
+        [section2]
+        key2 = "value2"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      const originalAst = doc.ast;
+      
+      // Use overwrite instead of update
+      const updatedToml = dedent`
+        [section1]
+        key1 = "value1"
+        
+        [section2]
+        key2 = "CHANGED"
+      ` + '\n';
+      
+      doc.overwrite(updatedToml);
+      const updatedAst = doc.ast;
+      
+      // With overwrite, ALL nodes are reparsed, so none should be preserved
+      expect(updatedAst[0]).not.toBe(originalAst[0]);
+      expect(updatedAst[1]).not.toBe(originalAst[1]);
+      
+      // But values should still be correct
+      expect(doc.toJsObject.section1.key1).toBe('value1');
+      expect(doc.toJsObject.section2.key2).toBe('CHANGED');
+    });
+  });
 });

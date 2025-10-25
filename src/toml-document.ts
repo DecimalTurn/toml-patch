@@ -2,7 +2,7 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toTOML from './to-toml';
 import toJS from './to-js';
 import { Format } from './format';
-import { AST } from './ast';
+import { AST, Block } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, countTrailingNewlines } from './utils';
 import { truncateAst } from './truncate';
@@ -11,7 +11,7 @@ import { truncateAst } from './truncate';
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
  */
 export class TomlDocument {
-  #ast: AST;
+  #ast: Block[];
   #currentTomlString: string | null
   #newline: string;
   #trailingNewlineCount: number;
@@ -22,7 +22,7 @@ export class TomlDocument {
    */
   constructor(tomlString: string) {
     this.#currentTomlString = tomlString;
-    this.#ast = parseTOML(tomlString);
+    this.#ast = Array.from(parseTOML(tomlString));
     // Detect the line ending style and trailing newlines from the original file
     this.#newline = detectNewline(tomlString);
     this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
@@ -40,6 +40,14 @@ export class TomlDocument {
    */
   get toJsObject(): any {
     return toJS(this.#ast);
+  }
+
+  /**
+   * Returns the internal AST (for testing purposes).
+   * @internal
+   */
+  get ast(): Block[] {
+    return this.#ast;
   }
 
   /**
@@ -119,7 +127,7 @@ export class TomlDocument {
     
     const remainingToml = remainingLines.join(this.#newline);
     
-    this.#ast = continueParsingTOML(truncatedAst, remainingToml);
+    this.#ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
@@ -138,7 +146,7 @@ export class TomlDocument {
     }
 
     // Re-parse the entire document
-    this.#ast = parseTOML(tomlString);
+    this.#ast = Array.from(parseTOML(tomlString));
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
