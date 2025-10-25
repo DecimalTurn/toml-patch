@@ -751,6 +751,7 @@ color = "gray"
 
     it('preserves entire AST when only a comment changes at the end', () => {
       const toml = dedent`
+        # Comment at the start
         [section]
         key = "value"
         
@@ -762,6 +763,7 @@ color = "gray"
       
       // Change only the comment at the end
       const updatedToml = dedent`
+        # Comment at the start
         [section]
         key = "value"
         
@@ -771,10 +773,11 @@ color = "gray"
       doc.update(updatedToml);
       const updatedAst = doc.ast;
       
-      // Section should be preserved since it ends before the comment
-      expect(updatedAst[0]).toBe(originalAst[0]);
-      // Comment node should be different
-      expect(updatedAst[1]).not.toBe(originalAst[1]);
+      // Original structure: [Comment, Table, Comment]
+      // After update: [Comment (unchanged), Table (preserved), Comment (changed)]
+      expect(updatedAst[0]).toBe(originalAst[0]); // First comment unchanged
+      expect(updatedAst[1]).toBe(originalAst[1]); // Table unchanged
+      expect(updatedAst[2]).not.toBe(originalAst[2]); // Last comment changed
     });
 
     it('preserves unchanged section when adding a new section after it', () => {
