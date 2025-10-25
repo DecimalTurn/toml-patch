@@ -62,7 +62,9 @@ export default function patch(existing: string, updated: any, format?: Format): 
   const updated_document = parseJS(updated, format);
   const changes = reorder(diff(existing_js, updated));
 
-
+  if (changes.length === 0) {
+    return toTOML(items, newline, { trailingNewline: trailingNewlineCount });
+  }
 
   const patched_document = applyChanges(existing_document, updated_document, changes);
 
