@@ -27,7 +27,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org/'
 
       - name: Install
-        run: npm install
+        run: npm ci
         env:
           CI: true
           
@@ -43,6 +43,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
+
+      - name: Check git status
+        run: git status && git diff
 
       - name: Publish to jsr
         run: npx -y jsr publish
