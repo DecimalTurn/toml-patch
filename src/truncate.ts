@@ -44,6 +44,10 @@ function shouldIncludeBlock(node: Block, limit: Position): boolean {
  * excluded and can be reparsed. This is useful for incremental parsing scenarios
  * where you want to keep only the unchanged portion of the AST.
  * 
+ * Special handling: If the truncation point falls within a Table or TableArray
+ * (e.g., in a comment inside the table), the entire table is excluded to ensure
+ * proper reparsing.
+ * 
  * @param ast - The AST to truncate
  * @param line - The line number (1-indexed) at which to truncate
  * @param column - The column number (0-indexed) at which to truncate
@@ -68,11 +72,21 @@ export function truncateAst(ast: AST, line: number, column: number): {
   let lastEndPosition: Position | null = null;
   
   for (const node of ast) {
-    if (shouldIncludeBlock(node, limit)) {
+    const nodeEndsBeforeLimit = comparePositions(node.loc.end, limit) < 0;
+    const nodeStartsBeforeLimit = comparePositions(node.loc.start, limit) < 0;
+    
+    if (nodeEndsBeforeLimit) {
+      // Node completely ends before the limit - include it
       nodes.push(node);
       lastEndPosition = node.loc.end;
+    } else if (nodeStartsBeforeLimit && !nodeEndsBeforeLimit) {
+      // Node starts before the limit but ends at or after it
+      // This means the truncation point is within this node
+      // For Table/TableArray nodes, don't include them if the change is inside
+      // This ensures the entire table gets reparsed
+      break;
     } else {
-      // Once we encounter a node that starts after the limit, we can stop
+      // Node starts at or after the limit - stop
       break;
     }
   }
