@@ -201,12 +201,12 @@ describe('findLastNodeBeforePosition', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
-    // Position includes the comment (line 4) but not section2
-    const lastNode = findLastNodeBeforePosition(ast, 4, 999);
+    // Parse each time to get a fresh generator
+    const lastNode = findLastNodeBeforePosition(parseTOML(toml), 4, 999);
     
     expect(lastNode).toBeDefined();
-    expect(lastNode?.type).toBe(NodeType.Comment);
+    // The last top-level block before line 5 is section1 (the comment is inside it)
+    expect(lastNode?.type).toBe(NodeType.Table);
   });
 
   it('handles exact position matches', () => {

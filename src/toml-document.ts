@@ -5,6 +5,7 @@ import { Format } from './format';
 import { AST } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, countTrailingNewlines } from './utils';
+import { truncateAst } from './truncate';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -65,26 +66,44 @@ export class TomlDocument {
    * @param tomlString - The modified TOML string to update with
    */
   update(tomlString: string): void {
-    if (tomlString === this.#currentTomlString) {
+    if (tomlString === this.toTomlString) {
       return;
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.#currentTomlString ? this.#currentTomlString.split(this.#newline) : [];
+    const existingLines = this.toTomlString.split(this.#newline);
     const newLines = tomlString.split(this.#newline);
-    let firstDiffIndex = 0;
+    let firstDiffLineIndex = 0;
     while (
-      firstDiffIndex < existingLines.length &&
-      firstDiffIndex < newLines.length &&
-      existingLines[firstDiffIndex] === newLines[firstDiffIndex]
+      firstDiffLineIndex < existingLines.length &&
+      firstDiffLineIndex < newLines.length &&
+      existingLines[firstDiffLineIndex] === newLines[firstDiffLineIndex]
     ) {
-      firstDiffIndex++;
+      firstDiffLineIndex++;
+    }
+
+    // Calculate the 1-based line number and 0-based column where the first difference occurs
+    const firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
+    let firstDiffColumn = 0;
+    
+    // If we're within the bounds of both arrays, find the column where they differ
+    if (firstDiffLineIndex < existingLines.length && firstDiffLineIndex < newLines.length) {
+      const existingLine = existingLines[firstDiffLineIndex];
+      const newLine = newLines[firstDiffLineIndex];
+      
+      // Find the first character position where the lines differ
+      for (let i = 0; i < Math.max(existingLine.length, newLine.length); i++) {
+        if (existingLine[i] !== newLine[i]) {
+          firstDiffColumn = i;
+          break;
+        }
+      }
     }
 
     // Based on the first difference, we can re-parse only the affected part
-    // We will need to supply the location to the parser in a future enhancement
-    this.#ast = parseTOML(tomlString);
-    this.#currentTomlString = tomlString;
+    // We will need to supply the remaining string after the first difference and the position to start parsing from
+    const remainingToml = newLines.slice(firstDiffLineIndex).join(this.#newline);
+    const truncatedAst = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
 
   }
 
