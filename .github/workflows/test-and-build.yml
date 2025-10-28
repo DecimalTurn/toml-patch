@@ -19,7 +19,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: 22.x
+        node-version: 24.x
     # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
     - uses: socketdev/action@4337a545deecc20f19a909e52db7a2f6ba292f42 # v1.2.0
       with:
