@@ -13,7 +13,7 @@ import { truncateAst } from './truncate';
 export class TomlDocument {
   #ast: Block[];
   #currentTomlString: string | null
-  #newline: string;
+  #linebreak: string;
   #trailingNewlineCount: number;
 
   /**
@@ -24,8 +24,8 @@ export class TomlDocument {
     this.#currentTomlString = tomlString;
     this.#ast = Array.from(parseTOML(tomlString));
     // Detect the line ending style and trailing newlines from the original file
-    this.#newline = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    this.#linebreak = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
   }
 
   get toTomlString(): string {
@@ -61,7 +61,7 @@ export class TomlDocument {
       this.#ast,
       updatedObject,
       format,
-      this.#newline,
+      this.#linebreak,
       this.#trailingNewlineCount
     );
     this.#ast = document.items;
@@ -79,8 +79,9 @@ export class TomlDocument {
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this.#newline);
-    const newLines = tomlString.split(this.#newline);
+    const existingLines = this.toTomlString.split(this.#linebreak);
+    const newLinebreak = detectNewline(tomlString);
+    const newLines = tomlString.split(newLinebreak);
     let firstDiffLineIndex = 0;
     while (
       firstDiffLineIndex < existingLines.length &&
@@ -125,14 +126,14 @@ export class TomlDocument {
       remainingLines[0] = remainingLines[0].substring(continueFromColumn);
     }
     
-    const remainingToml = remainingLines.join(this.#newline);
+    const remainingToml = remainingLines.join(this.#linebreak);
     
     this.#ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
-    this.#newline = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    this.#linebreak = newLinebreak;
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
   }
 
   /**
@@ -150,8 +151,8 @@ export class TomlDocument {
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
-    this.#newline = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    this.#linebreak = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
   }
 
 }
