@@ -1101,4 +1101,228 @@ color = "gray"
       expect(doc.toJsObject.section2.key2).toBe('CHANGED');
     });
   });
+
+  describe('edge cases and potential issues with update logic', () => {
+    it('correctly handles nested table modifications that could confuse line-based truncation', () => {
+      const toml = dedent`
+        [parent.child1]
+        key1 = 1
+        
+        [parent.child2] 
+        key2 = 2
+        
+        [parent.child3]
+        key3 = 3
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      
+      // The dangerous scenario: modify parent.child2 by adding content
+      // Line-based diffing might get confused about where parent.child2 ends 
+      // and parent.child3 begins, potentially under-truncating
+      const updatedToml = dedent`
+        [parent.child1]
+        key1 = 1
+        
+        [parent.child2]
+        key2 = 999
+        new_key = "added"
+        
+        [parent.child3]
+        key3 = 3
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      
+      // Critical test: ensure parent.child3 wasn't corrupted by incorrect truncation
+      expect(doc.toJsObject.parent.child1.key1).toBe(1);
+      expect(doc.toJsObject.parent.child2.key2).toBe(999);
+      expect(doc.toJsObject.parent.child2.new_key).toBe("added");
+      expect(doc.toJsObject.parent.child3.key3).toBe(3);
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('handles nested tables where modification shifts all subsequent line numbers', () => {
+      const toml = dedent`
+        [database.primary]
+        host = "db1.example.com"
+        port = 5432
+        
+        [database.secondary]
+        host = "db2.example.com" 
+        port = 5433
+        
+        [database.backup]
+        host = "backup.example.com"
+        port = 5434
+        
+        [cache.redis]
+        host = "redis.example.com"
+        port = 6379
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      
+      // Insert multiple lines in database.secondary - this shifts everything after it
+      // Line-based truncation must handle the line number shifts correctly
+      const updatedToml = dedent`
+        [database.primary]
+        host = "db1.example.com"
+        port = 5432
+        
+        [database.secondary]
+        host = "db2.example.com"
+        port = 5433
+        username = "dbuser" 
+        password = "secret"
+        ssl_mode = "require"
+        
+        [database.backup]
+        host = "backup.example.com"
+        port = 5434
+        
+        [cache.redis]
+        host = "redis.example.com" 
+        port = 6379
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      
+      // Verify that all sections after the modified one are still correct
+      expect(doc.toJsObject.database.primary.host).toBe("db1.example.com");
+      expect(doc.toJsObject.database.secondary.host).toBe("db2.example.com");
+      expect(doc.toJsObject.database.secondary.username).toBe("dbuser");
+      expect(doc.toJsObject.database.secondary.password).toBe("secret");
+      expect(doc.toJsObject.database.secondary.ssl_mode).toBe("require");
+      expect(doc.toJsObject.database.backup.host).toBe("backup.example.com");
+      expect(doc.toJsObject.cache.redis.host).toBe("redis.example.com");
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('handles deeply nested table hierarchy with mid-level modifications', () => {
+      const toml = dedent`
+        [app.server.config]
+        port = 8080
+        
+        [app.server.middleware] 
+        auth = true
+        
+        [app.server.routes]
+        api = "/api/v1"
+        
+        [app.database.config]
+        url = "postgres://localhost"
+        
+        [app.database.pool]
+        max_connections = 10
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      
+      // Modify app.server.middleware (middle of server section)
+      // This tests if truncation correctly handles nested hierarchies
+      const updatedToml = dedent`
+        [app.server.config]
+        port = 8080
+        
+        [app.server.middleware]
+        auth = true
+        cors = true
+        rate_limit = 100
+        
+        [app.server.routes]
+        api = "/api/v1"
+        
+        [app.database.config] 
+        url = "postgres://localhost"
+        
+        [app.database.pool]
+        max_connections = 10
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      
+      // Ensure the nested structure is preserved correctly
+      expect(doc.toJsObject.app.server.config.port).toBe(8080);
+      expect(doc.toJsObject.app.server.middleware.auth).toBe(true);
+      expect(doc.toJsObject.app.server.middleware.cors).toBe(true);
+      expect(doc.toJsObject.app.server.middleware.rate_limit).toBe(100);
+      expect(doc.toJsObject.app.server.routes.api).toBe("/api/v1");
+      expect(doc.toJsObject.app.database.config.url).toBe("postgres://localhost");
+      expect(doc.toJsObject.app.database.pool.max_connections).toBe(10);
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('stress test: complex nested modifications that could break truncation logic', () => {
+      const toml = dedent`
+        [services.web.frontend]
+        framework = "react"
+        
+        [services.web.backend] 
+        framework = "node"
+        
+        [services.web.database]
+        type = "postgres"
+        
+        [services.api.v1]
+        enabled = true
+        
+        [services.api.v2]
+        enabled = false
+        
+        [monitoring.metrics]
+        provider = "prometheus"
+        
+        [monitoring.logs]
+        provider = "elasticsearch"
+      ` + '\n';
+      
+      const doc = new TomlDocument(toml);
+      
+      // Complex modification: change services.web.backend extensively
+      // This could potentially confuse truncation about where sections begin/end
+      const updatedToml = dedent`
+        [services.web.frontend]
+        framework = "react"
+        
+        [services.web.backend]
+        framework = "node" 
+        version = "18.0.0"
+        env = "production"
+        workers = 4
+        memory_limit = "2GB"
+        
+        [services.web.database]
+        type = "postgres"
+        
+        [services.api.v1]
+        enabled = true
+        
+        [services.api.v2] 
+        enabled = false
+        
+        [monitoring.metrics]
+        provider = "prometheus"
+        
+        [monitoring.logs]
+        provider = "elasticsearch"
+      ` + '\n';
+      
+      doc.update(updatedToml);
+      
+      // Verify entire nested structure integrity
+      expect(doc.toJsObject.services.web.frontend.framework).toBe("react");
+      expect(doc.toJsObject.services.web.backend.framework).toBe("node");
+      expect(doc.toJsObject.services.web.backend.version).toBe("18.0.0");
+      expect(doc.toJsObject.services.web.backend.env).toBe("production");
+      expect(doc.toJsObject.services.web.backend.workers).toBe(4);
+      expect(doc.toJsObject.services.web.backend.memory_limit).toBe("2GB");
+      expect(doc.toJsObject.services.web.database.type).toBe("postgres");
+      expect(doc.toJsObject.services.api.v1.enabled).toBe(true);
+      expect(doc.toJsObject.services.api.v2.enabled).toBe(false);
+      expect(doc.toJsObject.monitoring.metrics.provider).toBe("prometheus");
+      expect(doc.toJsObject.monitoring.logs.provider).toBe("elasticsearch");
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+  });
 });
