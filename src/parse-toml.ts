@@ -50,11 +50,6 @@ export default function* parseTOML(input: string): AST {
 /**
  * Continues parsing TOML from a remaining string and appends the results to an existing AST.
  * 
- * Note: The combined AST is suitable for conversion to JS (toJS) but NOT for conversion
- * back to TOML (toTOML), because location information (line numbers) in the second AST
- * would conflict with the first AST. For TOML string concatenation, concatenate the strings
- * first, then parse the combined result.
- * 
  * @param existingAst - The existing AST to append to
  * @param remainingString - The remaining TOML string to parse
  * @returns A new complete AST with both the existing and newly parsed items
