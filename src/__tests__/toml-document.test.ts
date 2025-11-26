@@ -1,4 +1,5 @@
 import { TomlDocument } from '../toml-document';
+import { hard_example } from '../__fixtures__';
 import dedent from 'dedent';
 
 describe('TomlDocument', () => {
@@ -51,6 +52,116 @@ describe('TomlDocument', () => {
     const patched = doc.toTomlString;
     expect(patched.includes('\r\n')).toBe(true);
     expect(patched).toEqual('[x]\r\ny = 2\r\n');
+  });
+
+  describe('hard-example.toml edge cases', () => {
+    it('handles parsing and updating complex TOML with tricky syntax', () => {
+      const doc = new TomlDocument(hard_example);
+      
+      // Verify it can parse the complex TOML correctly
+      const parsed = doc.toJsObject;
+      
+      // Check that complex nested structures are parsed
+      expect(parsed.the.test_string).toBe("You'll hate me after this - #");
+      expect(parsed.the.hard.test_array).toEqual(["] ", " # "]);
+      expect(parsed.the.hard.test_array2).toEqual([
+        "Test #11 ]proved that", 
+        "Experiment #9 was a success"
+      ]);
+      expect(parsed.the.hard.another_test_string).toBe(" Same thing, but with a string #");
+      expect(parsed.the.hard.harder_test_string).toBe(" And when \"'s are in the string, along with # \"");
+      expect(parsed.the.hard["bit#"]["what?"]).toBe("You don't think some user won't do that?");
+      expect(parsed.the.hard["bit#"].multi_line_array).toEqual(["]"]);
+      
+      // Test updating a value with special characters
+      const updatedToml = hard_example.replace(
+        'test_string = "You\'ll hate me after this - #"',
+        'test_string = "You\'ll love me after this - #"'
+      );
+      doc.update(updatedToml);
+      
+      expect(doc.toJsObject.the.test_string).toBe("You'll love me after this - #");
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('handles updating arrays with special characters', () => {
+      const doc = new TomlDocument(hard_example);
+      
+      // Update an array containing special characters
+      const updatedToml = hard_example.replace(
+        'test_array2 = [ "Test #11 ]proved that", "Experiment #9 was a success" ]',
+        'test_array2 = [ "Test #11 ]proved that", "Experiment #9 was a success", "Test #12 failed" ]'
+      );
+      doc.update(updatedToml);
+      
+      expect(doc.toJsObject.the.hard.test_array2).toEqual([
+        "Test #11 ]proved that", 
+        "Experiment #9 was a success",
+        "Test #12 failed"
+      ]);
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('handles updating values in sections with special key names', () => {
+      const doc = new TomlDocument(hard_example);
+      
+      // Update a value in a section with special characters in the key name
+      const updatedToml = hard_example.replace(
+        '"what?" = "You don\'t think some user won\'t do that?"',
+        '"what?" = "Actually, users do this all the time!"'
+      );
+      doc.update(updatedToml);
+      
+      expect(doc.toJsObject.the.hard["bit#"]["what?"]).toBe("Actually, users do this all the time!");
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('preserves comments when updating values', () => {
+      const doc = new TomlDocument(hard_example);
+      const originalString = doc.toTomlString;
+      
+      // Update a value but keep the structure
+      const updatedToml = hard_example.replace(
+        'another_test_string = " Same thing, but with a string #"',
+        'another_test_string = " Different thing, but with a string #"'
+      );
+      doc.update(updatedToml);
+      
+      // Should preserve the comment structure
+      expect(doc.toTomlString).toBe(updatedToml);
+      expect(doc.toTomlString).toContain('# " Annoying, isn\'t it?');
+      expect(doc.toTomlString).toContain('# ] There you go, parse this!');
+      expect(doc.toJsObject.the.hard.another_test_string).toBe(" Different thing, but with a string #");
+    });
+
+    it('handles multiline arrays with complex content', () => {
+      const doc = new TomlDocument(hard_example);
+      
+      // Update the multiline array
+      const updatedToml = hard_example.replace(
+        'multi_line_array = [\n            "]",\n            # ] Oh yes I did\n            ]',
+        'multi_line_array = [\n            "]",\n            "another]",\n            # ] Oh yes I did\n            ]'
+      );
+      doc.update(updatedToml);
+      
+      expect(doc.toJsObject.the.hard["bit#"].multi_line_array).toEqual(["]", "another]"]);
+      expect(doc.toTomlString).toBe(updatedToml);
+    });
+
+    it('overwrite produces same results as update for hard example', () => {
+      const doc1 = new TomlDocument(hard_example);
+      const doc2 = new TomlDocument(hard_example);
+      
+      const updatedToml = hard_example
+        .replace('test_string = "You\'ll hate me after this - #"', 'test_string = "Modified"')
+        .replace('"what?" = "You don\'t think some user won\'t do that?"', '"what?" = "Modified too"');
+      
+      doc1.update(updatedToml);
+      doc2.overwrite(updatedToml);
+      
+      expect(doc1.toJsObject).toEqual(doc2.toJsObject);
+      expect(doc1.toTomlString).toBe(doc2.toTomlString);
+    });
   });
 
   describe('update', () => {
