@@ -47,6 +47,25 @@ export default function* parseTOML(input: string): AST {
   }
 }
 
+/**
+ * Continues parsing TOML from a remaining string and appends the results to an existing AST.
+ * 
+ * @param existingAst - The existing AST to append to
+ * @param remainingString - The remaining TOML string to parse
+ * @returns A new complete AST with both the existing and newly parsed items
+ */
+export function* continueParsingTOML(existingAst: AST, remainingString: string): AST {
+  // Yield all items from the existing AST
+  for (const item of existingAst) {
+    yield item;
+  }
+  
+  // Parse and yield all items from the remaining string
+  for (const item of parseTOML(remainingString)) {
+    yield item;
+  }
+}
+
 function* walkBlock(cursor: Cursor<Token>, input: string): IterableIterator<Block> {
   if (cursor.value!.type === TokenType.Comment) {
     yield comment(cursor);

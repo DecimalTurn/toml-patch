@@ -30,3 +30,8 @@ export function stringify(value: any, format?: Format): string {
 }
 
 export { default as patch } from './patch';
+
+/**
+ * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
+ */
+export { TomlDocument } from './toml-document';

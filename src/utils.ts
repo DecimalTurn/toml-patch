@@ -1,3 +1,26 @@
+// Returns the detected newline (\n or \r\n) from a string, defaulting to \n
+export function detectNewline(str: string): string {
+  const lfIndex = str.indexOf('\n');
+  if (lfIndex > 0 && str.substring(lfIndex - 1, lfIndex) === '\r') {
+    return '\r\n';
+  }
+  return '\n';
+}
+
+// Counts consecutive trailing newlines at the end of a string
+export function countTrailingNewlines(str: string, newlineChar: string): number {
+  let count = 0;
+  let pos = str.length;
+  while (pos >= newlineChar.length) {
+    if (str.substring(pos - newlineChar.length, pos) === newlineChar) {
+      count++;
+      pos -= newlineChar.length;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
 export function last<TValue>(values: TValue[]): TValue | undefined {
   return values[values.length - 1];
 }

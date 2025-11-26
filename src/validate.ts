@@ -23,11 +23,14 @@ import {
   } from './ast';
 import traverse from './traverse';
 
-export function validate(document: Document): boolean {
+export function validate(document: Document) {
 
     // traverse the document to check if there is a inline array
     // if yes, make sure that the loc.end.columns is bigger than the loc.end.column of the last item
-    let valid = true;
+	// same for inline tables
+	// If yes, the inline array/table is valid
+	// If not, throw an error
+
     traverse(document, {
         [NodeType.InlineArray](node : InlineArray) {
             const { start, end } = node.loc;
@@ -43,7 +46,6 @@ export function validate(document: Document): boolean {
                     "Difference: " + (lastItem.loc.end.column - end.column) + "\n";
 
                 throw new Error(`Invalid inline array: ${stringRepresentation}`);
-                return false;
             }
         },
         [NodeType.InlineTable](node : InlineTable) {
@@ -52,12 +54,9 @@ export function validate(document: Document): boolean {
             if (lastItem.loc.end.column >= end.column) {
                 const stringRepresentation = "[" + node.items.map((item) => item.item.key + "=" + item.item.value ).join(', ') + "]";
                 throw new Error(`Invalid inline table: ${stringRepresentation}`);
-                return false;
             }
         },
     });
-
-    return true;
 
 }
 
