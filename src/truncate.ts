@@ -1,4 +1,4 @@
-import { AST, Block, isComment, isKeyValue, isTable, isTableArray } from './ast';
+import { AST, Block } from './ast';
 import { Position } from './location';
 
 /**
