@@ -30,7 +30,7 @@ export class TomlDocument {
 
   get toTomlString(): string {
     if (this.#currentTomlString === null) {
-      this.#currentTomlString =  toTOML(this.#ast);
+      this.#currentTomlString = toTOML(this.#ast);
     }
     return this.#currentTomlString;
   }

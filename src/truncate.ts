@@ -15,16 +15,6 @@ function comparePositions(pos1: Position, pos2: Position): number {
 }
 
 /**
- * Checks if a position is before or at another position.
- * @param pos - Position to check
- * @param limit - Limit position
- * @returns true if pos is before or at limit
- */
-function isPositionBeforeOrAt(pos: Position, limit: Position): boolean {
-  return comparePositions(pos, limit) <= 0;
-}
-
-/**
  * Checks if a block node should be included based on its location.
  * A block is included if its end position is before the limit position.
  * This ensures that only complete blocks that don't contain the change are kept.
