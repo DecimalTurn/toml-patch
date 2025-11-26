@@ -13,7 +13,7 @@ import { truncateAst } from './truncate';
 export class TomlDocument {
   #ast: Block[];
   #currentTomlString: string | null
-  #linebreak: string;
+  #newline: string;
   #trailingNewlineCount: number;
 
   /**
@@ -24,8 +24,8 @@ export class TomlDocument {
     this.#currentTomlString = tomlString;
     this.#ast = Array.from(parseTOML(tomlString));
     // Detect the line ending style and trailing newlines from the original file
-    this.#linebreak = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
+    this.#newline = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
   }
 
   get toTomlString(): string {
@@ -61,7 +61,7 @@ export class TomlDocument {
       this.#ast,
       updatedObject,
       format,
-      this.#linebreak,
+      this.#newline,
       this.#trailingNewlineCount
     );
     this.#ast = document.items;
@@ -79,14 +79,14 @@ export class TomlDocument {
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this.#linebreak);
-    const newLinebreak = detectNewline(tomlString);
-    const newLines = tomlString.split(newLinebreak);
+    const existingLines = this.toTomlString.split(this.#newline);
+    const newLineChar = detectNewline(tomlString);
+    const newTextLines = tomlString.split(newLineChar);
     let firstDiffLineIndex = 0;
     while (
       firstDiffLineIndex < existingLines.length &&
-      firstDiffLineIndex < newLines.length &&
-      existingLines[firstDiffLineIndex] === newLines[firstDiffLineIndex]
+      firstDiffLineIndex < newTextLines.length &&
+      existingLines[firstDiffLineIndex] === newTextLines[firstDiffLineIndex]
     ) {
       firstDiffLineIndex++;
     }
@@ -96,9 +96,9 @@ export class TomlDocument {
     let firstDiffColumn = 0;
     
     // If we're within the bounds of both arrays, find the column where they differ
-    if (firstDiffLineIndex < existingLines.length && firstDiffLineIndex < newLines.length) {
+    if (firstDiffLineIndex < existingLines.length && firstDiffLineIndex < newTextLines.length) {
       const existingLine = existingLines[firstDiffLineIndex];
-      const newLine = newLines[firstDiffLineIndex];
+      const newLine = newTextLines[firstDiffLineIndex];
       
       // Find the first character position where the lines differ
       for (let i = 0; i < Math.max(existingLine.length, newLine.length); i++) {
@@ -119,21 +119,21 @@ export class TomlDocument {
 
     // Based on the first difference, we can re-parse only the affected part
     // We will need to supply the remaining string after where the AST was truncated
-    const remainingLines = newLines.slice(continueFromLine - 1);
+    const remainingLines = newTextLines.slice(continueFromLine - 1);
     
     // If there's a partial line match, we need to extract only the part after the continuation column
     if (remainingLines.length > 0 && continueFromColumn > 0) {
       remainingLines[0] = remainingLines[0].substring(continueFromColumn);
     }
     
-    const remainingToml = remainingLines.join(this.#linebreak);
+    const remainingToml = remainingLines.join(this.#newline);
     
     this.#ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
-    this.#linebreak = newLinebreak;
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
+    this.#newline = newLineChar;
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
   }
 
   /**
@@ -151,8 +151,8 @@ export class TomlDocument {
     this.#currentTomlString = tomlString;
     
     // Update newline style and trailing newline count from the new string
-    this.#linebreak = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#linebreak);
+    this.#newline = detectNewline(tomlString);
+    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
   }
 
 }
