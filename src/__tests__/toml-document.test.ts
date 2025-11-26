@@ -35,6 +35,11 @@ describe('TomlDocument', () => {
     const newObj = { section: { key: 'changed', newKey: 42 } };
     doc.patch(newObj);
     const patched = doc.toTomlString;
+    expect(patched).toEqual(dedent`
+    [section]
+    key = "changed"
+    newKey = 42
+    ` + '\n');
     const newDoc = new TomlDocument(patched);
     expect(newDoc.toJsObject).toEqual(newObj);
   });
@@ -48,8 +53,8 @@ describe('TomlDocument', () => {
     expect(patched).toEqual('[x]\r\ny = 2\r\n');
   });
 
-  describe('overwrite', () => {
-    it('does nothing when overwriting with identical string', () => {
+  describe('update', () => {
+    it('does nothing when updating with identical string', () => {
       const toml = dedent`
         [section]
         key = "value"
@@ -57,7 +62,7 @@ describe('TomlDocument', () => {
       const doc = new TomlDocument(toml);
       const originalToml = doc.toTomlString;
       
-      doc.overwrite(toml);
+      doc.update(toml);
       
       expect(doc.toTomlString).toBe(originalToml);
       expect(doc.toJsObject).toEqual({ section: { key: 'value' } });
