@@ -1108,3 +1108,418 @@ test('should respect inlineTableStart setting for deeply nested objects', () => 
   
   expect(patchedSections).toEqual(expectedSections);
 });
+
+test('should patch date by increasing it by one day', () => {
+  const existing = dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-15T10:30:00Z
+    
+    [settings]
+    enabled = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current date and add one day
+  const currentDate = value.created_date as Date;
+  const nextDay = new Date(currentDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  
+  value.created_date = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-16T10:30:00.000Z
+    
+    [settings]
+    enabled = true
+    ` + '\n');
+});
+
+test('should patch date field from example toml', () => {
+  // Use a simplified version of the example TOML focusing on the date field
+  const existing = dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-27T07:32:00Z # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the date of birth and add one day
+  const currentDob = value.owner.dob as Date;
+  const nextDay = new Date(currentDob);
+  nextDay.setDate(nextDay.getDate() + 1);
+  
+  value.owner.dob = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-28T07:32:00.000Z # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n');
+});
+
+test('should patch date-only field by increasing it by one day', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current date and add one day
+  const currentDate = value.start_date as Date;
+  const nextDay = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
+  
+  // Preserve the isDate property if it exists
+  if ((currentDate as any).isDate) {
+    (nextDay as any).isDate = true;
+    // Override toISOString to return date-only format
+    nextDay.toISOString = function() {
+      const year = this.getUTCFullYear();
+      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(this.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+  }
+  
+  value.start_date = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch local datetime with T separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current datetime and add one day
+  const currentDateTime = value.start_datetime as Date;
+  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
+  
+  // Preserve the isFloating property if it exists
+  if ((currentDateTime as any).isFloating) {
+    (nextDay as any).isFloating = true;
+    (nextDay as any).useSpaceSeparator = (currentDateTime as any).useSpaceSeparator;
+    // Override toISOString to return local datetime format
+    nextDay.toISOString = function() {
+      const year = this.getUTCFullYear();
+      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(this.getUTCDate()).padStart(2, '0');
+      const hours = String(this.getUTCHours()).padStart(2, '0');
+      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+      const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
+      return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
+    };
+  }
+  
+  value.start_datetime = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch local datetime with space separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current datetime and add one day
+  const currentDateTime = value.start_datetime as Date;
+  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
+  
+  // Preserve the isFloating property if it exists
+  if ((currentDateTime as any).isFloating) {
+    (nextDay as any).isFloating = true;
+    (nextDay as any).useSpaceSeparator = (currentDateTime as any).useSpaceSeparator;
+    // Override toISOString to return local datetime format
+    nextDay.toISOString = function() {
+      const year = this.getUTCFullYear();
+      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(this.getUTCDate()).padStart(2, '0');
+      const hours = String(this.getUTCHours()).padStart(2, '0');
+      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+      const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
+      return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
+    };
+  }
+  
+  value.start_datetime = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with space separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current datetime and add one day
+  const currentDateTime = value.start_datetime as Date;
+  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
+  
+  // Preserve the useSpaceSeparator property if it exists
+  if ((currentDateTime as any).useSpaceSeparator) {
+    (nextDay as any).useSpaceSeparator = true;
+    // Override toISOString to return offset datetime format with space
+    nextDay.toISOString = function() {
+      const isoString = Date.prototype.toISOString.call(this);
+      return isoString.replace('T', ' ');
+    };
+  }
+  
+  value.start_datetime = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00.000Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should preserve all TOML date/time formats when patching', () => {
+  const testCases = [
+    {
+      name: 'Local Date',
+      input: 'event_date = 2024-01-15',
+      expected: 'event_date = 2024-01-16'
+    },
+    {
+      name: 'Local DateTime with T separator',
+      input: 'event_datetime = 2024-01-15T10:30:00',
+      expected: 'event_datetime = 2024-01-16T10:30:00'
+    },
+    {
+      name: 'Local DateTime with space separator', 
+      input: 'event_datetime = 2024-01-15 10:30:00',
+      expected: 'event_datetime = 2024-01-16 10:30:00'
+    },
+    {
+      name: 'Local DateTime with milliseconds',
+      input: 'event_datetime = 2024-01-15T10:30:00.999',
+      expected: 'event_datetime = 2024-01-16T10:30:00.999'
+    },
+    {
+      name: 'Offset DateTime with T and Z',
+      input: 'event_datetime = 2024-01-15T10:30:00Z',
+      expected: 'event_datetime = 2024-01-16T10:30:00Z'
+    },
+    {
+      name: 'Offset DateTime with space and Z',
+      input: 'event_datetime = 2024-01-15 10:30:00Z',
+      expected: 'event_datetime = 2024-01-16 10:30:00Z'
+    },
+    {
+      name: 'Offset DateTime with timezone offset',
+      input: 'event_datetime = 2024-01-15T10:30:00-07:00',
+      expected: 'event_datetime = 2024-01-16T10:30:00-07:00' // Note: preserves the original offset
+    }
+  ];
+
+  testCases.forEach(({ name, input, expected }) => {
+    const parsed = parse(input);
+    const key = Object.keys(parsed)[0];
+    const originalDate = parsed[key] as Date;
+    
+    // Add one day
+    const nextDay = new Date(originalDate.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Preserve the original date format properties
+    if ((originalDate as any).isDate) {
+      (nextDay as any).isDate = true;
+      nextDay.toISOString = function() {
+        const year = this.getUTCFullYear();
+        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(this.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+    } else if ((originalDate as any).isFloating) {
+      (nextDay as any).isFloating = true;
+      (nextDay as any).useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      nextDay.toISOString = function() {
+        const year = this.getUTCFullYear();
+        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(this.getUTCDate()).padStart(2, '0');
+        const hours = String(this.getUTCHours()).padStart(2, '0');
+        const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+        const milliseconds = this.getUTCMilliseconds();
+        const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
+        
+        if (milliseconds > 0) {
+          const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+          return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}.${ms}`;
+        }
+        return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
+      };
+    } else if ((originalDate as any).useSpaceSeparator || (originalDate as any).originalOffset) {
+      // Handle offset datetime (both space and T separators)
+      (nextDay as any).useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      (nextDay as any).originalOffset = (originalDate as any).originalOffset;
+      nextDay.toISOString = function() {
+        if ((this as any).originalOffset) {
+          // Calculate the local time in the original timezone
+          const utcTime = this.getTime();
+          let offsetMinutes = 0;
+          
+          if ((this as any).originalOffset !== 'Z') {
+            const sign = (this as any).originalOffset[0] === '+' ? 1 : -1;
+            const [hours, minutes] = (this as any).originalOffset.slice(1).split(':');
+            offsetMinutes = sign * (parseInt(hours) * 60 + parseInt(minutes));
+          }
+          
+          const localTime = new Date(utcTime + offsetMinutes * 60000);
+          const year = localTime.getUTCFullYear();
+          const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(localTime.getUTCDate()).padStart(2, '0');
+          const hours = String(localTime.getUTCHours()).padStart(2, '0');
+          const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
+          const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
+          const milliseconds = localTime.getUTCMilliseconds();
+          
+          const datePart = `${year}-${month}-${day}`;
+          const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
+          
+          if (milliseconds > 0) {
+            const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+            return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}${(this as any).originalOffset}`;
+          }
+          return `${datePart}${separator}${hours}:${minutes}:${seconds}${(this as any).originalOffset}`;
+        }
+        
+        const isoString = Date.prototype.toISOString.call(this);
+        if ((this as any).useSpaceSeparator) {
+          return isoString.replace('T', ' ');
+        }
+        return isoString;
+      };
+    }
+    
+    parsed[key] = nextDay;
+    const patched = patch(input, parsed);
+    
+    expect(patched.trim()).toEqual(expected);
+  });
+});
+
+test('should patch local time values while preserving format', () => {
+  const existing = dedent`
+    # Daily schedule
+    meeting_time = 10:30:00
+    lunch_time = 12:00:00.500
+    
+    [schedule]
+    active = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Add 1 hour to meeting time
+  const meetingTime = value.meeting_time as Date;
+  const newMeetingTime = new Date(meetingTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+  
+  // Preserve time-only format
+  if ((meetingTime as any).isTime) {
+    (newMeetingTime as any).isTime = true;
+    newMeetingTime.toISOString = function() {
+      const hours = String(this.getUTCHours()).padStart(2, '0');
+      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+      const milliseconds = this.getUTCMilliseconds();
+      
+      if (milliseconds > 0) {
+        const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+        return `${hours}:${minutes}:${seconds}.${ms}`;
+      }
+      return `${hours}:${minutes}:${seconds}`;
+    };
+  }
+  
+  value.meeting_time = newMeetingTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Daily schedule
+    meeting_time = 11:30:00
+    lunch_time = 12:00:00.500
+    
+    [schedule]
+    active = true
+    ` + '\n');
+});

@@ -54,6 +54,59 @@ describe('TomlDocument', () => {
     expect(patched).toEqual('[x]\r\ny = 2\r\n');
   });
 
+  it('patches date field and preserves format in output', () => {
+    const toml = dedent`
+      # Event information
+      name = "Annual Conference"
+      start_date = 2024-01-15
+      
+      [venue]
+      location = "Convention Center"
+    ` + '\n';
+    
+    const doc = new TomlDocument(toml);
+    const jsObj = doc.toJsObject;
+    
+    // Increment the date by one day
+    const currentDate = jsObj.start_date;
+    const nextDay = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
+    
+    // For patching to preserve format, we need to keep the original date type information
+    // Find the KeyValue node for start_date in the AST to access the original date type
+    const keyValueNode = doc.ast.find(node => 
+      node.type === 'KeyValue' && 
+      (node as any).key?.value?.[0] === 'start_date'
+    ) as any;
+    
+    if (keyValueNode?.value?.value && (keyValueNode.value.value as any).isDate) {
+      // Create a new Date with the date-only formatting properties
+      (nextDay as any).isDate = true;
+      nextDay.toISOString = function() {
+        const year = this.getUTCFullYear();
+        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(this.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+    }
+    
+    jsObj.start_date = nextDay;
+    
+    // Patch the document
+    doc.patch(jsObj);
+    
+    // Verify the TOML output preserves the date-only format
+    const expected = dedent`
+      # Event information
+      name = "Annual Conference"
+      start_date = 2024-01-16
+      
+      [venue]
+      location = "Convention Center"
+    ` + '\n';
+    
+    expect(doc.toTomlString).toBe(expected);
+  });
+
   describe('hard-example.toml edge cases', () => {
     it('handles parsing and updating complex TOML with tricky syntax', () => {
       const doc = new TomlDocument(hard_example);

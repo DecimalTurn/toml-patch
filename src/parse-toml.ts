@@ -38,6 +38,141 @@ const IS_BINARY = /^0b/;
 export const IS_FULL_DATE = /(\d{4})-(\d{2})-(\d{2})/;
 export const IS_FULL_TIME = /(\d{2}):(\d{2}):(\d{2})/;
 
+// Patterns for different date/time formats
+const IS_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const IS_TIME_ONLY = /^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+const IS_LOCAL_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+const IS_LOCAL_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+const IS_OFFSET_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?[Zz+-]/;
+const IS_OFFSET_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?[Zz+-]/;
+
+// Custom Date class for local dates (date-only)
+class LocalDate extends Date {
+  isDate: boolean = true;
+  
+  constructor(value: string) {
+    super(value);
+  }
+  
+  toISOString(): string {
+    const year = this.getUTCFullYear();
+    const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(this.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+}
+
+// Custom Date class for local times (time-only)
+class LocalTime extends Date {
+  isTime: boolean = true;
+  originalFormat: string;
+  
+  constructor(value: string, originalFormat: string) {
+    // For local time, use a fixed date (1970-01-01) and the provided time
+    super(`1970-01-01T${value}`);
+    this.originalFormat = originalFormat;
+  }
+  
+  toISOString(): string {
+    const hours = String(this.getUTCHours()).padStart(2, '0');
+    const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+    const milliseconds = this.getUTCMilliseconds();
+    
+    if (milliseconds > 0) {
+      const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+      return `${hours}:${minutes}:${seconds}.${ms}`;
+    }
+    return `${hours}:${minutes}:${seconds}`;
+  }
+}
+
+// Custom Date class for local datetime (no timezone)
+class LocalDateTime extends Date {
+  isFloating: boolean = true;
+  useSpaceSeparator: boolean = false;
+  
+  constructor(value: string, useSpaceSeparator: boolean = false) {
+    // Convert space to T for Date parsing, but remember the original format
+    super(value.replace(' ', 'T') + 'Z');
+    this.useSpaceSeparator = useSpaceSeparator;
+  }
+  
+  toISOString(): string {
+    const year = this.getUTCFullYear();
+    const month = String(this.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(this.getUTCDate()).padStart(2, '0');
+    const hours = String(this.getUTCHours()).padStart(2, '0');
+    const minutes = String(this.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(this.getUTCSeconds()).padStart(2, '0');
+    const milliseconds = this.getUTCMilliseconds();
+    
+    const datePart = `${year}-${month}-${day}`;
+    const separator = this.useSpaceSeparator ? ' ' : 'T';
+    
+    if (milliseconds > 0) {
+      const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+      return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}`;
+    }
+    return `${datePart}${separator}${hours}:${minutes}:${seconds}`;
+  }
+}
+
+// Custom Date class for offset datetime that preserves space separator
+class OffsetDateTime extends Date {
+  useSpaceSeparator: boolean = false;
+  originalOffset?: string;
+  
+  constructor(value: string, useSpaceSeparator: boolean = false) {
+    super(value.replace(' ', 'T'));
+    this.useSpaceSeparator = useSpaceSeparator;
+    
+    // Extract and preserve the original offset
+    const offsetMatch = value.match(/([+-]\d{2}:\d{2}|[Zz])$/);
+    if (offsetMatch) {
+      this.originalOffset = offsetMatch[1] === 'z' ? 'Z' : offsetMatch[1];
+    }
+  }
+  
+  toISOString(): string {
+    if (this.originalOffset) {
+      // Calculate the local time in the original timezone
+      const utcTime = this.getTime();
+      let offsetMinutes = 0;
+      
+      if (this.originalOffset !== 'Z') {
+        const sign = this.originalOffset[0] === '+' ? 1 : -1;
+        const [hours, minutes] = this.originalOffset.slice(1).split(':');
+        offsetMinutes = sign * (parseInt(hours) * 60 + parseInt(minutes));
+      }
+      
+      const localTime = new Date(utcTime + offsetMinutes * 60000);
+      const year = localTime.getUTCFullYear();
+      const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(localTime.getUTCDate()).padStart(2, '0');
+      const hours = String(localTime.getUTCHours()).padStart(2, '0');
+      const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
+      const milliseconds = localTime.getUTCMilliseconds();
+      
+      const datePart = `${year}-${month}-${day}`;
+      const separator = this.useSpaceSeparator ? ' ' : 'T';
+      
+      if (milliseconds > 0) {
+        const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+        return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}${this.originalOffset}`;
+      }
+      return `${datePart}${separator}${hours}:${minutes}:${seconds}${this.originalOffset}`;
+    }
+    
+    const isoString = super.toISOString();
+    if (this.useSpaceSeparator) {
+      return isoString.replace('T', ' ');
+    }
+    return isoString;
+  }
+}
+
 export default function* parseTOML(input: string): AST {
   const tokens = tokenize(input);
   const cursor = new Cursor(tokens);
@@ -381,10 +516,31 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   }
 
   if (!IS_FULL_DATE.test(raw)) {
-    // For local time, use local ISO date
-    const [local_date] = new Date().toISOString().split('T');
-    value = new Date(`${local_date}T${raw}`);
+    // Local time only (e.g., "07:32:00" or "07:32:00.999")
+    if (IS_TIME_ONLY.test(raw)) {
+      value = new LocalTime(raw, raw) as any;
+    } else {
+      // For other time formats, use local ISO date
+      const [local_date] = new Date().toISOString().split('T');
+      value = new Date(`${local_date}T${raw}`);
+    }
+  } else if (IS_DATE_ONLY.test(raw)) {
+    // Local date only (e.g., "1979-05-27")
+    value = new LocalDate(raw) as any;
+  } else if (IS_LOCAL_DATETIME_T.test(raw)) {
+    // Local datetime with T separator (e.g., "1979-05-27T07:32:00")
+    value = new LocalDateTime(raw, false) as any;
+  } else if (IS_LOCAL_DATETIME_SPACE.test(raw)) {
+    // Local datetime with space separator (e.g., "1979-05-27 07:32:00")
+    value = new LocalDateTime(raw, true) as any;
+  } else if (IS_OFFSET_DATETIME_T.test(raw)) {
+    // Offset datetime with T separator (e.g., "1979-05-27T07:32:00Z" or "1979-05-27T07:32:00-07:00")
+    value = new OffsetDateTime(raw, false) as any;
+  } else if (IS_OFFSET_DATETIME_SPACE.test(raw)) {
+    // Offset datetime with space separator (e.g., "1979-05-27 07:32:00Z")
+    value = new OffsetDateTime(raw, true) as any;
   } else {
+    // Default: offset datetime with T separator or any other format
     value = new Date(raw.replace(' ', 'T'));
   }
 

@@ -34,7 +34,9 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    return toJS(this.#ast);
+    const jsObject = toJS(this.#ast);
+    // Convert custom date classes to regular JavaScript Date objects
+    return convertCustomDateClasses(jsObject);
   }
 
   /**
@@ -148,5 +150,25 @@ export class TomlDocument {
     // Update the auto-detected format with the new string's characteristics
     this.#Format = TomlFormat.autoDetectFormat(tomlString);
   }
+}
 
+/**
+ * Recursively converts custom date classes to regular JavaScript Date objects.
+ * This ensures that the toJsObject property returns standard Date objects
+ * while preserving the custom classes internally for TOML formatting.
+ */
+function convertCustomDateClasses(obj: any): any {
+  if (obj instanceof Date) {
+    // Convert custom date classes to regular Date objects
+    return new Date(obj.getTime());
+  } else if (Array.isArray(obj)) {
+    return obj.map(convertCustomDateClasses);
+  } else if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = convertCustomDateClasses(value);
+    }
+    return result;
+  }
+  return obj;
 }
