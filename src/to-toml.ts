@@ -24,10 +24,7 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
  * const tomlString = toTOML(ast, '\n', { trailingNewline: 1 });
  * ```
  */
-export default function toTOML(ast: AST, format: Format , options?: { trailingNewline?: number }): string {
-
-  const newLine = format?.newLine ?? '\n';
-  const trailingNewline = options?.trailingNewline ?? 1;
+export default function toTOML(ast: AST, format: Format): string {
 
   const lines: string[] = [];
 
@@ -98,7 +95,7 @@ export default function toTOML(ast: AST, format: Format , options?: { trailingNe
     }
   });
 
-  return lines.join(newLine) + newLine.repeat(trailingNewline);
+  return lines.join(format.newLine) + format.newLine.repeat(format.trailingNewline);
 }
 
 /**

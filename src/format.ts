@@ -15,7 +15,8 @@ import { insert, remove, applyWrites, shiftNode } from './writer';
 export class Format {
   
   // Note that the following options won't be reflected inside the AST. They will after only the stringification process
-  newLine?: string;
+  newLine: string;
+  trailingNewline: number;
   
   // The following options will be reflected inside the AST
   trailingComma?: boolean;
@@ -29,6 +30,7 @@ export class Format {
   constructor() {
     // New Format object should have everything set to empty except for defaults
     this.newLine = '\n';
+    this.trailingNewline = 1;
   }
 }
 export function formatTopLevel(document: Document): Document {

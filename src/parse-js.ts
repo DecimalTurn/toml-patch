@@ -21,7 +21,7 @@ const default_format = {
   bracketSpacing: true
 };
 
-export default function parseJS(value: any, format: Format = {}): Document {
+export default function parseJS(value: any, format: Format = new Format()): Document {
   format = Object.assign({}, default_format, format);
   value = toJSON(value);
 

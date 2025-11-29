@@ -7,13 +7,13 @@ import {
   generateString,
   generateDocument
 } from '../generate';
-import { formatEmptyLines } from '../format';
+import { Format, formatEmptyLines } from '../format';
 
 test('it should insert elements into empty inline array', () => {
   const inline_array = generateInlineArray();
   const key_value = generateKeyValue(['a'], inline_array);
   const ast = [key_value];
-  const format = {}
+  const format = new Format()
 
   expect(toTOML(ast, format)).toEqual(`a = []\n`);
 
@@ -33,7 +33,7 @@ test('it should insert elements into empty inline array', () => {
 test('it should insert first item on first line in document', () => {
   const document = generateDocument();
   const item = generateKeyValue(['a'], generateString('b'));
-  const format = {};
+  const format = new Format();
 
   insert(document, document, item);
 

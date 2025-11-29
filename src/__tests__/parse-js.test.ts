@@ -41,17 +41,22 @@ const valueMixedOrder = {
   e: new Date('1979-05-27T07:32:00Z')
 };
 
+const fmt = new Format();
+fmt.bracketSpacing = false;
+fmt.trailingComma = true;
+
 test('it should be properly formatted', () => {
   expect(toTOML(parseJS(value).items, new Format())).toMatchSnapshot();
+
   expect(
-    toTOML(parseJS(value, { bracketSpacing: false, trailingComma: true }).items, new Format())
+    toTOML(parseJS(value, fmt).items, new Format())
   ).toMatchSnapshot();
 });
 
 test('it should perform reordering', () => {
   expect(toTOML(parseJS(valueMixedOrder).items, new Format())).toMatchSnapshot();
   expect(
-    toTOML(parseJS(valueMixedOrder, { bracketSpacing: false, trailingComma: true }).items, new Format())
+    toTOML(parseJS(valueMixedOrder, fmt).items, new Format())
   ).toMatchSnapshot();
 });
 
