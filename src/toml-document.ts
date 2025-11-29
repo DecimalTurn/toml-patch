@@ -56,7 +56,7 @@ export class TomlDocument {
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
-  patch(updatedObject: any, format?: Format | undefined): void {
+  patch(updatedObject: any, format: Format | undefined = undefined) : void {
     const { tomlString, document } = patchAst(
       this.#ast,
       updatedObject,
