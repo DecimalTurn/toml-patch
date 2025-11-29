@@ -107,6 +107,54 @@ describe('TomlDocument', () => {
     expect(doc.toTomlString).toBe(expected);
   });
 
+  it('patches multiple different date types and preserves their formats', () => {
+    const toml = dedent`
+      # Event schedule
+      event_date = 2024-01-15
+      start_time = 09:30:00
+      meeting_datetime = 2024-01-15T14:30:00
+      deadline = 2024-01-15T23:59:59-08:00
+      
+      [config]
+      active = true
+    ` + '\n';
+    
+    const doc = new TomlDocument(toml);
+    const jsObj = doc.toJsObject;
+    
+    // Increment all dates by one day and time by one hour
+    const eventDate = jsObj.event_date;
+    const startTime = jsObj.start_time;
+    const meetingDateTime = jsObj.meeting_datetime;
+    const deadline = jsObj.deadline;
+    
+    // Add one day to date fields
+    jsObj.event_date = new Date(eventDate.getTime() + 24 * 60 * 60 * 1000);
+    jsObj.meeting_datetime = new Date(meetingDateTime.getTime() + 24 * 60 * 60 * 1000);
+    jsObj.deadline = new Date(deadline.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Add one hour to time field
+    jsObj.start_time = new Date(startTime.getTime() + 60 * 60 * 1000);
+    
+    // Patch the document
+    doc.patch(jsObj);
+    
+    // This test should preserve all original formats but currently fails
+    const expected = dedent`
+      # Event schedule
+      event_date = 2024-01-16
+      start_time = 10:30:00
+      meeting_datetime = 2024-01-16T14:30:00
+      deadline = 2024-01-16T23:59:59-08:00
+      
+      [config]
+      active = true
+    ` + '\n';
+    
+    // This will fail because we lose format information for all but manually handled dates
+    expect(doc.toTomlString).toBe(expected);
+  });
+
   describe('hard-example.toml edge cases', () => {
     it('handles parsing and updating complex TOML with tricky syntax', () => {
       const doc = new TomlDocument(hard_example);
