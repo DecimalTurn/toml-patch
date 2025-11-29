@@ -30,7 +30,8 @@ export class TomlDocument {
 
   get toTomlString(): string {
     if (this.#currentTomlString === null) {
-      this.#currentTomlString = toTOML(this.#ast);
+      const fmt: Format = { newLine: this.#newline };
+      this.#currentTomlString = toTOML(this.#ast, fmt, { trailingNewline: this.#trailingNewlineCount });
     }
     return this.#currentTomlString;
   }
@@ -57,11 +58,16 @@ export class TomlDocument {
    * @param format - Optional formatting options
    */
   patch(updatedObject: any, format: Format | undefined = undefined) : void {
+
+    const fmt = format || {};
+    if (!fmt.newLine) {
+      fmt.newLine = this.#newline;
+    }
+
     const { tomlString, document } = patchAst(
       this.#ast,
       updatedObject,
-      format,
-      this.#newline,
+      fmt,
       this.#trailingNewlineCount
     );
     this.#ast = document.items;

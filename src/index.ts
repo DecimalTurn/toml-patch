@@ -26,7 +26,8 @@ export function parse(value: string): any {
  */
 export function stringify(value: any, format?: Format): string {
   const document = parseJS(value, format);
-  return toTOML(document.items);
+  const fmt = format ?? new Format();
+  return toTOML(document.items, fmt);
 }
 
 export { default as patch } from './patch';

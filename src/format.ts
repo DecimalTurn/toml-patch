@@ -12,14 +12,25 @@ import {
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
 
-export interface Format {
+export class Format {
+  
+  // Note that the following options won't be reflected inside the AST. They will after only the stringification process
+  newLine?: string;
+  
+  // The following options will be reflected inside the AST
+  trailingComma?: boolean;
+  bracketSpacing?: boolean;
+
+  // These options are not yet implemented
   printWidth?: number;
   tabWidth?: number;
   useTabs?: boolean;
-  trailingComma?: boolean;
-  bracketSpacing?: boolean;
-}
 
+  constructor() {
+    // New Format object should have everything set to empty except for defaults
+    this.newLine = '\n';
+  }
+}
 export function formatTopLevel(document: Document): Document {
   const move_to_top_level = document.items.filter(item => {
     if (!isKeyValue(item)) return false;

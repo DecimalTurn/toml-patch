@@ -55,10 +55,15 @@ export default function patch(existing: string, updated: any, format?: Format): 
   const newline = detectNewline(existing);
   const trailingNewlineCount = countTrailingNewlines(existing, newline);
 
-  return patchAst(existing_ast, updated, format, newline, trailingNewlineCount).tomlString;
+  const fmt = format || {};
+  if (!fmt.newLine) {
+    fmt.newLine = newline;
+  }
+
+  return patchAst(existing_ast, updated, fmt, trailingNewlineCount).tomlString;
 }
 
-export function patchAst(existing_ast:AST, updated: any, format: Format | undefined, newline: string, trailingNewlineCount: number): { tomlString: string; document: Document } {
+export function patchAst(existing_ast:AST, updated: any, format: Format, trailingNewlineCount: number): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
   const existing_js = toJS(items);
@@ -73,7 +78,7 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
 
   if (changes.length === 0) {
     return {
-      tomlString: toTOML(items, newline, { trailingNewline: trailingNewlineCount }),
+      tomlString: toTOML(items, format, { trailingNewline: trailingNewlineCount }),
       document: existing_document
     };
   }
@@ -81,10 +86,11 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
   const patched_document = applyChanges(existing_document, updated_document, changes);
 
   // Validate the patched_document
+  // This would prevent overlapping element position in the AST, but since those are handled at stringification time, we can skip this for now
   //validate(patched_document);
 
   return {
-    tomlString: toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount }),
+    tomlString: toTOML(patched_document.items, format, { trailingNewline: trailingNewlineCount }),
     document: patched_document
   };
 }

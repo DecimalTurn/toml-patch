@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import parseTOML from '../parse-toml';
 import parseJS from '../parse-js';
 import toTOML from '../to-toml';
+import { Format } from '../format';
 
 test('should stringify example from readme', () => {
   const toml = stringify(
@@ -37,7 +38,7 @@ test('should stringify simple example', () => {
   );
 
   //console.log(toml);
-  let ouput = toTOML(toml.items);
+  let ouput = toTOML(toml.items, new Format());
 
   let expectedOutput = dedent`
     bar = "baz"
@@ -68,7 +69,7 @@ test('should stringify simple example with simple value at the end', () => {
   );
 
   //console.log(toml);
-  let ouput = toTOML(toml.items);
+  let ouput = toTOML(toml.items, new Format());
 
   let expectedOutput = dedent`
     bar = "baz"
@@ -101,7 +102,7 @@ test('should stringify simple example with empty object', () => {
   );
 
   //console.log(toml);
-  let ouput = toTOML(toml.items);
+  let ouput = toTOML(toml.items, new Format());
 
   let expectedOutput = dedent`
     bar = "baz"
