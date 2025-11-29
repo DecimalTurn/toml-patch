@@ -47,7 +47,7 @@ const IS_OFFSET_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?[Zz+
 const IS_OFFSET_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?[Zz+-]/;
 
 // Custom Date class for local dates (date-only)
-class LocalDate extends Date {
+export class LocalDate extends Date {
   isDate: boolean = true;
   
   constructor(value: string) {
@@ -63,7 +63,7 @@ class LocalDate extends Date {
 }
 
 // Custom Date class for local times (time-only)
-class LocalTime extends Date {
+export class LocalTime extends Date {
   isTime: boolean = true;
   originalFormat: string;
   
@@ -88,7 +88,7 @@ class LocalTime extends Date {
 }
 
 // Custom Date class for local datetime (no timezone)
-class LocalDateTime extends Date {
+export class LocalDateTime extends Date {
   isFloating: boolean = true;
   useSpaceSeparator: boolean = false;
   
@@ -119,7 +119,7 @@ class LocalDateTime extends Date {
 }
 
 // Custom Date class for offset datetime that preserves space separator
-class OffsetDateTime extends Date {
+export class OffsetDateTime extends Date {
   useSpaceSeparator: boolean = false;
   originalOffset?: string;
   

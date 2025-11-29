@@ -1,5 +1,6 @@
 import patch from '../patch';
 import { parse } from '../';
+import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
 
@@ -1397,77 +1398,41 @@ test('should preserve all TOML date/time formats when patching', () => {
     const originalDate = parsed[key] as Date;
     
     // Add one day
-    const nextDay = new Date(originalDate.getTime() + 24 * 60 * 60 * 1000);
+    const nextDayTime = originalDate.getTime() + 24 * 60 * 60 * 1000;
+    let nextDay: Date;
     
-    // Preserve the original date format properties
+    // Use the appropriate custom date class based on the original type
     if ((originalDate as any).isDate) {
-      (nextDay as any).isDate = true;
-      nextDay.toISOString = function() {
-        const year = this.getUTCFullYear();
-        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(this.getUTCDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
+      nextDay = new LocalDate(new Date(nextDayTime).toISOString().split('T')[0]);
+    } else if ((originalDate as any).isTime) {
+      const timeString = new Date(nextDayTime).toISOString().split('T')[1].split('Z')[0];
+      nextDay = new LocalTime(timeString, timeString);
     } else if ((originalDate as any).isFloating) {
-      (nextDay as any).isFloating = true;
-      (nextDay as any).useSpaceSeparator = (originalDate as any).useSpaceSeparator;
-      nextDay.toISOString = function() {
-        const year = this.getUTCFullYear();
-        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(this.getUTCDate()).padStart(2, '0');
-        const hours = String(this.getUTCHours()).padStart(2, '0');
-        const minutes = String(this.getUTCMinutes()).padStart(2, '0');
-        const seconds = String(this.getUTCSeconds()).padStart(2, '0');
-        const milliseconds = this.getUTCMilliseconds();
-        const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
-        
-        if (milliseconds > 0) {
-          const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
-          return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}.${ms}`;
-        }
-        return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
-      };
+      const useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      const isoString = new Date(nextDayTime).toISOString().replace('Z', '');
+      const dateTimeString = useSpaceSeparator ? isoString.replace('T', ' ') : isoString;
+      nextDay = new LocalDateTime(dateTimeString, useSpaceSeparator);
     } else if ((originalDate as any).useSpaceSeparator || (originalDate as any).originalOffset) {
-      // Handle offset datetime (both space and T separators)
-      (nextDay as any).useSpaceSeparator = (originalDate as any).useSpaceSeparator;
-      (nextDay as any).originalOffset = (originalDate as any).originalOffset;
-      nextDay.toISOString = function() {
-        if ((this as any).originalOffset) {
-          // Calculate the local time in the original timezone
-          const utcTime = this.getTime();
-          let offsetMinutes = 0;
-          
-          if ((this as any).originalOffset !== 'Z') {
-            const sign = (this as any).originalOffset[0] === '+' ? 1 : -1;
-            const [hours, minutes] = (this as any).originalOffset.slice(1).split(':');
-            offsetMinutes = sign * (parseInt(hours) * 60 + parseInt(minutes));
-          }
-          
-          const localTime = new Date(utcTime + offsetMinutes * 60000);
-          const year = localTime.getUTCFullYear();
-          const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(localTime.getUTCDate()).padStart(2, '0');
-          const hours = String(localTime.getUTCHours()).padStart(2, '0');
-          const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
-          const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
-          const milliseconds = localTime.getUTCMilliseconds();
-          
-          const datePart = `${year}-${month}-${day}`;
-          const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
-          
-          if (milliseconds > 0) {
-            const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
-            return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}${(this as any).originalOffset}`;
-          }
-          return `${datePart}${separator}${hours}:${minutes}:${seconds}${(this as any).originalOffset}`;
-        }
-        
-        const isoString = Date.prototype.toISOString.call(this);
-        if ((this as any).useSpaceSeparator) {
-          return isoString.replace('T', ' ');
-        }
-        return isoString;
-      };
+      const useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      const originalOffset = (originalDate as any).originalOffset;
+      
+      // For offset datetime, we need to preserve the local time in the original timezone
+      // Add 24 hours to the original date string representation, not the UTC time
+      const originalISOString = (originalDate as any).toISOString ? originalDate.toISOString() : originalDate.toISOString();
+      const datePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[0];
+      const timePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[1].replace(originalOffset || 'Z', '');
+      
+      // Parse the date part and add one day
+      const [year, month, day] = datePart.split('-').map(Number);
+      const nextDate = new Date(year, month - 1, day + 1);
+      const nextDateStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+      
+      const separator = useSpaceSeparator ? ' ' : 'T';
+      const dateTimeString = `${nextDateStr}${separator}${timePart}${originalOffset || 'Z'}`;
+      nextDay = new OffsetDateTime(dateTimeString, useSpaceSeparator);
+    } else {
+      // Fallback to regular Date
+      nextDay = new Date(nextDayTime);
     }
     
     parsed[key] = nextDay;
