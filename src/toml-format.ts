@@ -22,11 +22,11 @@ export class TomlFormat {
   trailingComma?: boolean;
   bracketSpacing?: boolean;
 
-  // These options are not yet implemented
-  printWidth?: number;
-  tabWidth?: number;
-  useTabs?: boolean;
-
+  // These options were part of the original TimHall's version and are not yet implemented
+  //printWidth?: number;
+  //tabWidth?: number;
+  //useTabs?: boolean;
+  
   constructor() {
     // New TomlFormat object should have everything set to empty except for defaults
     this.newLine = '\n';

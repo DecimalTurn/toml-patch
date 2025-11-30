@@ -13,7 +13,7 @@ test('it should insert elements into empty inline array', () => {
   const inline_array = generateInlineArray();
   const key_value = generateKeyValue(['a'], inline_array);
   const ast = [key_value];
-  const format = new TomlFormat()
+  const format = new TomlFormat();
 
   expect(toTOML(ast, format)).toEqual(`a = []\n`);
 

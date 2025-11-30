@@ -30,7 +30,9 @@ export class TomlDocument {
 
   get toTomlString(): string {
     if (this.#currentTomlString === null) {
-      const fmt: TomlFormat = { newLine: this.#newline, trailingNewline: this.#trailingNewlineCount };
+      const fmt = new TomlFormat();
+      fmt.newLine = this.#newline;
+      fmt.trailingNewline = this.#trailingNewlineCount;
       this.#currentTomlString = toTOML(this.#ast, fmt);
     }
     return this.#currentTomlString;

@@ -86,7 +86,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
   const patched_document = applyChanges(existing_document, updated_document, changes);
 
   // Validate the patched_document
-  // This would prevent overlapping element position in the AST, but since those are handled at stringification time, we can skip this for now
+  // This would prevent overlapping element positions in the AST, but since those are handled at stringification time, we can skip this for now
   //validate(patched_document);
 
   return {

@@ -16,7 +16,6 @@ import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from 
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 const default_format = {
-  printWidth: 80,
   trailingComma: false,
   bracketSpacing: true
 };
