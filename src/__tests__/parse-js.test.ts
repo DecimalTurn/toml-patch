@@ -46,22 +46,22 @@ fmt.bracketSpacing = false;
 fmt.trailingComma = true;
 
 test('it should be properly formatted', () => {
-  expect(toTOML(parseJS(value).items, new Format())).toMatchSnapshot();
+  expect(toTOML(parseJS(value).items, fmt)).toMatchSnapshot();
 
   expect(
-    toTOML(parseJS(value, fmt).items, new Format())
+    toTOML(parseJS(value, fmt).items, fmt)
   ).toMatchSnapshot();
 });
 
 test('it should perform reordering', () => {
-  expect(toTOML(parseJS(valueMixedOrder).items, new Format())).toMatchSnapshot();
+  expect(toTOML(parseJS(valueMixedOrder).items, fmt)).toMatchSnapshot();
   expect(
-    toTOML(parseJS(valueMixedOrder, fmt).items, new Format())
+    toTOML(parseJS(valueMixedOrder, fmt).items, fmt)
   ).toMatchSnapshot();
 });
 
 test('it should remove leading empty lines', () => {
-  expect(toTOML(parseJS({ a: { b: 2 }, c: { d: 4 }, e: { f: 6 } }).items, new Format())).toMatchSnapshot();
+  expect(toTOML(parseJS({ a: { b: 2 }, c: { d: 4 }, e: { f: 6 } }).items, fmt)).toMatchSnapshot();
 });
 
 test('simple JS Parsing', () => {
