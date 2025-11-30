@@ -1134,8 +1134,8 @@ test('should patch date by increasing it by one day', () => {
   expect(patched).toEqual(dedent`
     # Configuration with date
     name = "Test App"
-    created_date = 2024-01-16T10:30:00.000Z
-    
+    created_date = 2024-01-16T10:30:00Z
+
     [settings]
     enabled = true
     ` + '\n');
@@ -1170,7 +1170,7 @@ test('should patch date field from example toml', () => {
 
     [owner]
     name = "Tom Preston-Werner"
-    dob = 1979-05-28T07:32:00.000Z # First class dates? Why not?
+    dob = 1979-05-28T07:32:00Z     # First class dates? Why not?
 
     [database]
     enabled = true
@@ -1346,8 +1346,8 @@ test('should patch offset datetime with space separator', () => {
   expect(patched).toEqual(dedent`
     # Event configuration
     event_name = "Annual Conference"
-    start_datetime = 2024-01-16 10:30:00.000Z
-    
+    start_datetime = 2024-01-16 10:30:00Z
+
     [venue]
     name = "Convention Center"
     ` + '\n');

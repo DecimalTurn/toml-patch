@@ -24,7 +24,9 @@ import {
   InlineItem,
   isInlineItem,
   Block,
-  isBlock
+  isBlock,
+  DateTime,
+  isDateTime
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
@@ -33,6 +35,11 @@ import traverse from './traverse';
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the AST
 ////////////////////////////////////////
+
+import { DateFormatHelper } from './dateformat';
+
+// Create a shorter alias for convenience
+const dfh = DateFormatHelper;
 
 // Root node of the AST
 export type Root = Document | TreeNode;
@@ -60,6 +67,28 @@ const getExitOffsets = (root: Root) => {
 };
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
+  
+  // Special handling for DateTime nodes to preserve original format
+  if (isDateTime(existing) && isDateTime(replacement)) {
+    // Analyze the original raw format and create a properly formatted replacement
+    const originalRaw = existing.raw;
+    const originalValue = existing.value;
+    const newValue = replacement.value;
+    
+    // Create a new date with the original format preserved
+    const formattedDate = dfh.createDateWithOriginalFormat(originalValue, newValue, originalRaw);
+    
+    // Update the replacement with the properly formatted date
+    replacement.value = formattedDate;
+    replacement.raw = formattedDate.toISOString();
+    
+    // Adjust the location information to match the new raw length
+    const lengthDiff = replacement.raw.length - originalRaw.length;
+    if (lengthDiff !== 0) {
+      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+    }
+  }
+  
   // First, replace existing node
   // (by index for items, item, or key/value)
   if (hasItems(parent)) {
