@@ -41,7 +41,7 @@ const valueMixedOrder = {
   e: new Date('1979-05-27T07:32:00Z')
 };
 
-const fmt = new TomlFormat();
+const fmt = TomlFormat.default();
 fmt.bracketSpacing = false;
 fmt.trailingComma = true;
 

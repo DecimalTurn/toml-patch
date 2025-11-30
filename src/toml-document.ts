@@ -4,7 +4,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { AST, Block } from './ast';
 import { patchAst } from './patch';
-import { detectNewline, countTrailingNewlines } from './utils';
+import { detectNewline, countTrailingNewlines } from './toml-format';
 import { truncateAst } from './truncate';
 
 /**
@@ -12,9 +12,8 @@ import { truncateAst } from './truncate';
  */
 export class TomlDocument {
   #ast: Block[];
-  #currentTomlString: string | null
-  #newline: string;
-  #trailingNewlineCount: number;
+  #currentTomlString: string;
+  #Format: TomlFormat;
 
   /**
    * Initializes the TomlDocument with a TOML string, parsing it into an AST.
@@ -23,18 +22,11 @@ export class TomlDocument {
   constructor(tomlString: string) {
     this.#currentTomlString = tomlString;
     this.#ast = Array.from(parseTOML(tomlString));
-    // Detect the line ending style and trailing newlines from the original file
-    this.#newline = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    // Auto-detect formatting preferences from the original TOML string
+    this.#Format = TomlFormat.autoDetectFormat(tomlString);
   }
 
   get toTomlString(): string {
-    if (this.#currentTomlString === null) {
-      const fmt = new TomlFormat();
-      fmt.newLine = this.#newline;
-      fmt.trailingNewline = this.#trailingNewlineCount;
-      this.#currentTomlString = toTOML(this.#ast, fmt);
-    }
     return this.#currentTomlString;
   }
 
@@ -65,9 +57,8 @@ export class TomlDocument {
     if (format) {
       fmt = format;
     } else {
-      fmt = new TomlFormat();
-      fmt.newLine = this.#newline;
-      fmt.trailingNewline = this.#trailingNewlineCount;
+      // Use the auto-detected format from the original TOML string
+      fmt = this.#Format;
     }
 
     const { tomlString, document } = patchAst(
@@ -90,7 +81,7 @@ export class TomlDocument {
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this.#newline);
+    const existingLines = this.toTomlString.split(this.#Format.newLine);
     const newLineChar = detectNewline(tomlString);
     const newTextLines = tomlString.split(newLineChar);
     let firstDiffLineIndex = 0;
@@ -137,14 +128,13 @@ export class TomlDocument {
       remainingLines[0] = remainingLines[0].substring(continueFromColumn);
     }
     
-    const remainingToml = remainingLines.join(this.#newline);
+    const remainingToml = remainingLines.join(this.#Format.newLine);
     
     this.#ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
     this.#currentTomlString = tomlString;
     
-    // Update newline style and trailing newline count from the new string
-    this.#newline = newLineChar;
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    // Update the auto-detected format with the new string's characteristics
+    this.#Format = TomlFormat.autoDetectFormat(tomlString);
   }
 
   /**
@@ -161,9 +151,8 @@ export class TomlDocument {
     this.#ast = Array.from(parseTOML(tomlString));
     this.#currentTomlString = tomlString;
     
-    // Update newline style and trailing newline count from the new string
-    this.#newline = detectNewline(tomlString);
-    this.#trailingNewlineCount = countTrailingNewlines(tomlString, this.#newline);
+    // Update the auto-detected format with the new string's characteristics
+    this.#Format = TomlFormat.autoDetectFormat(tomlString);
   }
 
 }

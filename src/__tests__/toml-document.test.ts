@@ -1324,5 +1324,86 @@ color = "gray"
       expect(doc.toJsObject.monitoring.logs.provider).toBe("elasticsearch");
       expect(doc.toTomlString).toBe(updatedToml);
     });
+
+    it('should preserve bracket spacing when patching arrays', () => {
+      // Original TOML with no bracket spacing in arrays
+      const originalToml = dedent`
+        title = "Test Config"
+        tags = ["web", "api", "database"]
+        ports = [80, 443, 8080]
+        
+        [server]
+        name = "production"
+        ips = ["192.168.1.1", "192.168.1.2"]
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Patch by adding elements to existing arrays
+      const updatedObj = {
+        title: "Test Config",
+        tags: ["web", "api", "database", "monitoring"], // Add element to existing array
+        ports: [80, 443, 8080, 9090], // Add element to existing array
+        server: {
+          name: "production",
+          ips: ["192.168.1.1", "192.168.1.2", "192.168.1.3"] // Add element to nested array
+        }
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // The key expectation: preserve NO bracket spacing (no space after [ or before ])
+      // It's fine if comma spacing is added when new elements are inserted
+      expect(result).toContain('["web", "api", "database", "monitoring"]'); // No bracket spacing, normal comma spacing
+      expect(result).toContain('[80, 443, 8080, 9090]'); // No bracket spacing, normal comma spacing
+      expect(result).toContain('["192.168.1.1", "192.168.1.2", "192.168.1.3"]'); // No bracket spacing, normal comma spacing
+      
+      // Should NOT contain bracket spacing (spaces immediately after [ or before ])
+      expect(result).not.toContain('[ "web"'); // Should not have space after opening bracket
+      expect(result).not.toContain('"monitoring" ]'); // Should not have space before closing bracket
+      expect(result).not.toContain('[ 80'); // Should not have space after opening bracket
+      expect(result).not.toContain('9090 ]'); // Should not have space before closing bracket
+    });
+
+    it('should handle input TOML without comma spacing appropriately', () => {
+      // Original TOML with no comma spacing (compact style)
+      const originalToml = dedent`
+        title = "Compact Config"
+        tags = ["web","api","database"]
+        ports = [80,443,8080]
+        
+        [server]
+        name = "production"
+        ips = ["192.168.1.1","192.168.1.2"]
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Patch by adding elements to existing arrays
+      const updatedObj = {
+        title: "Compact Config",
+        tags: ["web", "api", "database", "monitoring"],
+        ports: [80, 443, 8080, 9090],
+        server: {
+          name: "production",
+          ips: ["192.168.1.1", "192.168.1.2", "192.168.1.3"]
+        }
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // Even with compact input, the tool should add appropriate comma spacing for new elements
+      // This documents how the tool handles compact input vs its output formatting
+      expect(result).toContain('["web","api","database", "monitoring"]'); // New element gets comma spacing (we might want to add a feature to TomlFormat to preseve the no-comma-spacing style)
+      //TODO: Decide if we want to preserve no-comma-spacing style in this case
+      expect(result).toContain('[80,443,8080, 9090]'); // New element gets comma spacing
+      expect(result).toContain('["192.168.1.1","192.168.1.2", "192.168.1.3"]'); // New element gets comma spacing
+      
+      // Should still preserve no bracket spacing
+      expect(result).not.toContain('[ "web"'); // No space after opening bracket
+      expect(result).not.toContain('"monitoring" ]'); // No space before closing bracket
+    });
   });
 });

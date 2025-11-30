@@ -15,13 +15,8 @@ import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines } from '
 import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
-const default_format = {
-  trailingComma: false,
-  bracketSpacing: true
-};
 
-export default function parseJS(value: any, format: TomlFormat = new TomlFormat()): Document {
-  format = Object.assign({}, default_format, format);
+export default function parseJS(value: any, format: TomlFormat = TomlFormat.default()): Document {
   value = toJSON(value);
 
   // Reorder the elements in the object

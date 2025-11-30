@@ -22,7 +22,7 @@ import {
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, detectNewline, countTrailingNewlines } from './utils';
+import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { validate } from './validate';
 
@@ -55,9 +55,8 @@ export default function patch(existing: string, updated: any, format?: TomlForma
   if (format) {
     fmt = format;
   } else {
-    fmt = new TomlFormat();
-    fmt.newLine = detectNewline(existing);
-    fmt.trailingNewline = countTrailingNewlines(existing, fmt.newLine);
+    // Auto-detect formatting preferences from the existing TOML string
+    fmt = TomlFormat.autoDetectFormat(existing);
   }
 
   return patchAst(existing_ast, updated, fmt).tomlString;

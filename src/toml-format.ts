@@ -11,10 +11,105 @@ import {
 } from './ast';
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
+import parseTOML from './parse-toml';
+
+// Default formatting values
+export const DEFAULT_NEWLINE = '\n';
+export const DEFAULT_TRAILING_NEWLINE = 1;
+export const DEFAULT_TRAILING_COMMA = false;
+export const DEFAULT_BRACKET_SPACING = true;
+
+// Detects if trailing commas are used in the existing TOML by examining the AST
+// Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
+export function detectTrailingComma(ast: Iterable<any>): boolean {
+  // Convert iterable to array and look for the first inline array or inline table to determine trailing comma preference
+  const items = Array.from(ast);
+  for (const item of items) {
+    const result = findTrailingCommaInNode(item);
+    if (result !== null) {
+      return result;
+    }
+  }
+  // Return false if no comma-separated structures are found (default to false)
+  return false;
+}
+
+// Helper function to recursively search for comma usage in a node
+function findTrailingCommaInNode(node: any): boolean | null {
+  if (!node || typeof node !== 'object') {
+    return null;
+  }
+
+  // Check if this is an InlineArray
+  if (node.type === 'InlineArray' && node.items && Array.isArray(node.items)) {
+    return checkTrailingCommaInItems(node.items);
+  }
+
+  // Check if this is an InlineTable
+  if (node.type === 'InlineTable' && node.items && Array.isArray(node.items)) {
+    return checkTrailingCommaInItems(node.items);
+  }
+
+  // Check if this is a KeyValue with a value that might contain arrays/tables
+  if (node.type === 'KeyValue' && node.value) {
+    return findTrailingCommaInNode(node.value);
+  }
+
+  // For other node types, recursively check any items array
+  if (node.items && Array.isArray(node.items)) {
+    for (const item of node.items) {
+      const result = findTrailingCommaInNode(item);
+      if (result !== null) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Check trailing comma usage in an array of inline items
+function checkTrailingCommaInItems(items: any[]): boolean | null {
+  if (items.length === 0) {
+    return null;
+  }
+
+  // Check the last item to see if it has a trailing comma
+  const lastItem = items[items.length - 1];
+  if (lastItem && typeof lastItem === 'object' && 'comma' in lastItem) {
+    return lastItem.comma === true;
+  }
+
+  return false;
+}
+
+// Returns the detected newline (\n or \r\n) from a string, defaulting to \n
+export function detectNewline(str: string): string {
+  const lfIndex = str.indexOf('\n');
+  if (lfIndex > 0 && str.substring(lfIndex - 1, lfIndex) === '\r') {
+    return '\r\n';
+  }
+  return '\n';
+}
+
+// Counts consecutive trailing newlines at the end of a string
+export function countTrailingNewlines(str: string, newlineChar: string): number {
+  let count = 0;
+  let pos = str.length;
+  while (pos >= newlineChar.length) {
+    if (str.substring(pos - newlineChar.length, pos) === newlineChar) {
+      count++;
+      pos -= newlineChar.length;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
 
 export class TomlFormat {
   
-  // Note that the following options won't be reflected inside the AST. They will after only the stringification process
+  // Note that the following options won't be reflected inside the AST. They will affect only the stringification process
   newLine: string;
   trailingNewline: number;
   
@@ -27,10 +122,69 @@ export class TomlFormat {
   //tabWidth?: number;
   //useTabs?: boolean;
   
-  constructor() {
-    // New TomlFormat object should have everything set to empty except for defaults
-    this.newLine = '\n';
-    this.trailingNewline = 1;
+  constructor(newLine: string, trailingNewline: number, trailingComma?: boolean, bracketSpacing?: boolean) {
+    this.newLine = newLine;
+    this.trailingNewline = trailingNewline;
+    this.trailingComma = trailingComma;
+    this.bracketSpacing = bracketSpacing;
+  }
+
+  /**
+   * Creates a new TomlFormat instance with default formatting preferences.
+   * 
+   * @returns A new TomlFormat instance with default values:
+   *   - newLine: '\n'
+   *   - trailingNewline: 1
+   *   - trailingComma: false
+   *   - bracketSpacing: true
+   */
+  static default(): TomlFormat {
+    return new TomlFormat(
+      DEFAULT_NEWLINE,
+      DEFAULT_TRAILING_NEWLINE,
+      DEFAULT_TRAILING_COMMA,
+      DEFAULT_BRACKET_SPACING
+    );
+  }
+
+  /**
+   * Auto-detects formatting preferences from an existing TOML string.
+   * 
+   * This method analyzes the provided TOML string to determine formatting
+   * preferences such as line endings, trailing newlines, and comma usage.
+   * 
+   * @param tomlString - The TOML string to analyze for formatting patterns
+   * @returns A new TomlFormat instance with detected formatting preferences
+   * 
+   * @example
+   * ```typescript
+   * const toml = 'array = ["a", "b", "c",]\ntable = { x = 1, y = 2, }';
+   * const format = TomlFormat.autoDetectFormat(toml);
+   * // format.trailingComma will be true
+   * // format.newLine will be '\n'
+   * // format.trailingNewline will be 0 (no trailing newline)
+   * ```
+   */
+  static autoDetectFormat(tomlString: string): TomlFormat {
+    const format = TomlFormat.default();
+    
+    // Detect line ending style
+    format.newLine = detectNewline(tomlString);
+    
+    // Detect trailing newline count
+    format.trailingNewline = countTrailingNewlines(tomlString, format.newLine);
+    
+    // Parse the TOML to detect comma usage patterns
+    try {
+      const ast = parseTOML(tomlString);
+      format.trailingComma = detectTrailingComma(ast);
+    } catch (error) {
+      // If parsing fails, fall back to defaults
+      // This ensures the method is robust against malformed TOML
+      format.trailingComma = DEFAULT_TRAILING_COMMA;
+    }
+    
+    return format;
   }
 }
 export function formatTopLevel(document: Document): Document {
