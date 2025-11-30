@@ -26,7 +26,7 @@ export function parse(value: string): any {
  */
 export function stringify(value: any, format?: TomlFormat): string {
   const document = parseJS(value, format);
-  const fmt = format ?? new TomlFormat();
+  const fmt = format ?? TomlFormat.defaultFormat();
   return toTOML(document.items, fmt);
 }
 
@@ -44,7 +44,7 @@ export { default as patch } from './patch';
  * import { patch, TomlFormat } from '@decimalturn/toml-patch';
  * 
  * // Create a custom format configuration
- * const format = new TomlFormat();
+ * const format = TomlFormat.defaultFormat();
  * format.newLine = '\r\n';        // Windows line endings
  * format.trailingNewline = 0;     // No trailing newline
  * format.trailingComma = true;    // Add trailing commas
