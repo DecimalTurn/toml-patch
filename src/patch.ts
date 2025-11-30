@@ -51,16 +51,13 @@ export function toDocument(ast: AST) : Document  {
 export default function patch(existing: string, updated: any, format?: Format): string {
   const existing_ast = parseTOML(existing);
 
-  // Detect the line ending style and trailing newlines from the original file
-  const newline = detectNewline(existing);
-  const trailingNewlineCount = countTrailingNewlines(existing, newline);
-
-
-  //const fmt = format || new Format();
-  const fmt = format ?? new Format();
-  if (!format) {
-    fmt.newLine = detectNewline(existing)
-    fmt.trailingNewline = countTrailingNewlines(existing, fmt.newLine)
+  let fmt: Format;
+  if (format) {
+    fmt = format;
+  } else {
+    fmt = new Format();
+    fmt.newLine = detectNewline(existing);
+    fmt.trailingNewline = countTrailingNewlines(existing, fmt.newLine);
   }
 
   return patchAst(existing_ast, updated, fmt).tomlString;

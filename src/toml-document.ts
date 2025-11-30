@@ -59,8 +59,11 @@ export class TomlDocument {
    */
   patch(updatedObject: any, format: Format | undefined = undefined) : void {
 
-    const fmt = format || new Format();
-    if (!format) {
+    let fmt: Format;
+    if (format) {
+      fmt = format;
+    } else {
+      fmt = new Format();
       fmt.newLine = this.#newline;
       fmt.trailingNewline = this.#trailingNewlineCount;
     }
