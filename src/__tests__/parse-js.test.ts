@@ -3,7 +3,7 @@ import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import dedent from 'dedent';
 import { toDocument } from '../patch';
-import { Format } from '../format';
+import { TomlFormat } from '../toml-format';
 
 const value = {
   a: '1',
@@ -41,7 +41,7 @@ const valueMixedOrder = {
   e: new Date('1979-05-27T07:32:00Z')
 };
 
-const fmt = new Format();
+const fmt = new TomlFormat();
 fmt.bracketSpacing = false;
 fmt.trailingComma = true;
 

@@ -2,7 +2,7 @@ import parseTOML from './parse-toml';
 import parseJS from './parse-js';
 import toJS from './to-js';
 import toTOML from './to-toml';
-import { Format } from './format';
+import { TomlFormat } from './toml-format';
 import {
   isKeyValue,
   WithItems,
@@ -48,14 +48,14 @@ export function toDocument(ast: AST) : Document  {
  * @param format - Optional formatting options to apply to new or modified sections
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: Format): string {
+export default function patch(existing: string, updated: any, format?: TomlFormat): string {
   const existing_ast = parseTOML(existing);
 
-  let fmt: Format;
+  let fmt: TomlFormat;
   if (format) {
     fmt = format;
   } else {
-    fmt = new Format();
+    fmt = new TomlFormat();
     fmt.newLine = detectNewline(existing);
     fmt.trailingNewline = countTrailingNewlines(existing, fmt.newLine);
   }
@@ -63,7 +63,7 @@ export default function patch(existing: string, updated: any, format?: Format): 
   return patchAst(existing_ast, updated, fmt).tomlString;
 }
 
-export function patchAst(existing_ast:AST, updated: any, format: Format): { tomlString: string; document: Document } {
+export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
   const existing_js = toJS(items);

@@ -1,7 +1,7 @@
 import parseTOML, { continueParsingTOML } from './parse-toml';
 import toTOML from './to-toml';
 import toJS from './to-js';
-import { Format } from './format';
+import { TomlFormat } from './toml-format';
 import { AST, Block } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, countTrailingNewlines } from './utils';
@@ -30,7 +30,7 @@ export class TomlDocument {
 
   get toTomlString(): string {
     if (this.#currentTomlString === null) {
-      const fmt: Format = { newLine: this.#newline, trailingNewline: this.#trailingNewlineCount };
+      const fmt: TomlFormat = { newLine: this.#newline, trailingNewline: this.#trailingNewlineCount };
       this.#currentTomlString = toTOML(this.#ast, fmt);
     }
     return this.#currentTomlString;
@@ -57,13 +57,13 @@ export class TomlDocument {
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
-  patch(updatedObject: any, format: Format | undefined = undefined) : void {
+  patch(updatedObject: any, format: TomlFormat | undefined = undefined) : void {
 
-    let fmt: Format;
+    let fmt: TomlFormat;
     if (format) {
       fmt = format;
     } else {
-      fmt = new Format();
+      fmt = new TomlFormat();
       fmt.newLine = this.#newline;
       fmt.trailingNewline = this.#trailingNewlineCount;
     }

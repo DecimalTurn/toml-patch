@@ -11,7 +11,7 @@ import {
   generateInlineArray,
   generateInlineTable
 } from './generate';
-import { Format, formatTopLevel, formatPrintWidth, formatEmptyLines } from './format';
+import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines } from './toml-format';
 import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
@@ -21,7 +21,7 @@ const default_format = {
   bracketSpacing: true
 };
 
-export default function parseJS(value: any, format: Format = new Format()): Document {
+export default function parseJS(value: any, format: TomlFormat = new TomlFormat()): Document {
   format = Object.assign({}, default_format, format);
   value = toJSON(value);
 
@@ -83,13 +83,13 @@ function reorderElements(value:any) : Object {
   return result;
 }
 
-function* walkObject(object: any, format: Format): IterableIterator<KeyValue> {
+function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue> {
   for (const key of Object.keys(object)) {
     yield generateKeyValue([key], walkValue(object[key], format));
   }
 }
 
-function walkValue(value: any, format: Format): Value {
+function walkValue(value: any, format: TomlFormat): Value {
   if (value == null) {
     throw new Error('"null" and "undefined" values are not supported');
   }
@@ -111,7 +111,7 @@ function walkValue(value: any, format: Format): Value {
   }
 }
 
-function walkInlineArray(value: Array<any>, format: Format): InlineArray {
+function walkInlineArray(value: Array<any>, format: TomlFormat): InlineArray {
   const inline_array = generateInlineArray();
   for (const element of value) {
     const item = walkValue(element, format);
@@ -126,7 +126,7 @@ function walkInlineArray(value: Array<any>, format: Format): InlineArray {
   return inline_array;
 }
 
-function walkInlineTable(value: object, format: Format): InlineTable | Value {
+function walkInlineTable(value: object, format: TomlFormat): InlineTable | Value {
   value = toJSON(value);
   if (!isObject(value)) return walkValue(value, format);
 
