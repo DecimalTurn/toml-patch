@@ -1520,6 +1520,39 @@ color = "gray"
         // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
         expect(result).toContain('compact_no_comma = ["m", "n", "o"]');
       });
+
+      it('should preserve brace spacing in complex inline table updates', () => {
+        // Edge case: test all 4 combinations of brace spacing and trailing comma format for inline tables
+        const originalToml = dedent`
+          spaced_with_comma = { a = 1, b = 2, }
+          spaced_no_comma = { x = 3, y = 4 }
+          compact_with_comma = {p = 5, q = 6,}
+          compact_no_comma = {m = 7, n = 8}
+        ` + '\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ 
+          spaced_with_comma: { a: 1, b: 2, c: 3 }, 
+          spaced_no_comma: { x: 3, y: 4, z: 9 },
+          compact_with_comma: { p: 5, q: 6, r: 10 },
+          compact_no_comma: { m: 7, n: 8, o: 11 }
+        });
+        const result = doc.toTomlString;
+        
+        // Test all 4 combinations preserve their original format:
+        
+        // 1. Spaced with trailing comma: preserves both
+        expect(result).toContain('spaced_with_comma = { a = 1, b = 2, c = 3, }');
+        
+        // 2. Spaced without trailing comma: preserves spacing, no trailing comma
+        expect(result).toContain('spaced_no_comma = { x = 3, y = 4, z = 9 }');
+        
+        // 3. Compact with trailing comma: preserves trailing comma, no spacing
+        expect(result).toContain('compact_with_comma = {p = 5, q = 6, r = 10,}');
+        
+        // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
+        expect(result).toContain('compact_no_comma = {m = 7, n = 8, o = 11}');
+      });
     });
   });
 });
