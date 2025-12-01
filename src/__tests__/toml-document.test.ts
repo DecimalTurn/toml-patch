@@ -1439,6 +1439,17 @@ color = "gray"
       expect(result).toContain('existing_tags = ["frontend", "backend",]'); // Should preserve original format
       expect(result).toContain('old_tags = ["legacy", "old",]'); // Should preserve original format
     });
+      it('should preserve proper comma spacing in inline tables when editing', () => {
+        // This test originally revealed a bug where adding properties to inline tables causes errors
+        // ORIGINAL ERROR: Incompatible child type "KeyValue" in insertInline function
+        const originalToml = 'config = { host = "localhost", port = 8080 }\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ config: { host: "127.0.0.1", port: 8080, debug: true } });
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('config = { host = "127.0.0.1", port = 8080, debug = true }');
+      });
     });
   });
 });

@@ -15,6 +15,7 @@ import {
   NodeType,
   isTableArray,
   isInlineArray,
+  isInlineTable,
   isInlineItem,
   hasItem,
   InlineItem,
@@ -24,6 +25,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
+import { generateInlineItem } from './generate';
 import { validate } from './validate';
 
 export function toDocument(ast: AST) : Document  {
@@ -174,6 +176,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         insert(original, parent, child, index);
+      } else if (isInlineTable(parent)) {
+        // Special handling for adding KeyValue to InlineTable
+        // InlineTable items must be wrapped in InlineItem
+        if (isKeyValue(child)) {
+          const inlineItem = generateInlineItem(child);
+          insert(original, parent, inlineItem);
+        } else {
+          insert(original, parent, child);
+        }
       } else {
         insert(original, parent, child);
       }
@@ -193,6 +204,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
+      } else if (isInlineItem(existing) && isKeyValue(replacement)) {
+        // Editing inline table item: existing is InlineItem, replacement is KeyValue
+        // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
+        parent = existing;
+        existing = existing.item;
+        replacement = replacement;
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits
