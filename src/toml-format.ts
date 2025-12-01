@@ -7,7 +7,8 @@ import {
   isInlineTable,
   isInlineArray,
   isKeyValue,
-  Document
+  Document,
+  TreeNode
 } from './ast';
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
@@ -188,6 +189,15 @@ function checkTrailingCommaInItems(items: any[]): boolean | null {
   }
 
   return false;
+}
+
+// Helper function to detect if an InlineArray originally had trailing commas
+export function arrayHadTrailingCommas(node: TreeNode): boolean {
+  if (!isInlineArray(node)) return false;
+  if (node.items.length === 0) return false;
+  // Check if the last item has a trailing comma
+  const lastItem = node.items[node.items.length - 1];
+  return lastItem.comma === true;
 }
 
 // Returns the detected newline (\n or \r\n) from a string, defaulting to \n

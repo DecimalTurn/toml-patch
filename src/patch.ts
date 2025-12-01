@@ -27,6 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem } from './generate';
 import { validate } from './validate';
+import { arrayHadTrailingCommas } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -175,6 +176,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
       }
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+        // Special handling for InlineArray: preserve original trailing comma format
+        if (isInlineArray(parent)) {
+          const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
+          
+          // If this is an InlineItem being added to an array, check its comma setting
+          if (isInlineItem(child)) {
+            // The child comes from the updated document with global format applied
+            // Override with the original array's format
+            child.comma = originalHadTrailingCommas;
+          }
+        }
+        
         insert(original, parent, child, index);
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -195,6 +208,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
+
+        // Special handling for arrays: preserve original trailing comma format
+        if (isInlineArray(existing.value) && isInlineArray(replacement.value)) {
+          const originalHadTrailingCommas = arrayHadTrailingCommas(existing.value);
+          const newArray = replacement.value;
+          
+          // Apply or remove trailing comma based on original format
+          if (newArray.items.length > 0) {
+            const lastItem = newArray.items[newArray.items.length - 1];
+            lastItem.comma = originalHadTrailingCommas;
+          }
+        }
+        
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;

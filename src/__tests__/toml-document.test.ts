@@ -1440,6 +1440,7 @@ color = "gray"
       expect(result).toContain('old_tags = ["legacy", "old",]'); // Should preserve original format
     });
 
+    describe('formatting bugs to fix', () => {
       it('should preserve trailing commas when completely replacing arrays', () => {
         // This test highlights a bug where trailing commas are lost when arrays are completely replaced
         const originalToml = 'tags = ["a", "b", "c",]\n';
@@ -1474,6 +1475,50 @@ color = "gray"
         
         // Trailing comma is preserved correctly without extra space
         expect(result).toContain('items = ["first", "third",]');
+      });
+
+      it('should handle array element addition while preserving format', () => {
+        // Edge case: adding elements to arrays with trailing commas
+        const originalToml = 'colors = ["red", "blue",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ colors: ["red", "blue", "green"] }); // Add element
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('colors = ["red", "blue", "green",]');
+      });
+
+      it('should preserve bracket spacing in complex array updates', () => {
+        // Edge case: test all 4 combinations of bracket spacing and trailing comma format
+        const originalToml = dedent`
+          spaced_with_comma = [ "a", "b", ]
+          spaced_no_comma = [ "x", "y" ]
+          compact_with_comma = ["p", "q",]
+          compact_no_comma = ["m", "n"]
+        ` + '\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ 
+          spaced_with_comma: ["a", "b", "c"], 
+          spaced_no_comma: ["x", "y", "z"],
+          compact_with_comma: ["p", "q", "r"],
+          compact_no_comma: ["m", "n", "o"]
+        });
+        const result = doc.toTomlString;
+        
+        // Test all 4 combinations preserve their original format:
+        
+        // 1. Spaced with trailing comma: preserves both
+        expect(result).toContain('spaced_with_comma = [ "a", "b", "c", ]');
+        
+        // 2. Spaced without trailing comma: preserves spacing, no trailing comma
+        expect(result).toContain('spaced_no_comma = [ "x", "y", "z" ]');
+        
+        // 3. Compact with trailing comma: preserves trailing comma, no spacing
+        expect(result).toContain('compact_with_comma = ["p", "q", "r",]');
+        
+        // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
+        expect(result).toContain('compact_no_comma = ["m", "n", "o"]');
       });
     });
   });
