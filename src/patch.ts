@@ -195,6 +195,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         replacement = replacement.item.value;
       } else {
         parent = findParent(original, change.path);
+        // Special handling for array element edits
+        if (isKeyValue(parent)) {
+          // Check if we're actually editing an array element
+          const parentPath = change.path.slice(0, -1);
+          const arrayNode = findByPath(original, parentPath);
+          if (isKeyValue(arrayNode) && isInlineArray(arrayNode.value)) {
+            parent = arrayNode.value;
+          }
+        }
       }
 
       replace(original, parent, existing, replacement);
