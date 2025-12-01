@@ -27,7 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, validateFormatObject } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -61,11 +61,14 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     if (format instanceof TomlFormat) {
       fmt = format;
     } else {
+      // Validate the format object and warn about unsupported properties
+      const validatedFormat = validateFormatObject(format);
+      
       // Start with auto-detected format and override with provided properties
       const autoDetected = TomlFormat.autoDetectFormat(existing);
       fmt = { ...autoDetected };
-      // Override with provided properties
-      Object.assign(fmt, format);
+      // Override with validated properties only
+      Object.assign(fmt, validatedFormat);
     }
   } else {
     // Auto-detect formatting preferences from the existing TOML string

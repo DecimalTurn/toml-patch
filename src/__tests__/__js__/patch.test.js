@@ -424,4 +424,373 @@ port = 5432
       expect(result).toContain('pools = [ "primary", "replica" ]');
     });
   });
+
+  describe('JavaScript/TypeScript interoperability edge cases', () => {
+    it('should handle null format parameter gracefully', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.null_test = ["value"];
+
+      // Should fall back to auto-detection when format is null
+      const result = patch(originalToml, updatedObject, null);
+
+      expect(result).toContain('null_test = [ "value" ]'); // Should use auto-detected format
+      expect(result).toContain('# Configuration file');
+      expect(result).toContain('[features]');
+    });
+
+    it('should handle undefined format parameter gracefully', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.undefined_test = ["value"];
+
+      // Should fall back to auto-detection when format is undefined
+      const result = patch(originalToml, updatedObject, undefined);
+
+      expect(result).toContain('undefined_test = [ "value" ]'); // Should use auto-detected format
+      expect(result).toContain('# Configuration file');
+    });
+
+    it('should ignore unsupported properties in format objects', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.settings.unsupported_test = ["a", "b"];
+
+      const formatWithUnsupportedProps = {
+        bracketSpacing: false,
+        unsupportedProperty: "this should be ignored",
+        anotherUnsupported: true,
+        randomFunction: function() { return "ignored"; },
+        someSymbol: Symbol("ignored"),
+        nestedObject: { deep: { property: "ignored" } }
+      };
+
+      // Capture console.warn calls
+      const originalWarn = console.warn;
+      let warnMessage = '';
+      console.warn = (message) => { warnMessage = message; };
+
+      try {
+        const result = patch(originalToml, updatedObject, formatWithUnsupportedProps);
+        
+        // Should warn about unsupported properties
+        expect(warnMessage).toContain('toml-patch: Ignoring unsupported format properties:');
+        expect(warnMessage).toContain('unsupportedProperty');
+        expect(warnMessage).toContain('anotherUnsupported');
+        expect(warnMessage).toContain('randomFunction');
+        expect(warnMessage).toContain('Supported properties are: newLine, trailingNewline, trailingComma, bracketSpacing');
+        
+        // Should still work and use supported properties
+        expect(result).toContain('unsupported_test = ["a", "b"]');
+      } finally {
+        // Restore console.warn
+        console.warn = originalWarn;
+      }
+    });
+
+    it('should handle format objects with getter/setter properties', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.getter_test = ["getter", "setter"];
+
+      const formatWithGetters = {
+        get bracketSpacing() { return true; },
+        set bracketSpacing(value) { this._bracketSpacing = value; },
+        get trailingComma() { return false; }
+      };
+
+      const result = patch(originalToml, updatedObject, formatWithGetters);
+
+      expect(result).toContain('getter_test = [ "getter", "setter" ]');
+      expect(result).toContain('[features]');
+    });
+
+    it('should handle format objects with non-enumerable properties', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.settings.non_enum_test = ["test"];
+
+      const format = {};
+      Object.defineProperty(format, 'bracketSpacing', {
+        value: true,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      });
+      Object.defineProperty(format, 'trailingComma', {
+        value: false,
+        enumerable: true,
+        writable: true,
+        configurable: true
+      });
+
+      const result = patch(originalToml, updatedObject, format);
+
+      // Should work with enumerable properties
+      expect(result).toContain('non_enum_test = [ "test" ]'); // Should use auto-detected format since non-enumerable props aren't copied
+      expect(result).toContain('[settings]');
+    });
+
+    it('should handle primitive values as format parameters', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.primitive_test = ["test"];
+
+      // These should all fall back to auto-detection without throwing
+      expect(() => patch(originalToml, updatedObject, "string")).not.toThrow();
+      expect(() => patch(originalToml, updatedObject, 123)).not.toThrow();
+      expect(() => patch(originalToml, updatedObject, true)).not.toThrow();
+      expect(() => patch(originalToml, updatedObject, [])).not.toThrow();
+    });
+
+    it('should handle format objects with circular references', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.settings.circular_test = ["circular"];
+
+      const formatWithCircular = { bracketSpacing: false };
+      formatWithCircular.self = formatWithCircular; // Create circular reference
+
+      // Should not throw and should handle the circular reference gracefully
+      expect(() => {
+        const result = patch(originalToml, updatedObject, formatWithCircular);
+        expect(result).toContain('circular_test = ["circular"]');
+      }).not.toThrow();
+    });
+
+    it('should handle format objects from different contexts/realms', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.realm_test = ["realm"];
+
+      // Simulate object from different context using Object.create
+      const differentContextFormat = Object.create(null);
+      differentContextFormat.bracketSpacing = true;
+      differentContextFormat.trailingComma = false;
+
+      const result = patch(originalToml, updatedObject, differentContextFormat);
+
+      expect(result).toContain('realm_test = [ "realm" ]');
+      expect(result).toContain('[features]');
+    });
+
+    it('should handle format objects with toString/valueOf overrides', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.settings.override_test = ["override"];
+
+      const formatWithOverrides = {
+        bracketSpacing: false,
+        toString() { return "CustomToString"; },
+        valueOf() { return 42; },
+        [Symbol.toPrimitive]() { return "primitive"; }
+      };
+
+      const result = patch(originalToml, updatedObject, formatWithOverrides);
+
+      expect(result).toContain('override_test = ["override"]');
+      expect(result).toContain('[settings]');
+    });
+
+    it('should handle Proxy objects as format parameters', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.proxy_test = ["proxy"];
+
+      const targetFormat = { bracketSpacing: true };
+      const proxyFormat = new Proxy(targetFormat, {
+        get(target, prop) {
+          // Log access for testing purposes
+          return target[prop];
+        },
+        set(target, prop, value) {
+          target[prop] = value;
+          return true;
+        }
+      });
+
+      const result = patch(originalToml, updatedObject, proxyFormat);
+
+      expect(result).toContain('proxy_test = [ "proxy" ]');
+      expect(result).toContain('[features]');
+    });
+
+    it('should handle frozen and sealed format objects', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.settings.frozen_test = ["frozen"];
+
+      const frozenFormat = Object.freeze({ bracketSpacing: false, trailingComma: true });
+      const sealedFormat = Object.seal({ bracketSpacing: true, trailingComma: false });
+
+      // Both should work without throwing
+      expect(() => {
+        const result1 = patch(originalToml, updatedObject, frozenFormat);
+        expect(result1).toContain('frozen_test = ["frozen",]');
+      }).not.toThrow();
+
+      expect(() => {
+        const result2 = patch(originalToml, updatedObject, sealedFormat);
+        expect(result2).toContain('frozen_test = [ "frozen" ]');
+      }).not.toThrow();
+    });
+
+    it('should handle format objects with inherited properties', () => {
+      const updatedObject = { ...baseUpdatedObject };
+      updatedObject.features.inherited_test = ["inherited"];
+
+      // Create inheritance chain
+      const BaseFormat = function() {};
+      BaseFormat.prototype.bracketSpacing = true;
+      BaseFormat.prototype.baseMethod = function() { return "base"; };
+
+      const ChildFormat = function() {};
+      ChildFormat.prototype = Object.create(BaseFormat.prototype);
+      ChildFormat.prototype.trailingComma = false;
+      ChildFormat.prototype.childMethod = function() { return "child"; };
+
+      const format = new ChildFormat();
+
+      const result = patch(originalToml, updatedObject, format);
+
+      expect(result).toContain('inherited_test = [ "inherited" ]');
+      expect(result).toContain('[features]');
+    });
+
+    it('should not trigger warnings for valid format objects with supported properties', () => {
+      const originalWarn = console.warn;
+      let warningCalled = false;
+      console.warn = (...args) => {
+        warningCalled = true;
+        originalWarn(...args);
+      };
+
+      try {
+        // Test with all supported properties
+        const validFormat1 = {
+          newLine: '\r\n',
+          trailingNewline: true,
+          trailingComma: true,
+          bracketSpacing: false
+        };
+        
+        patch(originalToml, baseUpdatedObject, validFormat1);
+        expect(warningCalled).toBe(false);
+
+        // Test with subset of supported properties
+        const validFormat2 = {
+          newLine: '\n',
+          bracketSpacing: true
+        };
+        
+        patch(originalToml, baseUpdatedObject, validFormat2);
+        expect(warningCalled).toBe(false);
+
+        // Test with empty object (should be valid)
+        patch(originalToml, baseUpdatedObject, {});
+        expect(warningCalled).toBe(false);
+
+        // Test with null/undefined (should not trigger validation)
+        patch(originalToml, baseUpdatedObject, null);
+        expect(warningCalled).toBe(false);
+        
+        patch(originalToml, baseUpdatedObject, undefined);
+        expect(warningCalled).toBe(false);
+
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
+
+    it('should serve as double-entry bookkeeping for supported format properties', () => {
+      // This test documents the currently supported properties
+      // If this test fails, it means the supported properties have changed
+      // and we need to update JavaScript-consuming code accordingly
+      const supportedProperties = new Set([
+        'newLine',
+        'trailingNewline', 
+        'trailingComma',
+        'bracketSpacing'
+      ]);
+
+      // Test that each documented property is actually supported
+      const originalWarn = console.warn;
+      let warningCalled = false;
+      console.warn = () => { warningCalled = true; };
+
+      try {
+        for (const property of supportedProperties) {
+          warningCalled = false;
+          // Use appropriate values for each property type
+          const format = { 
+            [property]: property === 'newLine' ? '\n' : true 
+          };
+          patch(originalToml, baseUpdatedObject, format);
+          expect(warningCalled).toBe(false, 
+            `Property '${property}' should be supported but triggered a warning`);
+        }
+      } finally {
+        console.warn = originalWarn;
+      }
+
+      // Document the expected count for easy maintenance
+      expect(supportedProperties.size).toBe(4);
+    });
+
+    it('should validate types of format properties and throw errors for invalid types', () => {
+      // Test invalid types for each property - these should throw TypeErrors
+      const invalidFormats = [
+        { newLine: 123 },
+        { newLine: true },
+        { newLine: null },
+        { trailingNewline: 'invalid' },
+        { trailingComma: 'invalid' },
+        { trailingComma: [] },
+        { bracketSpacing: 42 },
+        { bracketSpacing: {} }
+      ];
+
+      invalidFormats.forEach((format, index) => {
+        expect(() => {
+          patch(originalToml, baseUpdatedObject, format);
+        }).toThrow('Invalid types for format properties');
+      });
+
+      // Test multiple invalid types at once
+      const multipleInvalids = {
+        newLine: null,
+        trailingComma: [],
+        bracketSpacing: {}
+      };
+      
+      expect(() => {
+        patch(originalToml, baseUpdatedObject, multipleInvalids);
+      }).toThrow(TypeError);
+
+      // Test that valid types don't throw errors
+      expect(() => {
+        const validFormat = {
+          newLine: '\r\n',
+          trailingNewline: true,
+          trailingComma: false,
+          bracketSpacing: true
+        };
+        
+        const result = patch(originalToml, baseUpdatedObject, validFormat);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test that trailingNewline accepts both boolean and number
+      expect(() => {
+        patch(originalToml, baseUpdatedObject, { trailingNewline: 2 });
+      }).not.toThrow();
+      
+      expect(() => {
+        patch(originalToml, baseUpdatedObject, { trailingNewline: false });
+      }).not.toThrow();
+
+      // Test that unsupported properties still only warn (don't throw)
+      const originalWarn = console.warn;
+      let warningCalled = false;
+      console.warn = () => { warningCalled = true; };
+
+      try {
+        expect(() => {
+          patch(originalToml, baseUpdatedObject, { unsupportedProp: 'value' });
+        }).not.toThrow();
+        expect(warningCalled).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
+  });
 });

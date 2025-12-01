@@ -233,6 +233,74 @@ export function countTrailingNewlines(str: string, newlineChar: string): number 
   return count;
 }
 
+/**
+ * Validates a format object and warns about unsupported properties.
+ * Throws errors for supported properties with invalid types.
+ * @param format - The format object to validate
+ * @returns The validated format object with only supported properties and correct types
+ */
+export function validateFormatObject(format: any): any {
+  if (!format || typeof format !== 'object') {
+    return {};
+  }
+
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing']);
+  const validatedFormat: any = {};
+  const unsupportedProperties: string[] = [];
+  const invalidTypeProperties: string[] = [];
+
+  // Check all enumerable properties of the format object
+  for (const key in format) {
+    if (Object.prototype.hasOwnProperty.call(format, key)) {
+      if (supportedProperties.has(key)) {
+        const value = format[key];
+        
+        // Type validation for each property
+        switch (key) {
+          case 'newLine':
+            if (typeof value === 'string') {
+              validatedFormat.newLine = value;
+            } else {
+              invalidTypeProperties.push(`${key} (expected string, got ${typeof value})`);
+            }
+            break;
+          
+          case 'trailingNewline':
+            if (typeof value === 'boolean' || typeof value === 'number') {
+              validatedFormat.trailingNewline = value;
+            } else {
+              invalidTypeProperties.push(`${key} (expected boolean or number, got ${typeof value})`);
+            }
+            break;
+          
+          case 'trailingComma':
+          case 'bracketSpacing':
+            if (typeof value === 'boolean') {
+              validatedFormat[key] = value;
+            } else {
+              invalidTypeProperties.push(`${key} (expected boolean, got ${typeof value})`);
+            }
+            break;
+        }
+      } else {
+        unsupportedProperties.push(key);
+      }
+    }
+  }
+
+  // Warn about unsupported properties
+  if (unsupportedProperties.length > 0) {
+    console.warn(`toml-patch: Ignoring unsupported format properties: ${unsupportedProperties.join(', ')}. Supported properties are: ${Array.from(supportedProperties).join(', ')}`);
+  }
+
+  // Throw error for invalid types
+  if (invalidTypeProperties.length > 0) {
+    throw new TypeError(`Invalid types for format properties: ${invalidTypeProperties.join(', ')}`);
+  }
+
+  return validatedFormat;
+}
+
 export class TomlFormat {
   
   // Note that the following options won't be reflected inside the AST. They will affect only the stringification process

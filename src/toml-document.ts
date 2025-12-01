@@ -4,7 +4,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { AST, Block } from './ast';
 import { patchAst } from './patch';
-import { detectNewline, countTrailingNewlines } from './toml-format';
+import { detectNewline, countTrailingNewlines, validateFormatObject } from './toml-format';
 import { truncateAst } from './truncate';
 
 /**
@@ -60,10 +60,13 @@ export class TomlDocument {
       if (format instanceof TomlFormat) {
         fmt = format;
       } else {
+        // Validate the format object and warn about unsupported properties
+        const validatedFormat = validateFormatObject(format);
+        
         // Create a copy of the current format to avoid mutating the original
         fmt = { ...this.#Format };
-        // Override with provided properties
-        Object.assign(fmt, format);
+        // Override with validated properties only
+        Object.assign(fmt, validatedFormat);
       }
     } else {
       // Use the auto-detected format from the original TOML string
