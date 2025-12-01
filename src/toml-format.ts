@@ -200,6 +200,15 @@ export function arrayHadTrailingCommas(node: TreeNode): boolean {
   return lastItem.comma === true;
 }
 
+// Helper function to detect if an InlineTable originally had trailing commas
+export function tableHadTrailingCommas(node: TreeNode): boolean {
+  if (!isInlineTable(node)) return false;
+  if (node.items.length === 0) return false;
+  // Check if the last item has a trailing comma
+  const lastItem = node.items[node.items.length - 1];
+  return lastItem.comma === true;
+}
+
 // Returns the detected newline (\n or \r\n) from a string, defaulting to \n
 export function detectNewline(str: string): string {
   const lfIndex = str.indexOf('\n');

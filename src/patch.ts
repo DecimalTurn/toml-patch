@@ -27,7 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -191,9 +191,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         insert(original, parent, child, index);
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
+        // Preserve original trailing comma format
+        const originalHadTrailingCommas = tableHadTrailingCommas(parent);
+        
         // InlineTable items must be wrapped in InlineItem
         if (isKeyValue(child)) {
           const inlineItem = generateInlineItem(child);
+          // Override with the original table's format
+          inlineItem.comma = originalHadTrailingCommas;
           insert(original, parent, inlineItem);
         } else {
           insert(original, parent, child);
@@ -217,6 +222,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
           // Apply or remove trailing comma based on original format
           if (newArray.items.length > 0) {
             const lastItem = newArray.items[newArray.items.length - 1];
+            lastItem.comma = originalHadTrailingCommas;
+          }
+        }
+        
+        // Special handling for inline tables: preserve original trailing comma format
+        if (isInlineTable(existing.value) && isInlineTable(replacement.value)) {
+          const originalHadTrailingCommas = tableHadTrailingCommas(existing.value);
+          const newTable = replacement.value;
+          
+          // Apply or remove trailing comma based on original format
+          if (newTable.items.length > 0) {
+            const lastItem = newTable.items[newTable.items.length - 1];
             lastItem.comma = originalHadTrailingCommas;
           }
         }
