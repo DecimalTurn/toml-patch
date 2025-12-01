@@ -1405,5 +1405,37 @@ color = "gray"
       expect(result).not.toContain('[ "web"'); // No space after opening bracket
       expect(result).not.toContain('"monitoring" ]'); // No space before closing bracket
     });
+
+    it('should preserve trailing comma preference when adding new arrays', () => {
+      // Original TOML with trailing comma in existing array
+      const originalToml = dedent`
+        title = "App Config"
+        existing_tags = ["frontend", "backend",]
+        port = 3000
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Add a completely new array to the JS object
+      const updatedObj = {
+        title: "App Config",
+        existing_tags: ["frontend", "backend"],
+        port: 3000,
+        new_features: ["auth", "logging", "metrics"], // New array being added
+        categories: ["web", "api"] // Another new array
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // The expectation: new arrays should adopt the trailing comma preference from existing arrays
+      // Since the original had trailing comma, new arrays should also have trailing commas
+      // NOTE: Currently new arrays get default bracket spacing even if original doesn't have it
+      expect(result).toContain('new_features = ["auth", "logging", "metrics",]'); // Has trailing comma, no bracket spacing
+      expect(result).toContain('categories = ["web", "api",]'); // Has trailing comma, no bracket spacing
+      
+      // The existing array should maintain its format (though elements might change)
+      expect(result).toContain('existing_tags = ["frontend", "backend",]'); // Should preserve original format
+    });
   });
 });

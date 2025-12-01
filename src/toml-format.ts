@@ -30,8 +30,115 @@ export function detectTrailingComma(ast: Iterable<any>): boolean {
       return result;
     }
   }
-  // Return false if no comma-separated structures are found (default to false)
-  return false;
+  // Return default if no comma-separated structures are found
+  return DEFAULT_TRAILING_COMMA;
+}
+
+// Detects if bracket spacing is used in inline arrays and tables by examining the raw string
+// Returns true if bracket spacing is found, false if not or no bracket structures found (default to true)
+export function detectBracketSpacing(tomlString: string, ast: Iterable<any>): boolean {
+  // Convert iterable to array and look for inline arrays and tables
+  const items = Array.from(ast);
+  for (const item of items) {
+    const result = findBracketSpacingInNode(item, tomlString);
+    if (result !== null) {
+      return result;
+    }
+  }
+  // Return default if no bracket structures are found
+  return DEFAULT_BRACKET_SPACING;
+}
+
+// Helper function to recursively search for bracket spacing in a node
+function findBracketSpacingInNode(node: any, tomlString: string): boolean | null {
+  if (!node || typeof node !== 'object') {
+    return null;
+  }
+
+  // Check if this is an InlineArray or InlineTable
+  if ((node.type === 'InlineArray' || node.type === 'InlineTable') && node.loc) {
+    const bracketSpacing = checkBracketSpacingInLocation(node.loc, tomlString);
+    if (bracketSpacing !== null) {
+      return bracketSpacing;
+    }
+  }
+
+  // Recursively check nested structures
+  if (node.items && Array.isArray(node.items)) {
+    for (const child of node.items) {
+      const result = findBracketSpacingInNode(child, tomlString);
+      if (result !== null) {
+        return result;
+      }
+      // Also check nested item if it exists
+      if (child.item) {
+        const nestedResult = findBracketSpacingInNode(child.item, tomlString);
+        if (nestedResult !== null) {
+          return nestedResult;
+        }
+      }
+    }
+  }
+
+  // Check other properties that might contain nodes
+  for (const prop of ['value', 'key', 'item']) {
+    if (node[prop]) {
+      const result = findBracketSpacingInNode(node[prop], tomlString);
+      if (result !== null) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper function to check bracket spacing in a specific location
+function checkBracketSpacingInLocation(loc: any, tomlString: string): boolean | null {
+  if (!loc || !loc.start || !loc.end) {
+    return null;
+  }
+
+  // Extract the raw text for this location
+  const lines = tomlString.split(/\r?\n/);
+  const startLine = loc.start.line - 1; // Convert to 0-based
+  const endLine = loc.end.line - 1;
+  const startCol = loc.start.column;
+  const endCol = loc.end.column;
+
+  let rawText = '';
+  if (startLine === endLine) {
+    rawText = lines[startLine]?.substring(startCol, endCol + 1) || '';
+  } else {
+    // Multi-line case
+    if (lines[startLine]) {
+      rawText += lines[startLine].substring(startCol);
+    }
+    for (let i = startLine + 1; i < endLine; i++) {
+      rawText += '\n' + (lines[i] || '');
+    }
+    if (lines[endLine]) {
+      rawText += '\n' + lines[endLine].substring(0, endCol + 1);
+    }
+  }
+
+  // Check for bracket spacing patterns
+  // For arrays: [ elements ] vs [elements]
+  // For tables: { elements } vs {elements}
+  const arrayMatch = rawText.match(/^\[(\s*)/);
+  const tableMatch = rawText.match(/^\{(\s*)/);
+  
+  if (arrayMatch) {
+    // Check if there's a space after the opening bracket
+    return arrayMatch[1].length > 0;
+  }
+  
+  if (tableMatch) {
+    // Check if there's a space after the opening brace
+    return tableMatch[1].length > 0;
+  }
+
+  return null;
 }
 
 // Helper function to recursively search for comma usage in a node
@@ -174,14 +281,18 @@ export class TomlFormat {
     // Detect trailing newline count
     format.trailingNewline = countTrailingNewlines(tomlString, format.newLine);
     
-    // Parse the TOML to detect comma usage patterns
+    // Parse the TOML to detect comma and bracket spacing usage patterns
     try {
       const ast = parseTOML(tomlString);
-      format.trailingComma = detectTrailingComma(ast);
+      // Convert to array once to avoid consuming the iterator multiple times
+      const astArray = Array.from(ast);
+      format.trailingComma = detectTrailingComma(astArray);
+      format.bracketSpacing = detectBracketSpacing(tomlString, astArray);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
       format.trailingComma = DEFAULT_TRAILING_COMMA;
+      format.bracketSpacing = DEFAULT_BRACKET_SPACING;
     }
     
     return format;
