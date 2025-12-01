@@ -1553,6 +1553,85 @@ color = "gray"
         // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
         expect(result).toContain('compact_no_comma = {m = 7, n = 8, o = 11}');
       });
+
+      it('should preserve trailing commas in multiline arrays', () => {
+        // Test multiline arrays with and without trailing commas
+        const originalToml = dedent`
+          integers1 = [
+            1, 2, 3
+          ]
+          
+          integers2 = [
+            4,
+            5,
+            6, # this is ok and should be preserved
+          ]
+          
+          integers3 = [
+            7,
+            8,
+            9
+          ]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each array - should preserve their original trailing comma format
+        doc.patch({
+          integers1: [1, 2, 3, 10], // No trailing comma originally
+          integers2: [4, 5, 6, 11], // Had trailing comma originally
+          integers3: [7, 8, 9, 12]  // No trailing comma originally
+        });
+        
+        const result = doc.toTomlString;
+        
+        // integers1: should not have trailing comma (preserve original format)
+        expect(result).toContain('integers1 = [\n  1, 2, 3, 10\n]');
+        
+        // integers2: should have trailing comma (preserve original format)
+        // Note: there might be spacing issues with comments, but trailing comma should be preserved
+        expect(result).toContain('integers2 = [\n  4,\n  5,\n  6,\n  11,    # this is ok and should be preserved\n]');
+        
+        // integers3: should not have trailing comma (preserve original format)  
+        expect(result).toContain('integers3 = [\n  7,\n  8,\n  9,\n  12\n]');
+      });
+
+      it('should preserve multiline array formatting styles when adding elements', () => {
+        // Test different multiline array styles
+        const originalToml = dedent`
+          # Compact multiline (no trailing comma)
+          colors = ["red", "green",
+                    "blue"]
+          
+          # Spaced multiline with trailing comma  
+          fruits = [
+            "apple",
+            "banana",
+            "cherry",
+          ]
+          
+          # Mixed style (some items on same line)
+          numbers = [1, 2,
+                     3, 4,
+                     5]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each array
+        doc.patch({
+          colors: ["red", "green", "blue", "yellow"],
+          fruits: ["apple", "banana", "cherry", "date"],
+          numbers: [1, 2, 3, 4, 5, 6]
+        });
+        
+        const result = doc.toTomlString;
+        
+        // Each array should maintain its original style
+        expect(result).toContain('colors = ["red", "green",\n          "blue", "yellow"]'); // No trailing comma
+        expect(result).toContain('fruits = [\n  "apple",\n  "banana",\n  "cherry",\n  "date",\n]'); // Has trailing comma
+        expect(result).toContain('numbers = [1, 2,\n           3, 4,\n           5, 6]'); // No trailing comma
+      });
     });
   });
 });
