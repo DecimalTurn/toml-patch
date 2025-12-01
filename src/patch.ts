@@ -51,12 +51,22 @@ export function toDocument(ast: AST) : Document  {
  * @param format - Optional formatting options to apply to new or modified sections
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: TomlFormat): string {
+export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
   const existing_ast = parseTOML(existing);
 
   let fmt: TomlFormat;
   if (format) {
-    fmt = format;
+    // If format is provided, merge it with auto-detected format for backward compatibility
+    // This allows passing partial format objects like { bracketSpacing: true }
+    if (format instanceof TomlFormat) {
+      fmt = format;
+    } else {
+      // Start with auto-detected format and override with provided properties
+      const autoDetected = TomlFormat.autoDetectFormat(existing);
+      fmt = { ...autoDetected };
+      // Override with provided properties
+      Object.assign(fmt, format);
+    }
   } else {
     // Auto-detect formatting preferences from the existing TOML string
     fmt = TomlFormat.autoDetectFormat(existing);

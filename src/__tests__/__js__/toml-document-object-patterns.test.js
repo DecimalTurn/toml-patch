@@ -1,13 +1,13 @@
 /**
- * Integration tests for anonymous constructor patterns with TomlDocument
+ * Integration tests for TomlDocument with various object creation patterns
  * 
- * Tests various object creation patterns work with TomlDocument.patch()
- * without requiring TomlFormat imports.
+ * Tests that TomlDocument.patch() works with different object creation patterns
+ * and format object styles, demonstrating flexibility in format parameter handling.
  */
 
 const { TomlDocument } = require("../../../dist/toml-patch.cjs.min.js");
 
-describe('TomlDocument Anonymous Constructor Integration (No TomlFormat Import)', () => {
+describe('TomlDocument Object Creation Patterns Integration', () => {
   const originalToml = `# Test file
 title = "Anonymous Constructor Test"
 
