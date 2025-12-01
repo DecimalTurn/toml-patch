@@ -1,0 +1,3 @@
+
+# Set attributes for specific file patterns
+src/__tests__/__js-integration__/** linguist-detectable=false

@@ -30,6 +30,8 @@
   "types": "dist/toml-patch.d.ts",
   "scripts": {
     "test": "jest",
+    "test:js": "jest src/__tests__/__js__",
+    "test:all": "npm run test && npm run test:js",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.js",
     "benchmark": "npm-run-all2 bench:*",

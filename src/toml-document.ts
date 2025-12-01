@@ -51,11 +51,20 @@ export class TomlDocument {
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
-  patch(updatedObject: any, format: TomlFormat | undefined = undefined) : void {
+  patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat) : void {
 
     let fmt: TomlFormat;
     if (format) {
-      fmt = format;
+      // If format is provided, merge it with auto-detected format for backward compatibility
+      // This allows passing partial format objects like { bracketSpacing: true }
+      if (format instanceof TomlFormat) {
+        fmt = format;
+      } else {
+        // Create a copy of the current format to avoid mutating the original
+        fmt = { ...this.#Format };
+        // Override with provided properties
+        Object.assign(fmt, format);
+      }
     } else {
       // Use the auto-detected format from the original TOML string
       fmt = this.#Format;

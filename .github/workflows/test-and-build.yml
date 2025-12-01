@@ -32,7 +32,7 @@ jobs:
     - name: Typecheck
       run: npm run typecheck
     - name: Test
-      run: npm test
+      run: npm run test:all
     - name: Specs
       run: npm run specs
     - name: Build
