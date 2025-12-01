@@ -1632,6 +1632,68 @@ color = "gray"
         expect(result).toContain('fruits = [\n  "apple",\n  "banana",\n  "cherry",\n  "date",\n]'); // Has trailing comma
         expect(result).toContain('numbers = [1, 2,\n           3, 4,\n           5, 6]'); // No trailing comma
       });
+
+      it('should preserve formatting in mixed-type multiline arrays', () => {
+        // Test mixed-type arrays with different formatting styles
+        const originalToml = dedent`
+          # Mixed numbers without trailing comma
+          numbers = [ 0.1, 0.2, 0.5, 1, 2, 5 ]
+          
+          # Mixed-type contributors with trailing comma
+          contributors = [
+            "Foo Bar <foo@example.com>",
+            { name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" },
+          ]
+          
+          # Mixed types compact style
+          mixed_compact = [1, "string", true, 3.14]
+          
+          # Mixed types multiline without trailing comma
+          mixed_multiline = [
+            42,
+            "hello world",
+            false,
+            { key = "value" }
+          ]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each mixed-type array
+        doc.patch({
+          numbers: [0.1, 0.2, 0.5, 1, 2, 5, 10],
+          contributors: [
+            "Foo Bar <foo@example.com>",
+            { name: "Baz Qux", email: "bazqux@example.com", url: "https://example.com/bazqux" },
+            "New Contributor <new@example.com>"
+          ],
+          mixed_compact: [1, "string", true, 3.14, "new"],
+          mixed_multiline: [
+            42,
+            "hello world", 
+            false,
+            { key: "value" },
+            99
+          ]
+        });
+        
+        const result = doc.toTomlString;
+        
+        // Verify each mixed-type array maintains its original formatting
+        expect(result).toContain('numbers = [ 0.1, 0.2, 0.5, 1, 2, 5, 10 ]'); // No trailing comma, inline
+        
+        // Contributors array should have trailing comma and multiline format
+        expect(result).toContain('contributors = [\n  "Foo Bar <foo@example.com>",\n  { name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" },\n  "New Contributor <new@example.com>",\n]');
+        
+        expect(result).toContain('mixed_compact = [1, "string", true, 3.14, "new"]'); // No trailing comma, inline
+        
+        // Mixed multiline should not have trailing comma
+        expect(result).toContain('mixed_multiline = [\n  42,\n  "hello world",\n  false,\n  { key = "value" },\n  99\n]');
+        
+        // Verify that inline tables within arrays are preserved correctly
+        expect(result).toContain('{ name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" }');
+        expect(result).toContain('{ key = "value" }');
+      });
     });
   });
 });
