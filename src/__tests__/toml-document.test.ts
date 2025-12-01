@@ -1439,6 +1439,19 @@ color = "gray"
       expect(result).toContain('existing_tags = ["frontend", "backend",]'); // Should preserve original format
       expect(result).toContain('old_tags = ["legacy", "old",]'); // Should preserve original format
     });
+
+      it('should preserve trailing commas when completely replacing arrays', () => {
+        // This test highlights a bug where trailing commas are lost when arrays are completely replaced
+        const originalToml = 'tags = ["a", "b", "c",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        // Replace with a completely different array (should trigger complete replacement, not element edits)
+        doc.patch({ tags: ["x", "y"] });
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('tags = ["x", "y",]'); 
+      });
+
       it('should preserve proper comma spacing in inline tables when editing', () => {
         // This test originally revealed a bug where adding properties to inline tables causes errors
         // ORIGINAL ERROR: Incompatible child type "KeyValue" in insertInline function
@@ -1449,6 +1462,18 @@ color = "gray"
         const result = doc.toTomlString;
         
         expect(result).toContain('config = { host = "127.0.0.1", port = 8080, debug = true }');
+      });
+
+      it('should handle array element removal while preserving format', () => {
+        // Edge case: removing elements from arrays with trailing commas
+        const originalToml = 'items = ["first", "second", "third",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ items: ["first", "third"] }); // Remove middle element
+        const result = doc.toTomlString;
+        
+        // Trailing comma is preserved correctly without extra space
+        expect(result).toContain('items = ["first", "third",]');
       });
     });
   });

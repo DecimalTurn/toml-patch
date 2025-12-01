@@ -375,7 +375,14 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   }
 
   if (is_inline && previous && !next) {
-    (previous as InlineArrayItem | InlineTableItem).comma = false;
+    // When removing the last element, preserve trailing comma preference
+    // If the removed element had a trailing comma, transfer it to the new last element
+    const removedHadTrailingComma = (node as InlineArrayItem | InlineTableItem).comma;
+    if (removedHadTrailingComma) {
+      (previous as InlineArrayItem | InlineTableItem).comma = true;
+    } else {
+      (previous as InlineArrayItem | InlineTableItem).comma = false;
+    }
   }
 
   // Apply offsets after preceding node or before children of parent node
