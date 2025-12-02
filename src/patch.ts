@@ -210,8 +210,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Extract the KeyValue and insert it properly
         const keyValue = child.item;
         
+        console.log(`DEBUG: InlineItem with KeyValue - parent type: ${parent?.constructor?.name}, isTable: ${isTable(parent)}, isInlineTable: ${isInlineTable(keyValue.value)}, preferMultilineTable: ${format.preferMultilineTable}`);
+        
         if (isTable(parent) && isInlineTable(keyValue.value) && format.preferMultilineTable) {
           // Convert to separate table section
+          console.log(`DEBUG: Converting inline table to separate table section`);
           const parentTablePath = parent.key.item.value;
           const nestedTablePath = [...parentTablePath, ...keyValue.key.value];
           const nestedTable = generateTable(nestedTablePath);
