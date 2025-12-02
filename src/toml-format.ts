@@ -381,6 +381,11 @@ export class TomlFormat {
    */
   preferMultilineTable?: boolean;
 
+  /**
+   * Whether to prefer multiline formatting for tables when stringifying.
+   */
+  preferMultilineTable?: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
