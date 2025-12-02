@@ -25,7 +25,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem } from './generate';
+import { generateInlineItem, generateTable } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
@@ -81,7 +81,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format);
 
   // Validate the patched_document
   // This would prevent overlapping element positions in the AST, but since those are handled at stringification time, we can skip this for now
@@ -121,7 +121,7 @@ function reorder(changes: Change[]): Change[] {
 
 }
 
-function applyChanges(original: Document, updated: Document, changes: Change[]): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -171,7 +171,30 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         }
       }
 
-      if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+      // Check if we should convert inline table to multi-line table when adding to a table section
+      if (isTable(parent) && isKeyValue(child) && isInlineTable(child.value) && format.preferMultilineTable) {
+        // Convert the inline table to a multi-line table with proper nested path
+        const parentPath = change.path.slice(0, -1);
+        const childKey = child.key.value;
+        
+        // Build the full table path as a string array (convert any non-strings to strings)
+        const tablePath = [...parentPath.filter(p => typeof p === 'string'), childKey] as string[];
+        
+        const newTable = generateTable(tablePath);
+        
+        // Copy all items from the inline table to the new table
+        for (const item of child.value.items) {
+          if (isInlineItem(item) && isKeyValue(item.item)) {
+            // For regular tables, we need the KeyValue directly, not wrapped in InlineItem
+            insert(original, newTable, item.item);
+          }
+        }
+        
+        applyWrites(newTable);
+        
+        // Insert the new table at the document level instead of as a nested inline table
+        insert(original, original, newTable);
+      } else if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
