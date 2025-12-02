@@ -74,6 +74,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
 
   const updated_document = parseJS(updated, format);
   const changes = reorder(diff(existing_js, updated));
+  console.log('Generated changes for deeply nested:', changes.map(c => ({ type: c.type, path: c.path })));
 
   if (changes.length === 0) {
     return {
@@ -151,6 +152,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       let parent: TreeNode;
       if (isTable(child)) {
         parent = original;
+        console.log('Child is Table, inserting directly to document');
       } else if (is_table_array) {
         parent = original;
 
@@ -174,6 +176,51 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+        // Special handling for Tables being added to Document when preferMultilineTable is true
+        if (isDocument(parent) && isTable(child) && format.preferMultilineTable) {
+          console.log('Processing Table being added to Document with preferMultilineTable: true');
+          console.log('Table items:', child.items.map(item => ({ type: item.type, key: item.type === 'KeyValue' ? (item as KeyValue).key.value : 'N/A', valueType: item.type === 'KeyValue' ? (item as KeyValue).value.type : 'N/A' })));
+          
+          // Check if this table contains inline tables that should be converted to separate table sections
+          const inlineTableItems = child.items.filter(item => 
+            isKeyValue(item) && isInlineTable(item.value)
+          ) as KeyValue[];
+          
+          if (inlineTableItems.length > 0) {
+            console.log('Found inline tables in the table that need conversion:', inlineTableItems.length);
+            
+            // First, insert the main table (without inline table items)
+            for (const keyValue of inlineTableItems) {
+              const itemIndex = child.items.indexOf(keyValue);
+              child.items.splice(itemIndex, 1);
+            }
+            
+            // Insert the main table first (always, even if empty, to preserve structure)
+            insert(original, parent, child, index);
+            
+            // Then create and insert nested table sections
+            for (const keyValue of inlineTableItems) {
+              console.log('Converting inline table:', keyValue.key.value);
+              
+              // Create nested table section
+              const nestedTablePath = [...child.key.item.value, ...keyValue.key.value];
+              const nestedTable = generateTable(nestedTablePath);
+              
+              const inlineTable = keyValue.value as any;
+              for (const inlineItem of inlineTable.items) {
+                insert(nestedTable, nestedTable, inlineItem.item);
+              }
+              applyWrites(nestedTable);
+              
+              // Insert the nested table section into the document
+              insert(original, parent, nestedTable);
+            }
+            
+            // Don't insert the original table again since we already inserted it or its nested tables
+            return;
+          }
+        }
+        
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
@@ -240,6 +287,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           console.log('Regular insertion');
           insert(original, parent, keyValue);
         }
+      } else if (isTable(child)) {
+        // Handle adding Table nodes directly to the document
+        console.log('ENTERING TABLE HANDLING BLOCK');
+        insert(original, original, child);
       } else {
         insert(original, parent, child);
       }
