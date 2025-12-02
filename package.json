@@ -29,6 +29,7 @@
   "browser": "dist/toml-patch.umd.min.js",
   "types": "dist/toml-patch.d.ts",
   "scripts": {
+    "dev": "npm run typecheck && npm run build && npm-run-all2 --parallel test:all specs",
     "test": "jest",
     "test:js": "jest src/__tests__/__js__ --testRegex=\"/__tests__/.*\\.[jt]sx?$\"",
     "test:all": "npm run test && npm run test:js",

@@ -19,6 +19,7 @@ export const DEFAULT_NEWLINE = '\n';
 export const DEFAULT_TRAILING_NEWLINE = 1;
 export const DEFAULT_TRAILING_COMMA = false;
 export const DEFAULT_BRACKET_SPACING = true;
+export const DEFAULT_PREFER_MULTILINE_TABLE = true;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -244,7 +245,7 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing']);
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'preferMultilineTable']);
   const validatedFormat: any = {};
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
@@ -275,6 +276,7 @@ export function validateFormatObject(format: any): any {
           
           case 'trailingComma':
           case 'bracketSpacing':
+          case 'preferMultilineTable':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
@@ -374,17 +376,23 @@ export class TomlFormat {
    */
   bracketSpacing: boolean;
 
+  /**
+   * Whether to prefer multiline formatting for tables when stringifying.
+   */
+  preferMultilineTable?: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
   //useTabs?: boolean;
   
-  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean) {
+  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, preferMultilineTable?: boolean) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
+    this.preferMultilineTable = preferMultilineTable ?? DEFAULT_PREFER_MULTILINE_TABLE;
   }
 
   /**
@@ -395,13 +403,15 @@ export class TomlFormat {
    *   - trailingNewline: 1
    *   - trailingComma: false
    *   - bracketSpacing: true
+   *   - preferMultilineTable: true
    */
   static default(): TomlFormat {
     return new TomlFormat(
       DEFAULT_NEWLINE,
       DEFAULT_TRAILING_NEWLINE,
       DEFAULT_TRAILING_COMMA,
-      DEFAULT_BRACKET_SPACING
+      DEFAULT_BRACKET_SPACING,
+      DEFAULT_PREFER_MULTILINE_TABLE
     );
   }
 
@@ -445,6 +455,10 @@ export class TomlFormat {
       format.trailingComma = DEFAULT_TRAILING_COMMA;
       format.bracketSpacing = DEFAULT_BRACKET_SPACING;
     }
+    
+    // preferMultilineTable uses default value since auto-detection would require
+    // complex analysis of table formatting preferences
+    format.preferMultilineTable = DEFAULT_PREFER_MULTILINE_TABLE;
     
     return format;
   }
