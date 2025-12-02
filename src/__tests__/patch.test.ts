@@ -922,6 +922,40 @@ test('should respect preferMultilineTable setting when creating new top-level ob
   expect(patchedMultiline).toEqual(expectedMultiline);
 });
 
+test('should add nested objects to existing table sections', () => {
+  // Start with an existing table section
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+    ` + '\n';
+
+  // Add a nested object to the existing table
+  const newObject = {
+    project: {
+      name: "Simple",
+      version: "1.0.0",
+      target: {
+        type: "xlsm",
+        path: "targets/xlsm"
+      }
+    }
+  };
+
+  // Test current behavior - adds as inline table within existing table section
+  const result = patch(existing, newObject, { preferMultilineTable: false });
+  
+  // Current behavior: nested object becomes an inline table within the existing table section
+  const expected = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+    target = { type = "xlsm", path = "targets/xlsm" }
+    ` + '\n';
+  
+  expect(result).toEqual(expected);
+});
+
 test.skip('should respect preferMultilineTable setting when adding nested objects to existing table sections', () => {
   // This test is skipped because the functionality is not yet implemented
   // The current patch logic doesn't support adding nested objects to existing table sections
