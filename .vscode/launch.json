@@ -8,7 +8,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug Current File",
+      "name": "Debug Current JS File",
       "skipFiles": [
         "<node_internals>/**"
       ],
@@ -21,6 +21,24 @@
       "runtimeArgs": [
         "--trace-warnings"
       ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Current TS File",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "ts-node",
+        "${file}"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder}/tsconfig.json"
+      }
     },
     {
       "type": "node",
