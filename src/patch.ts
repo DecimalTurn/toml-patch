@@ -171,30 +171,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
-      // Check if we should convert inline table to multi-line table when adding to a table section
-      if (isTable(parent) && isKeyValue(child) && isInlineTable(child.value) && format.preferMultilineTable) {
-        // Convert the inline table to a multi-line table with proper nested path
-        const parentPath = change.path.slice(0, -1);
-        const childKey = child.key.value;
-        
-        // Build the full table path as a string array (convert any non-strings to strings)
-        const tablePath = [...parentPath.filter(p => typeof p === 'string'), childKey] as string[];
-        
-        const newTable = generateTable(tablePath);
-        
-        // Copy all items from the inline table to the new table
-        for (const item of child.value.items) {
-          if (isInlineItem(item) && isKeyValue(item.item)) {
-            // For regular tables, we need the KeyValue directly, not wrapped in InlineItem
-            insert(original, newTable, item.item);
-          }
-        }
-        
-        applyWrites(newTable);
-        
-        // Insert the new table at the document level instead of as a nested inline table
-        insert(original, original, newTable);
-      } else if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+      if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
