@@ -1324,5 +1324,376 @@ color = "gray"
       expect(doc.toJsObject.monitoring.logs.provider).toBe("elasticsearch");
       expect(doc.toTomlString).toBe(updatedToml);
     });
+
+    it('should preserve bracket spacing when patching arrays', () => {
+      // Original TOML with no bracket spacing in arrays
+      const originalToml = dedent`
+        title = "Test Config"
+        tags = ["web", "api", "database"]
+        ports = [80, 443, 8080]
+        
+        [server]
+        name = "production"
+        ips = ["192.168.1.1", "192.168.1.2"]
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Patch by adding elements to existing arrays
+      const updatedObj = {
+        title: "Test Config",
+        tags: ["web", "api", "database", "monitoring"], // Add element to existing array
+        ports: [80, 443, 8080, 9090], // Add element to existing array
+        server: {
+          name: "production",
+          ips: ["192.168.1.1", "192.168.1.2", "192.168.1.3"] // Add element to nested array
+        }
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // The key expectation: preserve NO bracket spacing (no space after [ or before ])
+      // It's fine if comma spacing is added when new elements are inserted
+      expect(result).toContain('["web", "api", "database", "monitoring"]'); // No bracket spacing, normal comma spacing
+      expect(result).toContain('[80, 443, 8080, 9090]'); // No bracket spacing, normal comma spacing
+      expect(result).toContain('["192.168.1.1", "192.168.1.2", "192.168.1.3"]'); // No bracket spacing, normal comma spacing
+      
+      // Should NOT contain bracket spacing (spaces immediately after [ or before ])
+      expect(result).not.toContain('[ "web"'); // Should not have space after opening bracket
+      expect(result).not.toContain('"monitoring" ]'); // Should not have space before closing bracket
+      expect(result).not.toContain('[ 80'); // Should not have space after opening bracket
+      expect(result).not.toContain('9090 ]'); // Should not have space before closing bracket
+    });
+
+    it('should handle input TOML without comma spacing appropriately', () => {
+      // Original TOML with no comma spacing (compact style)
+      const originalToml = dedent`
+        title = "Compact Config"
+        tags = ["web","api","database"]
+        ports = [80,443,8080]
+        
+        [server]
+        name = "production"
+        ips = ["192.168.1.1","192.168.1.2"]
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Patch by adding elements to existing arrays
+      const updatedObj = {
+        title: "Compact Config",
+        tags: ["web", "api", "database", "monitoring"],
+        ports: [80, 443, 8080, 9090],
+        server: {
+          name: "production",
+          ips: ["192.168.1.1", "192.168.1.2", "192.168.1.3"]
+        }
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // Even with compact input, the tool should add appropriate comma spacing for new elements
+      // This documents how the tool handles compact input vs its output formatting
+      expect(result).toContain('["web","api","database", "monitoring"]'); // New element gets comma spacing (we might want to add a feature to TomlFormat to preseve the no-comma-spacing style)
+      //TODO: Decide if we want to preserve no-comma-spacing style in this case
+      expect(result).toContain('[80,443,8080, 9090]'); // New element gets comma spacing
+      expect(result).toContain('["192.168.1.1","192.168.1.2", "192.168.1.3"]'); // New element gets comma spacing
+      
+      // Should still preserve no bracket spacing
+      expect(result).not.toContain('[ "web"'); // No space after opening bracket
+      expect(result).not.toContain('"monitoring" ]'); // No space before closing bracket
+    });
+
+    it('should preserve trailing comma and bracket spacing preferences when adding new arrays', () => {
+      // Original TOML with trailing comma in existing array
+      const originalToml = dedent`
+        title = "App Config"
+        existing_tags = ["frontend", "backend",]
+        old_tags = ["legacy", "deprecated",]
+        port = 3000
+      ` + '\n';
+      
+      const doc = new TomlDocument(originalToml);
+      
+      // Add a completely new array to the JS object
+      const updatedObj = {
+        title: "App Config",
+        existing_tags: ["frontend", "backend"],
+        old_tags: ["legacy", "old"],
+        port: 3000,
+        new_features: ["auth", "logging", "metrics"], // New array being added
+        categories: ["web", "api"] // Another new array
+      };
+      
+      doc.patch(updatedObj);
+      const result = doc.toTomlString;
+      
+      // The expectation: new arrays should adopt the trailing comma preference from existing arrays
+      // Since the original had trailing comma, new arrays should also have trailing commas
+      expect(result).toContain('new_features = ["auth", "logging", "metrics",]'); // Has trailing comma, no bracket spacing
+      expect(result).toContain('categories = ["web", "api",]'); // Has trailing comma, no bracket spacing
+      
+      // The existing array should maintain its format
+      expect(result).toContain('existing_tags = ["frontend", "backend",]'); // Should preserve original format
+      expect(result).toContain('old_tags = ["legacy", "old",]'); // Should preserve original format
+    });
+
+    describe('formatting bugs to fix', () => {
+      it('should preserve trailing commas when completely replacing arrays', () => {
+        // This test highlights a bug where trailing commas are lost when arrays are completely replaced
+        const originalToml = 'tags = ["a", "b", "c",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        // Replace with a completely different array (should trigger complete replacement, not element edits)
+        doc.patch({ tags: ["x", "y"] });
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('tags = ["x", "y",]'); 
+      });
+
+      it('should preserve proper comma spacing in inline tables when editing', () => {
+        // This test originally revealed a bug where adding properties to inline tables causes errors
+        // ORIGINAL ERROR: Incompatible child type "KeyValue" in insertInline function
+        const originalToml = 'config = { host = "localhost", port = 8080 }\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ config: { host: "127.0.0.1", port: 8080, debug: true } });
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('config = { host = "127.0.0.1", port = 8080, debug = true }');
+      });
+
+      it('should handle array element removal while preserving format', () => {
+        // Edge case: removing elements from arrays with trailing commas
+        const originalToml = 'items = ["first", "second", "third",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ items: ["first", "third"] }); // Remove middle element
+        const result = doc.toTomlString;
+        
+        // Trailing comma is preserved correctly without extra space
+        expect(result).toContain('items = ["first", "third",]');
+      });
+
+      it('should handle array element addition while preserving format', () => {
+        // Edge case: adding elements to arrays with trailing commas
+        const originalToml = 'colors = ["red", "blue",]\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ colors: ["red", "blue", "green"] }); // Add element
+        const result = doc.toTomlString;
+        
+        expect(result).toContain('colors = ["red", "blue", "green",]');
+      });
+
+      it('should preserve bracket spacing in complex array updates', () => {
+        // Edge case: test all 4 combinations of bracket spacing and trailing comma format
+        const originalToml = dedent`
+          spaced_with_comma = [ "a", "b", ]
+          spaced_no_comma = [ "x", "y" ]
+          compact_with_comma = ["p", "q",]
+          compact_no_comma = ["m", "n"]
+        ` + '\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ 
+          spaced_with_comma: ["a", "b", "c"], 
+          spaced_no_comma: ["x", "y", "z"],
+          compact_with_comma: ["p", "q", "r"],
+          compact_no_comma: ["m", "n", "o"]
+        });
+        const result = doc.toTomlString;
+        
+        // Test all 4 combinations preserve their original format:
+        
+        // 1. Spaced with trailing comma: preserves both
+        expect(result).toContain('spaced_with_comma = [ "a", "b", "c", ]');
+        
+        // 2. Spaced without trailing comma: preserves spacing, no trailing comma
+        expect(result).toContain('spaced_no_comma = [ "x", "y", "z" ]');
+        
+        // 3. Compact with trailing comma: preserves trailing comma, no spacing
+        expect(result).toContain('compact_with_comma = ["p", "q", "r",]');
+        
+        // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
+        expect(result).toContain('compact_no_comma = ["m", "n", "o"]');
+      });
+
+      it('should preserve brace spacing in complex inline table updates', () => {
+        // Edge case: test all 4 combinations of brace spacing and trailing comma format for inline tables
+        const originalToml = dedent`
+          spaced_with_comma = { a = 1, b = 2, }
+          spaced_no_comma = { x = 3, y = 4 }
+          compact_with_comma = {p = 5, q = 6,}
+          compact_no_comma = {m = 7, n = 8}
+        ` + '\n';
+        const doc = new TomlDocument(originalToml);
+        
+        doc.patch({ 
+          spaced_with_comma: { a: 1, b: 2, c: 3 }, 
+          spaced_no_comma: { x: 3, y: 4, z: 9 },
+          compact_with_comma: { p: 5, q: 6, r: 10 },
+          compact_no_comma: { m: 7, n: 8, o: 11 }
+        });
+        const result = doc.toTomlString;
+        
+        // Test all 4 combinations preserve their original format:
+        
+        // 1. Spaced with trailing comma: preserves both
+        expect(result).toContain('spaced_with_comma = { a = 1, b = 2, c = 3, }');
+        
+        // 2. Spaced without trailing comma: preserves spacing, no trailing comma
+        expect(result).toContain('spaced_no_comma = { x = 3, y = 4, z = 9 }');
+        
+        // 3. Compact with trailing comma: preserves trailing comma, no spacing
+        expect(result).toContain('compact_with_comma = {p = 5, q = 6, r = 10,}');
+        
+        // 4. Compact without trailing comma: preserves both (no spacing, no trailing comma)
+        expect(result).toContain('compact_no_comma = {m = 7, n = 8, o = 11}');
+      });
+
+      it('should preserve trailing commas in multiline arrays', () => {
+        // Test multiline arrays with and without trailing commas
+        const originalToml = dedent`
+          integers1 = [
+            1, 2, 3
+          ]
+          
+          integers2 = [
+            4,
+            5,
+            6, # this is ok and should be preserved
+          ]
+          
+          integers3 = [
+            7,
+            8,
+            9
+          ]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each array - should preserve their original trailing comma format
+        doc.patch({
+          integers1: [1, 2, 3, 10], // No trailing comma originally
+          integers2: [4, 5, 6, 11], // Had trailing comma originally
+          integers3: [7, 8, 9, 12]  // No trailing comma originally
+        });
+        
+        const result = doc.toTomlString;
+        
+        // integers1: should not have trailing comma (preserve original format)
+        expect(result).toContain('integers1 = [\n  1, 2, 3, 10\n]');
+        
+        // integers2: should have trailing comma (preserve original format)
+        // Note: there might be spacing issues with comments, but trailing comma should be preserved
+        expect(result).toContain('integers2 = [\n  4,\n  5,\n  6,\n  11,    # this is ok and should be preserved\n]');
+        
+        // integers3: should not have trailing comma (preserve original format)  
+        expect(result).toContain('integers3 = [\n  7,\n  8,\n  9,\n  12\n]');
+      });
+
+      it('should preserve multiline array formatting styles when adding elements', () => {
+        // Test different multiline array styles
+        const originalToml = dedent`
+          # Compact multiline (no trailing comma)
+          colors = ["red", "green",
+                    "blue"]
+          
+          # Spaced multiline with trailing comma  
+          fruits = [
+            "apple",
+            "banana",
+            "cherry",
+          ]
+          
+          # Mixed style (some items on same line)
+          numbers = [1, 2,
+                     3, 4,
+                     5]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each array
+        doc.patch({
+          colors: ["red", "green", "blue", "yellow"],
+          fruits: ["apple", "banana", "cherry", "date"],
+          numbers: [1, 2, 3, 4, 5, 6]
+        });
+        
+        const result = doc.toTomlString;
+        
+        // Each array should maintain its original style
+        expect(result).toContain('colors = ["red", "green",\n          "blue", "yellow"]'); // No trailing comma
+        expect(result).toContain('fruits = [\n  "apple",\n  "banana",\n  "cherry",\n  "date",\n]'); // Has trailing comma
+        expect(result).toContain('numbers = [1, 2,\n           3, 4,\n           5, 6]'); // No trailing comma
+      });
+
+      it('should preserve formatting in mixed-type multiline arrays', () => {
+        // Test mixed-type arrays with different formatting styles
+        const originalToml = dedent`
+          # Mixed numbers without trailing comma
+          numbers = [ 0.1, 0.2, 0.5, 1, 2, 5 ]
+          
+          # Mixed-type contributors with trailing comma
+          contributors = [
+            "Foo Bar <foo@example.com>",
+            { name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" },
+          ]
+          
+          # Mixed types compact style
+          mixed_compact = [1, "string", true, 3.14]
+          
+          # Mixed types multiline without trailing comma
+          mixed_multiline = [
+            42,
+            "hello world",
+            false,
+            { key = "value" }
+          ]
+        ` + '\n';
+        
+        const doc = new TomlDocument(originalToml);
+        
+        // Add elements to each mixed-type array
+        doc.patch({
+          numbers: [0.1, 0.2, 0.5, 1, 2, 5, 10],
+          contributors: [
+            "Foo Bar <foo@example.com>",
+            { name: "Baz Qux", email: "bazqux@example.com", url: "https://example.com/bazqux" },
+            "New Contributor <new@example.com>"
+          ],
+          mixed_compact: [1, "string", true, 3.14, "new"],
+          mixed_multiline: [
+            42,
+            "hello world", 
+            false,
+            { key: "value" },
+            99
+          ]
+        });
+        
+        const result = doc.toTomlString;
+        
+        // Verify each mixed-type array maintains its original formatting
+        expect(result).toContain('numbers = [ 0.1, 0.2, 0.5, 1, 2, 5, 10 ]'); // No trailing comma, inline
+        
+        // Contributors array should have trailing comma and multiline format
+        expect(result).toContain('contributors = [\n  "Foo Bar <foo@example.com>",\n  { name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" },\n  "New Contributor <new@example.com>",\n]');
+        
+        expect(result).toContain('mixed_compact = [1, "string", true, 3.14, "new"]'); // No trailing comma, inline
+        
+        // Mixed multiline should not have trailing comma
+        expect(result).toContain('mixed_multiline = [\n  42,\n  "hello world",\n  false,\n  { key = "value" },\n  99\n]');
+        
+        // Verify that inline tables within arrays are preserved correctly
+        expect(result).toContain('{ name = "Baz Qux", email = "bazqux@example.com", url = "https://example.com/bazqux" }');
+        expect(result).toContain('{ key = "value" }');
+      });
+    });
   });
 });

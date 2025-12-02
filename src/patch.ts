@@ -2,7 +2,7 @@ import parseTOML from './parse-toml';
 import parseJS from './parse-js';
 import toJS from './to-js';
 import toTOML from './to-toml';
-import { Format } from './format';
+import { TomlFormat } from './toml-format';
 import {
   isKeyValue,
   WithItems,
@@ -15,6 +15,7 @@ import {
   NodeType,
   isTableArray,
   isInlineArray,
+  isInlineTable,
   isInlineItem,
   hasItem,
   InlineItem,
@@ -22,9 +23,11 @@ import {
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, detectNewline, countTrailingNewlines } from './utils';
+import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
+import { generateInlineItem } from './generate';
 import { validate } from './validate';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -48,17 +51,17 @@ export function toDocument(ast: AST) : Document  {
  * @param format - Optional formatting options to apply to new or modified sections
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: Format): string {
+export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
   const existing_ast = parseTOML(existing);
 
-  // Detect the line ending style and trailing newlines from the original file
-  const newline = detectNewline(existing);
-  const trailingNewlineCount = countTrailingNewlines(existing, newline);
+  // Auto-detect formatting preferences from the existing TOML string for fallback
+  const autoDetectedFormat = TomlFormat.autoDetectFormat(existing);
+  const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
-  return patchAst(existing_ast, updated, format, newline, trailingNewlineCount).tomlString;
+  return patchAst(existing_ast, updated, fmt).tomlString;
 }
 
-export function patchAst(existing_ast:AST, updated: any, format: Format | undefined, newline: string, trailingNewlineCount: number): { tomlString: string; document: Document } {
+export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
   const existing_js = toJS(items);
@@ -73,7 +76,7 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
 
   if (changes.length === 0) {
     return {
-      tomlString: toTOML(items, newline, { trailingNewline: trailingNewlineCount }),
+      tomlString: toTOML(items, format),
       document: existing_document
     };
   }
@@ -81,10 +84,11 @@ export function patchAst(existing_ast:AST, updated: any, format: Format | undefi
   const patched_document = applyChanges(existing_document, updated_document, changes);
 
   // Validate the patched_document
+  // This would prevent overlapping element positions in the AST, but since those are handled at stringification time, we can skip this for now
   //validate(patched_document);
 
   return {
-    tomlString: toTOML(patched_document.items, newline, { trailingNewline: trailingNewlineCount }),
+    tomlString: toTOML(patched_document.items, format),
     document: patched_document
   };
 }
@@ -168,7 +172,33 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
       }
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+        // Special handling for InlineArray: preserve original trailing comma format
+        if (isInlineArray(parent)) {
+          const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
+          
+          // If this is an InlineItem being added to an array, check its comma setting
+          if (isInlineItem(child)) {
+            // The child comes from the updated document with global format applied
+            // Override with the original array's format
+            child.comma = originalHadTrailingCommas;
+          }
+        }
+        
         insert(original, parent, child, index);
+      } else if (isInlineTable(parent)) {
+        // Special handling for adding KeyValue to InlineTable
+        // Preserve original trailing comma format
+        const originalHadTrailingCommas = tableHadTrailingCommas(parent);
+        
+        // InlineTable items must be wrapped in InlineItem
+        if (isKeyValue(child)) {
+          const inlineItem = generateInlineItem(child);
+          // Override with the original table's format
+          inlineItem.comma = originalHadTrailingCommas;
+          insert(original, parent, inlineItem);
+        } else {
+          insert(original, parent, child);
+        }
       } else {
         insert(original, parent, child);
       }
@@ -179,6 +209,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
+
+        // Special handling for arrays: preserve original trailing comma format
+        if (isInlineArray(existing.value) && isInlineArray(replacement.value)) {
+          const originalHadTrailingCommas = arrayHadTrailingCommas(existing.value);
+          const newArray = replacement.value;
+          
+          // Apply or remove trailing comma based on original format
+          if (newArray.items.length > 0) {
+            const lastItem = newArray.items[newArray.items.length - 1];
+            lastItem.comma = originalHadTrailingCommas;
+          }
+        }
+        
+        // Special handling for inline tables: preserve original trailing comma format
+        if (isInlineTable(existing.value) && isInlineTable(replacement.value)) {
+          const originalHadTrailingCommas = tableHadTrailingCommas(existing.value);
+          const newTable = replacement.value;
+          
+          // Apply or remove trailing comma based on original format
+          if (newTable.items.length > 0) {
+            const lastItem = newTable.items[newTable.items.length - 1];
+            lastItem.comma = originalHadTrailingCommas;
+          }
+        }
+        
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;
@@ -188,8 +243,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
+      } else if (isInlineItem(existing) && isKeyValue(replacement)) {
+        // Editing inline table item: existing is InlineItem, replacement is KeyValue
+        // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
+        parent = existing;
+        existing = existing.item;
+        replacement = replacement;
       } else {
         parent = findParent(original, change.path);
+        // Special handling for array element edits
+        if (isKeyValue(parent)) {
+          // Check if we're actually editing an array element
+          const parentPath = change.path.slice(0, -1);
+          const arrayNode = findByPath(original, parentPath);
+          if (isKeyValue(arrayNode) && isInlineArray(arrayNode.value)) {
+            parent = arrayNode.value;
+          }
+        }
       }
 
       replace(original, parent, existing, replacement);

@@ -2,6 +2,7 @@ import { NodeType, AST } from './ast';
 import traverse from './traverse';
 import { Location } from './location';
 import { SPACE } from './tokenizer';
+import { TomlFormat } from './toml-format';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -23,9 +24,7 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
  * const tomlString = toTOML(ast, '\n', { trailingNewline: 1 });
  * ```
  */
-export default function toTOML(ast: AST, newline: string = '\n', options?: { trailingNewline?: number }): string {
-
-  const trailingNewline = options?.trailingNewline ?? 1;
+export default function toTOML(ast: AST, format: TomlFormat): string {
 
   const lines: string[] = [];
 
@@ -96,7 +95,7 @@ export default function toTOML(ast: AST, newline: string = '\n', options?: { tra
     }
   });
 
-  return lines.join(newline) + newline.repeat(trailingNewline);
+  return lines.join(format.newLine) + format.newLine.repeat(format.trailingNewline);
 }
 
 /**

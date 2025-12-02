@@ -3,6 +3,7 @@ import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import dedent from 'dedent';
 import { toDocument } from '../patch';
+import { TomlFormat } from '../toml-format';
 
 const value = {
   a: '1',
@@ -40,22 +41,27 @@ const valueMixedOrder = {
   e: new Date('1979-05-27T07:32:00Z')
 };
 
+const fmt = TomlFormat.default();
+fmt.bracketSpacing = false;
+fmt.trailingComma = true;
+
 test('it should be properly formatted', () => {
-  expect(toTOML(parseJS(value).items)).toMatchSnapshot();
+  expect(toTOML(parseJS(value).items, fmt)).toMatchSnapshot();
+
   expect(
-    toTOML(parseJS(value, { bracketSpacing: false, trailingComma: true }).items)
+    toTOML(parseJS(value, fmt).items, fmt)
   ).toMatchSnapshot();
 });
 
 test('it should perform reordering', () => {
-  expect(toTOML(parseJS(valueMixedOrder).items)).toMatchSnapshot();
+  expect(toTOML(parseJS(valueMixedOrder).items, fmt)).toMatchSnapshot();
   expect(
-    toTOML(parseJS(valueMixedOrder, { bracketSpacing: false, trailingComma: true }).items)
+    toTOML(parseJS(valueMixedOrder, fmt).items, fmt)
   ).toMatchSnapshot();
 });
 
 test('it should remove leading empty lines', () => {
-  expect(toTOML(parseJS({ a: { b: 2 }, c: { d: 4 }, e: { f: 6 } }).items)).toMatchSnapshot();
+  expect(toTOML(parseJS({ a: { b: 2 }, c: { d: 4 }, e: { f: 6 } }).items, fmt)).toMatchSnapshot();
 });
 
 test('simple JS Parsing', () => {

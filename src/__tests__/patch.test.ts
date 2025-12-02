@@ -416,7 +416,7 @@ test('should patch complex vba-block example', () => {
     [project]
     name = "complex"
     version = "0.0.0"
-    authors = ["Tim Hall"]
+    authors = [ "Tim Hall" ]
     target = { type = "xlsm", path = "targets/xlsm" }
 
     [src]
@@ -473,7 +473,7 @@ test('should patch complex vba-block example', () => {
     [project]
     name = "complex"
     version = "0.0.0"
-    authors = ["Tim Hall"]
+    authors = [ "Tim Hall" ]
     target = { type = "xlsm", path = "targets/xlsm" }
 
     [src]
@@ -672,7 +672,7 @@ test('should correctly add new sections', () => {
     policy = "per_worker"
 
     [db]
-    pooler = { enabled = true, pool_mode = "transaction" }
+    pooler = {enabled = true, pool_mode = "transaction"}
     ` + '\n';
   
   expect(patched).toEqual(expectedOutput);
