@@ -20,8 +20,8 @@ describe('TomlFormat comprehensive tests', () => {
       
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(1);
-      expect(format.trailingComma).toBeUndefined();
-      expect(format.bracketSpacing).toBeUndefined();
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
     });
 
     test('should handle partial parameters', () => {
@@ -30,7 +30,152 @@ describe('TomlFormat comprehensive tests', () => {
       expect(format.newLine).toBe('\r\n');
       expect(format.trailingNewline).toBe(2);
       expect(format.trailingComma).toBe(true);
-      expect(format.bracketSpacing).toBeUndefined();
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should use defaults when no arguments provided', () => {
+      const format = new TomlFormat();
+      
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(1);
+      expect(format.trailingComma).toBe(false);
+      expect(format.bracketSpacing).toBe(true);
+    });
+
+    test('should use default when newLine is undefined', () => {
+      const format = new TomlFormat(undefined, 2, true, false);
+      
+      expect(format.newLine).toBe('\n'); // Default value
+      expect(format.trailingNewline).toBe(2);
+      expect(format.trailingComma).toBe(true);
+      expect(format.bracketSpacing).toBe(false);
+    });
+
+    test('should use default when trailingNewline is undefined', () => {
+      const format = new TomlFormat('\r\n', undefined, false);
+      
+      expect(format.newLine).toBe('\r\n');
+      expect(format.trailingNewline).toBe(1); // Default value
+      expect(format.trailingComma).toBe(false);
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should use defaults for multiple undefined parameters', () => {
+      const format = new TomlFormat(undefined, undefined, true);
+      
+      expect(format.newLine).toBe('\n'); // Default value
+      expect(format.trailingNewline).toBe(1); // Default value
+      expect(format.trailingComma).toBe(true);
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should use default when newLine is null', () => {
+      const format = new TomlFormat(null as any, 2);
+      
+      expect(format.newLine).toBe('\n'); // Default value
+      expect(format.trailingNewline).toBe(2);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should use default when trailingNewline is null', () => {
+      const format = new TomlFormat('\r\n', null as any);
+      
+      expect(format.newLine).toBe('\r\n');
+      expect(format.trailingNewline).toBe(1); // Default value
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle null/undefined optional parameters gracefully', () => {
+      const format = new TomlFormat('\r\n', 0, null as any, undefined);
+      
+      expect(format.newLine).toBe('\r\n');
+      expect(format.trailingNewline).toBe(0);
+      expect(format.trailingComma).toBe(false); // Default value (null becomes default)
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle mixed null/undefined optional parameters', () => {
+      const format = new TomlFormat('\n', 2, undefined, null as any);
+      
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(2);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle explicit undefined for all optional parameters', () => {
+      const format = new TomlFormat('\r\n', 3, undefined, undefined);
+      
+      expect(format.newLine).toBe('\r\n');
+      expect(format.trailingNewline).toBe(3);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle explicit null for all optional parameters', () => {
+      const format = new TomlFormat('\n', 0, null as any, null as any);
+      
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(0);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle empty string as newLine', () => {
+      const format = new TomlFormat('', 1);
+      
+      expect(format.newLine).toBe('');
+      expect(format.trailingNewline).toBe(1);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle zero as trailingNewline', () => {
+      const format = new TomlFormat('\n', 0);
+      
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(0);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle negative numbers as trailingNewline', () => {
+      const format = new TomlFormat('\n', -1);
+      
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(-1);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should be equivalent to TomlFormat.default() when no args provided', () => {
+      const constructorFormat = new TomlFormat();
+      const defaultFormat = TomlFormat.default();
+      
+      expect(constructorFormat.newLine).toBe(defaultFormat.newLine);
+      expect(constructorFormat.trailingNewline).toBe(defaultFormat.trailingNewline);
+      expect(constructorFormat.trailingComma).toBe(defaultFormat.trailingComma);
+      expect(constructorFormat.bracketSpacing).toBe(defaultFormat.bracketSpacing);
+    });
+
+    test('should allow partial specification with mixed values', () => {
+      const format = new TomlFormat(undefined, 3);
+      
+      expect(format.newLine).toBe('\n'); // Default value
+      expect(format.trailingNewline).toBe(3);
+      expect(format.trailingComma).toBe(false); // Default value
+      expect(format.bracketSpacing).toBe(true); // Default value
+    });
+
+    test('should handle false values correctly (not treat as null/undefined)', () => {
+      const format = new TomlFormat('\r\n', 0, false, false);
+      
+      expect(format.newLine).toBe('\r\n');
+      expect(format.trailingNewline).toBe(0);
+      expect(format.trailingComma).toBe(false); // Explicit false, not default
+      expect(format.bracketSpacing).toBe(false); // Explicit false, not default
     });
   });
 

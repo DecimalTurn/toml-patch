@@ -792,5 +792,84 @@ port = 5432
         console.warn = originalWarn;
       }
     });
+
+    it('should handle TomlFormat constructor with all optional parameters', () => {
+      const { TomlFormat } = require('../../../dist/toml-patch.cjs.min.js');
+
+      // Test parameterless constructor - should work and use defaults
+      expect(() => {
+        const format = new TomlFormat();
+        expect(format.newLine).toBe('\n');
+        expect(format.trailingNewline).toBe(1);
+        expect(format.trailingComma).toBe(false);
+        expect(format.bracketSpacing).toBe(true);
+
+        // Should work in patch function
+        const result = patch(originalToml, baseUpdatedObject, format);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test partial constructor arguments - should now work with defaults
+      expect(() => {
+        const format = new TomlFormat('\r\n'); // Only newLine provided
+        expect(format.newLine).toBe('\r\n');
+        expect(format.trailingNewline).toBe(1); // Default value
+        expect(format.trailingComma).toBe(false); // Default value
+        expect(format.bracketSpacing).toBe(true); // Default value
+
+        const result = patch(originalToml, baseUpdatedObject, format);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test with undefined values - should use defaults
+      expect(() => {
+        const format = new TomlFormat(undefined, 2); // newLine is undefined
+        expect(format.newLine).toBe('\n'); // Default value
+        expect(format.trailingNewline).toBe(2);
+        expect(format.trailingComma).toBe(false); // Default value
+        expect(format.bracketSpacing).toBe(true); // Default value
+
+        const result = patch(originalToml, baseUpdatedObject, format);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test with null values - should use defaults
+      expect(() => {
+        const format = new TomlFormat(null, null); // Both null
+        expect(format.newLine).toBe('\n'); // Default value
+        expect(format.trailingNewline).toBe(1); // Default value
+        expect(format.trailingComma).toBe(false); // Default value
+        expect(format.bracketSpacing).toBe(true); // Default value
+
+        const result = patch(originalToml, baseUpdatedObject, format);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test full constructor - should work normally
+      expect(() => {
+        const format = new TomlFormat('\r\n', 2, true, false);
+        expect(format.newLine).toBe('\r\n');
+        expect(format.trailingNewline).toBe(2);
+        expect(format.trailingComma).toBe(true);
+        expect(format.bracketSpacing).toBe(false);
+
+        const result = patch(originalToml, baseUpdatedObject, format);
+        expect(result).toBeTruthy();
+      }).not.toThrow();
+
+      // Test TomlFormat.default() vs new TomlFormat() equivalence
+      const defaultFormat = TomlFormat.default();
+      const constructorFormat = new TomlFormat();
+      
+      expect(constructorFormat.newLine).toBe(defaultFormat.newLine);
+      expect(constructorFormat.trailingNewline).toBe(defaultFormat.trailingNewline);
+      expect(constructorFormat.trailingComma).toBe(defaultFormat.trailingComma);
+      expect(constructorFormat.bracketSpacing).toBe(defaultFormat.bracketSpacing);
+
+      // Both should produce identical results
+      const result1 = patch(originalToml, baseUpdatedObject, defaultFormat);
+      const result2 = patch(originalToml, baseUpdatedObject, constructorFormat);
+      expect(result1).toBe(result2);
+    });
   });
 });

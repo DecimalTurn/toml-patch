@@ -316,11 +316,12 @@ export class TomlFormat {
   //tabWidth?: number;
   //useTabs?: boolean;
   
-  constructor(newLine: string, trailingNewline: number, trailingComma?: boolean, bracketSpacing?: boolean) {
-    this.newLine = newLine;
-    this.trailingNewline = trailingNewline;
-    this.trailingComma = trailingComma;
-    this.bracketSpacing = bracketSpacing;
+  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean) {
+    // Use provided values or fall back to defaults
+    this.newLine = newLine ?? DEFAULT_NEWLINE;
+    this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
+    this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
+    this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
   }
 
   /**
