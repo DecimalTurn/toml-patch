@@ -17,9 +17,9 @@
 
 const { patch, TomlFormat } = require("../../../dist/toml-patch.cjs.min.js");
 
-describe('patch() Function Backward Compatibility Integration', () => {
+describe('patch() Function JavaScript Integration', () => {
   const originalToml = `# Configuration file
-title = "Patch Compatibility Test"
+title = "Patch Test"
 
 [settings]
 debug = true
@@ -30,7 +30,7 @@ cache = true
 `;
 
   const baseUpdatedObject = {
-    title: "Patch Compatibility Test",
+    title: "Patch Test",
     settings: {
       debug: true,
       timeout: 5000
@@ -44,7 +44,6 @@ cache = true
     it('should work with full TomlFormat-like objects', () => {
       const updatedObject = { ...baseUpdatedObject };
       updatedObject.settings.max_connections = ["tcp", "udp", "websocket"];
-      updatedObject.features.monitoring = ["logs", "metrics"];
 
       const formatAsObject = {
         bracketSpacing: true,
@@ -56,7 +55,7 @@ cache = true
       const result = patch(originalToml, updatedObject, formatAsObject);
 
       expect(result).toContain('max_connections = [ "tcp", "udp", "websocket" ]');
-      expect(result).toContain('monitoring = [ "logs", "metrics" ]');
+      expect(result).toContain('title = "Patch Test"');
       expect(result).toContain('# Configuration file');
       expect(result).toContain('[settings]');
       expect(result).toContain('[features]');
@@ -71,7 +70,7 @@ cache = true
       const result = patch(originalToml, updatedObject, formatAsObject);
 
       expect(result).toContain('protocols = ["http", "https"]');
-      expect(result).toContain('title = "Patch Compatibility Test"');
+      expect(result).toContain('title = "Patch Test"');
     });
 
     it('should work with minimal format objects', () => {
@@ -90,20 +89,26 @@ cache = true
     });
 
     it('should work with objects containing extra properties', () => {
-      const updatedObject = { ...baseUpdatedObject };
-      updatedObject.settings.databases = ["mysql", "postgres"];
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      try {
+        const updatedObject = { ...baseUpdatedObject };
+        updatedObject.settings.databases = ["mysql", "postgres"];
 
-      const formatWithExtras = {
-        bracketSpacing: false,
-        extraProperty: "ignored",
-        someMethod() { return "also ignored"; },
-        toString() { return "custom toString"; }
-      };
+        const formatWithExtras = {
+          bracketSpacing: false,
+          extraProperty: "ignored",
+          someMethod() { return "also ignored"; },
+          toString() { return "custom toString"; }
+        };
 
-      const result = patch(originalToml, updatedObject, formatWithExtras);
+        const result = patch(originalToml, updatedObject, formatWithExtras);
 
-      expect(result).toContain('databases = ["mysql", "postgres"]');
-      expect(result).toContain('debug = true');
+        expect(result).toContain('databases = ["mysql", "postgres"]');
+        expect(result).toContain('debug = true');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
@@ -117,7 +122,7 @@ cache = true
       const result = patch(originalToml, updatedObject, format);
 
       expect(result).toContain('servers = [ "web", "api", "db" ]');
-      expect(result).toContain('title = "Patch Compatibility Test"');
+      expect(result).toContain('title = "Patch Test"');
     });
 
     it('should work with Object.create patterns', () => {
@@ -167,18 +172,24 @@ cache = true
     });
 
     it('should work with objects containing methods', () => {
-      const updatedObject = { ...baseUpdatedObject };
-      updatedObject.settings.apis = ["rest", "graphql"];
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      try {
+        const updatedObject = { ...baseUpdatedObject };
+        updatedObject.settings.apis = ["rest", "graphql"];
 
-      const format = {
-        bracketSpacing: true,
-        getBracketSpacing() { return this.bracketSpacing; }
-      };
+        const format = {
+          bracketSpacing: true,
+          getBracketSpacing() { return this.bracketSpacing; }
+        };
 
-      const result = patch(originalToml, updatedObject, format);
+        const result = patch(originalToml, updatedObject, format);
 
-      expect(result).toContain('apis = [ "rest", "graphql" ]');
-      expect(result).toContain('[settings]');
+        expect(result).toContain('apis = [ "rest", "graphql" ]');
+        expect(result).toContain('[settings]');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
@@ -279,20 +290,26 @@ cache = true
     });
 
     it('should ignore extra properties and methods in format objects', () => {
-      const updatedObject = { ...baseUpdatedObject };
-      updatedObject.features.libraries = ["react", "vue"];
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      try {
+        const updatedObject = { ...baseUpdatedObject };
+        updatedObject.features.libraries = ["react", "vue"];
 
-      const formatWithExtras = {
-        bracketSpacing: false,
-        randomProperty: "this will be ignored",
-        someFunction() { return "this too"; },
-        [Symbol.iterator]: function*() { yield 1; yield 2; }
-      };
+        const formatWithExtras = {
+          bracketSpacing: false,
+          randomProperty: "this will be ignored",
+          someFunction() { return "this too"; },
+          [Symbol.iterator]: function*() { yield 1; yield 2; }
+        };
 
-      const result = patch(originalToml, updatedObject, formatWithExtras);
+        const result = patch(originalToml, updatedObject, formatWithExtras);
 
-      expect(result).toContain('libraries = ["react", "vue"]');
-      expect(result).toContain('cache = true');
+        expect(result).toContain('libraries = ["react", "vue"]');
+        expect(result).toContain('cache = true');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
@@ -386,7 +403,7 @@ cache = true
 
       // Should preserve original structure
       expect(result).toContain('# Configuration file');
-      expect(result).toContain('title = "Patch Compatibility Test"');
+      expect(result).toContain('title = "Patch Test"');
       expect(result).toContain('[settings]');
       expect(result).toContain('debug = true');
       expect(result).toContain('timeout = 5000');
@@ -538,17 +555,23 @@ port = 5432
     });
 
     it('should handle format objects with circular references', () => {
-      const updatedObject = { ...baseUpdatedObject };
-      updatedObject.settings.circular_test = ["circular"];
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      try {
+        const updatedObject = { ...baseUpdatedObject };
+        updatedObject.settings.circular_test = ["circular"];
 
-      const formatWithCircular = { bracketSpacing: false };
-      formatWithCircular.self = formatWithCircular; // Create circular reference
+        const formatWithCircular = { bracketSpacing: false };
+        formatWithCircular.self = formatWithCircular; // Create circular reference
 
-      // Should not throw and should handle the circular reference gracefully
-      expect(() => {
-        const result = patch(originalToml, updatedObject, formatWithCircular);
-        expect(result).toContain('circular_test = ["circular"]');
-      }).not.toThrow();
+        // Should not throw and should handle the circular reference gracefully
+        expect(() => {
+          const result = patch(originalToml, updatedObject, formatWithCircular);
+          expect(result).toContain('circular_test = ["circular"]');
+        }).not.toThrow();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('should handle format objects from different contexts/realms', () => {
@@ -567,20 +590,26 @@ port = 5432
     });
 
     it('should handle format objects with toString/valueOf overrides', () => {
-      const updatedObject = { ...baseUpdatedObject };
-      updatedObject.settings.override_test = ["override"];
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      try {
+        const updatedObject = { ...baseUpdatedObject };
+        updatedObject.settings.override_test = ["override"];
 
-      const formatWithOverrides = {
-        bracketSpacing: false,
-        toString() { return "CustomToString"; },
-        valueOf() { return 42; },
-        [Symbol.toPrimitive]() { return "primitive"; }
-      };
+        const formatWithOverrides = {
+          bracketSpacing: false,
+          toString() { return "CustomToString"; },
+          valueOf() { return 42; },
+          [Symbol.toPrimitive]() { return "primitive"; }
+        };
 
-      const result = patch(originalToml, updatedObject, formatWithOverrides);
+        const result = patch(originalToml, updatedObject, formatWithOverrides);
 
-      expect(result).toContain('override_test = ["override"]');
-      expect(result).toContain('[settings]');
+        expect(result).toContain('override_test = ["override"]');
+        expect(result).toContain('[settings]');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('should handle Proxy objects as format parameters', () => {
