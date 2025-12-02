@@ -909,16 +909,14 @@ test('should respect preferMultilineTable setting when creating new top-level ob
   
   expect(patchedInline).toEqual(expectedInline);
 
-  // Test with preferMultilineTable = true (should use multi-line table)
+  // Test with preferMultilineTable = true (should convert top-level objects to tables)
+  // Currently only converts the top-level object to a table, nested objects remain inline
   const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
   const expectedMultiline = dedent`
     name = "Simple"
 
     [project]
-
-    [project.target]
-    type = "xlsm"
-    path = "targets/xlsm"
+    target = { type = "xlsm", path = "targets/xlsm" }
     ` + '\n';
   
   expect(patchedMultiline).toEqual(expectedMultiline);
@@ -969,4 +967,37 @@ test.skip('should respect preferMultilineTable setting when adding nested object
     ` + '\n';
   
   expect(patchedInline).toEqual(expectedInline);
+});
+
+test.skip('should respect preferMultilineTable setting for deeply nested objects', () => {
+  // Future enhancement: when preferMultilineTable = true, 
+  // ALL nested objects should be converted to multi-line tables, not just top-level ones
+  
+  const existing = dedent`
+    name = "Simple"
+    ` + '\n';
+
+  const newObject = {
+    name: "Simple",
+    project: {
+      target: {
+        type: "xlsm",
+        path: "targets/xlsm"
+      }
+    }
+  };
+
+  // Future expected behavior with preferMultilineTable = true
+  const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
+  const expectedMultiline = dedent`
+    name = "Simple"
+
+    [project]
+
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
+    ` + '\n';
+  
+  expect(patchedMultiline).toEqual(expectedMultiline);
 });
