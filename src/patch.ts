@@ -27,7 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, validateFormatObject } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -54,26 +54,9 @@ export function toDocument(ast: AST) : Document  {
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
   const existing_ast = parseTOML(existing);
 
-  let fmt: TomlFormat;
-  if (format) {
-    // If format is provided, merge it with auto-detected format for backward compatibility
-    // This allows passing partial format objects like { bracketSpacing: true }
-    if (format instanceof TomlFormat) {
-      fmt = format;
-    } else {
-      // Validate the format object and warn about unsupported properties
-      const validatedFormat = validateFormatObject(format);
-      
-      // Start with auto-detected format and override with provided properties
-      const autoDetected = TomlFormat.autoDetectFormat(existing);
-      fmt = { ...autoDetected };
-      // Override with validated properties only
-      Object.assign(fmt, validatedFormat);
-    }
-  } else {
-    // Auto-detect formatting preferences from the existing TOML string
-    fmt = TomlFormat.autoDetectFormat(existing);
-  }
+  // Auto-detect formatting preferences from the existing TOML string for fallback
+  const autoDetectedFormat = TomlFormat.autoDetectFormat(existing);
+  const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
   return patchAst(existing_ast, updated, fmt).tomlString;
 }

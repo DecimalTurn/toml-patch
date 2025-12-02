@@ -4,7 +4,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { AST, Block } from './ast';
 import { patchAst } from './patch';
-import { detectNewline, countTrailingNewlines, validateFormatObject } from './toml-format';
+import { detectNewline, countTrailingNewlines, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 
 /**
@@ -53,25 +53,7 @@ export class TomlDocument {
    */
   patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat) : void {
 
-    let fmt: TomlFormat;
-    if (format) {
-      // If format is provided, merge it with auto-detected format for backward compatibility
-      // This allows passing partial format objects like { bracketSpacing: true }
-      if (format instanceof TomlFormat) {
-        fmt = format;
-      } else {
-        // Validate the format object and warn about unsupported properties
-        const validatedFormat = validateFormatObject(format);
-        
-        // Create a copy of the current format to avoid mutating the original
-        fmt = { ...this.#Format };
-        // Override with validated properties only
-        Object.assign(fmt, validatedFormat);
-      }
-    } else {
-      // Use the auto-detected format from the original TOML string
-      fmt = this.#Format;
-    }
+    const fmt = resolveTomlFormat(format, this.#Format);
 
     const { tomlString, document } = patchAst(
       this.#ast,

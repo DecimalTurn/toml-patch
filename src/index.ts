@@ -2,7 +2,7 @@ import parseTOML from './parse-toml';
 import parseJS from './parse-js';
 import toTOML from './to-toml';
 import toJS from './to-js';
-import { TomlFormat, validateFormatObject } from './toml-format';
+import { TomlFormat, resolveTomlFormat } from './toml-format';
 
 /**
  * Parses a TOML string into a JavaScript object.
@@ -25,23 +25,7 @@ export function parse(value: string): any {
  * @returns The stringified TOML representation
  */
 export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  let fmt: TomlFormat;
-  if (format) {
-    // If format is provided, validate and merge it with defaults
-    if (format instanceof TomlFormat) {
-      fmt = format;
-    } else {
-      // Validate the format object and warn about unsupported properties
-      const validatedFormat = validateFormatObject(format);
-      
-      // Start with defaults and override with validated properties only
-      fmt = { ...TomlFormat.default() };
-      Object.assign(fmt, validatedFormat);
-    }
-  } else {
-    // Use default formatting when no format is provided
-    fmt = TomlFormat.default();
-  }
+  const fmt = resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
   return toTOML(document.items, fmt);

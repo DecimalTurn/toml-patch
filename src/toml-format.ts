@@ -301,6 +301,34 @@ export function validateFormatObject(format: any): any {
   return validatedFormat;
 }
 
+/**
+ * Resolves a format parameter to a TomlFormat instance.
+ * Handles both TomlFormat instances and partial format objects.
+ * 
+ * @param format - The format parameter to resolve (TomlFormat instance, partial format object, or undefined)
+ * @param fallbackFormat - The fallback TomlFormat to use when no format is provided
+ * @returns A resolved TomlFormat instance
+ */
+export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | undefined, fallbackFormat: TomlFormat): TomlFormat {
+  if (format) {
+    // If format is provided, validate and merge it with fallback
+    if (format instanceof TomlFormat) {
+      return format;
+    } else {
+      // Validate the format object and warn about unsupported properties
+      const validatedFormat = validateFormatObject(format);
+      
+      // Start with fallback format and override with validated properties only
+      const resolvedFormat = { ...fallbackFormat };
+      Object.assign(resolvedFormat, validatedFormat);
+      return resolvedFormat;
+    }
+  } else {
+    // Use fallback format when no format is provided
+    return fallbackFormat;
+  }
+}
+
 export class TomlFormat {
   
   // Note that the following options won't be reflected inside the AST. They will affect only the stringification process
