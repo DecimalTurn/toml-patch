@@ -956,7 +956,7 @@ test('should add nested objects to existing table sections', () => {
   expect(result).toEqual(expected);
 });
 
-test.skip('should respect preferMultilineTable setting when adding nested objects to existing table sections', () => {
+test('should respect preferMultilineTable setting when adding nested objects to existing table sections', () => {
   // This test is skipped because the functionality is not yet implemented
   // The current patch logic doesn't support adding nested objects to existing table sections
   
@@ -1003,7 +1003,7 @@ test.skip('should respect preferMultilineTable setting when adding nested object
   expect(patchedInline).toEqual(expectedInline);
 });
 
-test.skip('should respect preferMultilineTable setting for deeply nested objects', () => {
+test('should respect preferMultilineTable setting for deeply nested objects', () => {
   // Future enhancement: when preferMultilineTable = true, 
   // ALL nested objects should be converted to multi-line tables, not just top-level ones
   

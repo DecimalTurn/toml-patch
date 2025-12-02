@@ -19,7 +19,8 @@ import {
   isInlineItem,
   hasItem,
   InlineItem,
-  AST
+  AST,
+  Table
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
@@ -135,6 +136,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   changes.forEach(change => {
     if (isAdd(change)) {
       const child = findByPath(updated, change.path);
+      console.log('Found child type:', child.type, 'for path:', change.path, 'with preferMultilineTable:', format.preferMultilineTable);
       const parent_path = change.path.slice(0, -1);
       let index = last(change.path)! as number;
 
@@ -197,6 +199,46 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           insert(original, parent, inlineItem);
         } else {
           insert(original, parent, child);
+        }
+      } else if (isTable(parent) && isKeyValue(child) && isInlineTable(child.value) && format.preferMultilineTable) {
+        // Convert inline table to separate table section when preferMultilineTable is true
+        console.log('Converting KeyValue with InlineTable to separate table section');
+        const parentTablePath = parent.key.item.value;
+        const nestedTablePath = [...parentTablePath, ...child.key.value];
+        const nestedTable = generateTable(nestedTablePath);
+        
+        const inlineTable = child.value as any;
+        for (const inlineItem of inlineTable.items) {
+          insert(nestedTable, nestedTable, inlineItem.item);
+        }
+        applyWrites(nestedTable);
+        insert(original, original, nestedTable);
+      } else if (isInlineItem(child) && isKeyValue(child.item)) {
+        // Handle case where findByPath returns InlineItem wrapping KeyValue
+        // Extract the KeyValue and insert it properly
+        const keyValue = child.item;
+        console.log('Found InlineItem wrapping KeyValue, checking conditions:');
+        console.log('- parent is Table:', isTable(parent));
+        console.log('- keyValue.value is InlineTable:', isInlineTable(keyValue.value));
+        console.log('- preferMultilineTable:', format.preferMultilineTable);
+        
+        if (isTable(parent) && isInlineTable(keyValue.value) && format.preferMultilineTable) {
+          // Convert to separate table section
+          console.log('Converting to separate table section');
+          const parentTablePath = parent.key.item.value;
+          const nestedTablePath = [...parentTablePath, ...keyValue.key.value];
+          const nestedTable = generateTable(nestedTablePath);
+          
+          const inlineTable = keyValue.value as any;
+          for (const inlineItem of inlineTable.items) {
+            insert(nestedTable, nestedTable, inlineItem.item);
+          }
+          applyWrites(nestedTable);
+          insert(original, original, nestedTable);
+        } else {
+          // Regular insertion
+          console.log('Regular insertion');
+          insert(original, parent, keyValue);
         }
       } else {
         insert(original, parent, child);
