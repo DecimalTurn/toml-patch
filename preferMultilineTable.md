@@ -1,0 +1,1 @@
+The key might be to alter how a new nested table is added to the AST when calculating the `diff`. This way we can mark the element in the AST with the correct property such that the write operations occurs correctly.
