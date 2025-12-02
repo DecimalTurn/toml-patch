@@ -31,12 +31,12 @@ jobs:
         CI: true
     - name: Typecheck
       run: npm run typecheck
+    - name: Build
+      run: npm run build
     - name: Test
       run: npm run test:all
     - name: Specs
       run: npm run specs
-    - name: Build
-      run: npm run build
     - name: Benchmark (Example)
       run: npm run benchmark:example
     - name: Create build artifacts
