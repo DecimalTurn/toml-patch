@@ -175,7 +175,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
-          
           // If this is an InlineItem being added to an array, check its comma setting
           if (isInlineItem(child)) {
             // The child comes from the updated document with global format applied
@@ -248,7 +247,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[]):
         // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
         parent = existing;
         existing = existing.item;
-        replacement = replacement;
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits
