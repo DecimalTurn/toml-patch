@@ -882,3 +882,47 @@ test('should respect quoted keys when parsing', () => {
     }
   });
 });
+
+test('should respect preferMultilineTable setting when adding new nested objects', () => {
+  const existing = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+    ` + '\n';
+
+  const newObject = {
+    project: {
+      name: "Simple",
+      version: "1.0.0",
+      target: {
+        type: "xlsm",
+        path: "targets/xlsm"
+      }
+    }
+  };
+
+  // Test with preferMultilineTable = true (default behavior)
+  const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
+  const expectedMultiline = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
+    ` + '\n';
+  
+  expect(patchedMultiline).toEqual(expectedMultiline);
+
+  // Test with preferMultilineTable = false (should use inline table)
+  const patchedInline = patch(existing, newObject, { preferMultilineTable: false });
+  const expectedInline = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+    target = { type = "xlsm", path = "targets/xlsm" }
+    ` + '\n';
+  
+  expect(patchedInline).toEqual(expectedInline);
+});

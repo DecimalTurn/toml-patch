@@ -463,7 +463,12 @@ export class TomlFormat {
     return format;
   }
 }
-export function formatTopLevel(document: Document): Document {
+export function formatTopLevel(document: Document, format: TomlFormat): Document {
+  // Only convert inline tables to multi-line tables if preferMultilineTable is true
+  if (!format.preferMultilineTable) {
+    return document;
+  }
+
   const move_to_top_level = document.items.filter(item => {
     if (!isKeyValue(item)) return false;
 
