@@ -19,7 +19,7 @@ export const DEFAULT_NEWLINE = '\n';
 export const DEFAULT_TRAILING_NEWLINE = 1;
 export const DEFAULT_TRAILING_COMMA = false;
 export const DEFAULT_BRACKET_SPACING = true;
-export const DEFAULT_PREFER_MULTILINE_TABLE = true;
+export const DEFAULT_PREFER_NESTED_TABLES_MULTILINE = false;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -245,7 +245,7 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'preferMultilineTable']);
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'preferNestedTablesMultiline']);
   const validatedFormat: any = {};
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
@@ -276,7 +276,7 @@ export function validateFormatObject(format: any): any {
           
           case 'trailingComma':
           case 'bracketSpacing':
-          case 'preferMultilineTable':
+          case 'preferNestedTablesMultiline':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
@@ -325,7 +325,8 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.newLine ?? fallbackFormat.newLine,
         validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
         validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
-        validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing
+        validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
+        validatedFormat.preferNestedTablesMultiline ?? fallbackFormat.preferNestedTablesMultiline
       );
     }
   } else {
@@ -377,27 +378,24 @@ export class TomlFormat {
   bracketSpacing: boolean;
 
   /**
-   * Whether to prefer multiline formatting for tables when stringifying.
+   * Whether to prefer multiline formatting for nested tables when stringifying or adding new elements while patching.
+   * When false, nested tables will be formatted as inline tables.
+   * When true, nested tables will be formatted as separate table sections.
    */
-  preferMultilineTable?: boolean;
-
-  /**
-   * Whether to prefer multiline formatting for tables when stringifying.
-   */
-  preferMultilineTable?: boolean;
+  preferNestedTablesMultiline?: boolean;
 
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
   //useTabs?: boolean;
   
-  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, preferMultilineTable?: boolean) {
+  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, preferNestedTablesMultiline?: boolean) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
-    this.preferMultilineTable = preferMultilineTable ?? DEFAULT_PREFER_MULTILINE_TABLE;
+    this.preferNestedTablesMultiline = preferNestedTablesMultiline ?? DEFAULT_PREFER_NESTED_TABLES_MULTILINE;
   }
 
   /**
@@ -408,7 +406,7 @@ export class TomlFormat {
    *   - trailingNewline: 1
    *   - trailingComma: false
    *   - bracketSpacing: true
-   *   - preferMultilineTable: true
+   *   - preferNestedTablesMultiline: false
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -416,7 +414,7 @@ export class TomlFormat {
       DEFAULT_TRAILING_NEWLINE,
       DEFAULT_TRAILING_COMMA,
       DEFAULT_BRACKET_SPACING,
-      DEFAULT_PREFER_MULTILINE_TABLE
+      DEFAULT_PREFER_NESTED_TABLES_MULTILINE
     );
   }
 
@@ -461,9 +459,9 @@ export class TomlFormat {
       format.bracketSpacing = DEFAULT_BRACKET_SPACING;
     }
     
-    // preferMultilineTable uses default value since auto-detection would require
-    // complex analysis of table formatting preferences
-    format.preferMultilineTable = DEFAULT_PREFER_MULTILINE_TABLE;
+    // preferNestedTablesMultiline uses default value since auto-detection would require
+    // complex analysis of nested table formatting preferences
+    format.preferNestedTablesMultiline = DEFAULT_PREFER_NESTED_TABLES_MULTILINE;
     
     return format;
   }

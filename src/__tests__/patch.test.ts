@@ -883,7 +883,7 @@ test('should respect quoted keys when parsing', () => {
   });
 });
 
-test('should respect preferMultilineTable setting when creating new top-level objects', () => {
+test('should respect preferNestedTablesMultiline setting when creating new top-level objects', () => {
   // Start with a simple document
   const existing = dedent`
     name = "Simple"
@@ -900,8 +900,8 @@ test('should respect preferMultilineTable setting when creating new top-level ob
     }
   };
 
-  // Test with preferMultilineTable = false (should use inline table)  
-  const patchedInline = patch(existing, newObject, { preferMultilineTable: false });
+  // Test with preferNestedTablesMultiline = false (should use inline table)  
+  const patchedInline = patch(existing, newObject, { preferNestedTablesMultiline: false });
   const expectedInline = dedent`
     name = "Simple"
     project = { target = { type = "xlsm", path = "targets/xlsm" } }
@@ -909,9 +909,9 @@ test('should respect preferMultilineTable setting when creating new top-level ob
   
   expect(patchedInline).toEqual(expectedInline);
 
-  // Test with preferMultilineTable = true (should convert top-level objects to tables)
+  // Test with preferNestedTablesMultiline = true (should convert top-level objects to tables)
   // Currently only converts the top-level object to a table, nested objects remain inline
-  const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
+  const patchedMultiline = patch(existing, newObject, { preferNestedTablesMultiline: true });
   const expectedMultiline = dedent`
     name = "Simple"
 
@@ -943,7 +943,7 @@ test('should add nested objects to existing table sections', () => {
   };
 
   // Test current behavior - adds as inline table within existing table section
-  const result = patch(existing, newObject, { preferMultilineTable: false });
+  const result = patch(existing, newObject, { preferNestedTablesMultiline: false });
   
   // Current behavior: nested object becomes an inline table within the existing table section
   const expected = dedent`
@@ -956,7 +956,7 @@ test('should add nested objects to existing table sections', () => {
   expect(result).toEqual(expected);
 });
 
-test.skip('should respect preferMultilineTable setting when adding nested objects to existing table sections', () => {
+test.skip('should respect preferNestedTablesMultiline setting when adding nested objects to existing table sections', () => {
   // This test is skipped because the functionality is not yet implemented
   // The current patch logic doesn't support adding nested objects to existing table sections
   
@@ -977,8 +977,8 @@ test.skip('should respect preferMultilineTable setting when adding nested object
     }
   };
 
-  // Test with preferMultilineTable = true (should create multi-line table)
-  const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
+  // Test with preferNestedTablesMultiline = true (should create multi-line table)
+  const patchedMultiline = patch(existing, newObject, { preferNestedTablesMultiline: true });
   const expectedMultiline = dedent`
     [project]
     name = "Simple"
@@ -991,8 +991,8 @@ test.skip('should respect preferMultilineTable setting when adding nested object
   
   expect(patchedMultiline).toEqual(expectedMultiline);
 
-  // Test with preferMultilineTable = false (should use inline table)
-  const patchedInline = patch(existing, newObject, { preferMultilineTable: false });
+  // Test with preferNestedTablesMultiline = false (should use inline table)
+  const patchedInline = patch(existing, newObject, { preferNestedTablesMultiline: false });
   const expectedInline = dedent`
     [project]
     name = "Simple"
@@ -1003,8 +1003,8 @@ test.skip('should respect preferMultilineTable setting when adding nested object
   expect(patchedInline).toEqual(expectedInline);
 });
 
-test.skip('should respect preferMultilineTable setting for deeply nested objects', () => {
-  // Future enhancement: when preferMultilineTable = true, 
+test.skip('should respect preferNestedTablesMultiline setting for deeply nested objects', () => {
+  // Future enhancement: when preferNestedTablesMultiline = true, 
   // ALL nested objects should be converted to multi-line tables, not just top-level ones
   
   const existing = dedent`
@@ -1021,8 +1021,8 @@ test.skip('should respect preferMultilineTable setting for deeply nested objects
     }
   };
 
-  // Future expected behavior with preferMultilineTable = true
-  const patchedMultiline = patch(existing, newObject, { preferMultilineTable: true });
+  // Future expected behavior with preferNestedTablesMultiline = true
+  const patchedMultiline = patch(existing, newObject, { preferNestedTablesMultiline: true });
   const expectedMultiline = dedent`
     name = "Simple"
 
