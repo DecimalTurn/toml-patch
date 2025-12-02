@@ -331,12 +331,44 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
 
 export class TomlFormat {
   
-  // Note that the following options won't be reflected inside the AST. They will affect only the stringification process
+  /**
+   * The line ending character(s) to use in the output TOML.
+   * This option affects only the stringification process, not the internal representation (AST).
+   * 
+   * @example
+   * - '\n' for Unix/Linux line endings
+   * - '\r\n' for Windows line endings
+   */
   newLine: string;
+  
+  /**
+   * The number of trailing newlines to add at the end of the TOML document.
+   * This option affects only the stringification process, not the internal representation (AST).
+   * 
+   * @example
+   * - 0: No trailing newline
+   * - 1: One trailing newline (standard)
+   * - 2: Two trailing newlines (adds extra spacing)
+   */
   trailingNewline: number;
   
-  // The following options will be reflected inside the AST
+  /**
+   * Whether to add trailing commas after the last element in arrays and inline tables.
+   * 
+   * @example
+   * - true:  [1, 2, 3,] and { x = 1, y = 2, }
+   * - false: [1, 2, 3] and { x = 1, y = 2 }
+   */
   trailingComma?: boolean;
+  
+  /**
+   * Whether to add spaces after opening brackets/braces and before closing brackets/braces
+   * in arrays and inline tables.
+   * 
+   * @example
+   * - true:  [ 1, 2, 3 ] and { x = 1, y = 2 }
+   * - false: [1, 2, 3] and {x = 1, y = 2}
+   */
   bracketSpacing?: boolean;
 
   // These options were part of the original TimHall's version and are not yet implemented
