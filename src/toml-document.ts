@@ -4,7 +4,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { AST, Block } from './ast';
 import { patchAst } from './patch';
-import { detectNewline, countTrailingNewlines, resolveTomlFormat } from './toml-format';
+import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 
 /**
@@ -65,7 +65,7 @@ export class TomlDocument {
   }
 
   /**
-   * Updates the internal AST by supplying a modified tomlString.
+   * Updates the internal document by supplying a modified tomlString.
    * Use toJsObject getter to retrieve the updated JS object representation.
    * @param tomlString - The modified TOML string to update with
    */

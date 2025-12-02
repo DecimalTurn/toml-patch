@@ -238,13 +238,13 @@ function insertInline(
   parent.items.splice(index, 0, child);
 
   // Add commas as-needed
-  const has_seperating_comma_before = !!previous;
-  const has_seperating_comma_after = !is_last;
+  const has_separating_comma_before = !!previous;
+  const has_separating_comma_after = !is_last;
   const has_trailing_comma = is_last && child.comma === true;
-  if (has_seperating_comma_before) {
+  if (has_separating_comma_before) {
     previous!.comma = true;
   }
-  if (has_seperating_comma_after) {
+  if (has_separating_comma_after) {
     child.comma = true;
   }
 
@@ -271,7 +271,7 @@ function insertInline(
   } else {
     const skip_comma = 2;
     const skip_bracket = 1;
-    start.column += has_seperating_comma_before ? skip_comma : skip_bracket;
+    start.column += has_separating_comma_before ? skip_comma : skip_bracket;
   }
   start.line += leading_lines;
 
@@ -291,9 +291,9 @@ function insertInline(
   // 
   // This only applies to arrays that actually have trailing commas.
   const has_trailing_comma_spacing_bug = 
-    has_seperating_comma_before && // Element inserted after existing content
+    has_separating_comma_before && // Element inserted after existing content
     has_trailing_comma &&          // Element gets trailing comma  
-    !has_seperating_comma_after && // Element is last (no separator after)
+    !has_separating_comma_after && // Element is last (no separator after)
     is_last;                       // Definitely the last element
 
   let trailing_comma_offset_adjustment = 0;
@@ -304,7 +304,7 @@ function insertInline(
     
   const offset = {
     lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + (has_seperating_comma_before || has_seperating_comma_after ? 2 : 0) + (has_trailing_comma ? 1 + trailing_comma_offset_adjustment : 0)
+    columns: child_span.columns + (has_separating_comma_before || has_separating_comma_after ? 2 : 0) + (has_trailing_comma ? 1 + trailing_comma_offset_adjustment : 0)
   };
 
   return { shift, offset };

@@ -303,7 +303,7 @@ export function validateFormatObject(format: any): any {
 
 /**
  * Resolves a format parameter to a TomlFormat instance.
- * Handles both TomlFormat instances and partial format objects.
+ * Handles TomlFormat instances and partial TomlFormat objects as well as undefined.
  * 
  * @param format - The format parameter to resolve (TomlFormat instance, partial format object, or undefined)
  * @param fallbackFormat - The fallback TomlFormat to use when no format is provided
@@ -318,10 +318,13 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
       // Validate the format object and warn about unsupported properties
       const validatedFormat = validateFormatObject(format);
       
-      // Start with fallback format and override with validated properties only
-      const resolvedFormat = { ...fallbackFormat };
-      Object.assign(resolvedFormat, validatedFormat);
-      return resolvedFormat;
+      // Create a new TomlFormat instance with validated properties
+      return new TomlFormat(
+        validatedFormat.newLine ?? fallbackFormat.newLine,
+        validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
+        validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
+        validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing
+      );
     }
   } else {
     // Use fallback format when no format is provided
@@ -359,7 +362,7 @@ export class TomlFormat {
    * - true:  [1, 2, 3,] and { x = 1, y = 2, }
    * - false: [1, 2, 3] and { x = 1, y = 2 }
    */
-  trailingComma?: boolean;
+  trailingComma: boolean;
   
   /**
    * Whether to add spaces after opening brackets/braces and before closing brackets/braces
@@ -369,7 +372,7 @@ export class TomlFormat {
    * - true:  [ 1, 2, 3 ] and { x = 1, y = 2 }
    * - false: [1, 2, 3] and {x = 1, y = 2}
    */
-  bracketSpacing?: boolean;
+  bracketSpacing: boolean;
 
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
