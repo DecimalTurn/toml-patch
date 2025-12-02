@@ -468,6 +468,8 @@ export class TomlFormat {
 }
 export function formatTopLevel(document: Document, format: TomlFormat): Document {
 
+  //TODO: Add option to format tables as inline tables instead of top-level tables
+
   const move_to_top_level = document.items.filter(item => {
     if (!isKeyValue(item)) return false;
 
