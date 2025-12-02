@@ -7,6 +7,7 @@ import {
   isInlineTable,
   isInlineArray,
   isKeyValue,
+  isTable,
   Document,
   TreeNode
 } from './ast';
@@ -469,6 +470,7 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     return document;
   }
 
+  // First, handle top-level inline tables (existing behavior)
   const move_to_top_level = document.items.filter(item => {
     if (!isKeyValue(item)) return false;
 
@@ -493,12 +495,45 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     }
   });
 
+  // Then, handle inline tables within existing table sections
+  formatNestedInlineTables(document);
+
   applyWrites(document);
   return document;
 }
 
+function formatNestedInlineTables(document: Document): void {
+  // Find all Table items in the document
+  const tables = document.items.filter(item => isTable(item)) as Table[];
+  
+  for (const table of tables) {
+    // Look for KeyValue items within this table that have inline table values
+    const inlineTableKeyValues = table.items.filter(item => {
+      return isKeyValue(item) && isInlineTable(item.value);
+    }) as KeyValue[];
+    
+    for (const keyValue of inlineTableKeyValues) {
+      // Remove the KeyValue from the table
+      remove(document, table, keyValue);
+      
+      // Create a new table section with the nested path
+      const parentPath = table.key.item.value;
+      const childKey = keyValue.key.value;
+      const nestedPath = [...parentPath, ...childKey];
+      const nestedTable = formatTableWithPath(keyValue, nestedPath);
+      
+      // Insert the new table at the document level
+      insert(document, document, nestedTable);
+    }
+  }
+}
+
 function formatTable(key_value: KeyValue): Table {
-  const table = generateTable(key_value.key.value);
+  return formatTableWithPath(key_value, key_value.key.value);
+}
+
+function formatTableWithPath(key_value: KeyValue, path: string[]): Table {
+  const table = generateTable(path);
 
   for (const item of (key_value.value as InlineTable).items) {
     insert(table, table, item.item);

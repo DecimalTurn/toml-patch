@@ -26,7 +26,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem, generateTable } from './generate';
+import { generateInlineItem, generateTable, generateKeyValue } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
@@ -210,11 +210,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Extract the KeyValue and insert it properly
         const keyValue = child.item;
         
-        console.log(`DEBUG: InlineItem with KeyValue - parent type: ${parent?.constructor?.name}, isTable: ${isTable(parent)}, isInlineTable: ${isInlineTable(keyValue.value)}, preferMultilineTable: ${format.preferMultilineTable}`);
-        
         if (isTable(parent) && isInlineTable(keyValue.value) && format.preferMultilineTable) {
           // Convert to separate table section
-          console.log(`DEBUG: Converting inline table to separate table section`);
           const parentTablePath = parent.key.item.value;
           const nestedTablePath = [...parentTablePath, ...keyValue.key.value];
           const nestedTable = generateTable(nestedTablePath);
