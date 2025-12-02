@@ -25,7 +25,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem } from './generate';
+import { generateInlineItem, generateTable } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
@@ -81,7 +81,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format);
 
   // Validate the patched_document
   // This would prevent overlapping element positions in the AST, but since those are handled at stringification time, we can skip this for now
@@ -121,7 +121,7 @@ function reorder(changes: Change[]): Change[] {
 
 }
 
-function applyChanges(original: Document, updated: Document, changes: Change[]): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array

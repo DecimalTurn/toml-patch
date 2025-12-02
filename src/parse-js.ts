@@ -33,7 +33,7 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
   // 2. Convert objects/arrays to tables/table arrays based on print width
   const formatted = pipe(
     document,
-    formatTopLevel,
+    document => formatTopLevel(document, format),
     document => formatPrintWidth(document, format),
     formatEmptyLines
   );
