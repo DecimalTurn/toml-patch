@@ -918,7 +918,8 @@ test('should respect preferNestedTablesMultiline setting when creating new top-l
     name = "Simple"
 
     [project]
-    
+
+
     [project.target]
     type = "xlsm"
     path = "targets/xlsm"
@@ -961,7 +962,7 @@ test('should add nested objects to existing table sections', () => {
   expect(result).toEqual(expected);
 });
 
-test.skip('should respect preferNestedTablesMultiline setting when adding nested objects to existing table sections', () => {
+test('should respect preferNestedTablesMultiline setting when adding nested objects to existing table sections', () => {
   // This test is skipped because the functionality is not yet implemented
   // The current patch logic doesn't support adding nested objects to existing table sections
   
@@ -1008,7 +1009,7 @@ test.skip('should respect preferNestedTablesMultiline setting when adding nested
   expect(patchedInline).toEqual(expectedInline);
 });
 
-test.skip('should respect preferNestedTablesMultiline setting for deeply nested objects', () => {
+test('should respect preferNestedTablesMultiline setting for deeply nested objects', () => {
   // Future enhancement: when preferNestedTablesMultiline = true, 
   // ALL nested objects should be converted to multi-line tables, not just top-level ones
   
@@ -1033,6 +1034,7 @@ test.skip('should respect preferNestedTablesMultiline setting for deeply nested 
 
     [project]
 
+    
     [project.target]
     type = "xlsm"
     path = "targets/xlsm"

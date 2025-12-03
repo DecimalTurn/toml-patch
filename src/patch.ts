@@ -25,7 +25,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem } from './generate';
+import { generateInlineItem, generateTable } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
 
@@ -207,7 +207,44 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             child.comma = originalHadTrailingCommas;
           }
         }
-        insert(original, parent, child, index);
+        
+        // Check if we should convert nested inline tables to multiline tables
+        if (format.preferNestedTablesMultiline && isDocument(parent) && isTable(child)) {
+          // Look for KeyValue items with InlineTable values inside this table
+          const additionalTables: any[] = [];
+          
+          for (let i = child.items.length - 1; i >= 0; i--) {
+            const item = child.items[i];
+            if (isKeyValue(item) && isInlineTable(item.value)) {
+              // Convert this inline table to a separate table section
+              const nestedTableKey = [...child.key.item.value, ...item.key.value];
+              const separateTable = generateTable(nestedTableKey);
+              
+              // Move all items from the inline table to the separate table
+              for (const inlineItem of item.value.items) {
+                if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
+                  insert(original, separateTable, inlineItem.item, undefined);
+                }
+              }
+              
+              // Remove this item from the original table
+              child.items.splice(i, 1);
+              
+              // Queue this table to be added to the document
+              additionalTables.push(separateTable);
+            }
+          }
+          
+          // Insert the main table first
+          insert(original, parent, child, index);
+          
+          // Then insert all the additional tables
+          for (const table of additionalTables) {
+            insert(original, original, table, undefined);
+          }
+        } else {
+          insert(original, parent, child, index);
+        }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
