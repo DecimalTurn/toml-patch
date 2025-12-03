@@ -27,7 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -377,16 +377,7 @@ function convertNestedInlineTablesToMultiline(table: any, original: Document, fo
         currentTable.items.splice(i, 1);
         
         // Update the parent table's end position after removal
-        // When we remove content, the table now ends where the last remaining item ends
-        if (currentTable.items.length > 0) {
-          const lastItem = currentTable.items[currentTable.items.length - 1];
-          currentTable.loc.end.line = lastItem.loc.end.line;
-          currentTable.loc.end.column = lastItem.loc.end.column;
-        } else {
-          // If no items left, table ends at the header line
-          currentTable.loc.end.line = currentTable.key.loc.end.line;
-          currentTable.loc.end.column = currentTable.key.loc.end.column;
-        }
+        postInlineItemRemovalAdjustment(currentTable);
         
         // Queue this table to be added to the document
         tablesToAdd.push(separateTable);
@@ -431,16 +422,7 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: any, origi
   insert(original, original, separateTable, undefined);
   
   // Update the parent table's end position since we're not adding the inline table to it
-  // The parent table should end at its last item (if any) rather than including space for the removed inline table
-  if (parent.items.length > 0) {
-    const lastItem = parent.items[parent.items.length - 1];
-    parent.loc.end.line = lastItem.loc.end.line;
-    parent.loc.end.column = lastItem.loc.end.column;
-  } else {
-    // If no items left, table ends at the header line
-    parent.loc.end.line = parent.key.loc.end.line;
-    parent.loc.end.column = parent.key.loc.end.column;
-  }
+  postInlineItemRemovalAdjustment(parent);
   
   // Also handle any nested inline tables within the new table
   const additionalTables = convertNestedInlineTablesToMultiline(separateTable, original, format);
