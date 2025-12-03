@@ -919,7 +919,6 @@ test('should respect preferNestedTablesMultiline setting when creating new top-l
 
     [project]
 
-
     [project.target]
     type = "xlsm"
     path = "targets/xlsm"

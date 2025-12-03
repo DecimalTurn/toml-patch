@@ -189,13 +189,7 @@ function insertOnNewLine(
   if (use_first_line) {
     // 0 leading lines
   } else if (isSquareBracketsStructure) {
-    // Check if this is a nested table (has more than one key segment)
-    const isNestedTable = (isTable(child) || isTableArray(child)) && 
-                          child.key && child.key.item && child.key.item.value && 
-                          child.key.item.value.length > 1;
-    
-    // Use 1 leading line for nested tables to avoid excessive spacing
-    leading_lines = isNestedTable ? 1 : 2;
+    leading_lines = 2;
   } else {
     leading_lines = 1;
   }

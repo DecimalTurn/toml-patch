@@ -585,6 +585,18 @@ function processTableForNestedInlines(table: Table, additionalTables: Table[]): 
       // Remove this item from the original table
       remove(table, table, item);
       
+      // Update the parent table's end position after removal
+      // When we remove content, the table now ends where the last remaining item ends
+      if (table.items.length > 0) {
+        const lastItem = table.items[table.items.length - 1];
+        table.loc.end.line = lastItem.loc.end.line;
+        table.loc.end.column = lastItem.loc.end.column;
+      } else {
+        // If no items left, table ends at the header line
+        table.loc.end.line = table.key.loc.end.line;
+        table.loc.end.column = table.key.loc.end.column;
+      }
+      
       // Add this table to be inserted into the document
       additionalTables.push(separateTable);
       

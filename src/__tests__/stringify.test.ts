@@ -326,8 +326,8 @@ test('should handle empty nested objects with preferNestedTablesMultiline', () =
     [project]
     name = "Test"
 
-
     [project.empty_config]
+
     [project.settings]
     debug = true
     ` + '\n';
