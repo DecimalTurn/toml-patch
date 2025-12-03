@@ -4,6 +4,10 @@ export enum NodeType {
   Document = 'Document',
   Table = 'Table',
   TableKey = 'TableKey',
+  /**
+   * Array of Tables node
+   * More info: https://toml.io/en/latest#array-of-tables
+   */
   TableArray = 'TableArray',
   TableArrayKey = 'TableArrayKey',
   KeyValue = 'KeyValue',
@@ -16,6 +20,10 @@ export enum NodeType {
   InlineArray = 'InlineArray',
   InlineItem = 'InlineItem',
   InlineTable = 'InlineTable',
+  /**
+   * Comment node
+   * More info: https://toml.io/en/latest#comment
+   */
   Comment = 'Comment'
 }
 
@@ -97,6 +105,12 @@ export interface TableArray extends TreeNode {
   key: TableArrayKey;
   items: Array<KeyValue | Comment>;
 }
+
+/**
+ * Is a TableArray (aka array of tables)
+ * @param node 
+ * @returns 
+ */
 export function isTableArray(node: TreeNode): node is TableArray {
   return node.type === NodeType.TableArray;
 }

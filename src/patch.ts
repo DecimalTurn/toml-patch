@@ -121,6 +121,29 @@ function reorder(changes: Change[]): Change[] {
 
 }
 
+/**
+ * Applies a list of changes to the original TOML document AST while preserving formatting and structure.
+ * 
+ * This function processes different types of changes (Add, Edit, Remove, Move, Rename) and applies them
+ * to the original document in a way that maintains the existing formatting preferences, comments, and
+ * structural elements as much as possible. Special handling is provided for different node types like
+ * inline tables, arrays, and table arrays to ensure proper formatting consistency.
+ * 
+ * @param original - The original TOML document AST to be modified
+ * @param updated - The updated document AST containing new values for changes
+ * @param changes - Array of change objects describing what modifications to apply
+ * @param format - Formatting preferences to use for newly added elements
+ * @returns The modified original document with all changes applied
+ * 
+ * @example
+ * ```typescript
+ * const changes = [
+ *   { type: 'add', path: ['newKey'], value: 'newValue' },
+ *   { type: 'edit', path: ['existingKey'], value: 'updatedValue' }
+ * ];
+ * const result = applyChanges(originalDoc, updatedDoc, changes, format);
+ * ```
+ */
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
   // Potential Changes:
   //
@@ -134,6 +157,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
   changes.forEach(change => {
     if (isAdd(change)) {
+
       const child = findByPath(updated, change.path);
       const parent_path = change.path.slice(0, -1);
       let index = last(change.path)! as number;
@@ -146,6 +170,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // Determine the parent node where the new child will be inserted
       let parent: TreeNode;
       if (isTable(child)) {
         parent = original;
@@ -182,13 +207,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             child.comma = originalHadTrailingCommas;
           }
         }
-        
         insert(original, parent, child, index);
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
         const originalHadTrailingCommas = tableHadTrailingCommas(parent);
-        
         // InlineTable items must be wrapped in InlineItem
         if (isKeyValue(child)) {
           const inlineItem = generateInlineItem(child);
@@ -201,6 +224,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       } else {
         insert(original, parent, child);
       }
+
     } else if (isEdit(change)) {
       let existing = findByPath(original, change.path);
       let replacement = findByPath(updated, change.path);

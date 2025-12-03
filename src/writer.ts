@@ -165,6 +165,7 @@ function insertOnNewLine(
   child: Block,
   index: number
 ): { shift: Span; offset: Span } {
+
   if (!isBlock(child)) {
     throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
   }
@@ -183,12 +184,11 @@ function insertOnNewLine(
     }
     : clonePosition(parent.loc.start);
   
-  //TODO: Check the definition for block to see if using isBlock is more appropriate
-  const is_block = isTable(child) || isTableArray(child);
+  const isSquareBracketsStructure = isTable(child) || isTableArray(child);
   let leading_lines = 0;
   if (use_first_line) {
     // 0 leading lines
-  } else if (is_block) {
+  } else if (isSquareBracketsStructure) {
     leading_lines = 2;
   } else {
     leading_lines = 1;

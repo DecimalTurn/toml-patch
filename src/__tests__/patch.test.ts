@@ -904,7 +904,9 @@ test('should respect preferNestedTablesMultiline setting when creating new top-l
   const patchedInline = patch(existing, newObject, { preferNestedTablesMultiline: false });
   const expectedInline = dedent`
     name = "Simple"
-    project = { target = { type = "xlsm", path = "targets/xlsm" } }
+
+    [project]
+    target = { type = "xlsm", path = "targets/xlsm" }
     ` + '\n';
   
   expect(patchedInline).toEqual(expectedInline);
@@ -916,7 +918,10 @@ test('should respect preferNestedTablesMultiline setting when creating new top-l
     name = "Simple"
 
     [project]
-    target = { type = "xlsm", path = "targets/xlsm" }
+    
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
     ` + '\n';
   
   expect(patchedMultiline).toEqual(expectedMultiline);
