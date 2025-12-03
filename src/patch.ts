@@ -236,7 +236,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           insert(original, parent, child);
         }
       } else {
-        insert(original, parent, child);
+        // Check if we should convert inline tables to multiline tables when adding to existing tables
+        if (format.preferNestedTablesMultiline && isKeyValue(child) && isInlineTable(child.value) && isTable(parent)) {
+          convertInlineTableToSeparateSection(child, parent, original, format);
+        } else {
+          insert(original, parent, child);
+        }
       }
 
     } else if (isEdit(change)) {
@@ -376,4 +381,40 @@ function convertNestedInlineTablesToMultiline(table: any, original: Document, fo
   
   processTableForNestedInlines(table, additionalTables);
   return additionalTables;
+}
+
+/**
+ * Converts an inline table to a separate table section when adding to an existing table.
+ * This function creates a new table section with the combined key path and moves all
+ * properties from the inline table to the separate table section.
+ * 
+ * @param child - The KeyValue node with an InlineTable as its value
+ * @param parent - The parent table where the KeyValue would be added
+ * @param original - The original document for inserting new items
+ * @param format - The formatting options
+ */
+function convertInlineTableToSeparateSection(child: KeyValue, parent: any, original: Document, format: TomlFormat): void {
+  // Convert the inline table to a separate table section
+  const baseTableKey = parent.key.item.value; // Get the parent table's key path
+  const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key
+  const separateTable = generateTable(nestedTableKey);
+  
+  // We know child.value is an InlineTable from the calling context
+  if (isInlineTable(child.value)) {
+    // Move all items from the inline table to the separate table
+    for (const inlineItem of child.value.items) {
+      if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
+        insert(original, separateTable, inlineItem.item, undefined);
+      }
+    }
+  }
+  
+  // Add the separate table to the document
+  insert(original, original, separateTable, undefined);
+  
+  // Also handle any nested inline tables within the new table
+  const additionalTables = convertNestedInlineTablesToMultiline(separateTable, original, format);
+  for (const table of additionalTables) {
+    insert(original, original, table, undefined);
+  }
 }
