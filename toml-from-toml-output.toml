@@ -1,0 +1,5 @@
+[top]
+name = "example"
+
+[top.nested]
+key = "value"

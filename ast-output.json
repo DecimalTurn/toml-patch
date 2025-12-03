@@ -1,0 +1,212 @@
+{
+  "type": "Document",
+  "loc": {
+    "start": {
+      "line": 1,
+      "column": 0
+    },
+    "end": {
+      "line": 3,
+      "column": 101
+    }
+  },
+  "items": [
+    {
+      "type": "Table",
+      "loc": {
+        "start": {
+          "line": 1,
+          "column": 0
+        },
+        "end": {
+          "line": 3,
+          "column": 47
+        }
+      },
+      "key": {
+        "type": "TableKey",
+        "loc": {
+          "start": {
+            "line": 1,
+            "column": 0
+          },
+          "end": {
+            "line": 1,
+            "column": 5
+          }
+        },
+        "item": {
+          "type": "Key",
+          "loc": {
+            "start": {
+              "line": 1,
+              "column": 1
+            },
+            "end": {
+              "line": 1,
+              "column": 4
+            }
+          },
+          "value": [
+            "top"
+          ],
+          "raw": "top"
+        }
+      },
+      "items": [
+        {
+          "type": "KeyValue",
+          "loc": {
+            "start": {
+              "line": 2,
+              "column": 0
+            },
+            "end": {
+              "line": 2,
+              "column": 16
+            }
+          },
+          "key": {
+            "type": "Key",
+            "loc": {
+              "start": {
+                "line": 2,
+                "column": 0
+              },
+              "end": {
+                "line": 2,
+                "column": 4
+              }
+            },
+            "raw": "name",
+            "value": [
+              "name"
+            ]
+          },
+          "equals": 5,
+          "value": {
+            "type": "String",
+            "loc": {
+              "start": {
+                "line": 2,
+                "column": 7
+              },
+              "end": {
+                "line": 2,
+                "column": 16
+              }
+            },
+            "raw": "\"example\"",
+            "value": "example"
+          }
+        },
+        {
+          "type": "KeyValue",
+          "loc": {
+            "start": {
+              "line": 3,
+              "column": 0
+            },
+            "end": {
+              "line": 3,
+              "column": 26
+            }
+          },
+          "key": {
+            "type": "Key",
+            "loc": {
+              "start": {
+                "line": 3,
+                "column": 0
+              },
+              "end": {
+                "line": 3,
+                "column": 6
+              }
+            },
+            "raw": "nested",
+            "value": [
+              "nested"
+            ]
+          },
+          "equals": 7,
+          "value": {
+            "type": "InlineTable",
+            "loc": {
+              "start": {
+                "line": 3,
+                "column": 9
+              },
+              "end": {
+                "line": 3,
+                "column": 26
+              }
+            },
+            "items": [
+              {
+                "type": "InlineItem",
+                "loc": {
+                  "start": {
+                    "line": 3,
+                    "column": 11
+                  },
+                  "end": {
+                    "line": 3,
+                    "column": 24
+                  }
+                },
+                "item": {
+                  "type": "KeyValue",
+                  "loc": {
+                    "start": {
+                      "line": 3,
+                      "column": 11
+                    },
+                    "end": {
+                      "line": 3,
+                      "column": 24
+                    }
+                  },
+                  "key": {
+                    "type": "Key",
+                    "loc": {
+                      "start": {
+                        "line": 3,
+                        "column": 11
+                      },
+                      "end": {
+                        "line": 3,
+                        "column": 14
+                      }
+                    },
+                    "raw": "key",
+                    "value": [
+                      "key"
+                    ]
+                  },
+                  "equals": 15,
+                  "value": {
+                    "type": "String",
+                    "loc": {
+                      "start": {
+                        "line": 3,
+                        "column": 17
+                      },
+                      "end": {
+                        "line": 3,
+                        "column": 24
+                      }
+                    },
+                    "raw": "\"value\"",
+                    "value": "value"
+                  }
+                },
+                "comma": false
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "type": "Document",
+  "items": [
+    {
+      "type": "Table",
+      "loc": {
+        "start": {
+          "line": 1,
+          "column": 0
+        },
+        "end": {
+          "line": 2,
+          "column": 16
+        }
+      },
+      "key": {
+        "type": "TableKey",
+        "loc": {
+          "start": {
+            "line": 1,
+            "column": 0
+          },
+          "end": {
+            "line": 1,
+            "column": 5
+          }
+        },
+        "item": {
+          "type": "Key",
+          "loc": {
+            "start": {
+              "line": 1,
+              "column": 1
+            },
+            "end": {
+              "line": 1,
+              "column": 4
+            }
+          },
+          "raw": "top",
+          "value": [
+            "top"
+          ]
+        }
+      },
+      "items": [
+        {
+          "type": "KeyValue",
+          "key": {
+            "type": "Key",
+            "loc": {
+              "start": {
+                "line": 2,
+                "column": 0
+              },
+              "end": {
+                "line": 2,
+                "column": 4
+              }
+            },
+            "raw": "name",
+            "value": [
+              "name"
+            ]
+          },
+          "value": {
+            "type": "String",
+            "loc": {
+              "start": {
+                "line": 2,
+                "column": 7
+              },
+              "end": {
+                "line": 2,
+                "column": 16
+              }
+            },
+            "raw": "\"example\"",
+            "value": "example"
+          },
+          "loc": {
+            "start": {
+              "line": 2,
+              "column": 0
+            },
+            "end": {
+              "line": 2,
+              "column": 16
+            }
+          },
+          "equals": 5
+        }
+      ]
+    },
+    {
+      "type": "Table",
+      "loc": {
+        "start": {
+          "line": 4,
+          "column": 0
+        },
+        "end": {
+          "line": 5,
+          "column": 13
+        }
+      },
+      "key": {
+        "type": "TableKey",
+        "loc": {
+          "start": {
+            "line": 4,
+            "column": 0
+          },
+          "end": {
+            "line": 4,
+            "column": 12
+          }
+        },
+        "item": {
+          "type": "Key",
+          "loc": {
+            "start": {
+              "line": 4,
+              "column": 1
+            },
+            "end": {
+              "line": 4,
+              "column": 11
+            }
+          },
+          "raw": "top.nested",
+          "value": [
+            "top",
+            "nested"
+          ]
+        }
+      },
+      "items": [
+        {
+          "type": "KeyValue",
+          "key": {
+            "type": "Key",
+            "loc": {
+              "start": {
+                "line": 5,
+                "column": 0
+              },
+              "end": {
+                "line": 5,
+                "column": 3
+              }
+            },
+            "raw": "key",
+            "value": [
+              "key"
+            ]
+          },
+          "value": {
+            "type": "String",
+            "loc": {
+              "start": {
+                "line": 5,
+                "column": 6
+              },
+              "end": {
+                "line": 5,
+                "column": 13
+              }
+            },
+            "raw": "\"value\"",
+            "value": "value"
+          },
+          "loc": {
+            "start": {
+              "line": 5,
+              "column": 0
+            },
+            "end": {
+              "line": 5,
+              "column": 13
+            }
+          },
+          "equals": 4
+        }
+      ]
+    }
+  ],
+  "loc": {
+    "start": {
+      "line": 1,
+      "column": 0
+    },
+    "end": {
+      "line": 5,
+      "column": 13
+    }
+  }
+}
