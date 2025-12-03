@@ -71,7 +71,13 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
     items
   };
 
-  const updated_document = parseJS(updated, format);
+  // Certain formatting options should not be applied to the updated document during patching, because it would
+  // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
+  // convert all nested tables to multiline, which is not be desired during patching.
+  // Therefore, we create a modified format for generating the updated document used for diffing.
+  const diffing_fmt = resolveTomlFormat({...format, preferNestedTablesMultiline: false}, format);
+  const updated_document = parseJS(updated, diffing_fmt);
+  
   const changes = reorder(diff(existing_js, updated));
 
   if (changes.length === 0) {

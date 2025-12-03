@@ -525,6 +525,75 @@ function formatTableArray(key_value: KeyValue): TableArray[] {
   return root.items as TableArray[];
 }
 
+/**
+ * Converts nested inline tables to separate table sections when preferNestedTablesMultiline is enabled.
+ * This function recursively processes all tables in the document and extracts any inline tables within them.
+ */
+export function formatNestedTablesMultiline(document: Document, format: TomlFormat): Document {
+  if (!format.preferNestedTablesMultiline) {
+    return document;
+  }
+
+  const additionalTables: Table[] = [];
+  
+  // Process all existing tables for nested inline tables
+  for (const item of document.items) {
+    if (isKeyValue(item) && isInlineTable(item.value)) {
+      // This is a top-level inline table, convert it to a separate table
+      const table = formatTable(item);
+      
+      // Remove the original inline table item
+      remove(document, document, item);
+      
+      // Add the new table
+      insert(document, document, table);
+      
+      // Process this table for further nested inlines
+      processTableForNestedInlines(table, additionalTables);
+    } else if (item.type === 'Table') {
+      // Process existing table for nested inline tables
+      processTableForNestedInlines(item as Table, additionalTables);
+    }
+  }
+  
+  // Add all the additional tables to the document
+  for (const table of additionalTables) {
+    insert(document, document, table);
+  }
+
+  applyWrites(document);
+  return document;
+}
+
+/**
+ * Recursively processes a table for nested inline tables and extracts them as separate tables.
+ */
+function processTableForNestedInlines(table: Table, additionalTables: Table[]): void {
+  // Process from end to beginning to avoid index issues when removing items
+  for (let i = table.items.length - 1; i >= 0; i--) {
+    const item = table.items[i];
+    if (isKeyValue(item) && isInlineTable(item.value)) {
+      // Convert this inline table to a separate table section
+      const nestedTableKey = [...table.key.item.value, ...item.key.value];
+      const separateTable = generateTable(nestedTableKey);
+      
+      // Move all items from the inline table to the separate table
+      for (const inlineItem of item.value.items) {
+        insert(separateTable, separateTable, inlineItem.item);
+      }
+      
+      // Remove this item from the original table
+      remove(table, table, item);
+      
+      // Add this table to be inserted into the document
+      additionalTables.push(separateTable);
+      
+      // Recursively process the new table for further nested inlines
+      processTableForNestedInlines(separateTable, additionalTables);
+    }
+  }
+}
+
 export function formatPrintWidth(document: Document, format: TomlFormat): Document {
   // TODO
   return document;

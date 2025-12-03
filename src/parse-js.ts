@@ -11,7 +11,7 @@ import {
   generateInlineArray,
   generateInlineTable
 } from './generate';
-import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines } from './toml-format';
+import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines, formatNestedTablesMultiline } from './toml-format';
 import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
@@ -31,9 +31,11 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
   // Heuristics:
   // 1. Top-level objects/arrays should be tables/table arrays
   // 2. Convert objects/arrays to tables/table arrays based on print width
+  // 3. Convert nested inline tables to separate tables based on preferNestedTablesMultiline
   const formatted = pipe(
     document,
     document => formatTopLevel(document, format),
+    document => formatNestedTablesMultiline(document, format),
     document => formatPrintWidth(document, format),
     formatEmptyLines
   );

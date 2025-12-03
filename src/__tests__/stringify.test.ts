@@ -269,3 +269,43 @@ test('should stringify object with no top-level key/value pairs', () => {
 
   expect(result).toEqual(expectedOutput);
 });
+
+test('should respect preferNestedTablesMultiline setting when stringifying nested objects', () => {
+  const jsObject = {
+    project: {
+      name: "Simple",
+      version: "1.0.0",
+      target: {
+        type: "xlsm",
+        path: "targets/xlsm"
+      }
+    }
+  };
+
+  // Test with preferNestedTablesMultiline = true (should create separate table sections)
+  const resultMultiline = stringify(jsObject, { preferNestedTablesMultiline: true });
+  const expectedMultiline = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+
+
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
+    ` + '\n';
+
+  expect(resultMultiline).toEqual(expectedMultiline);
+
+  // Test with preferNestedTablesMultiline = false (should use inline tables)
+  const resultInline = stringify(jsObject, { preferNestedTablesMultiline: false });
+  const expectedInline = dedent`
+    [project]
+    name = "Simple"
+    version = "1.0.0"
+    target = { type = "xlsm", path = "targets/xlsm" }
+    ` + '\n';
+
+  expect(resultInline).toEqual(expectedInline);
+});
+
