@@ -1,0 +1,433 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`AST parsing comparison JS object to AST should parse nested objects with inline table formatting by default: js-object-ast 1`] = `
+Object {
+  "items": Array [
+    Object {
+      "items": Array [
+        Object {
+          "equals": 5,
+          "key": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 4,
+                "line": 2,
+              },
+              "start": Object {
+                "column": 0,
+                "line": 2,
+              },
+            },
+            "raw": "name",
+            "type": "Key",
+            "value": Array [
+              "name",
+            ],
+          },
+          "loc": Object {
+            "end": Object {
+              "column": 16,
+              "line": 2,
+            },
+            "start": Object {
+              "column": 0,
+              "line": 2,
+            },
+          },
+          "type": "KeyValue",
+          "value": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 16,
+                "line": 2,
+              },
+              "start": Object {
+                "column": 7,
+                "line": 2,
+              },
+            },
+            "raw": "\\"example\\"",
+            "type": "String",
+            "value": "example",
+          },
+        },
+        Object {
+          "equals": 7,
+          "key": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 6,
+                "line": 3,
+              },
+              "start": Object {
+                "column": 0,
+                "line": 3,
+              },
+            },
+            "raw": "nested",
+            "type": "Key",
+            "value": Array [
+              "nested",
+            ],
+          },
+          "loc": Object {
+            "end": Object {
+              "column": 26,
+              "line": 3,
+            },
+            "start": Object {
+              "column": 0,
+              "line": 3,
+            },
+          },
+          "type": "KeyValue",
+          "value": Object {
+            "items": Array [
+              Object {
+                "comma": false,
+                "item": Object {
+                  "equals": 15,
+                  "key": Object {
+                    "loc": Object {
+                      "end": Object {
+                        "column": 14,
+                        "line": 3,
+                      },
+                      "start": Object {
+                        "column": 11,
+                        "line": 3,
+                      },
+                    },
+                    "raw": "key",
+                    "type": "Key",
+                    "value": Array [
+                      "key",
+                    ],
+                  },
+                  "loc": Object {
+                    "end": Object {
+                      "column": 24,
+                      "line": 3,
+                    },
+                    "start": Object {
+                      "column": 11,
+                      "line": 3,
+                    },
+                  },
+                  "type": "KeyValue",
+                  "value": Object {
+                    "loc": Object {
+                      "end": Object {
+                        "column": 24,
+                        "line": 3,
+                      },
+                      "start": Object {
+                        "column": 17,
+                        "line": 3,
+                      },
+                    },
+                    "raw": "\\"value\\"",
+                    "type": "String",
+                    "value": "value",
+                  },
+                },
+                "loc": Object {
+                  "end": Object {
+                    "column": 24,
+                    "line": 3,
+                  },
+                  "start": Object {
+                    "column": 11,
+                    "line": 3,
+                  },
+                },
+                "type": "InlineItem",
+              },
+            ],
+            "loc": Object {
+              "end": Object {
+                "column": 26,
+                "line": 3,
+              },
+              "start": Object {
+                "column": 9,
+                "line": 3,
+              },
+            },
+            "type": "InlineTable",
+          },
+        },
+      ],
+      "key": Object {
+        "item": Object {
+          "loc": Object {
+            "end": Object {
+              "column": 4,
+              "line": 1,
+            },
+            "start": Object {
+              "column": 1,
+              "line": 1,
+            },
+          },
+          "raw": "top",
+          "type": "Key",
+          "value": Array [
+            "top",
+          ],
+        },
+        "loc": Object {
+          "end": Object {
+            "column": 5,
+            "line": 1,
+          },
+          "start": Object {
+            "column": 0,
+            "line": 1,
+          },
+        },
+        "type": "TableKey",
+      },
+      "loc": Object {
+        "end": Object {
+          "column": 47,
+          "line": 3,
+        },
+        "start": Object {
+          "column": 0,
+          "line": 1,
+        },
+      },
+      "type": "Table",
+    },
+  ],
+  "loc": Object {
+    "end": Object {
+      "column": 101,
+      "line": 3,
+    },
+    "start": Object {
+      "column": 0,
+      "line": 1,
+    },
+  },
+  "type": "Document",
+}
+`;
+
+exports[`AST parsing comparison JS object to AST should parse nested objects with inline table formatting by default: js-object-to-toml 1`] = `
+"[top]
+name = \\"example\\"
+nested = { key = \\"value\\" }
+"
+`;
+
+exports[`AST parsing comparison TOML file to AST should parse nested tables preserving separate section formatting: toml-file-ast 1`] = `
+Object {
+  "items": Array [
+    Object {
+      "items": Array [
+        Object {
+          "equals": 5,
+          "key": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 4,
+                "line": 2,
+              },
+              "start": Object {
+                "column": 0,
+                "line": 2,
+              },
+            },
+            "raw": "name",
+            "type": "Key",
+            "value": Array [
+              "name",
+            ],
+          },
+          "loc": Object {
+            "end": Object {
+              "column": 16,
+              "line": 2,
+            },
+            "start": Object {
+              "column": 0,
+              "line": 2,
+            },
+          },
+          "type": "KeyValue",
+          "value": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 16,
+                "line": 2,
+              },
+              "start": Object {
+                "column": 7,
+                "line": 2,
+              },
+            },
+            "raw": "\\"example\\"",
+            "type": "String",
+            "value": "example",
+          },
+        },
+      ],
+      "key": Object {
+        "item": Object {
+          "loc": Object {
+            "end": Object {
+              "column": 4,
+              "line": 1,
+            },
+            "start": Object {
+              "column": 1,
+              "line": 1,
+            },
+          },
+          "raw": "top",
+          "type": "Key",
+          "value": Array [
+            "top",
+          ],
+        },
+        "loc": Object {
+          "end": Object {
+            "column": 5,
+            "line": 1,
+          },
+          "start": Object {
+            "column": 0,
+            "line": 1,
+          },
+        },
+        "type": "TableKey",
+      },
+      "loc": Object {
+        "end": Object {
+          "column": 16,
+          "line": 2,
+        },
+        "start": Object {
+          "column": 0,
+          "line": 1,
+        },
+      },
+      "type": "Table",
+    },
+    Object {
+      "items": Array [
+        Object {
+          "equals": 4,
+          "key": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 3,
+                "line": 5,
+              },
+              "start": Object {
+                "column": 0,
+                "line": 5,
+              },
+            },
+            "raw": "key",
+            "type": "Key",
+            "value": Array [
+              "key",
+            ],
+          },
+          "loc": Object {
+            "end": Object {
+              "column": 13,
+              "line": 5,
+            },
+            "start": Object {
+              "column": 0,
+              "line": 5,
+            },
+          },
+          "type": "KeyValue",
+          "value": Object {
+            "loc": Object {
+              "end": Object {
+                "column": 13,
+                "line": 5,
+              },
+              "start": Object {
+                "column": 6,
+                "line": 5,
+              },
+            },
+            "raw": "\\"value\\"",
+            "type": "String",
+            "value": "value",
+          },
+        },
+      ],
+      "key": Object {
+        "item": Object {
+          "loc": Object {
+            "end": Object {
+              "column": 11,
+              "line": 4,
+            },
+            "start": Object {
+              "column": 1,
+              "line": 4,
+            },
+          },
+          "raw": "top.nested",
+          "type": "Key",
+          "value": Array [
+            "top",
+            "nested",
+          ],
+        },
+        "loc": Object {
+          "end": Object {
+            "column": 12,
+            "line": 4,
+          },
+          "start": Object {
+            "column": 0,
+            "line": 4,
+          },
+        },
+        "type": "TableKey",
+      },
+      "loc": Object {
+        "end": Object {
+          "column": 13,
+          "line": 5,
+        },
+        "start": Object {
+          "column": 0,
+          "line": 4,
+        },
+      },
+      "type": "Table",
+    },
+  ],
+  "loc": Object {
+    "end": Object {
+      "column": 13,
+      "line": 5,
+    },
+    "start": Object {
+      "column": 0,
+      "line": 1,
+    },
+  },
+  "type": "Document",
+}
+`;
+
+exports[`AST parsing comparison TOML file to AST should parse nested tables preserving separate section formatting: toml-file-to-toml 1`] = `
+"[top]
+name = \\"example\\"
+
+[top.nested]
+key = \\"value\\"
+"
+`;

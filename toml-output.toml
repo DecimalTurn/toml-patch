@@ -1,3 +1,0 @@
-[top]
-name = "example"
-nested = { key = "value" }
