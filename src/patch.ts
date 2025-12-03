@@ -210,30 +210,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         
         // Check if we should convert nested inline tables to multiline tables
         if (format.preferNestedTablesMultiline && isDocument(parent) && isTable(child)) {
-          // Look for KeyValue items with InlineTable values inside this table
-          const additionalTables: any[] = [];
-          
-          for (let i = child.items.length - 1; i >= 0; i--) {
-            const item = child.items[i];
-            if (isKeyValue(item) && isInlineTable(item.value)) {
-              // Convert this inline table to a separate table section
-              const nestedTableKey = [...child.key.item.value, ...item.key.value];
-              const separateTable = generateTable(nestedTableKey);
-              
-              // Move all items from the inline table to the separate table
-              for (const inlineItem of item.value.items) {
-                if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
-                  insert(original, separateTable, inlineItem.item, undefined);
-                }
-              }
-              
-              // Remove this item from the original table
-              child.items.splice(i, 1);
-              
-              // Queue this table to be added to the document
-              additionalTables.push(separateTable);
-            }
-          }
+          const additionalTables = convertNestedInlineTablesToMultiline(child, original, format);
           
           // Insert the main table first
           insert(original, parent, child, index);
@@ -355,4 +332,48 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
   applyWrites(original);
   return original;
+}
+
+/**
+ * Converts nested inline tables to separate table sections when preferNestedTablesMultiline is enabled.
+ * This function recursively processes a table and extracts any inline tables within it,
+ * creating separate table sections with properly nested keys.
+ * 
+ * @param table - The table to process for nested inline tables
+ * @param original - The original document for inserting new items
+ * @param format - The formatting options
+ * @returns Array of additional tables that should be added to the document
+ */
+function convertNestedInlineTablesToMultiline(table: any, original: Document, format: TomlFormat): any[] {
+  const additionalTables: any[] = [];
+  
+  const processTableForNestedInlines = (currentTable: any, tablesToAdd: any[]) => {
+    for (let i = currentTable.items.length - 1; i >= 0; i--) {
+      const item = currentTable.items[i];
+      if (isKeyValue(item) && isInlineTable(item.value)) {
+        // Convert this inline table to a separate table section
+        const nestedTableKey = [...currentTable.key.item.value, ...item.key.value];
+        const separateTable = generateTable(nestedTableKey);
+        
+        // Move all items from the inline table to the separate table
+        for (const inlineItem of item.value.items) {
+          if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
+            insert(original, separateTable, inlineItem.item, undefined);
+          }
+        }
+        
+        // Remove this item from the original table
+        currentTable.items.splice(i, 1);
+        
+        // Queue this table to be added to the document
+        tablesToAdd.push(separateTable);
+        
+        // Recursively process the new table for further nested inlines
+        processTableForNestedInlines(separateTable, tablesToAdd);
+      }
+    }
+  };
+  
+  processTableForNestedInlines(table, additionalTables);
+  return additionalTables;
 }
