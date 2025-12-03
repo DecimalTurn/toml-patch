@@ -309,3 +309,106 @@ test('should respect preferNestedTablesMultiline setting when stringifying neste
   expect(resultInline).toEqual(expectedInline);
 });
 
+test('should handle empty nested objects with preferNestedTablesMultiline', () => {
+  const jsObject = {
+    project: {
+      name: "Test",
+      empty_config: {},
+      settings: {
+        debug: true
+      }
+    }
+  };
+
+  // Empty objects should also create table sections when preferNestedTablesMultiline is enabled
+  const result = stringify(jsObject, { preferNestedTablesMultiline: true });
+  const expected = dedent`
+    [project]
+    name = "Test"
+
+
+
+    [project.settings]
+    debug = true
+    [project.empty_config]
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle table arrays with nested objects', () => {
+  const jsObject = {
+    database: [
+      {
+        name: "db1",
+        config: {
+          host: "localhost",
+          port: 5432
+        }
+      },
+      {
+        name: "db2", 
+        config: {
+          host: "remote",
+          port: 3306
+        }
+      }
+    ]
+  };
+
+  // Currently, nested objects in table arrays remain as inline tables
+  // This could be a future enhancement to support multiline conversion within arrays
+  const result = stringify(jsObject, { preferNestedTablesMultiline: true });
+  const expected = dedent`
+    [[database]]
+    name = "db1"
+    config = { host = "localhost", port = 5432 }
+
+    [[database]]
+    name = "db2"
+    config = { host = "remote", port = 3306 }
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle mixed formatting preferences', () => {
+  const jsObject = {
+    app: {
+      name: "TestApp",
+      simple_config: {
+        enabled: true
+      }
+    },
+    servers: {
+      primary: {
+        ip: "192.168.1.1"
+      }
+    }
+  };
+
+  // Test interaction with other formatting options
+  const result = stringify(jsObject, { 
+    preferNestedTablesMultiline: true,
+    bracketSpacing: false,
+    trailingComma: true
+  });
+  
+  // Should respect preferNestedTablesMultiline while maintaining other format settings
+  const expected = dedent`
+    [app]
+    name = "TestApp"
+
+
+    [servers]
+
+
+    [app.simple_config]
+    enabled = true
+    [servers.primary]
+    ip = "192.168.1.1"
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
