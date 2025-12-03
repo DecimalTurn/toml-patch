@@ -969,7 +969,6 @@ test('should respect preferNestedTablesMultiline setting with deeply nested stru
 
     [project]
 
-
     [project.build]
 
     [project.build.config]
@@ -1089,7 +1088,6 @@ test('should respect preferNestedTablesMultiline setting for deeply nested objec
     name = "Simple"
 
     [project]
-
 
     [project.target]
     type = "xlsm"

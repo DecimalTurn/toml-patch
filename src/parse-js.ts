@@ -36,11 +36,11 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
     document,
     document => formatTopLevel(document, format),
     document => formatNestedTablesMultiline(document, format),
-    document => formatPrintWidth(document, format),
-    formatEmptyLines
+    document => formatPrintWidth(document, format)
   );
 
-  return formatted;
+  // Apply formatEmptyLines only once at the end
+  return formatEmptyLines(formatted);
 }
 
 /** 
