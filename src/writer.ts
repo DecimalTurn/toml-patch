@@ -217,6 +217,108 @@ function insertOnNewLine(
   return { shift, offset };
 }
 
+/**
+ * Calculates positioning (shift and offset) for inserting a child into a parent container.
+ * This function handles the core positioning logic used by both inline and document insertions.
+ */
+function calculatePositioning(
+  parent: Document | InlineArray | InlineTable,
+  child: TreeNode,
+  index: number,
+  options: {
+    useNewLine?: boolean;
+    skipCommaSpace?: number;
+    skipBracketSpace?: number;
+    hasCommaHandling?: boolean;
+    isLastElement?: boolean;
+    hasSeparatingCommaBefore?: boolean;
+    hasSeparatingCommaAfter?: boolean;
+    hasTrailingComma?: boolean;
+  } = {}
+): { shift: Span; offset: Span } {
+  const {
+    useNewLine = false,
+    skipCommaSpace = 2,
+    skipBracketSpace = 1,
+    hasCommaHandling = false,
+    isLastElement = false,
+    hasSeparatingCommaBefore = false,
+    hasSeparatingCommaAfter = false,
+    hasTrailingComma = false
+  } = options;
+
+  // Store preceding node
+  const previous = index > 0 ? parent.items[index - 1] : undefined;
+
+  // Set start location from previous item or start of parent
+  const start = previous
+    ? {
+      line: previous.loc.end.line,
+      column: useNewLine
+        ? !isComment(previous)
+          ? previous.loc.start.column
+          : parent.loc.start.column
+        : previous.loc.end.column
+    }
+    : clonePosition(parent.loc.start);
+
+  let leading_lines = 0;
+  if (useNewLine) {
+    leading_lines = 1;
+  } else {
+    // Add spacing for inline positioning
+    const hasSpacing = hasSeparatingCommaBefore || (!hasCommaHandling && !!previous);
+    if (hasSpacing && hasCommaHandling) {
+      start.column += skipCommaSpace;
+    } else if (hasSpacing) {
+      start.column += skipBracketSpace;
+    } else if (hasCommaHandling && !previous) {
+      start.column += skipBracketSpace;
+    } else if (!hasCommaHandling && previous) {
+      start.column += skipBracketSpace; // Just a space for document inline spacing
+    }
+  }
+  start.line += leading_lines;
+
+  const shift = {
+    lines: start.line - child.loc.start.line,
+    columns: start.column - child.loc.start.column
+  };
+
+  // Apply offsets after child node
+  const child_span = getSpan(child.loc);
+  
+  if (!hasCommaHandling) {
+    // For documents or contexts without comma handling, simpler offset calculation
+    const offset = {
+      lines: child_span.lines + (leading_lines - 1),
+      columns: child_span.columns
+    };
+    return { shift, offset };
+  }
+
+  // HACK: Fix trailing comma spacing issue for arrays that have trailing commas
+  const has_trailing_comma_spacing_bug = 
+    hasSeparatingCommaBefore && 
+    hasTrailingComma &&          
+    !hasSeparatingCommaAfter && 
+    isLastElement;                       
+
+  let trailing_comma_offset_adjustment = 0;
+  if (has_trailing_comma_spacing_bug) {
+    trailing_comma_offset_adjustment = -1;
+  }
+    
+  const offset = {
+    lines: child_span.lines + (leading_lines - 1),
+    columns: child_span.columns + 
+             (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) + 
+             (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0)
+  };
+
+  return { shift, offset };
+}
+
 function insertInline(
   parent: InlineArray | InlineTable,
   child: InlineItem,
@@ -242,68 +344,18 @@ function insertInline(
     child.comma = true;
   }
 
-  // Use a new line for documents, children of Table/TableArray,
-  // and if an inline table is using new lines
+  // Use new line for inline arrays that span multiple lines
   const use_new_line = isInlineArray(parent) && perLine(parent);
-
-  // Set start location from previous item or start of array
-  // (previous is undefined for empty array or inserting at first item)
-  const start = previous
-    ? {
-      line: previous.loc.end.line,
-      column: use_new_line
-        ? !isComment(previous)
-          ? previous.loc.start.column
-          : parent.loc.start.column
-        : previous.loc.end.column
-    }
-    : clonePosition(parent.loc.start);
-
-  let leading_lines = 0;
-  if (use_new_line) {
-    leading_lines = 1;
-  } else {
-    const skip_comma = 2;
-    const skip_bracket = 1;
-    const has_separating_comma_before = !!previous;
-    start.column += has_separating_comma_before ? skip_comma : skip_bracket;
-  }
-  start.line += leading_lines;
-
-  const shift = {
-    lines: start.line - child.loc.start.line,
-    columns: start.column - child.loc.start.column
-  };
-
-  // Apply offsets after child node
-  const child_span = getSpan(child.loc);
-  
-  // HACK: Fix trailing comma spacing issue for arrays that have trailing commas
-  // When inserting a new element with trailing comma after existing content,
-  // there's a double-space bug where both the separating comma (2 chars) and 
-  // trailing comma (1 char) contribute spacing, but the trailing comma doesn't 
-  // need extra space when it's the final element.
-  // 
-  // This only applies to arrays that actually have trailing commas.
   const has_trailing_comma = is_last && child.comma === true;
-  const has_trailing_comma_spacing_bug = 
-    has_separating_comma_before && // Element inserted after existing content
-    has_trailing_comma &&          // Element gets trailing comma  
-    !has_separating_comma_after && // Element is last (no separator after)
-    is_last;                       // Definitely the last element
 
-  let trailing_comma_offset_adjustment = 0;
-  if (has_trailing_comma_spacing_bug) {
-    // Only adjust the trailing comma portion, not the separating comma
-    trailing_comma_offset_adjustment = -1;
-  }
-    
-  const offset = {
-    lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + (has_separating_comma_before || has_separating_comma_after ? 2 : 0) + (has_trailing_comma ? 1 + trailing_comma_offset_adjustment : 0)
-  };
-
-  return { shift, offset };
+  return calculatePositioning(parent, child, index, {
+    useNewLine: use_new_line,
+    hasCommaHandling: true,
+    isLastElement: is_last,
+    hasSeparatingCommaBefore: has_separating_comma_before,
+    hasSeparatingCommaAfter: has_separating_comma_after,
+    hasTrailingComma: has_trailing_comma
+  });
 }
 
 /**
@@ -315,46 +367,10 @@ function calculateInlinePositioning(
   child: TreeNode,
   index: number
 ): { shift: Span; offset: Span } {
-  // Store preceding node (don't actually insert yet)
-  const previous = index > 0 ? parent.items[index - 1] : undefined;
-  const is_last = index === parent.items.length;
-
-  // For documents with inline behavior, we don't use new lines
-  const use_new_line = false;
-
-  // Set start location from previous item or start of document
-  const start = previous
-    ? {
-      line: previous.loc.end.line,
-      column: previous.loc.end.column
-    }
-    : clonePosition(parent.loc.start);
-
-  let leading_lines = 0;
-  if (use_new_line) {
-    leading_lines = 1;
-  } else {
-    // For inline spacing, add space after previous element
-    const skip_space = 1;
-    start.column += skip_space;
-  }
-  start.line += leading_lines;
-
-  const shift = {
-    lines: start.line - child.loc.start.line,
-    columns: start.column - child.loc.start.column
-  };
-
-  // Apply offsets after child node
-  const child_span = getSpan(child.loc);
-  
-  // For document inline positioning, no comma handling needed
-  const offset = {
-    lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns
-  };
-
-  return { shift, offset };
+  return calculatePositioning(parent, child, index, {
+    useNewLine: false,
+    hasCommaHandling: false
+  });
 }
 
 export function remove(root: Root, parent: TreeNode, node: TreeNode) {
