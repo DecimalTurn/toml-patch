@@ -19,7 +19,7 @@ export const DEFAULT_NEWLINE = '\n';
 export const DEFAULT_TRAILING_NEWLINE = 1;
 export const DEFAULT_TRAILING_COMMA = false;
 export const DEFAULT_BRACKET_SPACING = true;
-export const DEFAULT_PREFER_NESTED_TABLES_MULTILINE = false;
+export const DEFAULT_INLINE_TABLE_START = 1;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -245,7 +245,7 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'preferNestedTablesMultiline']);
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart']);
   const validatedFormat: any = {};
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
@@ -276,11 +276,21 @@ export function validateFormatObject(format: any): any {
           
           case 'trailingComma':
           case 'bracketSpacing':
-          case 'preferNestedTablesMultiline':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
               invalidTypeProperties.push(`${key} (expected boolean, got ${typeof value})`);
+            }
+            break;
+          
+          case 'inlineTableStart':
+            if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+              validatedFormat.inlineTableStart = value;
+            } else if (value === undefined || value === null) {
+              // Allow undefined/null to use default
+              validatedFormat.inlineTableStart = value;
+            } else {
+              invalidTypeProperties.push(`${key} (expected non-negative integer or undefined, got ${typeof value})`);
             }
             break;
         }
@@ -326,7 +336,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
         validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
         validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
-        validatedFormat.preferNestedTablesMultiline ?? fallbackFormat.preferNestedTablesMultiline
+        validatedFormat.inlineTableStart ?? fallbackFormat.inlineTableStart
       );
     }
   } else {
@@ -378,24 +388,30 @@ export class TomlFormat {
   bracketSpacing: boolean;
 
   /**
-   * Whether to prefer multiline formatting for nested tables when stringifying or adding new elements while patching.
-   * When false, nested tables will be formatted as inline tables.
-   * When true, nested tables will be formatted as separate table sections.
+   * The nesting depth at which new tables should start being formatted as inline tables.
+   * When adding new tables during patching or stringifying objects:
+   * - Tables at depth >= inlineTableStart will be formatted as inline tables
+   * - Tables at depth < inlineTableStart will be formatted as separate table sections
+   * 
+   * @example
+   * - 0: All tables are inline tables including top-level tables (root level)
+   * - 1: Top-level tables as sections, nested tables as inline (default)
+   * - 2: Two levels as sections, deeper nesting as inline
    */
-  preferNestedTablesMultiline?: boolean;
+  inlineTableStart?: number;
 
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
   //useTabs?: boolean;
   
-  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, preferNestedTablesMultiline?: boolean) {
+  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, inlineTableStart?: number) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
-    this.preferNestedTablesMultiline = preferNestedTablesMultiline ?? DEFAULT_PREFER_NESTED_TABLES_MULTILINE;
+    this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
   }
 
   /**
@@ -406,7 +422,7 @@ export class TomlFormat {
    *   - trailingNewline: 1
    *   - trailingComma: false
    *   - bracketSpacing: true
-   *   - preferNestedTablesMultiline: false
+   *   - inlineTableStart: 1
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -414,7 +430,7 @@ export class TomlFormat {
       DEFAULT_TRAILING_NEWLINE,
       DEFAULT_TRAILING_COMMA,
       DEFAULT_BRACKET_SPACING,
-      DEFAULT_PREFER_NESTED_TABLES_MULTILINE
+      DEFAULT_INLINE_TABLE_START
     );
   }
 
@@ -459,16 +475,19 @@ export class TomlFormat {
       format.bracketSpacing = DEFAULT_BRACKET_SPACING;
     }
     
-    // preferNestedTablesMultiline uses default value since auto-detection would require
+    // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences
-    format.preferNestedTablesMultiline = DEFAULT_PREFER_NESTED_TABLES_MULTILINE;
+    format.inlineTableStart = DEFAULT_INLINE_TABLE_START;
     
     return format;
   }
 }
 export function formatTopLevel(document: Document, format: TomlFormat): Document {
 
-  //TODO: Add option to format tables as inline tables instead of top-level tables
+  // If inlineTableStart is 0, convert all top-level tables to inline tables
+  if (format.inlineTableStart === 0) {
+    return document;
+  }
 
   const move_to_top_level = document.items.filter(item => {
     if (!isKeyValue(item)) return false;
@@ -479,7 +498,13 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
       item.value.items.length &&
       isInlineTable(item.value.items[0].item);
 
-    return is_inline_table || is_inline_array;
+    // Only move to top level if the depth is less than inlineTableStart
+    if (is_inline_table || is_inline_array) {
+      const depth = calculateTableDepth(item.key.value);
+      return format.inlineTableStart === undefined || depth < format.inlineTableStart;
+    }
+
+    return false;
   }) as KeyValue[];
 
   move_to_top_level.forEach(node => {
@@ -545,11 +570,26 @@ export function postInlineItemRemovalAdjustment(table: Table): void {
 }
 
 /**
- * Converts nested inline tables to separate table sections when preferNestedTablesMultiline is enabled.
- * This function recursively processes all tables in the document and extracts any inline tables within them.
+ * Calculates the nesting depth of a table based on its key path.
+ * Root level tables (e.g., [table]) have depth 0.
+ * First level nested tables (e.g., [table.nested]) have depth 1.
+ * 
+ * @param keyPath - Array representing the table key path (e.g., ['table', 'nested'])
+ * @returns The nesting depth (0 for root level, 1+ for nested levels)
+ */
+export function calculateTableDepth(keyPath: string[]): number {
+  return Math.max(0, keyPath.length - 1);
+}
+
+/**
+ * Converts nested inline tables to separate table sections based on the inlineTableStart depth setting.
+ * This function recursively processes all tables in the document and extracts inline tables that are
+ * at a depth less than the inlineTableStart threshold.
  */
 export function formatNestedTablesMultiline(document: Document, format: TomlFormat): Document {
-  if (!format.preferNestedTablesMultiline) {
+  // If inlineTableStart is undefined, use the default behavior (no conversion)
+  // If inlineTableStart is 0, all should be inline (no conversion)
+  if (format.inlineTableStart === undefined || format.inlineTableStart === 0) {
     return document;
   }
 
@@ -558,20 +598,24 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
   // Process all existing tables for nested inline tables
   for (const item of document.items) {
     if (isKeyValue(item) && isInlineTable(item.value)) {
-      // This is a top-level inline table, convert it to a separate table
-      const table = formatTable(item);
-      
-      // Remove the original inline table item
-      remove(document, document, item);
-      
-      // Add the new table
-      insert(document, document, table);
-      
-      // Process this table for further nested inlines
-      processTableForNestedInlines(table, additionalTables);
+      // This is a top-level inline table (depth 0)
+      const depth = calculateTableDepth(item.key.value);
+      if (depth < format.inlineTableStart) {
+        // Convert to a separate table
+        const table = formatTable(item);
+        
+        // Remove the original inline table item
+        remove(document, document, item);
+        
+        // Add the new table
+        insert(document, document, table);
+        
+        // Process this table for further nested inlines
+        processTableForNestedInlines(table, additionalTables, format);
+      }
     } else if (item.type === 'Table') {
       // Process existing table for nested inline tables
-      processTableForNestedInlines(item as Table, additionalTables);
+      processTableForNestedInlines(item as Table, additionalTables, format);
     }
   }
   
@@ -585,33 +629,40 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
 }
 
 /**
- * Recursively processes a table for nested inline tables and extracts them as separate tables.
+ * Recursively processes a table for nested inline tables and extracts them as separate tables
+ * when they are at a depth less than the inlineTableStart threshold.
  */
-function processTableForNestedInlines(table: Table, additionalTables: Table[]): void {
+function processTableForNestedInlines(table: Table, additionalTables: Table[], format: TomlFormat): void {
   // Process from end to beginning to avoid index issues when removing items
   for (let i = table.items.length - 1; i >= 0; i--) {
     const item = table.items[i];
     if (isKeyValue(item) && isInlineTable(item.value)) {
-      // Convert this inline table to a separate table section
+      // Calculate the depth of this nested table
       const nestedTableKey = [...table.key.item.value, ...item.key.value];
-      const separateTable = generateTable(nestedTableKey);
+      const depth = calculateTableDepth(nestedTableKey);
       
-      // Move all items from the inline table to the separate table
-      for (const inlineItem of item.value.items) {
-        insert(separateTable, separateTable, inlineItem.item);
+      // Only convert to separate table if depth is less than inlineTableStart
+      if (depth < (format.inlineTableStart ?? 1)) {
+        // Convert this inline table to a separate table section
+        const separateTable = generateTable(nestedTableKey);
+        
+        // Move all items from the inline table to the separate table
+        for (const inlineItem of item.value.items) {
+          insert(separateTable, separateTable, inlineItem.item);
+        }
+        
+        // Remove this item from the original table
+        remove(table, table, item);
+        
+        // Update the parent table's end position after removal
+        postInlineItemRemovalAdjustment(table);
+        
+        // Add this table to be inserted into the document
+        additionalTables.push(separateTable);
+        
+        // Recursively process the new table for further nested inlines
+        processTableForNestedInlines(separateTable, additionalTables, format);
       }
-      
-      // Remove this item from the original table
-      remove(table, table, item);
-      
-      // Update the parent table's end position after removal
-      postInlineItemRemovalAdjustment(table);
-      
-      // Add this table to be inserted into the document
-      additionalTables.push(separateTable);
-      
-      // Recursively process the new table for further nested inlines
-      processTableForNestedInlines(separateTable, additionalTables);
     }
   }
 }

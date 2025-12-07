@@ -27,7 +27,7 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment, calculateTableDepth } from './toml-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -75,7 +75,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
   // convert all nested tables to multiline, which is not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
-  const diffing_fmt = resolveTomlFormat({...format, preferNestedTablesMultiline: false}, format);
+  const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
   const updated_document = parseJS(updated, diffing_fmt);
   
   const changes = reorder(diff(existing_js, updated));
@@ -215,7 +215,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
         
         // Check if we should convert nested inline tables to multiline tables
-        if (format.preferNestedTablesMultiline && isDocument(parent) && isTable(child)) {
+        if (format.inlineTableStart !== undefined && format.inlineTableStart > 0 && isDocument(parent) && isTable(child)) {
           const additionalTables = convertNestedInlineTablesToMultiline(child, original, format);
           
           // Insert the main table first
@@ -243,8 +243,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       } else {
         // Check if we should convert inline tables to multiline tables when adding to existing tables
-        if (format.preferNestedTablesMultiline && isKeyValue(child) && isInlineTable(child.value) && isTable(parent)) {
-          convertInlineTableToSeparateSection(child, parent, original, format);
+        if (format.inlineTableStart !== undefined && format.inlineTableStart > 0 && isKeyValue(child) && isInlineTable(child.value) && isTable(parent)) {
+          // Calculate the depth of the inline table that would be created
+          const baseTableKey = parent.key.item.value;
+          const nestedTableKey = [...baseTableKey, ...child.key.value];
+          const depth = calculateTableDepth(nestedTableKey);
+          
+          // Convert to separate section only if depth is less than inlineTableStart
+          if (depth < format.inlineTableStart) {
+            convertInlineTableToSeparateSection(child, parent, original, format);
+          } else {
+            insert(original, parent, child);
+          }
         } else {
           insert(original, parent, child);
         }
@@ -346,7 +356,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 }
 
 /**
- * Converts nested inline tables to separate table sections when preferNestedTablesMultiline is enabled.
+ * Converts nested inline tables to separate table sections based on the inlineTableStart depth setting.
  * This function recursively processes a table and extracts any inline tables within it,
  * creating separate table sections with properly nested keys.
  * 
@@ -362,28 +372,34 @@ function convertNestedInlineTablesToMultiline(table: any, original: Document, fo
     for (let i = currentTable.items.length - 1; i >= 0; i--) {
       const item = currentTable.items[i];
       if (isKeyValue(item) && isInlineTable(item.value)) {
-        // Convert this inline table to a separate table section
+        // Calculate the depth of this nested table
         const nestedTableKey = [...currentTable.key.item.value, ...item.key.value];
-        const separateTable = generateTable(nestedTableKey);
+        const depth = calculateTableDepth(nestedTableKey);
         
-        // Move all items from the inline table to the separate table
-        for (const inlineItem of item.value.items) {
-          if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
-            insert(original, separateTable, inlineItem.item, undefined);
+        // Only convert to separate table if depth is less than inlineTableStart
+        if (depth < (format.inlineTableStart ?? 1) && format.inlineTableStart !== 0) {
+          // Convert this inline table to a separate table section
+          const separateTable = generateTable(nestedTableKey);
+          
+          // Move all items from the inline table to the separate table
+          for (const inlineItem of item.value.items) {
+            if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
+              insert(original, separateTable, inlineItem.item, undefined);
+            }
           }
+          
+          // Remove this item from the original table
+          currentTable.items.splice(i, 1);
+          
+          // Update the parent table's end position after removal
+          postInlineItemRemovalAdjustment(currentTable);
+          
+          // Queue this table to be added to the document
+          tablesToAdd.push(separateTable);
+          
+          // Recursively process the new table for further nested inlines
+          processTableForNestedInlines(separateTable, tablesToAdd);
         }
-        
-        // Remove this item from the original table
-        currentTable.items.splice(i, 1);
-        
-        // Update the parent table's end position after removal
-        postInlineItemRemovalAdjustment(currentTable);
-        
-        // Queue this table to be added to the document
-        tablesToAdd.push(separateTable);
-        
-        // Recursively process the new table for further nested inlines
-        processTableForNestedInlines(separateTable, tablesToAdd);
       }
     }
   };
