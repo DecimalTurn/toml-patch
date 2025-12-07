@@ -231,26 +231,31 @@ function insertInline(
     throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
   }
 
+  // Handle different parent types - Document has different item types than inline containers
+  const isDocumentParent = isDocument(parent);
+  
   // Store preceding node and insert
-  const previous = index != null ? parent.items[index - 1] : last(parent.items);
+  const previous = index != null ? parent.items[index - 1] : last(parent.items as TreeNode[]);
   const is_last = index == null || index === parent.items.length;
 
   parent.items.splice(index, 0, child);
 
-  // Add commas as-needed
-  const has_separating_comma_before = !!previous;
-  const has_separating_comma_after = !is_last;
-  const has_trailing_comma = is_last && child.comma === true;
-  if (has_separating_comma_before) {
-    previous!.comma = true;
-  }
-  if (has_separating_comma_after) {
-    child.comma = true;
+  // Add commas as-needed (only for inline containers, not Document)
+  if (!isDocumentParent) {
+    const has_separating_comma_before = !!previous;
+    const has_separating_comma_after = !is_last;
+    const has_trailing_comma = is_last && child.comma === true;
+    if (has_separating_comma_before) {
+      (previous as InlineArrayItem | InlineTableItem).comma = true;
+    }
+    if (has_separating_comma_after) {
+      child.comma = true;
+    }
   }
 
   // Use a new line for documents, children of Table/TableArray,
   // and if an inline table is using new lines
-  const use_new_line = isInlineArray(parent) && perLine(parent);
+  const use_new_line = (isDocumentParent) || (isInlineArray(parent) && perLine(parent));
 
   // Set start location from previous item or start of array
   // (previous is undefined for empty array or inserting at first item)
@@ -271,6 +276,7 @@ function insertInline(
   } else {
     const skip_comma = 2;
     const skip_bracket = 1;
+    const has_separating_comma_before = !!previous && !isDocumentParent;
     start.column += has_separating_comma_before ? skip_comma : skip_bracket;
   }
   start.line += leading_lines;
@@ -283,6 +289,15 @@ function insertInline(
   // Apply offsets after child node
   const child_span = getSpan(child.loc);
   
+  if (isDocumentParent) {
+    // For documents, no comma handling needed
+    const offset = {
+      lines: child_span.lines + (leading_lines - 1),
+      columns: child_span.columns
+    };
+    return { shift, offset };
+  }
+  
   // HACK: Fix trailing comma spacing issue for arrays that have trailing commas
   // When inserting a new element with trailing comma after existing content,
   // there's a double-space bug where both the separating comma (2 chars) and 
@@ -290,6 +305,9 @@ function insertInline(
   // need extra space when it's the final element.
   // 
   // This only applies to arrays that actually have trailing commas.
+  const has_separating_comma_before = !!previous;
+  const has_separating_comma_after = !is_last;
+  const has_trailing_comma = is_last && child.comma === true;
   const has_trailing_comma_spacing_bug = 
     has_separating_comma_before && // Element inserted after existing content
     has_trailing_comma &&          // Element gets trailing comma  

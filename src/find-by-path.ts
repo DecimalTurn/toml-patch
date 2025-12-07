@@ -4,7 +4,13 @@ import { arraysEqual, stableStringify } from './utils';
 export type Path = Array<string | number>;
 
 export default function findByPath(node: TreeNode, path: Path): TreeNode {
-  if (!path.length) return node;
+  if (!path.length) {
+    // If this is an InlineItem containing a KeyValue, return the KeyValue
+    if (isInlineItem(node) && isKeyValue(node.item)) {
+      return node.item;
+    }
+    return node;
+  }
 
   if (isKeyValue(node)) {
     return findByPath(node.value, path);
