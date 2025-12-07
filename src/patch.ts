@@ -255,6 +255,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           } else {
             insert(original, parent, child);
           }
+        } else if (format.inlineTableStart == 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
+          insert(original, parent, child, undefined, true);
         } else {
           insert(original, parent, child);
         }

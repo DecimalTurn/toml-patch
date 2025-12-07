@@ -123,7 +123,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param child - The child node to insert
  * @param index - The index at which to insert the child (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -132,7 +132,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 
   let shift: Span;
   let offset: Span;
-  if (isInlineArray(parent) || isInlineTable(parent)) {
+  if (isInlineArray(parent) || isInlineTable(parent ) || (forceInline && isDocument(parent))) {
     ({ shift, offset } = insertInline(parent, child as InlineItem, index));
   } else {
     ({ shift, offset } = insertOnNewLine(
@@ -223,7 +223,7 @@ function insertOnNewLine(
  * @throws Error if the child is not a compatible inline item type
  */
 function insertInline(
-  parent: InlineArray | InlineTable,
+  parent: InlineArray | InlineTable | Document,
   child: InlineItem,
   index: number
 ): { shift: Span; offset: Span } {

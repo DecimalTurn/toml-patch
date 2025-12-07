@@ -989,7 +989,7 @@ test('should respect inlineTableStart setting with deeply nested structures', ()
 
 });
 
-test.skip('should add nested objects to existing table sections', () => {
+test('should add nested objects to existing table sections', () => {
   // Start with an existing table section
   const existing = dedent`
     [project]
@@ -1023,7 +1023,7 @@ test.skip('should add nested objects to existing table sections', () => {
   expect(result).toEqual(expected);
 });
 
-test.skip('should respect inlineTableStart setting when adding nested objects to existing table sections', () => {
+test('should respect inlineTableStart setting when adding nested objects to existing table sections', () => {
   // This test is skipped because the functionality is not yet implemented
   // The current patch logic doesn't support adding nested objects to existing table sections
   
