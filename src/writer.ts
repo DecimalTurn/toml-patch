@@ -135,12 +135,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   if (isInlineArray(parent) || isInlineTable(parent)) {
     ({ shift, offset } = insertInline(parent, child as InlineItem, index));
   } else if (forceInline && isDocument(parent)) {
-    // Special case: when forcing inline behavior for Document,
-    // calculate positioning as if inserting into an inline context
-    ({ shift, offset } = calculateInlinePositioning(parent, child, index));
-    
-    // Insert the child directly into the Document (as a Block item)
-    parent.items.splice(index, 0, child as KeyValue | Comment);
+    ({ shift, offset } = insertInlineAtRoot(parent, child, index));
   } else {
     ({ shift, offset } = insertOnNewLine(
       parent as Document | Table | TableArray,
@@ -219,9 +214,9 @@ function insertOnNewLine(
 
 /**
  * Calculates positioning (shift and offset) for inserting a child into a parent container.
- * This function handles the core positioning logic used by both inline and document insertions.
+ * This function handles the core positioning logic used to insert an inline item inside a table (or at the document root level).
  */
-function calculatePositioning(
+function calculateInlinePositioning(
   parent: Document | InlineArray | InlineTable,
   child: TreeNode,
   index: number,
@@ -297,7 +292,7 @@ function calculatePositioning(
     return { shift, offset };
   }
 
-  // HACK: Fix trailing comma spacing issue for arrays that have trailing commas
+  // Special case: Fix trailing comma spacing issue for arrays that have trailing commas
   const has_trailing_comma_spacing_bug = 
     hasSeparatingCommaBefore && 
     hasTrailingComma &&          
@@ -348,7 +343,7 @@ function insertInline(
   const use_new_line = isInlineArray(parent) && perLine(parent);
   const has_trailing_comma = is_last && child.comma === true;
 
-  return calculatePositioning(parent, child, index, {
+  return calculateInlinePositioning(parent, child, index, {
     useNewLine: use_new_line,
     hasCommaHandling: true,
     isLastElement: is_last,
@@ -359,18 +354,24 @@ function insertInline(
 }
 
 /**
- * Calculates positioning for inserting a child into a Document using inline spacing rules.
- * This function simulates inline positioning without actually modifying the parent or child.
+ * Inserts a child into a Document with inline positioning behavior.
+ * This provides inline-style spacing while maintaining Document's Block item types.
  */
-function calculateInlinePositioning(
+function insertInlineAtRoot(
   parent: Document,
   child: TreeNode,
   index: number
 ): { shift: Span; offset: Span } {
-  return calculatePositioning(parent, child, index, {
+  // Calculate positioning as if inserting into an inline context
+  const result = calculateInlinePositioning(parent, child, index, {
     useNewLine: false,
     hasCommaHandling: false
   });
+  
+  // Insert the child directly into the Document (as a Block item)
+  parent.items.splice(index, 0, child as KeyValue | Comment);
+  
+  return result;
 }
 
 export function remove(root: Root, parent: TreeNode, node: TreeNode) {
