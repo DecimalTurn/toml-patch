@@ -10,4 +10,5 @@ export const fruit = read('fruit.toml');
 export const hard_example = read('hard-example.toml');
 export const hard_example_unicode = read('hard-example-unicode.toml');
 export const kitchen_sink = read('kitchen-sink.toml');
+export const nested_tables = read('nested-tables.toml');
 export const spec_01_example = read('0A-spec-01-example-v0.4.0.toml');

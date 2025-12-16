@@ -4,6 +4,10 @@ export enum NodeType {
   Document = 'Document',
   Table = 'Table',
   TableKey = 'TableKey',
+  /**
+   * Array of Tables node
+   * More info: https://toml.io/en/latest#array-of-tables
+   */
   TableArray = 'TableArray',
   TableArrayKey = 'TableArrayKey',
   KeyValue = 'KeyValue',
@@ -16,6 +20,10 @@ export enum NodeType {
   InlineArray = 'InlineArray',
   InlineItem = 'InlineItem',
   InlineTable = 'InlineTable',
+  /**
+   * Comment node
+   * More info: https://toml.io/en/latest#comment
+   */
   Comment = 'Comment'
 }
 
@@ -55,7 +63,7 @@ export function isDocument(node: TreeNode): node is Document {
 export interface Table extends TreeNode {
   type: NodeType.Table;
   key: TableKey;
-  items: Array<KeyValue | Comment>;
+  items: RowItem[];
 }
 export function isTable(node: TreeNode): node is Table {
   return node.type === NodeType.Table;
@@ -95,8 +103,14 @@ export function isTableKey(node: TreeNode): node is TableKey {
 export interface TableArray extends TreeNode {
   type: NodeType.TableArray;
   key: TableArrayKey;
-  items: Array<KeyValue | Comment>;
+  items: RowItem[];
 }
+
+/**
+ * Is a TableArray (aka array of tables)
+ * @param node 
+ * @returns 
+ */
 export function isTableArray(node: TreeNode): node is TableArray {
   return node.type === NodeType.TableArray;
 }
@@ -297,6 +311,18 @@ export function isComment(node: TreeNode): node is Comment {
 // Combinations
 //
 
+/**
+ * RowItem represents items that can appear inside Table and TableArray sections.
+ * These are the items that form the "rows" of content within table structures.
+ * 
+ * Unlike Block items (which include Table and TableArray), RowItems can only be
+ * KeyValue pairs and Comments - you cannot have nested tables within a table section.
+ */
+export type RowItem = KeyValue | Comment;
+export function isRowItem(node: TreeNode): node is RowItem {
+  return isKeyValue(node) || isComment(node);
+}
+
 export interface WithItems extends TreeNode {
   items: TreeNode[];
 }
@@ -317,6 +343,46 @@ export function hasItem(node: TreeNode): node is WithItem {
   return isTableKey(node) || isTableArrayKey(node) || isInlineItem(node);
 }
 
+/**
+ * Block represents items that can appear at the root level (Document level) in TOML.
+ * 
+ * Context and Usage:
+ * - Block items are the fundamental top-level constructs in a TOML document
+ * - They appear directly in Document containers and regular Table sections
+ * - This is in contrast to InlineItems, which appear within inline containers
+ * 
+ * Important Distinction:
+ * - Table and TableArray can ONLY exist as Block items (they cannot appear inside inline containers)
+ * - KeyValue and Comment can exist as BOTH Block items AND as InlineItems:
+ *   * As Block: When they appear at root level or inside regular Table sections
+ *   * As InlineItem: When they appear inside InlineTable or InlineArray containers
+ * 
+ * Examples:
+ * ```toml
+ * # These are Block items at root level:
+ * name = "value"        # KeyValue as Block
+ * # This is a comment   # Comment as Block
+ * [table]               # Table as Block
+ * [[array]]             # TableArray as Block
+ * 
+ * # These are Block items inside a Table:
+ * [config]
+ * setting = "value"     # KeyValue as Block (inside Table)
+ * # comment here        # Comment as Block (inside Table)
+ * 
+ * # These are InlineItems (NOT Block items):
+ * array = [ "a", "b" ]          # "a", "b" are InlineItems
+ * table = { key = "value" }     # key="value" is InlineItem
+ * ```
+ * 
+ * Type Safety:
+ * This distinction is crucial for the AST structure because:
+ * - Document.items: Block[]
+ * - Table.items: RowItem[] (KeyValue | Comment)
+ * - TableArray.items: RowItem[] (KeyValue | Comment)
+ * - InlineArray.items: InlineArrayItem[] (which extends InlineItem)
+ * - InlineTable.items: InlineTableItem[] (which extends InlineItem)
+ */
 export type Block = KeyValue | Table | TableArray | Comment;
 export function isBlock(node: TreeNode): node is Block {
   return isKeyValue(node) || isTable(node) || isTableArray(node) || isComment(node);

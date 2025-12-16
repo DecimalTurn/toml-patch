@@ -122,8 +122,9 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param parent - The parent node to insert the child into
  * @param child - The child node to insert
  * @param index - The index at which to insert the child (optional)
+ * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -134,6 +135,8 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   let offset: Span;
   if (isInlineArray(parent) || isInlineTable(parent)) {
     ({ shift, offset } = insertInline(parent, child as InlineItem, index));
+  } else if (forceInline && isDocument(parent)) {
+    ({ shift, offset } = insertInlineAtRoot(parent, child, index));
   } else {
     ({ shift, offset } = insertOnNewLine(
       parent as Document | Table | TableArray,
@@ -165,6 +168,7 @@ function insertOnNewLine(
   child: Block,
   index: number
 ): { shift: Span; offset: Span } {
+
   if (!isBlock(child)) {
     throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
   }
@@ -183,12 +187,11 @@ function insertOnNewLine(
     }
     : clonePosition(parent.loc.start);
   
-  //TODO: Check the definition for block to see if using isBlock is more appropriate
-  const is_block = isTable(child) || isTableArray(child);
+  const isSquareBracketsStructure = isTable(child) || isTableArray(child);
   let leading_lines = 0;
   if (use_first_line) {
     // 0 leading lines
-  } else if (is_block) {
+  } else if (isSquareBracketsStructure) {
     leading_lines = 2;
   } else {
     leading_lines = 1;
@@ -211,53 +214,59 @@ function insertOnNewLine(
 }
 
 /**
- * Inserts an inline element into an inline array or table at the specified index.
- * This function handles positioning, comma management, and offset calculation for the inserted item.
+ * Calculates positioning (shift and offset) for inserting a child into a parent container.
+ * This function handles the core positioning logic used to insert an inline item inside a table (or at the document root level).
  * 
- * @param parent - The inline array or table where the child will be inserted
- * @param child - The inline item to insert
- * @param index - The index position where to insert the child
- * @returns An object containing shift and offset spans:
- *          - shift: Adjustments needed to position the child correctly
- *          - offset: Adjustments needed for elements that follow the insertion
- * @throws Error if the child is not a compatible inline item type
+ * @param parent - The parent container (Document, InlineArray or InlineTable)
+ * @param child - The child node to be inserted
+ * @param index - The insertion index within the parent's items
+ * @param options - Configuration options for positioning calculation
+ * @param options.useNewLine - Whether to place the child on a new line
+ * @param options.skipCommaSpace - Number of columns to skip for comma + space (default: 2)
+ * @param options.skipBracketSpace - Number of columns to skip for bracket/space (default: 1)
+ * @param options.hasCommaHandling - Whether comma handling logic should be applied
+ * @param options.isLastElement - Whether this is the last element in the container
+ * @param options.hasSeparatingCommaBefore - Whether a comma should precede this element
+ * @param options.hasSeparatingCommaAfter - Whether a comma should follow this element
+ * @param options.hasTrailingComma - Whether the element has a trailing comma
+ * @returns Object containing shift (positioning adjustment for the child) and offset (adjustment for following elements)
  */
-function insertInline(
-  parent: InlineArray | InlineTable,
-  child: InlineItem,
-  index: number
+function calculateInlinePositioning(
+  parent: Document | InlineArray | InlineTable,
+  child: TreeNode,
+  index: number,
+  options: {
+    useNewLine?: boolean;
+    skipCommaSpace?: number;
+    skipBracketSpace?: number;
+    hasCommaHandling?: boolean;
+    isLastElement?: boolean;
+    hasSeparatingCommaBefore?: boolean;
+    hasSeparatingCommaAfter?: boolean;
+    hasTrailingComma?: boolean;
+  } = {}
 ): { shift: Span; offset: Span } {
-  if (!isInlineItem(child)) {
-    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
-  }
+  
+  // Configuration options with default values
+  const {
+    useNewLine = false,
+    skipCommaSpace = 2,
+    skipBracketSpace = 1,
+    hasCommaHandling = false,
+    isLastElement = false,
+    hasSeparatingCommaBefore = false,
+    hasSeparatingCommaAfter = false,
+    hasTrailingComma = false
+  } = options;
 
-  // Store preceding node and insert
-  const previous = index != null ? parent.items[index - 1] : last(parent.items);
-  const is_last = index == null || index === parent.items.length;
+  // Store preceding node
+  const previous = index > 0 ? parent.items[index - 1] : undefined;
 
-  parent.items.splice(index, 0, child);
-
-  // Add commas as-needed
-  const has_separating_comma_before = !!previous;
-  const has_separating_comma_after = !is_last;
-  const has_trailing_comma = is_last && child.comma === true;
-  if (has_separating_comma_before) {
-    previous!.comma = true;
-  }
-  if (has_separating_comma_after) {
-    child.comma = true;
-  }
-
-  // Use a new line for documents, children of Table/TableArray,
-  // and if an inline table is using new lines
-  const use_new_line = isInlineArray(parent) && perLine(parent);
-
-  // Set start location from previous item or start of array
-  // (previous is undefined for empty array or inserting at first item)
+  // Set start location from previous item or start of parent
   const start = previous
     ? {
       line: previous.loc.end.line,
-      column: use_new_line
+      column: useNewLine
         ? !isComment(previous)
           ? previous.loc.start.column
           : parent.loc.start.column
@@ -266,12 +275,16 @@ function insertInline(
     : clonePosition(parent.loc.start);
 
   let leading_lines = 0;
-  if (use_new_line) {
+  if (useNewLine) {
     leading_lines = 1;
   } else {
-    const skip_comma = 2;
-    const skip_bracket = 1;
-    start.column += has_separating_comma_before ? skip_comma : skip_bracket;
+    // Add spacing for inline positioning
+    const hasSpacing = hasSeparatingCommaBefore || (!hasCommaHandling && !!previous);
+    if (hasSpacing && hasCommaHandling) {
+      start.column += skipCommaSpace;
+    } else if (hasSpacing || (hasCommaHandling && !previous)) {
+      start.column += skipBracketSpace;
+    }
   }
   start.line += leading_lines;
 
@@ -283,31 +296,95 @@ function insertInline(
   // Apply offsets after child node
   const child_span = getSpan(child.loc);
   
-  // HACK: Fix trailing comma spacing issue for arrays that have trailing commas
-  // When inserting a new element with trailing comma after existing content,
-  // there's a double-space bug where both the separating comma (2 chars) and 
-  // trailing comma (1 char) contribute spacing, but the trailing comma doesn't 
-  // need extra space when it's the final element.
-  // 
-  // This only applies to arrays that actually have trailing commas.
+  if (!hasCommaHandling) {
+    // For documents or contexts without comma handling, simpler offset calculation
+    const offset = {
+      lines: child_span.lines + (leading_lines - 1),
+      columns: child_span.columns
+    };
+    return { shift, offset };
+  }
+
+  // Special case: Fix trailing comma spacing issue for arrays that have trailing commas
   const has_trailing_comma_spacing_bug = 
-    has_separating_comma_before && // Element inserted after existing content
-    has_trailing_comma &&          // Element gets trailing comma  
-    !has_separating_comma_after && // Element is last (no separator after)
-    is_last;                       // Definitely the last element
+    hasSeparatingCommaBefore && 
+    hasTrailingComma &&          
+    !hasSeparatingCommaAfter && 
+    isLastElement;                       
 
   let trailing_comma_offset_adjustment = 0;
   if (has_trailing_comma_spacing_bug) {
-    // Only adjust the trailing comma portion, not the separating comma
     trailing_comma_offset_adjustment = -1;
   }
     
   const offset = {
     lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + (has_separating_comma_before || has_separating_comma_after ? 2 : 0) + (has_trailing_comma ? 1 + trailing_comma_offset_adjustment : 0)
+    columns: child_span.columns + 
+             (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) + 
+             (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0)
   };
 
   return { shift, offset };
+}
+
+function insertInline(
+  parent: InlineArray | InlineTable,
+  child: InlineItem,
+  index: number
+): { shift: Span; offset: Span } {
+  if (!isInlineItem(child)) {
+    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
+  }
+
+  // Store preceding node and insert
+  const previous = index != null ? parent.items[index - 1] : last(parent.items as TreeNode[]);
+  const is_last = index == null || index === parent.items.length;
+
+  parent.items.splice(index, 0, child);
+
+  // Add commas as-needed
+  const has_separating_comma_before = !!previous;
+  const has_separating_comma_after = !is_last;
+  if (has_separating_comma_before) {
+    (previous as InlineArrayItem | InlineTableItem).comma = true;
+  }
+  if (has_separating_comma_after) {
+    child.comma = true;
+  }
+
+  // Use new line for inline arrays that span multiple lines
+  const use_new_line = isInlineArray(parent) && perLine(parent);
+  const has_trailing_comma = is_last && child.comma === true;
+
+  return calculateInlinePositioning(parent, child, index, {
+    useNewLine: use_new_line,
+    hasCommaHandling: true,
+    isLastElement: is_last,
+    hasSeparatingCommaBefore: has_separating_comma_before,
+    hasSeparatingCommaAfter: has_separating_comma_after,
+    hasTrailingComma: has_trailing_comma
+  });
+}
+
+/**
+ * Inserts a child into a Document with inline positioning behavior.
+ * This provides inline-style spacing while maintaining Document's Block item types.
+ */
+function insertInlineAtRoot(
+  parent: Document,
+  child: TreeNode,
+  index: number
+): { shift: Span; offset: Span } {
+  // Calculate positioning as if inserting into an inline context
+  const result = calculateInlinePositioning(parent, child, index, {
+    useNewLine: false,
+    hasCommaHandling: false
+  });
+  
+  // Insert the child directly into the Document (as a Block item)
+  parent.items.splice(index, 0, child as KeyValue | Comment);
+  
+  return result;
 }
 
 export function remove(root: Root, parent: TreeNode, node: TreeNode) {
