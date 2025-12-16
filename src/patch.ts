@@ -19,7 +19,8 @@ import {
   isInlineItem,
   hasItem,
   InlineItem,
-  AST
+  AST,
+  Table
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
@@ -255,7 +256,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           } else {
             insert(original, parent, child);
           }
-        } else if (format.inlineTableStart == 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
+        } else if (format.inlineTableStart === 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
           insert(original, parent, child, undefined, true);
         } else {
           insert(original, parent, child);
@@ -367,10 +368,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
  * @param format - The formatting options
  * @returns Array of additional tables that should be added to the document
  */
-function convertNestedInlineTablesToMultiline(table: any, original: Document, format: TomlFormat): any[] {
-  const additionalTables: any[] = [];
+function convertNestedInlineTablesToMultiline(table: Table, original: Document, format: TomlFormat): Table[] {
+  const additionalTables: Table[] = [];
   
-  const processTableForNestedInlines = (currentTable: any, tablesToAdd: any[]) => {
+  const processTableForNestedInlines = (currentTable: Table, tablesToAdd: Table[]) => {
     for (let i = currentTable.items.length - 1; i >= 0; i--) {
       const item = currentTable.items[i];
       if (isKeyValue(item) && isInlineTable(item.value)) {
@@ -420,7 +421,7 @@ function convertNestedInlineTablesToMultiline(table: any, original: Document, fo
  * @param original - The original document for inserting new items
  * @param format - The formatting options
  */
-function convertInlineTableToSeparateSection(child: KeyValue, parent: any, original: Document, format: TomlFormat): void {
+function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, original: Document, format: TomlFormat): void {
   // Convert the inline table to a separate table section
   const baseTableKey = parent.key.item.value; // Get the parent table's key path
   const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key

@@ -122,6 +122,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param parent - The parent node to insert the child into
  * @param child - The child node to insert
  * @param index - The index at which to insert the child (optional)
+ * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
 export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean) {
   if (!hasItems(parent)) {
@@ -215,6 +216,20 @@ function insertOnNewLine(
 /**
  * Calculates positioning (shift and offset) for inserting a child into a parent container.
  * This function handles the core positioning logic used to insert an inline item inside a table (or at the document root level).
+ * 
+ * @param parent - The parent container (Document, InlineArray or InlineTable)
+ * @param child - The child node to be inserted
+ * @param index - The insertion index within the parent's items
+ * @param options - Configuration options for positioning calculation
+ * @param options.useNewLine - Whether to place the child on a new line
+ * @param options.skipCommaSpace - Number of columns to skip for comma + space (default: 2)
+ * @param options.skipBracketSpace - Number of columns to skip for bracket/space (default: 1)
+ * @param options.hasCommaHandling - Whether comma handling logic should be applied
+ * @param options.isLastElement - Whether this is the last element in the container
+ * @param options.hasSeparatingCommaBefore - Whether a comma should precede this element
+ * @param options.hasSeparatingCommaAfter - Whether a comma should follow this element
+ * @param options.hasTrailingComma - Whether the element has a trailing comma
+ * @returns Object containing shift (positioning adjustment for the child) and offset (adjustment for following elements)
  */
 function calculateInlinePositioning(
   parent: Document | InlineArray | InlineTable,
@@ -231,6 +246,8 @@ function calculateInlinePositioning(
     hasTrailingComma?: boolean;
   } = {}
 ): { shift: Span; offset: Span } {
+  
+  // Configuration options with default values
   const {
     useNewLine = false,
     skipCommaSpace = 2,
@@ -265,12 +282,8 @@ function calculateInlinePositioning(
     const hasSpacing = hasSeparatingCommaBefore || (!hasCommaHandling && !!previous);
     if (hasSpacing && hasCommaHandling) {
       start.column += skipCommaSpace;
-    } else if (hasSpacing) {
+    } else if (hasSpacing || (hasCommaHandling && !previous)) {
       start.column += skipBracketSpace;
-    } else if (hasCommaHandling && !previous) {
-      start.column += skipBracketSpace;
-    } else if (!hasCommaHandling && previous) {
-      start.column += skipBracketSpace; // Just a space for document inline spacing
     }
   }
   start.line += leading_lines;
