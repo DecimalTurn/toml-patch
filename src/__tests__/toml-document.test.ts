@@ -1,5 +1,6 @@
 import { TomlDocument } from '../toml-document';
 import { hard_example } from '../__fixtures__';
+import { LocalDate } from '../dateformat';
 import dedent from 'dedent';
 
 describe('TomlDocument', () => {
@@ -69,25 +70,8 @@ describe('TomlDocument', () => {
     
     // Increment the date by one day
     const currentDate = jsObj.start_date;
-    const nextDay = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
-    
-    // For patching to preserve format, we need to keep the original date type information
-    // Find the KeyValue node for start_date in the AST to access the original date type
-    const keyValueNode = doc.ast.find(node => 
-      node.type === 'KeyValue' && 
-      (node as any).key?.value?.[0] === 'start_date'
-    ) as any;
-    
-    if (keyValueNode?.value?.value && (keyValueNode.value.value as any).isDate) {
-      // Create a new Date with the date-only formatting properties
-      (nextDay as any).isDate = true;
-      nextDay.toISOString = function() {
-        const year = this.getUTCFullYear();
-        const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(this.getUTCDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-    }
+    const nextDayTime = currentDate.getTime() + 24 * 60 * 60 * 1000;
+    const nextDay = new LocalDate(new Date(nextDayTime).toISOString().split('T')[0]);
     
     jsObj.start_date = nextDay;
     
@@ -609,55 +593,56 @@ describe('TomlDocument', () => {
   });
 
   describe('update with kitchen-sink.toml edge cases', () => {
-    const kitchenSink = `# This is a TOML document.
+    const kitchenSink = dedent`
+      # This is a TOML document.
 
-title = "TOML Example"
+      title = "TOML Example"
 
-[values]
-string = "string..."
-integer = [ 1_234 , 0xdead_beef , 0o01234567 , 0o755 , 0b11010110 ]
-float = [ 1_234.567 , -0.01 , 5e+22 , 1E6 , inf , -inf , nan , -nan ]
-boolean = true
-date.datetime = [
-  1979-05-27T07:32:00Z,
-  1979-05-27T00:32:00-07:00,
-  1979-05-27T00:32:00.999999-07:00,
-  1979-05-27 07:32:00Z,
+      [values]
+      string = "string..."
+      integer = [ 1_234 , 0xdead_beef , 0o01234567 , 0o755 , 0b11010110 ]
+      float = [ 1_234.567 , -0.01 , 5e+22 , 1E6 , inf , -inf , nan , -nan ]
+      boolean = true
+      date.datetime = [
+        1979-05-27T07:32:00Z,
+        1979-05-27T00:32:00-07:00,
+        1979-05-27T00:32:00.999999-07:00,
+        1979-05-27 07:32:00Z,
 
-]
+      ]
 
-date.local = [
-  1979-05-27T07:32:00,
-  1979-05-27, # Local Date
-  07:32:00    # Local Time
-]
+      date.local = [
+        1979-05-27T07:32:00,
+        1979-05-27, # Local Date
+        07:32:00    # Local Time
+      ]
 
-array.nested = [ [ 1, 2 ], ["a", "b", "c"] ]
-array.trailing = [
-  1,
-  2, # this is ok
-]
+      array.nested = [ [ 1, 2 ], ["a", "b", "c"] ]
+      array.trailing = [
+        1,
+        2, # this is ok
+      ]
 
-table.dotted = { type.name = "pug" }
+      table.dotted = { type.name = "pug" }
 
-# Table
-[dog  .  "tater.man"]
-type.name = "pug"
+      # Table
+      [dog  .  "tater.man"]
+      type.name = "pug"
 
-# TODO [ j . "ʞ" . 'l' ]
+      # TODO [ j . "ʞ" . 'l' ]
 
-# Array Table
-[[products]]
-name = "Hammer"
-sku = 738594937
+      # Array Table
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
 
-[[products]]
+      [[products]]
 
-[[products]]
-name = "Nail"
-sku = 284758393
-color = "gray"
-`;
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+      color = "gray"
+    ` + '\n';
 
     it('handles changing the first line (title)', () => {
       const doc = new TomlDocument(kitchenSink);
