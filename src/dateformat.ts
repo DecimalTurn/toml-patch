@@ -27,13 +27,19 @@ export class DateFormatHelper {
   static createDateWithOriginalFormat(originalDate: Date, newJSDate: Date, originalRaw: string): Date {
     if (DateFormatHelper.IS_DATE_ONLY.test(originalRaw)) {
       // Local date (date-only) - format: 2024-01-15
-      // Check if newJSDate has time components - if so, upgrade to LocalDateTime
+      // Check if newJSDate has time components - if so, upgrade appropriately
       if (
         newJSDate.getUTCHours() !== 0 ||
         newJSDate.getUTCMinutes() !== 0 ||
         newJSDate.getUTCSeconds() !== 0 ||
         newJSDate.getUTCMilliseconds() !== 0
       ) {
+        // Check if the new value is an OffsetDateTime (has offset information)
+        if ((newJSDate as any).originalOffset !== undefined || (newJSDate as any).useSpaceSeparator !== undefined) {
+          // Upgrade to OffsetDateTime - it already has the right format
+          return newJSDate;
+        }
+        
         // Upgrade from date-only to local datetime with time components
         // Use T separator as it's the more common format
         let isoString = newJSDate.toISOString().replace('Z', '');

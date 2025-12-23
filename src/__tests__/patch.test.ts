@@ -1278,6 +1278,64 @@ test('should upgrade date-only field to datetime with milliseconds when patching
     ` + '\n');
 });
 
+test('should upgrade date-only field to offset datetime when patching with OffsetDateTime', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with an OffsetDateTime
+  const offsetDateTime = new OffsetDateTime('2024-01-16T14:30:00-07:00', false);
+  value.start_date = offsetDateTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to offset datetime format
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to offset datetime with Z timezone', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with an OffsetDateTime using Z (UTC)
+  const offsetDateTime = new OffsetDateTime('2024-01-16T14:30:00Z', false);
+  value.start_date = offsetDateTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to offset datetime format with Z
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
 test('should patch local datetime with T separator', () => {
   const existing = dedent`
     # Event configuration
@@ -1407,6 +1465,92 @@ test('should patch offset datetime with space separator', () => {
     event_name = "Annual Conference"
     start_datetime = 2024-01-16 10:30:00Z
 
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with T separator and timezone offset', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update the offset datetime by adding one day
+  const currentDateTime = value.start_datetime as Date;
+  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
+  const newDateTime = new OffsetDateTime('2024-01-16T10:30:00-07:00', false);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with space separator and timezone offset', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00+05:30
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update the offset datetime by adding one day, keeping same time and offset
+  const newDateTime = new OffsetDateTime('2024-01-16 10:30:00+05:30', true);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00+05:30
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with milliseconds and preserve precision', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00.500Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update with new datetime that has milliseconds
+  const newDateTime = new OffsetDateTime('2024-01-16T14:30:00.750Z', false);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T14:30:00.750Z
+    
     [venue]
     name = "Convention Center"
     ` + '\n');
