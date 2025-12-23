@@ -27,6 +27,20 @@ export class DateFormatHelper {
   static createDateWithOriginalFormat(originalDate: Date, newJSDate: Date, originalRaw: string): Date {
     if (DateFormatHelper.IS_DATE_ONLY.test(originalRaw)) {
       // Local date (date-only) - format: 2024-01-15
+      // Check if newJSDate has time components - if so, upgrade to LocalDateTime
+      if (
+        newJSDate.getUTCHours() !== 0 ||
+        newJSDate.getUTCMinutes() !== 0 ||
+        newJSDate.getUTCSeconds() !== 0 ||
+        newJSDate.getUTCMilliseconds() !== 0
+      ) {
+        // Upgrade from date-only to local datetime with time components
+        // Use T separator as it's the more common format
+        let isoString = newJSDate.toISOString().replace('Z', '');
+        // Strip .000 milliseconds if present (don't show unnecessary precision)
+        isoString = isoString.replace(/\.000$/, '');
+        return new LocalDateTime(isoString, false);
+      }
       const dateStr = newJSDate.toISOString().split('T')[0];
       return new LocalDate(dateStr);
     } else if (DateFormatHelper.IS_TIME_ONLY.test(originalRaw)) {

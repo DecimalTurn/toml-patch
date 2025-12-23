@@ -1219,6 +1219,65 @@ test('should patch date-only field by increasing it by one day', () => {
     ` + '\n');
 });
 
+test('should upgrade date-only field to datetime when patching with Date that has time components', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with a Date that has time components
+  // This should upgrade the field from date-only to local datetime
+  const dateWithTime = new Date('2024-01-16T14:30:00.000Z'); // Has time: 14:30:00
+  value.start_date = dateWithTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to local datetime format (with T separator)
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to datetime with milliseconds when patching with Date that has milliseconds', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with a Date that has time and millisecond components
+  const dateWithTime = new Date('2024-01-16T14:30:00.123Z'); // Has time: 14:30:00.123
+  value.start_date = dateWithTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to local datetime format with milliseconds
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00.123
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
 test('should patch local datetime with T separator', () => {
   const existing = dedent`
     # Event configuration

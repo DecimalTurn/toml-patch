@@ -98,4 +98,29 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(originalNoMs, newNoMs2, '10:30:00');
     expect(resultNoMs.toISOString()).toBe('14:15:00');
   });
+
+  test('should upgrade LocalDate to LocalDateTime when Date has time components', () => {
+    // Test that attempting to set a date-only field with time components upgrades to LocalDateTime
+    const originalDate = new Date('2024-01-15T00:00:00.000Z');
+    const newDateWithTime = new Date('2024-01-16T10:30:45.123Z'); // Has time components
+    
+    const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateWithTime, '2024-01-15');
+    
+    // Should be upgraded to LocalDateTime (with T separator)
+    expect((result as any).isFloating).toBe(true);
+    expect((result as any).useSpaceSeparator).toBe(false);
+    expect(result.toISOString()).toBe('2024-01-16T10:30:45.123');
+  });
+
+  test('should keep LocalDate when creating from Date with zero time components', () => {
+    // Test that creating a LocalDate from a Date with all zero time components stays as LocalDate
+    const originalDate = new Date('2024-01-15T00:00:00.000Z');
+    const newDateNoTime = new Date('2024-01-16T00:00:00.000Z'); // No time components
+    
+    const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateNoTime, '2024-01-15');
+    
+    // Should remain a LocalDate
+    expect((result as any).isDate).toBe(true);
+    expect(result.toISOString()).toBe('2024-01-16');
+  });
 });
