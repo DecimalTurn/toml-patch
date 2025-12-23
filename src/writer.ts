@@ -39,7 +39,7 @@ import traverse from './traverse';
 import { DateFormatHelper } from './dateformat';
 
 // Create a shorter alias for convenience
-const dfh = DateFormatHelper;
+const dateFormatHelper = DateFormatHelper;
 
 // Root node of the AST
 export type Root = Document | TreeNode;
@@ -76,7 +76,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     const newValue = replacement.value;
     
     // Create a new date with the original format preserved
-    const formattedDate = dfh.createDateWithOriginalFormat(originalValue, newValue, originalRaw);
+    const formattedDate = dateFormatHelper.createDateWithOriginalFormat(originalValue, newValue, originalRaw);
     
     // Update the replacement with the properly formatted date
     replacement.value = formattedDate;

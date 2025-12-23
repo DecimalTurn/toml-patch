@@ -35,7 +35,7 @@ import {
 } from './dateformat';
 
 // Create a shorter alias for convenience
-const dfh = DateFormatHelper;
+const dateFormatHelper = DateFormatHelper;
 
 const TRUE = 'true';
 const FALSE = 'false';
@@ -106,7 +106,7 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
       yield string(cursor);
     } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
       yield boolean(cursor);
-    } else if (dfh.IS_FULL_DATE.test(cursor.value!.raw) || dfh.IS_FULL_TIME.test(cursor.value!.raw)) {
+    } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
       yield datetime(cursor, input);
     } else if (
       (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
@@ -374,8 +374,8 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   if (
     !cursor.peek().done &&
     cursor.peek().value!.type === TokenType.Literal &&
-    dfh.IS_FULL_DATE.test(raw) &&
-    dfh.IS_FULL_TIME.test(cursor.peek().value!.raw)
+    dateFormatHelper.IS_FULL_DATE.test(raw) &&
+    dateFormatHelper.IS_FULL_TIME.test(cursor.peek().value!.raw)
   ) {
     const start = loc.start;
 
@@ -398,28 +398,28 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
     raw += `.${cursor.value!.raw}`;
   }
 
-  if (!dfh.IS_FULL_DATE.test(raw)) {
+  if (!dateFormatHelper.IS_FULL_DATE.test(raw)) {
     // Local time only (e.g., "07:32:00" or "07:32:00.999")
-    if (dfh.IS_TIME_ONLY.test(raw)) {
+    if (dateFormatHelper.IS_TIME_ONLY.test(raw)) {
       value = new LocalTime(raw, raw) as any;
     } else {
       // For other time formats, use local ISO date
       const [local_date] = new Date().toISOString().split('T');
       value = new Date(`${local_date}T${raw}`);
     }
-  } else if (dfh.IS_DATE_ONLY.test(raw)) {
+  } else if (dateFormatHelper.IS_DATE_ONLY.test(raw)) {
     // Local date only (e.g., "1979-05-27")
     value = new LocalDate(raw) as any;
-  } else if (dfh.IS_LOCAL_DATETIME_T.test(raw)) {
+  } else if (dateFormatHelper.IS_LOCAL_DATETIME_T.test(raw)) {
     // Local datetime with T separator (e.g., "1979-05-27T07:32:00")
     value = new LocalDateTime(raw, false) as any;
-  } else if (dfh.IS_LOCAL_DATETIME_SPACE.test(raw)) {
+  } else if (dateFormatHelper.IS_LOCAL_DATETIME_SPACE.test(raw)) {
     // Local datetime with space separator (e.g., "1979-05-27 07:32:00")
     value = new LocalDateTime(raw, true) as any;
-  } else if (dfh.IS_OFFSET_DATETIME_T.test(raw)) {
+  } else if (dateFormatHelper.IS_OFFSET_DATETIME_T.test(raw)) {
     // Offset datetime with T separator (e.g., "1979-05-27T07:32:00Z" or "1979-05-27T07:32:00-07:00")
     value = new OffsetDateTime(raw, false) as any;
-  } else if (dfh.IS_OFFSET_DATETIME_SPACE.test(raw)) {
+  } else if (dateFormatHelper.IS_OFFSET_DATETIME_SPACE.test(raw)) {
     // Offset datetime with space separator (e.g., "1979-05-27 07:32:00Z")
     value = new OffsetDateTime(raw, true) as any;
   } else {
