@@ -37,33 +37,84 @@ export class DateFormatHelper {
         // If the new date is already a LocalTime, use its toISOString
         return newJSDate;
       } else {
+        // Determine if originalRaw had milliseconds and how many digits
+        const msMatch = originalRaw.match(/\.(\d+)\s*$/);
+        
         // Extract time from a regular Date object
         const isoString = newJSDate.toISOString();
         if (isoString && isoString.includes('T')) {
-          const newTime = isoString.split('T')[1].split('Z')[0];
-          return new LocalTime(newTime, newTime);
+          let newTime = isoString.split('T')[1].split('Z')[0];
+          if (msMatch) {
+            // Original had milliseconds, preserve the number of digits
+            const msDigits = msMatch[1].length;
+            const [h, m, sMs] = newTime.split(':');
+            let [s, ms = ''] = sMs.split('.');
+            ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+            newTime = `${h}:${m}:${s}.${ms}`;
+          }
+          // If original had no milliseconds, keep newTime as-is (with milliseconds if present)
+          return new LocalTime(newTime, originalRaw);
         } else {
           // Fallback: construct time from the Date object directly
           const hours = String(newJSDate.getUTCHours()).padStart(2, '0');
           const minutes = String(newJSDate.getUTCMinutes()).padStart(2, '0');
           const seconds = String(newJSDate.getUTCSeconds()).padStart(2, '0');
-          const timeStr = `${hours}:${minutes}:${seconds}`;
-          return new LocalTime(timeStr, timeStr);
+          const milliseconds = newJSDate.getUTCMilliseconds();
+          let timeStr: string;
+          if (msMatch) {
+            const msDigits = msMatch[1].length;
+            let ms = String(milliseconds).padStart(3, '0').slice(0, msDigits);
+            timeStr = `${hours}:${minutes}:${seconds}.${ms}`;
+          } else if (milliseconds > 0) {
+            // No original milliseconds, but new value has them - include them
+            const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+            timeStr = `${hours}:${minutes}:${seconds}.${ms}`;
+          } else {
+            timeStr = `${hours}:${minutes}:${seconds}`;
+          }
+          return new LocalTime(timeStr, originalRaw);
         }
       }
     } else if (DateFormatHelper.IS_LOCAL_DATETIME_T.test(originalRaw)) {
       // Local datetime with T separator - format: 2024-01-15T10:30:00
-      const isoString = newJSDate.toISOString().replace('Z', '');
-      return new LocalDateTime(isoString, false);
+      // Determine if originalRaw had milliseconds and how many digits
+      const msMatch = originalRaw.match(/\.(\d+)\s*$/);
+      let isoString = newJSDate.toISOString().replace('Z', '');
+      if (msMatch) {
+        // Original had milliseconds, preserve the number of digits
+        const msDigits = msMatch[1].length;
+        // isoString is like "2024-01-15T10:30:00.123"
+        const [datePart, timePart] = isoString.split('T');
+        let [h, m, sMs] = timePart.split(':');
+        let [s, ms = ''] = sMs.split('.');
+        ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+        isoString = `${datePart}T${h}:${m}:${s}.${ms}`;
+      }
+      // If original had no milliseconds, keep isoString as-is (with milliseconds if present)
+      return new LocalDateTime(isoString, false, originalRaw);
     } else if (DateFormatHelper.IS_LOCAL_DATETIME_SPACE.test(originalRaw)) {
       // Local datetime with space separator - format: 2024-01-15 10:30:00
-      const isoString = newJSDate.toISOString().replace('Z', '').replace('T', ' ');
-      return new LocalDateTime(isoString, true);
+      const msMatch = originalRaw.match(/\.(\d+)\s*$/);
+      let isoString = newJSDate.toISOString().replace('Z', '').replace('T', ' ');
+      if (msMatch) {
+        const msDigits = msMatch[1].length;
+        // isoString is like "2024-01-15 10:30:00.123"
+        const [datePart, timePart] = isoString.split(' ');
+        let [h, m, sMs] = timePart.split(':');
+        let [s, ms = ''] = sMs.split('.');
+        ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+        isoString = `${datePart} ${h}:${m}:${s}.${ms}`;
+      }
+      // If original had no milliseconds, keep isoString as-is (with milliseconds if present)
+      return new LocalDateTime(isoString, true, originalRaw);
     } else if (DateFormatHelper.IS_OFFSET_DATETIME_T.test(originalRaw) || DateFormatHelper.IS_OFFSET_DATETIME_SPACE.test(originalRaw)) {
       // Offset datetime - we need to preserve the local time in the original timezone
       const offsetMatch = originalRaw.match(/([+-]\d{2}:\d{2}|[Zz])$/);
       const originalOffset = offsetMatch ? (offsetMatch[1] === 'z' ? 'Z' : offsetMatch[1]) : 'Z';
       const useSpaceSeparator = DateFormatHelper.IS_OFFSET_DATETIME_SPACE.test(originalRaw);
+      
+      // Check if original had milliseconds and preserve precision
+      const msMatch = originalRaw.match(/\.(\d+)(?:[Zz]|[+-]\d{2}:\d{2})\s*$/);
       
       // Calculate the time difference and determine how many days were added
       const timeDiffMs = newJSDate.getTime() - originalDate.getTime();
@@ -72,7 +123,43 @@ export class DateFormatHelper {
       // Work with the original string representation and manipulate the date part
       const separator = useSpaceSeparator ? ' ' : 'T';
       const datePart = originalRaw.split(separator)[0];
-      const timePart = originalRaw.split(separator)[1].replace(originalOffset, '');
+      let timePart = originalRaw.split(separator)[1].replace(originalOffset, '');
+      
+      // If the time portion needs updating and we need to preserve millisecond precision
+      if (Math.abs(timeDiffMs % (24 * 60 * 60 * 1000)) > 0) {
+        // Reconstruct time part from newJSDate but preserve millisecond precision format
+        const tempDate = new Date(newJSDate.getTime());
+        const hours = String(tempDate.getUTCHours()).padStart(2, '0');
+        const minutes = String(tempDate.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(tempDate.getUTCSeconds()).padStart(2, '0');
+        const milliseconds = tempDate.getUTCMilliseconds();
+        
+        if (msMatch) {
+          const msDigits = msMatch[1].length;
+          const ms = String(milliseconds).padStart(3, '0').slice(0, msDigits);
+          timePart = `${hours}:${minutes}:${seconds}.${ms}`;
+        } else if (milliseconds > 0) {
+          // No original milliseconds, but new value has them - include them
+          const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
+          timePart = `${hours}:${minutes}:${seconds}.${ms}`;
+        } else {
+          timePart = `${hours}:${minutes}:${seconds}`;
+        }
+      } else if (msMatch) {
+        // Time didn't change but ensure millisecond format is preserved
+        const msDigits = msMatch[1].length;
+        if (!timePart.includes('.')) {
+          // Add milliseconds if original had them but current doesn't
+          const ms = '0'.repeat(msDigits);
+          timePart = `${timePart}.${ms}`;
+        } else {
+          // Adjust millisecond precision to match original
+          const [baseTime, currentMs] = timePart.split('.');
+          const adjustedMs = (currentMs || '0').padEnd(msDigits, '0').slice(0, msDigits);
+          timePart = `${baseTime}.${adjustedMs}`;
+        }
+      }
+      // If original had no milliseconds, keep timePart as-is (with milliseconds if present)
       
       // Parse the date part and add the calculated days
       const [year, month, day] = datePart.split('-').map(Number);
@@ -127,10 +214,23 @@ export class LocalTime extends Date {
     const seconds = String(this.getUTCSeconds()).padStart(2, '0');
     const milliseconds = this.getUTCMilliseconds();
     
-    if (milliseconds > 0) {
+    // Check if the original format had milliseconds
+    const originalHadMs = this.originalFormat && this.originalFormat.includes('.');
+    
+    if (originalHadMs) {
+      // Determine the number of millisecond digits from the original format
+      const msMatch = this.originalFormat.match(/\.(\d+)\s*$/);
+      const msDigits = msMatch ? msMatch[1].length : 3;
+      
+      const ms = String(milliseconds).padStart(3, '0').slice(0, msDigits);
+      return `${hours}:${minutes}:${seconds}.${ms}`;
+    } else if (milliseconds > 0) {
+      // Original had no milliseconds, but current has non-zero milliseconds
+      // Show them with trailing zeros removed
       const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
       return `${hours}:${minutes}:${seconds}.${ms}`;
     }
+    
     return `${hours}:${minutes}:${seconds}`;
   }
 }
@@ -142,11 +242,13 @@ export class LocalTime extends Date {
 export class LocalDateTime extends Date {
   isFloating: boolean = true;
   useSpaceSeparator: boolean = false;
+  originalFormat: string;
   
-  constructor(value: string, useSpaceSeparator: boolean = false) {
+  constructor(value: string, useSpaceSeparator: boolean = false, originalFormat?: string) {
     // Convert space to T for Date parsing, but remember the original format
     super(value.replace(' ', 'T') + 'Z');
     this.useSpaceSeparator = useSpaceSeparator;
+    this.originalFormat = originalFormat || value;
   }
   
   toISOString(): string {
@@ -161,10 +263,23 @@ export class LocalDateTime extends Date {
     const datePart = `${year}-${month}-${day}`;
     const separator = this.useSpaceSeparator ? ' ' : 'T';
     
-    if (milliseconds > 0) {
+    // Check if the original format had milliseconds
+    const originalHadMs = this.originalFormat && this.originalFormat.includes('.');
+    
+    if (originalHadMs) {
+      // Determine the number of millisecond digits from the original format
+      const msMatch = this.originalFormat.match(/\.(\d+)\s*$/);
+      const msDigits = msMatch ? msMatch[1].length : 3;
+      
+      const ms = String(milliseconds).padStart(3, '0').slice(0, msDigits);
+      return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}`;
+    } else if (milliseconds > 0) {
+      // Original had no milliseconds, but current has non-zero milliseconds
+      // Show them with trailing zeros removed
       const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
       return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}`;
     }
+    
     return `${datePart}${separator}${hours}:${minutes}:${seconds}`;
   }
 }
@@ -176,10 +291,12 @@ export class LocalDateTime extends Date {
 export class OffsetDateTime extends Date {
   useSpaceSeparator: boolean = false;
   originalOffset?: string;
+  originalFormat: string;
   
   constructor(value: string, useSpaceSeparator: boolean = false) {
     super(value.replace(' ', 'T'));
     this.useSpaceSeparator = useSpaceSeparator;
+    this.originalFormat = value;
     
     // Extract and preserve the original offset
     const offsetMatch = value.match(/([+-]\d{2}:\d{2}|[Zz])$/);
@@ -212,10 +329,23 @@ export class OffsetDateTime extends Date {
       const datePart = `${year}-${month}-${day}`;
       const separator = this.useSpaceSeparator ? ' ' : 'T';
       
-      if (milliseconds > 0) {
+      // Check if the original format had milliseconds
+      const originalHadMs = this.originalFormat && this.originalFormat.includes('.');
+      
+      if (originalHadMs) {
+        // Determine the number of millisecond digits from the original format
+        const msMatch = this.originalFormat.match(/\.(\d+)(?:[Zz]|[+-]\d{2}:\d{2})\s*$/);
+        const msDigits = msMatch ? msMatch[1].length : 3;
+        
+        const ms = String(milliseconds).padStart(3, '0').slice(0, msDigits);
+        return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}${this.originalOffset}`;
+      } else if (milliseconds > 0) {
+        // Original had no milliseconds, but current has non-zero milliseconds
+        // Show them with trailing zeros removed
         const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
         return `${datePart}${separator}${hours}:${minutes}:${seconds}.${ms}${this.originalOffset}`;
       }
+      
       return `${datePart}${separator}${hours}:${minutes}:${seconds}${this.originalOffset}`;
     }
     
