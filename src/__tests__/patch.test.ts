@@ -1418,7 +1418,7 @@ test('should preserve all TOML date/time formats when patching', () => {
       
       // For offset datetime, we need to preserve the local time in the original timezone
       // Add 24 hours to the original date string representation, not the UTC time
-      const originalISOString = (originalDate as any).toISOString ? originalDate.toISOString() : originalDate.toISOString();
+      const originalISOString = originalDate.toISOString();
       const datePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[0];
       const timePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[1].replace(originalOffset || 'Z', '');
       
