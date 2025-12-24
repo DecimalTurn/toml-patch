@@ -123,7 +123,7 @@ describe('TomlDocument', () => {
     // Patch the document
     doc.patch(jsObj);
     
-    // This test should preserve all original formats but currently fails
+    // This test should preserve all original formats
     const expected = dedent`
       # Event schedule
       event_date = 2024-01-16
@@ -135,7 +135,6 @@ describe('TomlDocument', () => {
       active = true
     ` + '\n';
     
-    // This will fail because we lose format information for all but manually handled dates
     expect(doc.toTomlString).toBe(expected);
   });
 
