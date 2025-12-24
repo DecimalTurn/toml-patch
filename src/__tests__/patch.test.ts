@@ -1189,21 +1189,11 @@ test('should patch date-only field by increasing it by one day', () => {
 
   const value = parse(existing);
   
-  // Get the current date and add one day
+  // Get the current date and add one day using LocalDate
   const currentDate = value.start_date as Date;
-  const nextDay = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
-  
-  // Preserve the isDate property if it exists
-  if ((currentDate as any).isDate) {
-    (nextDay as any).isDate = true;
-    // Override toISOString to return date-only format
-    nextDay.toISOString = function() {
-      const year = this.getUTCFullYear();
-      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(this.getUTCDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-  }
+  const nextDayTime = currentDate.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayStr = new Date(nextDayTime).toISOString().split('T')[0];
+  const nextDay = new LocalDate(nextDayStr);
   
   value.start_date = nextDay;
 
@@ -1348,26 +1338,11 @@ test('should patch local datetime with T separator', () => {
 
   const value = parse(existing);
   
-  // Get the current datetime and add one day
+  // Get the current datetime and add one day using LocalDateTime
   const currentDateTime = value.start_datetime as Date;
-  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
-  
-  // Preserve the isFloating property if it exists
-  if ((currentDateTime as any).isFloating) {
-    (nextDay as any).isFloating = true;
-    (nextDay as any).useSpaceSeparator = (currentDateTime as any).useSpaceSeparator;
-    // Override toISOString to return local datetime format
-    nextDay.toISOString = function() {
-      const year = this.getUTCFullYear();
-      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(this.getUTCDate()).padStart(2, '0');
-      const hours = String(this.getUTCHours()).padStart(2, '0');
-      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
-      const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
-      return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
-    };
-  }
+  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '');
+  const nextDay = new LocalDateTime(nextDayISO, false);
   
   value.start_datetime = nextDay;
 
@@ -1395,26 +1370,11 @@ test('should patch local datetime with space separator', () => {
 
   const value = parse(existing);
   
-  // Get the current datetime and add one day
+  // Get the current datetime and add one day using LocalDateTime with space separator
   const currentDateTime = value.start_datetime as Date;
-  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
-  
-  // Preserve the isFloating property if it exists
-  if ((currentDateTime as any).isFloating) {
-    (nextDay as any).isFloating = true;
-    (nextDay as any).useSpaceSeparator = (currentDateTime as any).useSpaceSeparator;
-    // Override toISOString to return local datetime format
-    nextDay.toISOString = function() {
-      const year = this.getUTCFullYear();
-      const month = String(this.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(this.getUTCDate()).padStart(2, '0');
-      const hours = String(this.getUTCHours()).padStart(2, '0');
-      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
-      const separator = (this as any).useSpaceSeparator ? ' ' : 'T';
-      return `${year}-${month}-${day}${separator}${hours}:${minutes}:${seconds}`;
-    };
-  }
+  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '').replace('T', ' ');
+  const nextDay = new LocalDateTime(nextDayISO, true);
   
   value.start_datetime = nextDay;
 
@@ -1442,21 +1402,12 @@ test('should patch offset datetime with space separator', () => {
 
   const value = parse(existing);
   
-  // Get the current datetime and add one day
+  // Get the current datetime and add one day using OffsetDateTime
   const currentDateTime = value.start_datetime as Date;
-  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
+  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+  const newDateTime = new OffsetDateTime('2024-01-16 10:30:00Z', true);
   
-  // Preserve the useSpaceSeparator property if it exists
-  if ((currentDateTime as any).useSpaceSeparator) {
-    (nextDay as any).useSpaceSeparator = true;
-    // Override toISOString to return offset datetime format with space
-    nextDay.toISOString = function() {
-      const isoString = Date.prototype.toISOString.call(this);
-      return isoString.replace('T', ' ');
-    };
-  }
-  
-  value.start_datetime = nextDay;
+  value.start_datetime = newDateTime;
 
   const patched = patch(existing, value);
 
@@ -1657,28 +1608,16 @@ test('should patch local time values while preserving format', () => {
 
   const value = parse(existing);
   
-  // Add 1 hour to meeting time
+  // Add 1 hour to meeting time using LocalTime
   const meetingTime = value.meeting_time as Date;
   const newMeetingTime = new Date(meetingTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+  let timeStr = newMeetingTime.toISOString().split('T')[1].split('Z')[0];
+  // Get the original format to preserve precision
+  const originalFormat = (meetingTime as any).originalFormat || timeStr;
+  timeStr = timeStr.replace(/\.000$/, ''); // Strip .000 if present
+  const newTime = new LocalTime(timeStr, originalFormat);
   
-  // Preserve time-only format
-  if ((meetingTime as any).isTime) {
-    (newMeetingTime as any).isTime = true;
-    newMeetingTime.toISOString = function() {
-      const hours = String(this.getUTCHours()).padStart(2, '0');
-      const minutes = String(this.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(this.getUTCSeconds()).padStart(2, '0');
-      const milliseconds = this.getUTCMilliseconds();
-      
-      if (milliseconds > 0) {
-        const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
-        return `${hours}:${minutes}:${seconds}.${ms}`;
-      }
-      return `${hours}:${minutes}:${seconds}`;
-    };
-  }
-  
-  value.meeting_time = newMeetingTime;
+  value.meeting_time = newTime;
 
   const patched = patch(existing, value);
 

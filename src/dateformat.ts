@@ -35,7 +35,7 @@ export class DateFormatHelper {
         newJSDate.getUTCMilliseconds() !== 0
       ) {
         // Check if the new value is an OffsetDateTime (has offset information)
-        if ((newJSDate as any).originalOffset !== undefined || (newJSDate as any).useSpaceSeparator !== undefined) {
+        if (newJSDate instanceof OffsetDateTime) {
           // Upgrade to OffsetDateTime - it already has the right format
           return newJSDate;
         }
@@ -53,7 +53,7 @@ export class DateFormatHelper {
       // Local time (time-only) - format: 10:30:00
       // For time-only values, we need to handle this more carefully
       // The newJSDate might be a LocalTime object itself
-      if ((newJSDate as any).isTime) {
+      if (newJSDate instanceof LocalTime && newJSDate.isTime) {
         // If the new date is already a LocalTime, use its toISOString
         return newJSDate;
       } else {
