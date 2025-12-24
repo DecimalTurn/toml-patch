@@ -3,6 +3,13 @@ import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
 
+/**
+ * Converts the given AST to a JavaScript object.
+ * 
+ * @param ast The abstract syntax tree to convert.
+ * @param input The original input string (used for error reporting).
+ * @returns The JavaScript object representation of the AST.
+ */
 export default function toJS(ast: AST, input: string = ''): any {
   const result = blank();
   const tables: Set<string> = new Set();
