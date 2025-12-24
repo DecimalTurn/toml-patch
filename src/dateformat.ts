@@ -21,8 +21,36 @@ export class DateFormatHelper {
   static readonly IS_FULL_TIME = /(\d{2}):(\d{2}):(\d{2})/;
 
   /**
-   * Detects the TOML date/time format from the raw string and creates an appropriate
-   * custom date instance with the new JavaScript Date value.
+   * Creates a custom date/time object that preserves the original TOML date/time format.
+   * 
+   * This method detects the TOML date/time format from the raw string and returns an appropriate
+   * custom date/time instance (e.g., LocalDate, LocalTime, LocalDateTime, OffsetDateTime) or a Date,
+   * using the provided new JavaScript Date value.
+   * 
+   * @param {Date} originalDate - The original JavaScript Date object parsed from the TOML value,
+   * representing the date/time as interpreted in UTC or local time, depending on the format.
+   * Used to calculate differences (e.g., day offsets) when reconstructing offset datetimes.
+   * @param {Date} newJSDate - The new JavaScript Date object representing the updated 
+   * date/time value. This is used as the source for constructing the custom date/time object.
+   * In some cases, this may be a custom date/time object (e.g., LocalTime) instead of a native Date.
+   * @param {string} originalRaw - The original TOML date/time string as it appeared in the input.
+   * Used to detect the specific TOML date/time format and to extract formatting details (e.g., separator, offset).
+   * 
+   * @returns {Date | LocalDate | LocalTime | LocalDateTime | OffsetDateTime}
+   * Returns a custom date/time object that matches the original TOML format:
+   * - LocalDate for date-only values (e.g., "2024-01-15")
+   * - LocalTime for time-only values (e.g., "10:30:00")
+   * - LocalDateTime for local datetimes (e.g., "2024-01-15T10:30:00" or "2024-01-15 10:30:00")
+   * - OffsetDateTime for datetimes with offsets (e.g., "2024-01-15T10:30:00+02:00")
+   * - Date (native JS Date) as a fallback if the format is unrecognized
+   * 
+   * Format-specific behavior:
+   * - Date-only: Returns a LocalDate constructed from the date part of newJSDate.
+   * - Time-only: Returns a LocalTime, either from newJSDate (if already LocalTime) or constructed from its time part.
+   * - Local datetime: Returns a LocalDateTime, preserving the separator (T or space).
+   * - Offset datetime: Returns an OffsetDateTime, reconstructing the date/time with the original offset and separator,
+   *   and adjusting the date part if necessary to account for timezone differences.
+   * - Fallback: Returns newJSDate as-is.
    */
   static createDateWithOriginalFormat(originalDate: Date, newJSDate: Date, originalRaw: string): Date {
     if (DateFormatHelper.IS_DATE_ONLY.test(originalRaw)) {
@@ -53,7 +81,7 @@ export class DateFormatHelper {
       // Local time (time-only) - format: 10:30:00
       // For time-only values, we need to handle this more carefully
       // The newJSDate might be a LocalTime object itself
-      if (newJSDate instanceof LocalTime && newJSDate.isTime) {
+      if (newJSDate instanceof LocalTime) {
         // If the new date is already a LocalTime, use its toISOString
         return newJSDate;
       } else {
@@ -196,12 +224,11 @@ export class DateFormatHelper {
 }
 
 /**
- * Custom Date class for local dates (date-only)
+ * Custom Date class for local dates (date-only).
  * Format: 1979-05-27
  */
 export class LocalDate extends Date {
-  isDate: boolean = true;
-  
+
   constructor(value: string) {
     super(value);
   }
@@ -219,7 +246,6 @@ export class LocalDate extends Date {
  * Format: 07:32:00 or 07:32:00.999
  */
 export class LocalTime extends Date {
-  isTime: boolean = true;
   originalFormat: string;
   
   constructor(value: string, originalFormat: string) {
@@ -260,7 +286,6 @@ export class LocalTime extends Date {
  * Format: 1979-05-27T07:32:00 or 1979-05-27 07:32:00
  */
 export class LocalDateTime extends Date {
-  isFloating: boolean = true;
   useSpaceSeparator: boolean = false;
   originalFormat: string;
   

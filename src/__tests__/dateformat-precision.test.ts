@@ -1,4 +1,4 @@
-import { DateFormatHelper } from '../dateformat';
+import { DateFormatHelper, LocalDate, LocalDateTime } from '../dateformat';
 
 describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', () => {
   
@@ -107,8 +107,10 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateWithTime, '2024-01-15');
     
     // Should be upgraded to LocalDateTime (with T separator)
-    expect((result as any).isFloating).toBe(true);
-    expect((result as any).useSpaceSeparator).toBe(false);
+    expect(result instanceof LocalDateTime).toBe(true);
+    if (result instanceof LocalDateTime) {
+      expect(result.useSpaceSeparator).toBe(false);
+    }
     expect(result.toISOString()).toBe('2024-01-16T10:30:45.123');
   });
 
@@ -120,7 +122,7 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateNoTime, '2024-01-15');
     
     // Should remain a LocalDate
-    expect((result as any).isDate).toBe(true);
+    expect(result instanceof LocalDate)
     expect(result.toISOString()).toBe('2024-01-16');
   });
 });
