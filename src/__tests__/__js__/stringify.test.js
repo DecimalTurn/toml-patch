@@ -540,4 +540,99 @@ describe('stringify() Function JavaScript Integration', () => {
       expect(result).toContain('[[servers]]');
     });
   });
+
+  describe('date/time format preservation in round-trip (parse → stringify)', () => {
+    // These tests verify that the iarna-TOML behavior is maintained:
+    // Dates will correctly round trip if you pass them to stringify after parsing.
+    // Date objects should preserve their format when stringified back
+
+    it('should preserve local date-only format', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'birthday = 1979-05-27';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('birthday = 1979-05-27');
+      expect(stringified).not.toContain('T'); // Should not add time
+    });
+
+    it('should preserve local time-only format', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'alarm = 07:32:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('alarm = 07:32:00');
+      expect(stringified).not.toContain('1970'); // Should not add date
+    });
+
+    it('should preserve local datetime with T separator', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27T07:32:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27T07:32:00');
+      expect(stringified).not.toContain('Z'); // Should not add timezone
+      expect(stringified).not.toContain('+'); // Should not add timezone offset
+    });
+
+    it('should preserve local datetime with T separator even with 00:00:00', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27T00:00:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27T00:00:00');
+      expect(stringified).not.toContain('Z'); // Should not add timezone
+      expect(stringified).not.toContain('+'); // Should not add timezone offset
+    });
+
+    it('should preserve local datetime with space separator', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27 07:32:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27 07:32:00');
+      expect(stringified).not.toContain('Z'); // Should not add timezone
+      expect(stringified).not.toContain('+'); // Should not add timezone offset
+    });
+
+    it('should preserve offset datetime with Z', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27T07:32:00Z';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27T07:32:00Z');
+    });
+
+    it('should preserve offset datetime with numeric offset', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27T00:32:00-07:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27T00:32:00-07:00');
+    });
+
+    it('should preserve offset datetime with space separator', () => {
+      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
+      
+      const toml = 'timestamp = 1979-05-27 00:32:00-07:00';
+      const parsed = parse(toml);
+      const stringified = stringify(parsed);
+      
+      expect(stringified).toContain('timestamp = 1979-05-27 00:32:00-07:00');
+    });
+
+  });
 });
