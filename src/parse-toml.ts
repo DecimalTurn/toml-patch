@@ -32,7 +32,7 @@ import {
   LocalTime,
   LocalDateTime,
   OffsetDateTime
-} from './dateformat';
+} from './date-format';
 
 // Create a shorter alias for convenience
 const dateFormatHelper = DateFormatHelper;
@@ -54,7 +54,7 @@ export {
   LocalDateTime,
   OffsetDateTime,
   DateFormatHelper
-} from './dateformat';
+} from './date-format';
 
 export default function* parseTOML(input: string): AST {
   const tokens = tokenize(input);

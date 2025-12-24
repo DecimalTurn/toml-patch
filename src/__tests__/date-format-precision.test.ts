@@ -1,4 +1,4 @@
-import { DateFormatHelper, LocalDate, LocalDateTime } from '../dateformat';
+import { DateFormatHelper, LocalDate, LocalDateTime } from '../date-format';
 
 describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', () => {
   

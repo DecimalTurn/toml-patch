@@ -36,7 +36,7 @@ import traverse from './traverse';
 // The purpose of this file is to provide a way to modify the AST
 ////////////////////////////////////////
 
-import { DateFormatHelper } from './dateformat';
+import { DateFormatHelper } from './date-format';
 
 // Create a shorter alias for convenience
 const dateFormatHelper = DateFormatHelper;

@@ -1,6 +1,6 @@
 import { TomlDocument } from '../toml-document';
 import { hard_example } from '../__fixtures__';
-import { LocalDate } from '../dateformat';
+import { LocalDate } from '../date-format';
 import dedent from 'dedent';
 
 describe('TomlDocument', () => {

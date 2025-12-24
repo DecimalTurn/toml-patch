@@ -1,4 +1,4 @@
-import { DateFormatHelper } from '../dateformat';
+import { DateFormatHelper } from '../date-format';
 
 describe('DateFormatHelper regex patterns', () => {
   
