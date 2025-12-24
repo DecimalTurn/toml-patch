@@ -115,6 +115,7 @@ export class DateFormatHelper {
             timeStr = `${hours}:${minutes}:${seconds}.${ms}`;
           } else if (milliseconds > 0) {
             // No original milliseconds, but new value has them - include them
+            // Note: milliseconds > 0 ensures we don't format ".0" for zero milliseconds
             const ms = String(milliseconds).padStart(3, '0').replace(/0+$/, '');
             timeStr = `${hours}:${minutes}:${seconds}.${ms}`;
           } else {
