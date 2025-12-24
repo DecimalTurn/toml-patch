@@ -1611,13 +1611,7 @@ test('should patch local time values while preserving format', () => {
   // Add 1 hour to meeting time using LocalTime
   const meetingTime = value.meeting_time as Date;
   const newMeetingTime = new Date(meetingTime.getTime() + 60 * 60 * 1000); // Add 1 hour
-  let timeStr = newMeetingTime.toISOString().split('T')[1].split('Z')[0];
-  // Get the original format to preserve precision
-  const originalFormat = (meetingTime as any).originalFormat || timeStr;
-  timeStr = timeStr.replace(/\.000$/, ''); // Strip .000 if present
-  const newTime = new LocalTime(timeStr, originalFormat);
-  
-  value.meeting_time = newTime;
+  value.meeting_time = newMeetingTime;
 
   const patched = patch(existing, value);
 
