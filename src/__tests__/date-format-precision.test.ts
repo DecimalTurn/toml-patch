@@ -122,7 +122,7 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateNoTime, '2024-01-15');
     
     // Should remain a LocalDate
-    expect(result instanceof LocalDate)
+    expect(result instanceof LocalDate).toBe(true);
     expect(result.toISOString()).toBe('2024-01-16');
   });
 });
