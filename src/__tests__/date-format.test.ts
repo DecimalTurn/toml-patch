@@ -253,7 +253,6 @@ describe('OffsetDateTime partial-day time changes', () => {
     const newJSDate = new Date(originalDate.getTime() + 2 * 60 * 60 * 1000);
     
     const result = DateFormatHelper.createDateWithOriginalFormat(
-      originalDate,
       newJSDate,
       originalRaw
     );
@@ -268,7 +267,6 @@ describe('OffsetDateTime partial-day time changes', () => {
     const newJSDate = new Date(originalDate.getTime() + 30 * 60 * 1000);
     
     const result = DateFormatHelper.createDateWithOriginalFormat(
-      originalDate,
       newJSDate,
       originalRaw
     );
@@ -282,7 +280,6 @@ describe('OffsetDateTime partial-day time changes', () => {
     const newJSDate = new Date(originalDate.getTime() - 2 * 60 * 60 * 1000);
     
     const result = DateFormatHelper.createDateWithOriginalFormat(
-      originalDate,
       newJSDate,
       originalRaw
     );
@@ -296,7 +293,6 @@ describe('OffsetDateTime partial-day time changes', () => {
     const newJSDate = new Date(originalDate.getTime() + 2 * 60 * 60 * 1000);
     
     const result = DateFormatHelper.createDateWithOriginalFormat(
-      originalDate,
       newJSDate,
       originalRaw
     );
@@ -310,7 +306,6 @@ describe('OffsetDateTime partial-day time changes', () => {
     const newJSDate = new Date(originalDate.getTime() + 24 * 60 * 60 * 1000);
     
     const result = DateFormatHelper.createDateWithOriginalFormat(
-      originalDate,
       newJSDate,
       originalRaw
     );

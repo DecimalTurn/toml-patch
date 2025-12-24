@@ -72,11 +72,10 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   if (isDateTime(existing) && isDateTime(replacement)) {
     // Analyze the original raw format and create a properly formatted replacement
     const originalRaw = existing.raw;
-    const originalValue = existing.value;
     const newValue = replacement.value;
     
     // Create a new date with the original format preserved
-    const formattedDate = dateFormatHelper.createDateWithOriginalFormat(originalValue, newValue, originalRaw);
+    const formattedDate = dateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
     
     // Update the replacement with the properly formatted date
     replacement.value = formattedDate;

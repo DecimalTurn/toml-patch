@@ -6,19 +6,19 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // Test with 1 digit millisecond precision
     const originalTime1 = new Date('1970-01-01T10:30:00.500Z');
     const newTime1 = new Date('1970-01-01T14:15:00.123Z');
-    const result1 = DateFormatHelper.createDateWithOriginalFormat(originalTime1, newTime1, '10:30:00.5');
+    const result1 = DateFormatHelper.createDateWithOriginalFormat(newTime1, '10:30:00.5');
     expect(result1.toISOString()).toBe('14:15:00.1');
     
     // Test with 3 digit millisecond precision
     const originalTime3 = new Date('1970-01-01T10:30:00.500Z');
     const newTime3 = new Date('1970-01-01T14:15:00.123Z');
-    const result3 = DateFormatHelper.createDateWithOriginalFormat(originalTime3, newTime3, '10:30:00.500');
+    const result3 = DateFormatHelper.createDateWithOriginalFormat(newTime3, '10:30:00.500');
     expect(result3.toISOString()).toBe('14:15:00.123');
     
     // Test without milliseconds in original but with milliseconds in new value - should include them
     const originalTimeNoMs = new Date('1970-01-01T10:30:00.000Z');
     const newTimeWithMs = new Date('1970-01-01T14:15:00.123Z');
-    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(originalTimeNoMs, newTimeWithMs, '10:30:00');
+    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(newTimeWithMs, '10:30:00');
     expect(resultNoMs.toISOString()).toBe('14:15:00.123');
   });
 
@@ -26,13 +26,13 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // Test with milliseconds
     const originalDateTime = new Date('2024-01-15T10:30:00.500Z');
     const newDateTime = new Date('2024-02-20T14:15:00.123Z');
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalDateTime, newDateTime, '2024-01-15T10:30:00.500');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newDateTime, '2024-01-15T10:30:00.500');
     expect(result.toISOString()).toBe('2024-02-20T14:15:00.123');
     
     // Test without milliseconds in original but with milliseconds in new value - should include them
     const originalDateTimeNoMs = new Date('2024-01-15T10:30:00.000Z');
     const newDateTimeWithMs = new Date('2024-02-20T14:15:00.123Z');
-    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(originalDateTimeNoMs, newDateTimeWithMs, '2024-01-15T10:30:00');
+    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(newDateTimeWithMs, '2024-01-15T10:30:00');
     expect(resultNoMs.toISOString()).toBe('2024-02-20T14:15:00.123');
   });
 
@@ -40,13 +40,13 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // Test with milliseconds
     const originalDateTime = new Date('2024-01-15T10:30:00.500Z');
     const newDateTime = new Date('2024-02-20T14:15:00.123Z');
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalDateTime, newDateTime, '2024-01-15 10:30:00.500');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newDateTime, '2024-01-15 10:30:00.500');
     expect(result.toISOString()).toBe('2024-02-20 14:15:00.123');
     
     // Test without milliseconds in original but with milliseconds in new value - should include them
     const originalDateTimeNoMs = new Date('2024-01-15T10:30:00.000Z');
     const newDateTimeWithMs = new Date('2024-02-20T14:15:00.123Z');
-    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(originalDateTimeNoMs, newDateTimeWithMs, '2024-01-15 10:30:00');
+    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(newDateTimeWithMs, '2024-01-15 10:30:00');
     expect(resultNoMs.toISOString()).toBe('2024-02-20 14:15:00.123');
   });
 
@@ -54,13 +54,13 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // Test with milliseconds and Z offset
     const originalOffset = new Date('2024-01-15T10:30:00.500Z');
     const newOffset = new Date('2024-02-20T14:15:00.123Z');
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalOffset, newOffset, '2024-01-15T10:30:00.500Z');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newOffset, '2024-01-15T10:30:00.500Z');
     expect(result.toISOString()).toBe('2024-02-20T14:15:00.123Z');
     
     // Test without milliseconds in original but with milliseconds in new value - should include them
     const originalOffsetNoMs = new Date('2024-01-15T10:30:00Z');
     const newOffsetWithMs = new Date('2024-02-20T14:15:00.123Z');
-    const resultOffsetNoMs = DateFormatHelper.createDateWithOriginalFormat(originalOffsetNoMs, newOffsetWithMs, '2024-01-15T10:30:00Z');
+    const resultOffsetNoMs = DateFormatHelper.createDateWithOriginalFormat(newOffsetWithMs, '2024-01-15T10:30:00Z');
     expect(resultOffsetNoMs.toISOString()).toBe('2024-02-20T14:15:00.123Z');
   });
 
@@ -68,19 +68,19 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // Test 1 digit
     const original1 = new Date('1970-01-01T10:30:00.500Z');
     const new1 = new Date('1970-01-01T14:15:00.789Z');
-    const result1 = DateFormatHelper.createDateWithOriginalFormat(original1, new1, '10:30:00.5');
+    const result1 = DateFormatHelper.createDateWithOriginalFormat(new1, '10:30:00.5');
     expect(result1.toISOString()).toBe('14:15:00.7');
     
     // Test 2 digits
     const original2 = new Date('1970-01-01T10:30:00.500Z');
     const new2 = new Date('1970-01-01T14:15:00.789Z');
-    const result2 = DateFormatHelper.createDateWithOriginalFormat(original2, new2, '10:30:00.50');
+    const result2 = DateFormatHelper.createDateWithOriginalFormat(new2, '10:30:00.50');
     expect(result2.toISOString()).toBe('14:15:00.78');
     
     // Test 3 digits
     const original3 = new Date('1970-01-01T10:30:00.500Z');
     const new3 = new Date('1970-01-01T14:15:00.789Z');
-    const result3 = DateFormatHelper.createDateWithOriginalFormat(original3, new3, '10:30:00.500');
+    const result3 = DateFormatHelper.createDateWithOriginalFormat(new3, '10:30:00.500');
     expect(result3.toISOString()).toBe('14:15:00.789');
   });
 
@@ -88,14 +88,14 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     // When original has milliseconds but new date has zero milliseconds
     const originalMs = new Date('1970-01-01T10:30:00.500Z');
     const newNoMs = new Date('1970-01-01T14:15:00.000Z');
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalMs, newNoMs, '10:30:00.500');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newNoMs, '10:30:00.500');
     // Should preserve millisecond format even when zero
     expect(result.toISOString()).toBe('14:15:00.000');
     
     // When original has no milliseconds and new date has zero milliseconds
     const originalNoMs = new Date('1970-01-01T10:30:00.000Z');
     const newNoMs2 = new Date('1970-01-01T14:15:00.000Z');
-    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(originalNoMs, newNoMs2, '10:30:00');
+    const resultNoMs = DateFormatHelper.createDateWithOriginalFormat(newNoMs2, '10:30:00');
     expect(resultNoMs.toISOString()).toBe('14:15:00');
   });
 
@@ -104,7 +104,7 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const originalDate = new Date('2024-01-15T00:00:00.000Z');
     const newDateWithTime = new Date('2024-01-16T10:30:45.123Z'); // Has time components
     
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateWithTime, '2024-01-15');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newDateWithTime, '2024-01-15');
     
     // Should be upgraded to LocalDateTime (with T separator)
     expect(result instanceof LocalDateTime).toBe(true);
@@ -119,7 +119,7 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     const originalDate = new Date('2024-01-15T00:00:00.000Z');
     const newDateNoTime = new Date('2024-01-16T00:00:00.000Z'); // No time components
     
-    const result = DateFormatHelper.createDateWithOriginalFormat(originalDate, newDateNoTime, '2024-01-15');
+    const result = DateFormatHelper.createDateWithOriginalFormat(newDateNoTime, '2024-01-15');
     
     // Should remain a LocalDate
     expect(result instanceof LocalDate).toBe(true);

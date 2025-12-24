@@ -27,9 +27,6 @@ export class DateFormatHelper {
    * custom date/time instance (e.g., LocalDate, LocalTime, LocalDateTime, OffsetDateTime) or a Date,
    * using the provided new JavaScript Date value.
    * 
-   * @param {Date} originalDate - The original JavaScript Date object parsed from the TOML value,
-   * representing the date/time as interpreted in UTC or local time, depending on the format.
-   * Used to calculate differences (e.g., day offsets) when reconstructing offset datetimes.
    * @param {Date} newJSDate - The new JavaScript Date object representing the updated 
    * date/time value. This is used as the source for constructing the custom date/time object.
    * In some cases, this may be a custom date/time object (e.g., LocalTime) instead of a native Date.
@@ -48,11 +45,10 @@ export class DateFormatHelper {
    * - Date-only: Returns a LocalDate constructed from the date part of newJSDate.
    * - Time-only: Returns a LocalTime, either from newJSDate (if already LocalTime) or constructed from its time part.
    * - Local datetime: Returns a LocalDateTime, preserving the separator (T or space).
-   * - Offset datetime: Returns an OffsetDateTime, reconstructing the date/time with the original offset and separator,
-   *   and adjusting the date part if necessary to account for timezone differences.
+   * - Offset datetime: Returns an OffsetDateTime, reconstructing the date/time with the original offset and separator.
    * - Fallback: Returns newJSDate as-is.
    */
-  static createDateWithOriginalFormat(originalDate: Date, newJSDate: Date, originalRaw: string): Date {
+  static createDateWithOriginalFormat(newJSDate: Date, originalRaw: string): Date {
     if (DateFormatHelper.IS_DATE_ONLY.test(originalRaw)) {
       // Local date (date-only) - format: 2024-01-15
       // Check if newJSDate has time components - if so, upgrade appropriately
