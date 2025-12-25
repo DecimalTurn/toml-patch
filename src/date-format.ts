@@ -92,8 +92,8 @@ export class DateFormatHelper {
             // Original had milliseconds, preserve the number of digits
             const msDigits = msMatch[1].length;
             const [h, m, sMs] = newTime.split(':');
-            let [s, ms = ''] = sMs.split('.');
-            ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+            const [s] = sMs.split('.');
+            const ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
             newTime = `${h}:${m}:${s}.${ms}`;
           }
           // If original had no milliseconds, keep newTime as-is (with milliseconds if present)
@@ -130,9 +130,9 @@ export class DateFormatHelper {
         const msDigits = msMatch[1].length;
         // isoString is like "2024-01-15T10:30:00.123"
         const [datePart, timePart] = isoString.split('T');
-        let [h, m, sMs] = timePart.split(':');
-        let [s, ms = ''] = sMs.split('.');
-        ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+        const [h, m, sMs] = timePart.split(':');
+        const [s] = sMs.split('.');
+        const ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
         isoString = `${datePart}T${h}:${m}:${s}.${ms}`;
       }
       // If original had no milliseconds, keep isoString as-is (with milliseconds if present)
@@ -145,9 +145,9 @@ export class DateFormatHelper {
         const msDigits = msMatch[1].length;
         // isoString is like "2024-01-15 10:30:00.123"
         const [datePart, timePart] = isoString.split(' ');
-        let [h, m, sMs] = timePart.split(':');
-        let [s, ms = ''] = sMs.split('.');
-        ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
+        const [h, m, sMs] = timePart.split(':');
+        const [s] = sMs.split('.');
+        const ms = String(newJSDate.getUTCMilliseconds()).padStart(3, '0').slice(0, msDigits);
         isoString = `${datePart} ${h}:${m}:${s}.${ms}`;
       }
       // If original had no milliseconds, keep isoString as-is (with milliseconds if present)
