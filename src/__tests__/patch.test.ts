@@ -1402,9 +1402,6 @@ test('should patch offset datetime with space separator', () => {
 
   const value = parse(existing);
   
-  // Get the current datetime and add one day using OffsetDateTime
-  const currentDateTime = value.start_datetime as Date;
-  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
   const newDateTime = new OffsetDateTime('2024-01-16 10:30:00Z', true);
   
   value.start_datetime = newDateTime;
@@ -1435,7 +1432,6 @@ test('should patch offset datetime with T separator and timezone offset', () => 
   
   // Update the offset datetime by adding one day
   const currentDateTime = value.start_datetime as Date;
-  const nextDay = new Date(currentDateTime.getTime() + 24 * 60 * 60 * 1000);
   const newDateTime = new OffsetDateTime('2024-01-16T10:30:00-07:00', false);
   value.start_datetime = newDateTime;
 
