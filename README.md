@@ -390,6 +390,7 @@ class TomlFormat {
   trailingNewline: number
   trailingComma: boolean
   bracketSpacing: boolean
+  inlineTableStart?: number
   
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
@@ -464,6 +465,39 @@ format.trailingComma = true;   // [1, 2, 3,] and { x = 1, y = 2, }
 const format = TomlFormat.default();
 format.bracketSpacing = true;   // [ 1, 2, 3 ] and { x = 1, y = 2 }
 format.bracketSpacing = false;  // [1, 2, 3] and {x = 1, y = 2}
+```
+
+**inlineTableStart**
+- **Type:** `number` (optional)
+- **Default:** `1`
+- **Description:** The nesting depth at which new tables should start being formatted as inline tables. When adding new tables during patching or stringifying objects, tables at depth bigger or equal to `inlineTableStart` will be formatted as inline tables, while tables at depth smaller than `inlineTableStart` will be formatted as separate table sections. Note that a table at the top-level of the TOML document is considered to have a depth of 0.
+
+```js
+const format = TomlFormat.default();
+format.inlineTableStart = 0;  // All tables are inline tables including top-level
+format.inlineTableStart = 1;  // Top-level tables as sections, nested tables as inline (default)
+format.inlineTableStart = 2;  // Two levels as sections, deeper nesting as inline
+```
+
+Example with `inlineTableStart = 0`:
+```js
+// With inlineTableStart = 0, all tables become inline
+const format = TomlFormat.default();
+format.inlineTableStart = 0;
+stringify({ database: { host: 'localhost', port: 5432 } }, format);
+// Output: database = { host = "localhost", port = 5432 }
+```
+
+Example with `inlineTableStart = 1` (default):
+```js
+// With inlineTableStart = 1, top-level tables are sections
+const format = TomlFormat.default();
+format.inlineTableStart = 1;
+stringify({ database: { host: 'localhost', port: 5432 } }, format);
+// Output:
+// [database]
+// host = "localhost"
+// port = 5432
 ```
 
 #### Auto-Detection and Patching
