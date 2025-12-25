@@ -192,6 +192,8 @@ export function generateBoolean(value: boolean): Boolean {
 }
 
 export function generateDateTime(value: Date): DateTime {
+  // Custom date classes have their own toISOString() implementations
+  // that return the properly formatted strings for each TOML date/time type
   const raw = value.toISOString();
 
   return {

@@ -1,5 +1,6 @@
 import patch from '../patch';
 import { parse } from '../';
+import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
 
@@ -1107,4 +1108,515 @@ test('should respect inlineTableStart setting for deeply nested objects', () => 
     ` + '\n';
   
   expect(patchedSections).toEqual(expectedSections);
+});
+
+test('should patch date by increasing it by one day', () => {
+  const existing = dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-15T10:30:00Z
+    
+    [settings]
+    enabled = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current date and add one day
+  const currentDate = value.created_date as Date;
+  const nextDay = new Date(currentDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  
+  value.created_date = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-16T10:30:00Z
+
+    [settings]
+    enabled = true
+    ` + '\n');
+});
+
+test('should patch date field from example toml', () => {
+  // Use a simplified version of the example TOML focusing on the date field
+  const existing = dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-27T07:32:00Z # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the date of birth and add one day
+  const currentDob = value.owner.dob as Date;
+  const nextDay = new Date(currentDob);
+  nextDay.setDate(nextDay.getDate() + 1);
+  
+  value.owner.dob = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-28T07:32:00Z     # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n');
+});
+
+test('should patch date-only field by increasing it by one day', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current date and add one day using LocalDate
+  const currentDate = value.start_date as Date;
+  const nextDayTime = currentDate.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayStr = new Date(nextDayTime).toISOString().split('T')[0];
+  const nextDay = new LocalDate(nextDayStr);
+  
+  value.start_date = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to datetime when patching with Date that has time components', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with a Date that has time components
+  // This should upgrade the field from date-only to local datetime
+  const dateWithTime = new Date('2024-01-16T14:30:00.000Z'); // Has time: 14:30:00
+  value.start_date = dateWithTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to local datetime format (with T separator)
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to datetime with milliseconds when patching with Date that has milliseconds', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with a Date that has time and millisecond components
+  const dateWithTime = new Date('2024-01-16T14:30:00.123Z'); // Has time: 14:30:00.123
+  value.start_date = dateWithTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to local datetime format with milliseconds
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00.123
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to offset datetime when patching with OffsetDateTime', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with an OffsetDateTime
+  const offsetDateTime = new OffsetDateTime('2024-01-16T14:30:00-07:00', false);
+  value.start_date = offsetDateTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to offset datetime format
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should upgrade date-only field to offset datetime with Z timezone', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Set a date-only field with an OffsetDateTime using Z (UTC)
+  const offsetDateTime = new OffsetDateTime('2024-01-16T14:30:00Z', false);
+  value.start_date = offsetDateTime;
+
+  const patched = patch(existing, value);
+
+  // The field should be upgraded to offset datetime format with Z
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16T14:30:00Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch local datetime with T separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current datetime and add one day using LocalDateTime
+  const currentDateTime = value.start_datetime as Date;
+  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '');
+  const nextDay = new LocalDateTime(nextDayISO, false);
+  
+  value.start_datetime = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch local datetime with space separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Get the current datetime and add one day using LocalDateTime with space separator
+  const currentDateTime = value.start_datetime as Date;
+  const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+  const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '').replace('T', ' ');
+  const nextDay = new LocalDateTime(nextDayISO, true);
+  
+  value.start_datetime = nextDay;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with space separator', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  const newDateTime = new OffsetDateTime('2024-01-16 10:30:00Z', true);
+  
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00Z
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with T separator and timezone offset', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update the offset datetime by adding one day
+  const currentDateTime = value.start_datetime as Date;
+  const newDateTime = new OffsetDateTime('2024-01-16T10:30:00-07:00', false);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00-07:00
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with space separator and timezone offset', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00+05:30
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update the offset datetime by adding one day, keeping same time and offset
+  const newDateTime = new OffsetDateTime('2024-01-16 10:30:00+05:30', true);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00+05:30
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should patch offset datetime with milliseconds and preserve precision', () => {
+  const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00.500Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Update with new datetime that has milliseconds
+  const newDateTime = new OffsetDateTime('2024-01-16T14:30:00.750Z', false);
+  value.start_datetime = newDateTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T14:30:00.750Z
+    
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+});
+
+test('should preserve all TOML date/time formats when patching', () => {
+  const testCases = [
+    {
+      name: 'Local Date',
+      input: 'event_date = 2024-01-15',
+      expected: 'event_date = 2024-01-16'
+    },
+    {
+      name: 'Local DateTime with T separator',
+      input: 'event_datetime = 2024-01-15T10:30:00',
+      expected: 'event_datetime = 2024-01-16T10:30:00'
+    },
+    {
+      name: 'Local DateTime with space separator', 
+      input: 'event_datetime = 2024-01-15 10:30:00',
+      expected: 'event_datetime = 2024-01-16 10:30:00'
+    },
+    {
+      name: 'Local DateTime with milliseconds',
+      input: 'event_datetime = 2024-01-15T10:30:00.999',
+      expected: 'event_datetime = 2024-01-16T10:30:00.999'
+    },
+    {
+      name: 'Offset DateTime with T and Z',
+      input: 'event_datetime = 2024-01-15T10:30:00Z',
+      expected: 'event_datetime = 2024-01-16T10:30:00Z'
+    },
+    {
+      name: 'Offset DateTime with space and Z',
+      input: 'event_datetime = 2024-01-15 10:30:00Z',
+      expected: 'event_datetime = 2024-01-16 10:30:00Z'
+    },
+    {
+      name: 'Offset DateTime with timezone offset',
+      input: 'event_datetime = 2024-01-15T10:30:00-07:00',
+      expected: 'event_datetime = 2024-01-16T10:30:00-07:00' // Note: preserves the original offset
+    }
+  ];
+
+  testCases.forEach(({ name, input, expected }) => {
+    const parsed = parse(input);
+    const key = Object.keys(parsed)[0];
+    const originalDate = parsed[key] as Date;
+    
+    // Add one day
+    const nextDayTime = originalDate.getTime() + 24 * 60 * 60 * 1000;
+    let nextDay: Date;
+    
+    // Use the appropriate custom date class based on the original type
+    if ((originalDate as any).isDate) {
+      nextDay = new LocalDate(new Date(nextDayTime).toISOString().split('T')[0]);
+    } else if ((originalDate as any).isTime) {
+      const timeString = new Date(nextDayTime).toISOString().split('T')[1].split('Z')[0];
+      nextDay = new LocalTime(timeString, timeString);
+    } else if ((originalDate as any).isFloating) {
+      const useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      const isoString = new Date(nextDayTime).toISOString().replace('Z', '');
+      const dateTimeString = useSpaceSeparator ? isoString.replace('T', ' ') : isoString;
+      nextDay = new LocalDateTime(dateTimeString, useSpaceSeparator);
+    } else if ((originalDate as any).useSpaceSeparator || (originalDate as any).originalOffset) {
+      const useSpaceSeparator = (originalDate as any).useSpaceSeparator;
+      const originalOffset = (originalDate as any).originalOffset;
+      
+      // For offset datetime, we need to preserve the local time in the original timezone
+      // Add 24 hours to the original date string representation, not the UTC time
+      const originalISOString = originalDate.toISOString();
+      const datePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[0];
+      const timePart = originalISOString.split(useSpaceSeparator ? ' ' : 'T')[1].replace(originalOffset || 'Z', '');
+      
+      // Parse the date part and add one day
+      const [year, month, day] = datePart.split('-').map(Number);
+      const nextDate = new Date(year, month - 1, day + 1);
+      const nextDateStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+      
+      const separator = useSpaceSeparator ? ' ' : 'T';
+      const dateTimeString = `${nextDateStr}${separator}${timePart}${originalOffset || 'Z'}`;
+      nextDay = new OffsetDateTime(dateTimeString, useSpaceSeparator);
+    } else {
+      // Fallback to regular Date
+      nextDay = new Date(nextDayTime);
+    }
+    
+    parsed[key] = nextDay;
+    const patched = patch(input, parsed);
+    
+    expect(patched.trim()).toEqual(expected);
+  });
+});
+
+test('should patch local time values while preserving format', () => {
+  const existing = dedent`
+    # Daily schedule
+    meeting_time = 10:30:00
+    lunch_time = 12:00:00.500
+    
+    [schedule]
+    active = true
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Add 1 hour to meeting time using LocalTime
+  const meetingTime = value.meeting_time as Date;
+  const newMeetingTime = new Date(meetingTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+  value.meeting_time = newMeetingTime;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Daily schedule
+    meeting_time = 11:30:00
+    lunch_time = 12:00:00.500
+    
+    [schedule]
+    active = true
+    ` + '\n');
 });

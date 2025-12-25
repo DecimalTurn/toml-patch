@@ -1,5 +1,6 @@
 import { TomlDocument } from '../toml-document';
 import { hard_example } from '../__fixtures__';
+import { LocalDate } from '../date-format';
 import dedent from 'dedent';
 
 describe('TomlDocument', () => {
@@ -52,6 +53,89 @@ describe('TomlDocument', () => {
     const patched = doc.toTomlString;
     expect(patched.includes('\r\n')).toBe(true);
     expect(patched).toEqual('[x]\r\ny = 2\r\n');
+  });
+
+  it('patches date field and preserves format in output', () => {
+    const toml = dedent`
+      # Event information
+      name = "Annual Conference"
+      start_date = 2024-01-15
+      
+      [venue]
+      location = "Convention Center"
+    ` + '\n';
+    
+    const doc = new TomlDocument(toml);
+    const jsObj = doc.toJsObject;
+    
+    // Increment the date by one day
+    const currentDate = jsObj.start_date;
+    const nextDayTime = currentDate.getTime() + 24 * 60 * 60 * 1000;
+    const nextDay = new LocalDate(new Date(nextDayTime).toISOString().split('T')[0]);
+    
+    jsObj.start_date = nextDay;
+    
+    // Patch the document
+    doc.patch(jsObj);
+    
+    // Verify the TOML output preserves the date-only format
+    const expected = dedent`
+      # Event information
+      name = "Annual Conference"
+      start_date = 2024-01-16
+      
+      [venue]
+      location = "Convention Center"
+    ` + '\n';
+    
+    expect(doc.toTomlString).toBe(expected);
+  });
+
+  it('patches multiple different date types and preserves their formats', () => {
+    const toml = dedent`
+      # Event schedule
+      event_date = 2024-01-15
+      start_time = 09:30:00
+      meeting_datetime = 2024-01-15T14:30:00
+      deadline = 2024-01-15T23:59:59-08:00
+      
+      [config]
+      active = true
+    ` + '\n';
+    
+    const doc = new TomlDocument(toml);
+    const jsObj = doc.toJsObject;
+    
+    // Increment all dates by one day and time by one hour
+    const eventDate = jsObj.event_date;
+    const startTime = jsObj.start_time;
+    const meetingDateTime = jsObj.meeting_datetime;
+    const deadline = jsObj.deadline;
+    
+    // Add one day to date fields
+    jsObj.event_date = new Date(eventDate.getTime() + 24 * 60 * 60 * 1000);
+    jsObj.meeting_datetime = new Date(meetingDateTime.getTime() + 24 * 60 * 60 * 1000);
+    jsObj.deadline = new Date(deadline.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Add one hour to time field
+    jsObj.start_time = new Date(startTime.getTime() + 60 * 60 * 1000);
+    
+    // Patch the document
+    doc.patch(jsObj);
+    
+    // This test should preserve all original formats
+    const expected = dedent`
+      # Event schedule
+      event_date = 2024-01-16
+      start_time = 10:30:00
+      meeting_datetime = 2024-01-16T14:30:00
+      deadline = 2024-01-16T23:59:59-08:00
+      
+      [config]
+      active = true
+    ` + '\n';
+    
+    expect(doc.toTomlString).toBe(expected);
   });
 
   describe('hard-example.toml edge cases', () => {
@@ -508,55 +592,56 @@ describe('TomlDocument', () => {
   });
 
   describe('update with kitchen-sink.toml edge cases', () => {
-    const kitchenSink = `# This is a TOML document.
+    const kitchenSink = dedent`
+      # This is a TOML document.
 
-title = "TOML Example"
+      title = "TOML Example"
 
-[values]
-string = "string..."
-integer = [ 1_234 , 0xdead_beef , 0o01234567 , 0o755 , 0b11010110 ]
-float = [ 1_234.567 , -0.01 , 5e+22 , 1E6 , inf , -inf , nan , -nan ]
-boolean = true
-date.datetime = [
-  1979-05-27T07:32:00Z,
-  1979-05-27T00:32:00-07:00,
-  1979-05-27T00:32:00.999999-07:00,
-  1979-05-27 07:32:00Z,
+      [values]
+      string = "string..."
+      integer = [ 1_234 , 0xdead_beef , 0o01234567 , 0o755 , 0b11010110 ]
+      float = [ 1_234.567 , -0.01 , 5e+22 , 1E6 , inf , -inf , nan , -nan ]
+      boolean = true
+      date.datetime = [
+        1979-05-27T07:32:00Z,
+        1979-05-27T00:32:00-07:00,
+        1979-05-27T00:32:00.999999-07:00,
+        1979-05-27 07:32:00Z,
 
-]
+      ]
 
-date.local = [
-  1979-05-27T07:32:00,
-  1979-05-27, # Local Date
-  07:32:00    # Local Time
-]
+      date.local = [
+        1979-05-27T07:32:00,
+        1979-05-27, # Local Date
+        07:32:00    # Local Time
+      ]
 
-array.nested = [ [ 1, 2 ], ["a", "b", "c"] ]
-array.trailing = [
-  1,
-  2, # this is ok
-]
+      array.nested = [ [ 1, 2 ], ["a", "b", "c"] ]
+      array.trailing = [
+        1,
+        2, # this is ok
+      ]
 
-table.dotted = { type.name = "pug" }
+      table.dotted = { type.name = "pug" }
 
-# Table
-[dog  .  "tater.man"]
-type.name = "pug"
+      # Table
+      [dog  .  "tater.man"]
+      type.name = "pug"
 
-# TODO [ j . "ʞ" . 'l' ]
+      # TODO [ j . "ʞ" . 'l' ]
 
-# Array Table
-[[products]]
-name = "Hammer"
-sku = 738594937
+      # Array Table
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
 
-[[products]]
+      [[products]]
 
-[[products]]
-name = "Nail"
-sku = 284758393
-color = "gray"
-`;
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+      color = "gray"
+    ` + '\n';
 
     it('handles changing the first line (title)', () => {
       const doc = new TomlDocument(kitchenSink);

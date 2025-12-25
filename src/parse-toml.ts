@@ -26,6 +26,17 @@ import { clonePosition, cloneLocation } from './location';
 import ParseError from './parse-error';
 import { merge } from './utils';
 
+import {
+  DateFormatHelper,
+  LocalDate,
+  LocalTime,
+  LocalDateTime,
+  OffsetDateTime
+} from './date-format';
+
+// Create a shorter alias for convenience
+const dateFormatHelper = DateFormatHelper;
+
 const TRUE = 'true';
 const FALSE = 'false';
 const HAS_E = /e/i;
@@ -35,8 +46,15 @@ const IS_NAN = /nan/;
 const IS_HEX = /^0x/;
 const IS_OCTAL = /^0o/;
 const IS_BINARY = /^0b/;
-export const IS_FULL_DATE = /(\d{4})-(\d{2})-(\d{2})/;
-export const IS_FULL_TIME = /(\d{2}):(\d{2}):(\d{2})/;
+
+// Export the date classes for external use
+export {
+  LocalDate,
+  LocalTime,
+  LocalDateTime,
+  OffsetDateTime,
+  DateFormatHelper
+} from './date-format';
 
 export default function* parseTOML(input: string): AST {
   const tokens = tokenize(input);
@@ -88,7 +106,7 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
       yield string(cursor);
     } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
       yield boolean(cursor);
-    } else if (IS_FULL_DATE.test(cursor.value!.raw) || IS_FULL_TIME.test(cursor.value!.raw)) {
+    } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
       yield datetime(cursor, input);
     } else if (
       (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
@@ -356,8 +374,8 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   if (
     !cursor.peek().done &&
     cursor.peek().value!.type === TokenType.Literal &&
-    IS_FULL_DATE.test(raw) &&
-    IS_FULL_TIME.test(cursor.peek().value!.raw)
+    dateFormatHelper.IS_FULL_DATE.test(raw) &&
+    dateFormatHelper.IS_FULL_TIME.test(cursor.peek().value!.raw)
   ) {
     const start = loc.start;
 
@@ -380,11 +398,32 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
     raw += `.${cursor.value!.raw}`;
   }
 
-  if (!IS_FULL_DATE.test(raw)) {
-    // For local time, use local ISO date
-    const [local_date] = new Date().toISOString().split('T');
-    value = new Date(`${local_date}T${raw}`);
+  if (!dateFormatHelper.IS_FULL_DATE.test(raw)) {
+    // Local time only (e.g., "07:32:00" or "07:32:00.999")
+    if (dateFormatHelper.IS_TIME_ONLY.test(raw)) {
+      value = new LocalTime(raw, raw) as any;
+    } else {
+      // For other time formats, use local ISO date
+      const [local_date] = new Date().toISOString().split('T');
+      value = new Date(`${local_date}T${raw}`);
+    }
+  } else if (dateFormatHelper.IS_DATE_ONLY.test(raw)) {
+    // Local date only (e.g., "1979-05-27")
+    value = new LocalDate(raw) as any;
+  } else if (dateFormatHelper.IS_LOCAL_DATETIME_T.test(raw)) {
+    // Local datetime with T separator (e.g., "1979-05-27T07:32:00")
+    value = new LocalDateTime(raw, false) as any;
+  } else if (dateFormatHelper.IS_LOCAL_DATETIME_SPACE.test(raw)) {
+    // Local datetime with space separator (e.g., "1979-05-27 07:32:00")
+    value = new LocalDateTime(raw, true) as any;
+  } else if (dateFormatHelper.IS_OFFSET_DATETIME_T.test(raw)) {
+    // Offset datetime with T separator (e.g., "1979-05-27T07:32:00Z" or "1979-05-27T07:32:00-07:00")
+    value = new OffsetDateTime(raw, false) as any;
+  } else if (dateFormatHelper.IS_OFFSET_DATETIME_SPACE.test(raw)) {
+    // Offset datetime with space separator (e.g., "1979-05-27 07:32:00Z")
+    value = new OffsetDateTime(raw, true) as any;
   } else {
+    // Default: offset datetime with T separator or any other format
     value = new Date(raw.replace(' ', 'T'));
   }
 
