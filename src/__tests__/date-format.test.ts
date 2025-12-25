@@ -211,8 +211,6 @@ describe('LocalTime midnight boundary handling', () => {
     });
 
     it('demonstrates that JavaScript Date handles hour wrapping automatically', () => {
-      // This test proves that getUTCHours() already normalizes to 0-23
-      const time = new LocalTime('20:00:00', '20:00:00');
       
       // Add various amounts of hours
       const testCases = [
