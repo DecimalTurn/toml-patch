@@ -10,6 +10,9 @@ Note that this is a maintenance fork of the original toml-patch package. This fo
 Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
 
 
+**What's New in v0.5.0:**
+- **truncateZeroTimeInDates option**: New formatting option to automatically serialize JavaScript Date objects with zero time components (midnight) as date-only values in TOML.
+
 **What's New in v0.4.0:**
 - **TomlDocument class**: A new document-oriented API for stateful TOML manipulation
 - **TomlFormat class**: A class encapsulating all TOML formatting options
@@ -37,13 +40,13 @@ Note: The functional API (`patch`, `parse`, `stringify`) remains fully compatibl
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
     - [When to Use](#when-to-use-tomldocument-vs-functional-api)
-  - [Formatting](#formatting)
-    - [TomlFormat Class](#tomlformat-class)
-    - [Basic Usage](#basic-usage)
-    - [Formatting Options](#formatting-options)
-    - [Auto-Detection and Patching](#auto-detection-and-patching)
-    - [Complete Example](#complete-example)
-    - [Legacy Format Objects](#legacy-format-objects)
+- [Formatting](#formatting)
+  - [TomlFormat Class](#tomlformat-class)
+  - [Basic Usage](#basic-usage)
+  - [Formatting Options](#formatting-options)
+  - [Auto-Detection and Patching](#auto-detection-and-patching)
+  - [Complete Example](#complete-example)
+  - [Legacy Format Objects](#legacy-format-objects)
 - [Development](#development)
 
 
@@ -204,8 +207,7 @@ Converts a JavaScript object to a TOML string.
 
 **Format Options:**
 
-- `[trailingComma = false]` - Add trailing comma to inline tables
-- `[bracketSpacing = true]` - `true`: `{ key = "value" }`, `false`: `{key = "value"}`
+See [Formatting Options](#formatting-options) for more details.
 
 ##### Example
 
@@ -378,11 +380,11 @@ console.log(doc.toJsObject.server.port); // 3000
 | Preserving document state | ✅ Built-in | ❌ Manual |
 | Working with large files | ✅ Better performance | ❌ Re-parses entirely |
 
-### Formatting
+## Formatting
 
 The `TomlFormat` class provides comprehensive control over how TOML documents are formatted during stringification and patching operations. This class encapsulates all formatting preferences, making it easy to maintain consistent styling across your TOML documents.
 
-#### TomlFormat Class
+### TomlFormat Class
 
 ```typescript
 class TomlFormat {
@@ -391,13 +393,14 @@ class TomlFormat {
   trailingComma: boolean
   bracketSpacing: boolean
   inlineTableStart?: number
+  truncateZeroTimeInDates: boolean
   
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
 }
 ```
 
-#### Basic Usage
+### Basic Usage
 
 The recommended approach is to start with `TomlFormat.default()` and override specific options as needed:
 
@@ -420,7 +423,7 @@ const toml = stringify({
 
 ```
 
-#### Formatting Options
+### Formatting Options
 
 **newLine**
 - **Type:** `string`
@@ -500,14 +503,43 @@ stringify({ database: { host: 'localhost', port: 5432 } }, format);
 // port = 5432
 ```
 
-#### Auto-Detection and Patching
+**truncateZeroTimeInDates**
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** When `true`, JavaScript Date objects with all time components set to zero (midnight UTC) are automatically serialized as date-only values in TOML. This only affects new values during stringify operations; existing TOML dates maintain their original format during patch operations.
+
+```js
+const format = TomlFormat.default();
+format.truncateZeroTimeInDates = false;  // new Date('2024-01-15T00:00:00.000Z') → 2024-01-15T00:00:00.000Z
+format.truncateZeroTimeInDates = true;   // new Date('2024-01-15T00:00:00.000Z') → 2024-01-15
+```
+
+Example with mixed dates:
+```js
+import { stringify, TomlFormat } from '@decimalturn/toml-patch';
+
+const format = TomlFormat.default();
+format.truncateZeroTimeInDates = true;
+
+const data = {
+  startDate: new Date('2024-01-15T00:00:00.000Z'),  // Will be: 2024-01-15
+  endDate: new Date('2024-12-31T23:59:59.999Z')     // Will be: 2024-12-31T23:59:59.999Z
+};
+
+stringify(data, format);
+// Output:
+// startDate = 2024-01-15
+// endDate = 2024-12-31T23:59:59.999Z
+```
+
+### Auto-Detection and Patching
 
 The `TomlFormat.autoDetectFormat()` method analyzes existing TOML strings to automatically detect and preserve their current formatting. If you don't supply the `format` argument when patching an existing document, this is what will be used to determine the formatting to use when inserting new elements.
 
 Note that formatting of existing elements of a TOML string won't be affected by the `format` passed to  `patch()` except for `newLine` and `trailingNewline` which are applied at the document level.
 
 
-#### Complete Example
+### Complete Example
 
 Here's a comprehensive example showing different formatting configurations:
 
@@ -579,7 +611,7 @@ console.log(stringify(data, windows));
 // Same structure as compact but with \r\n line endings
 ```
 
-#### Legacy Format Objects
+### Legacy Format Objects
 
 For backward compatibility, you can still use anonymous objects for formatting options.
 ```js
