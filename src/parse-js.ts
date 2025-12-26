@@ -14,7 +14,6 @@ import {
 import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines, formatNestedTablesMultiline } from './toml-format';
 import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
-import { LocalDate } from './date-format';
 
 
 export default function parseJS(value: any, format: TomlFormat = TomlFormat.default()): Document {
@@ -100,17 +99,7 @@ function walkValue(value: any, format: TomlFormat): Value {
   } else if (isBoolean(value)) {
     return generateBoolean(value);
   } else if (isDate(value)) {
-    // Convert Date objects with zero time components to LocalDate
-    // so they are serialized as date-only in TOML (only if truncateZeroTimeInDates is true)
-    if (format.truncateZeroTimeInDates &&
-        !(value instanceof LocalDate) &&
-        value.getUTCHours() === 0 &&
-        value.getUTCMinutes() === 0 &&
-        value.getUTCSeconds() === 0 &&
-        value.getUTCMilliseconds() === 0) {
-      value = new LocalDate(value.toISOString().split('T')[0]);
-    }
-    return generateDateTime(value);
+    return generateDateTime(value, format);
   } else if (Array.isArray(value)) {
     return walkInlineArray(value, format);
   } else {
