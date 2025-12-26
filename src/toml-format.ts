@@ -20,6 +20,7 @@ export const DEFAULT_TRAILING_NEWLINE = 1;
 export const DEFAULT_TRAILING_COMMA = false;
 export const DEFAULT_BRACKET_SPACING = true;
 export const DEFAULT_INLINE_TABLE_START = 1;
+export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -245,7 +246,7 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart']);
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart', 'truncateZeroTimeInDates']);
   const validatedFormat: any = {};
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
@@ -276,6 +277,7 @@ export function validateFormatObject(format: any): any {
           
           case 'trailingComma':
           case 'bracketSpacing':
+          case 'truncateZeroTimeInDates':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
@@ -336,7 +338,8 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
         validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
         validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
-        validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart
+        validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
+        validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
       );
     }
   } else {
@@ -400,18 +403,37 @@ export class TomlFormat {
    */
   inlineTableStart?: number;
 
+  /**
+   * Whether to truncate time components in UTC date fields when they are zero.
+   * This setting affects only the stringification process.
+   * 
+   * @example  
+   * - true:  Date('2024-01-15T00:00:00.000Z') serializes as 2024-01-15
+   * - false: Date('2024-01-15T00:00:00.000Z') serializes as 2024-01-15T00:00:00.000Z
+   * 
+   */
+  truncateZeroTimeInDates?: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
   //useTabs?: boolean;
-  
-  constructor(newLine?: string, trailingNewline?: number, trailingComma?: boolean, bracketSpacing?: boolean, inlineTableStart?: number) {
+
+  constructor(
+    newLine?: string,
+    trailingNewline?: number,
+    trailingComma?: boolean,
+    bracketSpacing?: boolean,
+    inlineTableStart?: number,
+    truncateZeroTimeInDates?: boolean
+  ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
+    this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
   }
 
   /**
@@ -423,6 +445,7 @@ export class TomlFormat {
    *   - trailingComma: false
    *   - bracketSpacing: true
    *   - inlineTableStart: 1
+   *   - truncateZeroTimeInDates: false
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -430,7 +453,8 @@ export class TomlFormat {
       DEFAULT_TRAILING_NEWLINE,
       DEFAULT_TRAILING_COMMA,
       DEFAULT_BRACKET_SPACING,
-      DEFAULT_INLINE_TABLE_START
+      DEFAULT_INLINE_TABLE_START,
+      DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES
     );
   }
 
@@ -478,6 +502,12 @@ export class TomlFormat {
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences
     format.inlineTableStart = DEFAULT_INLINE_TABLE_START;
+
+    // truncateZeroTimeInDates uses default value as well
+    // We could always implement detection logic if needed
+    // That would imply checking if all dates have no time component in the TOML.
+    // However, it's not because all dates have no time component that a new key-value can't be introduced where the time component corresponds to midnight.
+    format.truncateZeroTimeInDates = DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     
     return format;
   }

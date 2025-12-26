@@ -19,6 +19,8 @@ import {
   Comment
 } from './ast';
 import { zero, cloneLocation, clonePosition } from './location';
+import { LocalDate } from './parse-toml';
+import { TomlFormat } from './toml-format';
 import { shiftNode } from './writer';
 
 /**
@@ -191,7 +193,18 @@ export function generateBoolean(value: boolean): Boolean {
   };
 }
 
-export function generateDateTime(value: Date): DateTime {
+export function generateDateTime(value: Date, format: TomlFormat): DateTime {
+  
+    // Convert Date objects with zero time components to LocalDate
+    // so they are serialized as date-only in TOML
+    if (format.truncateZeroTimeInDates &&
+        value.getUTCHours() === 0 &&
+        value.getUTCMinutes() === 0 &&
+        value.getUTCSeconds() === 0 &&
+        value.getUTCMilliseconds() === 0) {
+      value = new LocalDate(value.toISOString().split('T')[0]);
+    }
+  
   // Custom date classes have their own toISOString() implementations
   // that return the properly formatted strings for each TOML date/time type
   const raw = value.toISOString();
