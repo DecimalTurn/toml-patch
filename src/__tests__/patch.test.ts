@@ -1665,3 +1665,190 @@ test('should preserve datetime format when patching to zero time component', () 
     event_name = "Workshop"
     ` + '\n');
 });
+
+test('should not affect time-only values with truncateZeroTimeInDates option (non-zero time)', () => {
+  // Test that truncateZeroTimeInDates doesn't affect LocalTime values (time-only, no date component)
+  const existing = dedent`
+    meeting_time = 14:30:00
+    event_name = "Team Meeting"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a different time
+  const meetingTime = value.meeting_time as Date;
+  const newMeetingTime = new Date(meetingTime.getTime() + 2 * 60 * 60 * 1000); // Add 2 hours
+  value.meeting_time = newMeetingTime;
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The result should show the time as-is, not affected by truncateZeroTimeInDates
+  expect(patched).toEqual(dedent`
+    meeting_time = 16:30:00
+    event_name = "Team Meeting"
+    ` + '\n');
+});
+
+test('should not affect time-only values with truncateZeroTimeInDates option (zero time)', () => {
+  // Test that truncateZeroTimeInDates doesn't affect LocalTime values even when time is 00:00:00
+  const existing = dedent`
+    start_time = 23:00:00
+    event_name = "Late Event"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to midnight (00:00:00)
+  const startTime = value.start_time as Date;
+  const newStartTime = new Date(startTime.getTime() + 1 * 60 * 60 * 1000); // Add 1 hour to get 00:00:00
+  value.start_time = newStartTime;
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The result should show 00:00:00 as-is, not be truncated or affected
+  expect(patched).toEqual(dedent`
+    start_time = 00:00:00
+    event_name = "Late Event"
+    ` + '\n');
+});
+
+test('should preserve time component for offset datetime even when UTC equivalent is zero time', () => {
+  // Test that an OffsetDateTime with non-zero local time but zero UTC time
+  // keeps its time component with truncateZeroTimeInDates: true
+  // Example: 2024-01-15T02:00:00+02:00 = 2024-01-15T00:00:00Z in UTC
+  const existing = dedent`
+    event_start = 2024-01-15T02:00:00+02:00
+    event_name = "Morning Event"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a different date, also with time that is zero in UTC but non-zero locally
+  // We add 36 days, which keeps the same local time with the offset
+  const eventStart = value.event_start as Date;
+  const newEventStart = new Date(eventStart.getTime() + 36 * 24 * 60 * 60 * 1000); // Add 36 days
+  value.event_start = newEventStart;
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The result should keep the time component because the local time is 02:00:00, not 00:00:00
+  // Even though in UTC it's 00:00:00, the local time has a non-zero component
+  expect(patched).toEqual(dedent`
+    event_start = 2024-02-20T02:00:00+02:00
+    event_name = "Morning Event"
+    ` + '\n');
+});
+
+test('should preserve time component for local datetime with non-zero time and truncateZeroTimeInDates', () => {
+  // Test that a LocalDateTime (no timezone) with non-zero time keeps its time component
+  const existing = dedent`
+    event_start = 2024-01-15T14:30:00
+    event_name = "Afternoon Meeting"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a different date with same time
+  const eventStart = value.event_start as Date;
+  const newEventStart = new Date(eventStart.getTime() + 36 * 24 * 60 * 60 * 1000); // Add 36 days
+  value.event_start = newEventStart;
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The result should keep the time component
+  expect(patched).toEqual(dedent`
+    event_start = 2024-02-20T14:30:00
+    event_name = "Afternoon Meeting"
+    ` + '\n');
+});
+
+test('should preserve datetime format for local datetime with zero time component', () => {
+  // Test that a LocalDateTime with T00:00:00 preserves the time component
+  // even with truncateZeroTimeInDates: true, because the original format has time
+  const existing = dedent`
+    event_start = 2024-01-15T00:00:00
+    event_name = "Midnight Event"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a different date, also with zero time
+  const eventStart = value.event_start as Date;
+  const newEventStart = new Date(eventStart.getTime() + 36 * 24 * 60 * 60 * 1000); // Add 36 days
+  value.event_start = newEventStart;
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The result should keep T00:00:00 because the original format has time component
+  // truncateZeroTimeInDates should not affect values from existing TOML
+  expect(patched).toEqual(dedent`
+    event_start = 2024-02-20T00:00:00
+    event_name = "Midnight Event"
+    ` + '\n');
+});
+
+test('should add new date with zero time as date-only when truncateZeroTimeInDates is true', () => {
+  // Test adding a new date key-value that wasn't in the original TOML
+  const existing = dedent`
+    event_name = "Conference"
+    location = "Seattle"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Add a new date with zero time components
+  value.event_date = new Date('2024-01-15T00:00:00.000Z');
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The new date should be added as date-only (no time component)
+  expect(patched).toEqual(dedent`
+    event_name = "Conference"
+    location = "Seattle"
+    event_date = 2024-01-15
+    ` + '\n');
+});
+
+test('should add new date with zero time as full timestamp when truncateZeroTimeInDates is false (default)', () => {
+  // Test adding a new date key-value with default behavior (truncateZeroTimeInDates: false)
+  const existing = dedent`
+    event_name = "Workshop"
+    location = "Portland"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Add a new date with zero time components
+  value.event_date = new Date('2024-01-15T00:00:00.000Z');
+
+  const patched = patch(existing, value);
+
+  // The new date should be added with full timestamp
+  expect(patched).toEqual(dedent`
+    event_name = "Workshop"
+    location = "Portland"
+    event_date = 2024-01-15T00:00:00.000Z
+    ` + '\n');
+});
+
+test('should add new date with non-zero time as full timestamp regardless of truncateZeroTimeInDates', () => {
+  // Test that non-zero time is always preserved
+  const existing = dedent`
+    event_name = "Meetup"
+    location = "Austin"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Add a new date with non-zero time components
+  value.event_datetime = new Date('2024-01-15T14:30:00.000Z');
+
+  const patched = patch(existing, value, { truncateZeroTimeInDates: true });
+
+  // The new date should be added with full timestamp since time is non-zero
+  expect(patched).toEqual(dedent`
+    event_name = "Meetup"
+    location = "Austin"
+    event_datetime = 2024-01-15T14:30:00.000Z
+    ` + '\n');
+});
