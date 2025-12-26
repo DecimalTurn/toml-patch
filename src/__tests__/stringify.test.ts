@@ -445,3 +445,47 @@ test('should respect inlineTableStart=2 setting for deeper nesting', () => {
   expect(resultLevel1).toEqual(expectedLevel1);
 });
 
+test('should stringify date with T00:00:00.000Z without time information when truncateZeroTimeInDates is true', () => {
+  // Create a Date object with zero time components
+  const dateWithZeroTime = new Date('2024-01-15T00:00:00.000Z');
+  
+  const jsObject = {
+    project: "TestProject",
+    created_date: dateWithZeroTime,
+    version: "1.0.0"
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: true });
+
+  // The date should be output as date-only (no time component)
+  const expected = dedent`
+    project = "TestProject"
+    created_date = 2024-01-15
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should stringify date with T00:00:00.000Z with time information when truncateZeroTimeInDates is false (default)', () => {
+  // Create a Date object with zero time components
+  const dateWithZeroTime = new Date('2024-01-15T00:00:00.000Z');
+  
+  const jsObject = {
+    project: "TestProject",
+    created_date: dateWithZeroTime,
+    version: "1.0.0"
+  };
+
+  const result = stringify(jsObject);
+
+  // The date should be output with full time information
+  const expected = dedent`
+    project = "TestProject"
+    created_date = 2024-01-15T00:00:00.000Z
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+

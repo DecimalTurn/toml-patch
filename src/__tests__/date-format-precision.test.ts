@@ -125,4 +125,14 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
     expect(result instanceof LocalDate).toBe(true);
     expect(result.toISOString()).toBe('2024-01-16');
   });
+
+  test('should keep time component when creating from Date with zero time components, but raw string has time component', () => {
+    const originalDate = new Date('2024-01-15T00:00:00.000Z');
+    const newDateNoTime = new Date('2024-01-16T00:00:00.000Z'); // No time components
+    
+    const result = DateFormatHelper.createDateWithOriginalFormat(newDateNoTime, '2024-01-16T00:00:00.000Z');
+    
+    expect(result.toISOString()).toBe('2024-01-16T00:00:00.000Z');
+  });
+
 });
