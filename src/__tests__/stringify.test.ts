@@ -489,3 +489,149 @@ test('should stringify date with T00:00:00.000Z with time information when trunc
   expect(result).toEqual(expected);
 });
 
+test('should handle arrays of dates with mixed zero and non-zero times when truncateZeroTimeInDates is true', () => {
+  const jsObject = {
+    project: "TestProject",
+    event_dates: [
+      new Date('2024-01-15T00:00:00.000Z'), // Zero time - should be truncated
+      new Date('2024-02-20T14:30:00.000Z'), // Non-zero time - should keep time
+      new Date('2024-03-10T00:00:00.000Z'), // Zero time - should be truncated
+    ]
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: true });
+
+  const expected = dedent`
+    project = "TestProject"
+    event_dates = [ 2024-01-15, 2024-02-20T14:30:00.000Z, 2024-03-10 ]
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle arrays of dates without truncation when truncateZeroTimeInDates is false', () => {
+  const jsObject = {
+    project: "TestProject",
+    event_dates: [
+      new Date('2024-01-15T00:00:00.000Z'),
+      new Date('2024-02-20T14:30:00.000Z'),
+      new Date('2024-03-10T00:00:00.000Z'),
+    ]
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: false });
+
+  const expected = dedent`
+    project = "TestProject"
+    event_dates = [ 2024-01-15T00:00:00.000Z, 2024-02-20T14:30:00.000Z, 2024-03-10T00:00:00.000Z ]
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle dates in nested objects with truncateZeroTimeInDates is true', () => {
+  const jsObject = {
+    project: {
+      name: "MyProject",
+      created: new Date('2024-01-15T00:00:00.000Z'), // Zero time - should be truncated
+      metadata: {
+        last_updated: new Date('2024-02-20T14:30:00.000Z'), // Non-zero time - should keep time
+        start_date: new Date('2024-03-10T00:00:00.000Z'), // Zero time - should be truncated
+      }
+    }
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: true });
+
+  const expected = dedent`
+    [project]
+    name = "MyProject"
+    created = 2024-01-15
+    metadata = { last_updated = 2024-02-20T14:30:00.000Z, start_date = 2024-03-10 }
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle dates in nested objects without truncation when truncateZeroTimeInDates is false', () => {
+  const jsObject = {
+    project: {
+      name: "MyProject",
+      created: new Date('2024-01-15T00:00:00.000Z'),
+      metadata: {
+        last_updated: new Date('2024-02-20T14:30:00.000Z'),
+        start_date: new Date('2024-03-10T00:00:00.000Z'),
+      }
+    }
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: false });
+
+  const expected = dedent`
+    [project]
+    name = "MyProject"
+    created = 2024-01-15T00:00:00.000Z
+    metadata = { last_updated = 2024-02-20T14:30:00.000Z, start_date = 2024-03-10T00:00:00.000Z }
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle mixed scenarios with dates in arrays, nested objects, and top-level with truncateZeroTimeInDates', () => {
+  const jsObject = {
+    top_level_date: new Date('2024-01-01T00:00:00.000Z'), // Zero time - should be truncated
+    top_level_datetime: new Date('2024-01-02T09:15:00.000Z'), // Non-zero time - should keep time
+    dates_array: [
+      new Date('2024-02-01T00:00:00.000Z'), // Zero time - should be truncated
+      new Date('2024-02-02T10:30:00.000Z'), // Non-zero time - should keep time
+    ],
+    config: {
+      created_at: new Date('2024-03-01T00:00:00.000Z'), // Zero time - should be truncated
+      updated_at: new Date('2024-03-02T16:45:00.000Z'), // Non-zero time - should keep time
+      milestones: [
+        new Date('2024-04-01T00:00:00.000Z'), // Zero time - should be truncated
+        new Date('2024-04-02T08:00:00.000Z'), // Non-zero time - should keep time
+      ]
+    }
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: true });
+
+  const expected = dedent`
+    top_level_date = 2024-01-01
+    top_level_datetime = 2024-01-02T09:15:00.000Z
+    dates_array = [ 2024-02-01, 2024-02-02T10:30:00.000Z ]
+
+    [config]
+    created_at = 2024-03-01
+    updated_at = 2024-03-02T16:45:00.000Z
+    milestones = [ 2024-04-01, 2024-04-02T08:00:00.000Z ]
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('should handle deeply nested objects with dates and truncateZeroTimeInDates', () => {
+  const jsObject = {
+    level1: {
+      date1: new Date('2024-01-15T00:00:00.000Z'), // Zero time - should be truncated
+      level2: {
+        date2: new Date('2024-02-20T11:30:00.000Z'), // Non-zero time - should keep time
+        level3: {
+          date3: new Date('2024-03-10T00:00:00.000Z'), // Zero time - should be truncated
+          value: "deep"
+        }
+      }
+    }
+  };
+
+  const result = stringify(jsObject, { truncateZeroTimeInDates: true });
+
+  const expected = dedent`
+    [level1]
+    date1 = 2024-01-15
+    level2 = { date2 = 2024-02-20T11:30:00.000Z, level3 = { date3 = 2024-03-10, value = "deep" } }
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
