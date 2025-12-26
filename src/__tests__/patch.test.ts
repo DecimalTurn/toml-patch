@@ -1620,3 +1620,48 @@ test('should patch local time values while preserving format', () => {
     active = true
     ` + '\n');
 });
+
+test('should preserve zero time component when patching date with zero time', () => {
+  // Test that when the original TOML has a date with time component at zero,
+  // and we patch it to a new date, the time component is preserved
+  const existing = dedent`
+    event_start = 2024-01-15T00:00:00.000Z
+    event_name = "Conference"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a different date, also with zero time components
+  value.event_start = new Date('2024-02-20T00:00:00.000Z');
+
+  const patched = patch(existing, value);
+
+  // The result should keep the time component (not truncate to date-only)
+  expect(patched).toEqual(dedent`
+    event_start = 2024-02-20T00:00:00.000Z
+    event_name = "Conference"
+    ` + '\n');
+});
+
+test('should preserve datetime format when patching to zero time component', () => {
+  // Test that when the original TOML has a date with non-zero time component,
+  // and we patch it to a date with zero time components,
+  // the resulting TOML shows the zero-time component (not just the date)
+  const existing = dedent`
+    event_start = 2024-01-15T10:30:45.000Z
+    event_name = "Workshop"
+    ` + '\n';
+
+  const value = parse(existing);
+  
+  // Change to a date with zero time components
+  value.event_start = new Date('2024-02-20T00:00:00.000Z');
+
+  const patched = patch(existing, value);
+
+  // The result should show the full timestamp with zero time, not just the date
+  expect(patched).toEqual(dedent`
+    event_start = 2024-02-20T00:00:00.000Z
+    event_name = "Workshop"
+    ` + '\n');
+});
