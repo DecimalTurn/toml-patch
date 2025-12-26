@@ -404,8 +404,13 @@ export class TomlFormat {
   inlineTableStart?: number;
 
   /**
-   * Whether to truncate time components in date fields when they are zero.
+   * Whether to truncate time components in UTC date fields when they are zero.
    * This setting affects only the stringification process.
+   * 
+   * @example  
+   * - true:  Date('2024-01-15T00:00:00.000Z') serializes as 2024-01-15
+   * - false: Date('2024-01-15T00:00:00.000Z') serializes as 2024-01-15T00:00:00.000Z
+   * 
    */
   truncateZeroTimeInDates?: boolean;
 
@@ -413,24 +418,22 @@ export class TomlFormat {
   //printWidth?: number;
   //tabWidth?: number;
   //useTabs?: boolean;
-  
-
 
   constructor(
-    newLine?: string, 
+    newLine?: string,
     trailingNewline?: number,
-     trailingComma?: boolean,
-     bracketSpacing?: boolean,
-     inlineTableStart?: number,
-     truncateZeroTimeInDates?: boolean
-    ) {
+    trailingComma?: boolean,
+    bracketSpacing?: boolean,
+    inlineTableStart?: number,
+    truncateZeroTimeInDates?: boolean
+  ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
-    this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES; 
+    this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
   }
 
   /**
@@ -442,6 +445,7 @@ export class TomlFormat {
    *   - trailingComma: false
    *   - bracketSpacing: true
    *   - inlineTableStart: 1
+   *   - truncateZeroTimeInDates: false
    */
   static default(): TomlFormat {
     return new TomlFormat(
