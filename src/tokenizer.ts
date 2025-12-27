@@ -26,6 +26,7 @@ export const SPACE = ' ';
 export const ESCAPE = '\\';
 
 const IS_VALID_LEADING_CHARACTER = /[\w,\d,\",\',\+,\-,\_]/;
+const IS_VALID_BARE_KEY_CHARACTER = /[A-Za-z0-9_-]/;
 
 // Control character validation
 // TOML disallows control characters (0x00-0x1F, 0x7F) except tab (0x09) in comments and strings
@@ -226,6 +227,15 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
   while (!cursor.done && !isFinished(cursor)) {
     cursor.next();
 
+    // Validate newlines are not allowed in single-line strings (keys)
+    if ((double_quoted || single_quoted) && cursor.value === '\n') {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        'Newlines are not allowed in keys or single-line strings'
+      );
+    }
+
     // Validate control characters in quoted strings (before toggling the quote state)
     if ((double_quoted || single_quoted) && cursor.value !== DOUBLE_QUOTE && cursor.value !== SINGLE_QUOTE) {
       // For single-quoted (literal) strings, we also need to check for control characters
@@ -235,6 +245,45 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
           findPosition(input, cursor.index),
           `Invalid control character in string (code: 0x${cursor.value.charCodeAt(0).toString(16).toUpperCase()})`
         );
+      }
+    }
+
+    // Validate bare key characters (when not in quotes)
+    if (!double_quoted && !single_quoted && cursor.value) {
+      // Check if this is a bare key character (not a value)
+      // Bare keys can only contain A-Z, a-z, 0-9, _, -
+      if (!IS_VALID_BARE_KEY_CHARACTER.test(cursor.value)) {
+        // Check if it's a valid terminator or special character
+        const isTerminator = 
+          IS_WHITESPACE.test(cursor.value) ||
+          cursor.value === ',' ||
+          cursor.value === '.' ||
+          cursor.value === ']' ||
+          cursor.value === '}' ||
+          cursor.value === '=' ||
+          cursor.value === '#' ||
+          cursor.value === '+' ||  // Allow + for numbers
+          cursor.value === 'e' ||  // Allow e for exponents
+          cursor.value === 'E' ||  // Allow E for exponents
+          cursor.value === 'x' ||  // Allow x for hex
+          cursor.value === 'o' ||  // Allow o for octal
+          cursor.value === 'b' ||  // Allow b for binary
+          cursor.value === ':' ||  // Allow : for datetimes
+          cursor.value === 'T' ||  // Allow T for datetimes
+          cursor.value === 'Z' ||  // Allow Z for timezone
+          /[0-9]/.test(cursor.value); // Allow digits
+        
+        // If it's not a terminator and we're at the start or early in the token,
+        // it might be an invalid bare key character
+        // However, we need to be careful not to reject valid number/datetime formats
+        // Only reject truly invalid characters in what looks like a bare key context
+        if (!isTerminator && raw.length <= 20 && !/[0-9\+\-\.]/.test(raw)) {
+          throw new ParseError(
+            input,
+            findPosition(input, cursor.index),
+            `Invalid character '${cursor.value}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
+        }
       }
     }
 
