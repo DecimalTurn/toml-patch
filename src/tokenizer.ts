@@ -54,6 +54,15 @@ export function* tokenize(input: string): IterableIterator<Token> {
   const locate = createLocate(input);
 
   while (!cursor.done) {
+    // Check for control characters at the top level (not in strings/comments)
+    // VT (0x0B) and FF (0x0C) are not allowed anywhere in TOML
+    const charCode = cursor.value!.charCodeAt(0);
+    if (charCode === 0x0B || charCode === 0x0C) {
+      throw new Error(
+        `Control character 0x${charCode.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+      );
+    }
+    
     if (IS_WHITESPACE.test(cursor.value!)) {
       // (skip whitespace)
     } else if (cursor.value === '[' || cursor.value === ']') {
@@ -135,12 +144,26 @@ function multiline(
   // See spec-string-basic-multiline-9.toml
   while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
     // Validate control characters in multiline strings
-    // For multiline strings, we allow tab, LF (0x0A), and CR (0x0D) but not other control characters
+    // For multiline strings, we allow tab (0x09), LF (0x0A), and CR only if followed by LF (CRLF)
     if (!cursor.value) break;
     const code = cursor.value.charCodeAt(0);
     const isTab = code === 0x09;
     const isLF = code === 0x0A;
     const isCR = code === 0x0D;
+    
+    // CR is only allowed if followed by LF (CRLF sequence)
+    if (isCR) {
+      const nextChar = input[cursor.index + 1];
+      const nextIsCR = nextChar && nextChar.charCodeAt(0) === 0x0A;
+      if (!nextIsCR) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Invalid standalone CR (\\r) in multiline string (must be part of CRLF sequence)`
+        );
+      }
+    }
+    
     if (isControlCharacter(cursor.value) && !isTab && !isLF && !isCR) {
       throw new ParseError(
         input,
