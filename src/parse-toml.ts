@@ -320,6 +320,19 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   const [value, ...comments] = walkValue(cursor, input) as Iterable<Value | Comment>;
 
+  // Check if there's another key-value pair on the same line (invalid)
+  if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Literal) {
+    const nextToken = cursor.peek().value!;
+    // If the next literal is on the same line as the current value, it's an error
+    if (nextToken.loc.start.line === value.loc.end.line) {
+      throw new ParseError(
+        input,
+        nextToken.loc.start,
+        `Multiple key-value pairs on the same line are not allowed. Expected newline before "${nextToken.raw}"`
+      );
+    }
+  }
+
   return [
     {
       type: NodeType.KeyValue,
