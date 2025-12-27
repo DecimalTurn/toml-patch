@@ -479,13 +479,36 @@ function float(cursor: Cursor<Token>, input: string): Float {
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
 
+    // Validate underscore placement in integer part (no leading, trailing underscores)
+    if (/_$/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": underscore before decimal point is not allowed`
+      );
+    }
+    if (/^[+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": leading underscore is not allowed`
+      );
+    }
+    if (/__/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": consecutive underscores are not allowed`
+      );
+    }
+
     // From spec:
     // | A fractional part is a decimal point followed by one or more digits.
     //
     // -> Don't have to handle "4." (i.e. nothing behind decimal place)
 
     // Validate no leading zeros for the integer part (except standalone 0)
-    const integerPart = raw.replace(/^[+\-]/, '');
+    const integerPart = raw.replace(/^[+\-]/, '').replace(/_/g, '');
     if (/^0\d/.test(integerPart)) {
       throw new ParseError(
         input,
@@ -501,12 +524,108 @@ function float(cursor: Cursor<Token>, input: string): Float {
     }
     cursor.next();
 
-    raw += `.${cursor.value!.raw}`;
+    const fracPart = cursor.value!.raw;
+    
+    // Validate underscore placement in fractional part
+    if (/^_/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float: underscore after decimal point is not allowed`
+      );
+    }
+    if (/_$/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float: trailing underscore in fractional part is not allowed`
+      );
+    }
+    if (/__/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float: consecutive underscores in fractional part are not allowed`
+      );
+    }
+
+    raw += `.${fracPart}`;
     loc = { start, end: cursor.value!.loc.end };
     value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
+    // Validate underscore placement (no leading, trailing, or double underscores)
+    if (/_$/.test(raw) && !/[eE]/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": trailing underscore is not allowed`
+      );
+    }
+    if (/^[+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": leading underscore is not allowed`
+      );
+    }
+    if (/__/.test(raw)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": consecutive underscores are not allowed`
+      );
+    }
+    
+    // Validate exponent format if present
+    if (/[eE]/.test(raw)) {
+      // Check for trailing underscore before E
+      if (/_[eE]/.test(raw)) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          `Invalid float "${raw}": underscore before exponent is not allowed`
+        );
+      }
+      
+      // Check for underscore after E or after sign in exponent
+      if (/[eE][+\-]?_/.test(raw)) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          `Invalid float "${raw}": underscore at start of exponent is not allowed`
+        );
+      }
+      
+      // Check for trailing underscore in exponent
+      if (/_$/.test(raw)) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          `Invalid float "${raw}": trailing underscore in exponent is not allowed`
+        );
+      }
+      
+      // Check for incomplete exponent (just E with nothing after)
+      if (/[eE][+\-]?$/.test(raw)) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          `Invalid float "${raw}": incomplete exponent`
+        );
+      }
+      
+      // Check for decimal point in exponent
+      if (/[eE][+\-]?.*\./.test(raw)) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          `Invalid float "${raw}": decimal point not allowed in exponent`
+        );
+      }
+    }
+    
     // Validate no leading zeros for floats with exponents
-    const integerPart = raw.replace(/^[+\-]/, '').replace(/[eE].*$/, '');
+    const integerPart = raw.replace(/^[+\-]/, '').replace(/[eE].*$/, '').replace(/_/g, '');
     if (/^0\d/.test(integerPart)) {
       throw new ParseError(
         input,
