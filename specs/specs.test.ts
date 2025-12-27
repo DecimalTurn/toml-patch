@@ -118,6 +118,12 @@ function expandJSONValue(value: any): any {
     return new Date(`${value.value}T00:00:00.000Z`);
   } else if (value.type === 'time') {
     return new Date(`0000-01-01T${value.value}`);
+  } else if (value.type === 'time-local') {
+    // Local time without date context
+    return new Date(`0000-01-01T${value.value}`);
+  } else if (value.type === 'date-local') {
+    // Local date without time context
+    return new Date(`${value.value}T00:00:00.000Z`);
   } else if (value.type === 'string') {
     return value.value;
   } else if (value.type === 'float') {

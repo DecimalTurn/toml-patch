@@ -456,9 +456,114 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
 
 // Helper function to validate date-time format
 function validateDateTimeFormat(raw: string, input: string, loc: any): void {
+  // First, check for invalid formats that regex might partially match
+  
+  // Check for trailing invalid characters FIRST before other validations
+  // Valid date/time formats must match these patterns exactly (note the $ anchor)
+  const validDateTimePattern = /^[\d]{4}-[\d]{2}-[\d]{2}(?:[T ][\d]{2}:[\d]{2}(?::[\d]{2})?(?:\.[\d]+)?(?:[Zz]|[+-][\d]{2}:[\d]{2})?)?$/;
+  const validTimePattern = /^[\d]{2}:[\d]{2}(?::[\d]{2})?(?:\.[\d]+)?$/;
+  
+  if (!validDateTimePattern.test(raw) && !validTimePattern.test(raw)) {
+    // Check if it looks like a date/time but has trailing characters
+    if (/^\d{4}-\d{2}-\d{2}T$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": date cannot end with 'T' without a time component`
+      );
+    }
+    // Check for any letter (except T/t which is valid separator) after a date
+    // This catches patterns like 2020-01-01x, 2020-01-01a, etc.
+    if (/^\d{4}-\d{2}-\d{2}[a-su-zA-SU-Z]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": unexpected character after date`
+      );
+    }
+    if (/^\d{4}-\d{2}-\d{2}\d{2}:\d{2}/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid datetime "${raw}": missing separator 'T' or space between date and time`
+      );
+    }
+  }
+  
+  // Check for year with wrong number of digits (must be exactly 4)
+  // Match patterns like: 199-01-01, 10000-01-01, etc.
+  const yearMatch = raw.match(/^(\d+)-/);
+  if (yearMatch && yearMatch[1].length !== 4) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid date "${raw}": year must be exactly 4 digits, found ${yearMatch[1].length}`
+    );
+  }
+  
+  // Check for time with wrong number of digits (must be 2 for hour, minute, second)
+  // Match patterns like: 1:32:00, 01:32:0, etc.
+  const timeOnlyPattern = /^(\d+):(\d+)(?::(\d+))?/;
+  const timeInDatePattern = /[T ](\d+):(\d+)(?::(\d+))?/;
+  
+  let timeMatch = raw.match(timeOnlyPattern);
+  if (!timeMatch) {
+    timeMatch = raw.match(timeInDatePattern);
+    if (timeMatch) {
+      // Shift array since we captured the separator
+      timeMatch = [timeMatch[0], timeMatch[1], timeMatch[2], timeMatch[3]];
+    }
+  }
+  
+  if (timeMatch) {
+    const [, hour, minute, second] = timeMatch;
+    if (hour && hour.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": hour must be exactly 2 digits, found ${hour.length}`
+      );
+    }
+    if (minute && minute.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": minute must be exactly 2 digits, found ${minute.length}`
+      );
+    }
+    if (second && second.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": second must be exactly 2 digits, found ${second.length}`
+      );
+    }
+  }
+  
+  // Check for date with wrong number of digits for month/day
+  const datePattern = /^(\d{4})-(\d+)-(\d+)/;
+  const dateMatch = raw.match(datePattern);
+  if (dateMatch) {
+    const [, , month, day] = dateMatch;
+    if (month.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": month must be exactly 2 digits, found ${month.length}`
+      );
+    }
+    if (day.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": day must be exactly 2 digits, found ${day.length}`
+      );
+    }
+  }
+  
   // Extract components based on the format
-  const dateTimeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2}))?/);
-  const timeOnlyMatch = raw.match(/^(\d{2}):(\d{2}):(\d{2})/);
+  const dateTimeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  const timeOnlyMatch = raw.match(/^(\d{2}):(\d{2})(?::(\d{2}))?/);
   
   if (dateTimeMatch) {
     const [, year, month, day, hour, minute, second] = dateTimeMatch;
@@ -513,13 +618,15 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
         throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
       }
       
-      // Validate second (must be 2 digits with leading zero, 00-60 for leap seconds)
-      if (second.length !== 2) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": second must be 2 digits with leading zero`);
-      }
-      const secondNum = parseInt(second, 10);
-      if (secondNum < 0 || secondNum > 60) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+      // Validate second if present (must be 2 digits with leading zero, 00-60 for leap seconds)
+      if (second !== undefined) {
+        if (second.length !== 2) {
+          throw new ParseError(input, loc, `Invalid time "${raw}": second must be 2 digits with leading zero`);
+        }
+        const secondNum = parseInt(second, 10);
+        if (secondNum < 0 || secondNum > 60) {
+          throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+        }
       }
     }
   } else if (timeOnlyMatch) {
@@ -543,13 +650,15 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
     }
     
-    // Validate second (must be 2 digits with leading zero, 00-60 for leap seconds)
-    if (second.length !== 2) {
-      throw new ParseError(input, loc, `Invalid time "${raw}": second must be 2 digits with leading zero`);
-    }
-    const secondNum = parseInt(second, 10);
-    if (secondNum < 0 || secondNum > 60) {
-      throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+    // Validate second if present (must be 2 digits with leading zero, 00-60 for leap seconds)
+    if (second !== undefined) {
+      if (second.length !== 2) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": second must be 2 digits with leading zero`);
+      }
+      const secondNum = parseInt(second, 10);
+      if (secondNum < 0 || secondNum > 60) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+      }
     }
   }
 }
@@ -825,6 +934,26 @@ function float(cursor: Cursor<Token>, input: string): Float {
 
 function integer(cursor: Cursor<Token>, input: string): Integer {
   const raw = cursor.value!.raw;
+  
+  // Check if this looks like an invalid date format that didn't match IS_FULL_DATE
+  // Patterns like: 199-09-09, 1987-7-05, 1987-07-5, 2020-01-01x
+  if (/^\d+-\d+-\d+/.test(raw) || /^\d{4}-\d{1,2}-\d{1,2}[a-z]/i.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid date "${raw}": dates must be in format YYYY-MM-DD with exactly 4-digit year, 2-digit month, and 2-digit day`
+    );
+  }
+  
+  // Check if this looks like an invalid time format
+  // Patterns like: 1:32:00, 01:32:0
+  if (/^\d+:\d+/.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid time "${raw}": times must be in format HH:MM:SS with exactly 2 digits for each component`
+    );
+  }
   
   // Validate no double signs (++99, --99)
   if (/^[+\-]{2,}/.test(raw)) {
