@@ -41,8 +41,8 @@ const TRUE = 'true';
 const FALSE = 'false';
 const HAS_E = /e/i;
 const IS_DIVIDER = /\_/g;
-const IS_INF = /inf/;
-const IS_NAN = /nan/;
+const IS_INF = /inf/i;
+const IS_NAN = /nan/i;
 const IS_HEX = /^0x/;
 const IS_OCTAL = /^0o/;
 const IS_BINARY = /^0b/;
@@ -105,7 +105,10 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
     if (cursor.value!.raw[0] === DOUBLE_QUOTE || cursor.value!.raw[0] === SINGLE_QUOTE) {
       yield string(cursor);
     } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
-      yield boolean(cursor);
+      yield boolean(cursor, input);
+    } else if (/^(true|false)$/i.test(cursor.value!.raw) || /^[tf]/i.test(cursor.value!.raw)) {
+      // Catch invalid boolean-like values (TRUE, False, t, f, tru, etc.)
+      yield boolean(cursor, input);
     } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
       yield datetime(cursor, input);
     } else if (
@@ -115,8 +118,11 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
       (HAS_E.test(cursor.value!.raw) && !IS_HEX.test(cursor.value!.raw))
     ) {
       yield float(cursor, input);
+    } else if (/^[+-]?[inINaA]/i.test(cursor.value!.raw)) {
+      // Catch incomplete or invalid inf/nan values (in, na, Inf, NAN, etc.)
+      yield float(cursor, input);
     } else {
-      yield integer(cursor);
+      yield integer(cursor, input);
     }
   } else if (cursor.value!.type === TokenType.Curly) {
     yield inlineTable(cursor, input);
@@ -338,11 +344,21 @@ function string(cursor: Cursor<Token>): String {
   };
 }
 
-function boolean(cursor: Cursor<Token>): Boolean {
+function boolean(cursor: Cursor<Token>, input: string): Boolean {
+  // Validate that the value is exactly 'true' or 'false' (case-sensitive)
+  const raw = cursor.value!.raw;
+  if (raw !== TRUE && raw !== FALSE) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid boolean value "${raw}". Expected "true" or "false" (lowercase only)`
+    );
+  }
+  
   return {
     type: NodeType.Boolean,
     loc: cursor.value!.loc,
-    value: cursor.value!.raw === TRUE
+    value: raw === TRUE
   };
 }
 
@@ -441,8 +457,24 @@ function float(cursor: Cursor<Token>, input: string): Float {
   let value;
 
   if (IS_INF.test(raw)) {
+    // Validate exact format: 'inf', '+inf', '-inf' (lowercase only)
+    if (raw !== 'inf' && raw !== '+inf' && raw !== '-inf') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": infinity must be exactly "inf", "+inf", or "-inf" (lowercase only)`
+      );
+    }
     value = raw === '-inf' ? -Infinity : Infinity;
   } else if (IS_NAN.test(raw)) {
+    // Validate exact format: 'nan', '+nan', '-nan' (lowercase only)
+    if (raw !== 'nan' && raw !== '+nan' && raw !== '-nan') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": NaN must be exactly "nan", "+nan", or "-nan" (lowercase only)`
+      );
+    }
     value = raw === '-nan' ? -NaN : NaN;
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
@@ -451,6 +483,16 @@ function float(cursor: Cursor<Token>, input: string): Float {
     // | A fractional part is a decimal point followed by one or more digits.
     //
     // -> Don't have to handle "4." (i.e. nothing behind decimal place)
+
+    // Validate no leading zeros for the integer part (except standalone 0)
+    const integerPart = raw.replace(/^[+\-]/, '');
+    if (/^0\d/.test(integerPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": leading zeros are not allowed`
+      );
+    }
 
     cursor.next();
 
@@ -463,35 +505,87 @@ function float(cursor: Cursor<Token>, input: string): Float {
     loc = { start, end: cursor.value!.loc.end };
     value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
+    // Validate no leading zeros for floats with exponents
+    const integerPart = raw.replace(/^[+\-]/, '').replace(/[eE].*$/, '');
+    if (/^0\d/.test(integerPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": leading zeros are not allowed`
+      );
+    }
     value = Number(raw.replace(IS_DIVIDER, ''));
+    
+    // If the result is NaN but the raw value doesn't match valid nan format, it's invalid
+    if (isNaN(value) && raw !== 'nan' && raw !== '+nan' && raw !== '-nan') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": not a valid number`
+      );
+    }
   }
 
   return { type: NodeType.Float, loc, raw, value };
 }
 
-function integer(cursor: Cursor<Token>): Integer {
+function integer(cursor: Cursor<Token>, input: string): Integer {
+  const raw = cursor.value!.raw;
+  
   // > Integer values -0 and +0 are valid and identical to an unprefixed zero
-  if (cursor.value!.raw === '-0' || cursor.value!.raw === '+0') {
+  if (raw === '-0' || raw === '+0') {
     return {
       type: NodeType.Integer,
       loc: cursor.value!.loc,
-      raw: cursor.value!.raw,
+      raw: raw,
       value: 0
     };
   }
 
+  // Validate no zero-padding for decimal integers
+  // Check if it starts with 0 followed by digit (but allow 0x, 0o, 0b prefixes and standalone 0)
+  if (/^[+\-]?0\d/.test(raw) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid integer "${raw}": leading zeros are not allowed`
+    );
+  }
+
   let radix = 10;
-  if (IS_HEX.test(cursor.value!.raw)) {
+  if (IS_HEX.test(raw)) {
     radix = 16;
-  } else if (IS_OCTAL.test(cursor.value!.raw)) {
+    // Hex, octal, and binary integers cannot have signs
+    if (raw[0] === '+' || raw[0] === '-') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
+      );
+    }
+  } else if (IS_OCTAL.test(raw)) {
     radix = 8;
-  } else if (IS_BINARY.test(cursor.value!.raw)) {
+    if (raw[0] === '+' || raw[0] === '-') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
+      );
+    }
+  } else if (IS_BINARY.test(raw)) {
     radix = 2;
+    if (raw[0] === '+' || raw[0] === '-') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
+      );
+    }
   }
 
   const value = parseInt(
-    cursor
-      .value!.raw.replace(IS_DIVIDER, '')
+    raw
+      .replace(IS_DIVIDER, '')
       .replace(IS_OCTAL, '')
       .replace(IS_BINARY, ''),
     radix
@@ -500,7 +594,7 @@ function integer(cursor: Cursor<Token>): Integer {
   return {
     type: NodeType.Integer,
     loc: cursor.value!.loc,
-    raw: cursor.value!.raw,
+    raw: raw,
     value
   };
 }
@@ -576,6 +670,18 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
     );
   }
 
+  // Check for trailing comma before closing brace
+  if (value.items.length > 0) {
+    const lastItem = value.items[value.items.length - 1];
+    if (lastItem.comma) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Trailing comma is not allowed in inline tables'
+      );
+    }
+  }
+
   value.loc.end = cursor.value!.loc.end;
 
   return value;
@@ -614,11 +720,32 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         );
       }
 
+      // Check for double comma
+      if (previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Double comma is not allowed in arrays'
+        );
+      }
+
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
     } else if ((cursor.value as Token).type === TokenType.Comment) {
       comments.push(comment(cursor));
     } else {
+      // Check if previous item exists and doesn't have a comma
+      if (value.items.length > 0) {
+        const previous = value.items[value.items.length - 1];
+        if (!previous.comma) {
+          throw new ParseError(
+            input,
+            cursor.value!.loc.start,
+            'Missing comma separator between array elements'
+          );
+        }
+      }
+
       const [item, ...additional_comments] = walkValue(cursor, input);
       const inline_item: InlineItem = {
         type: NodeType.InlineItem,

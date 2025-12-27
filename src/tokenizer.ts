@@ -27,6 +27,25 @@ export const ESCAPE = '\\';
 
 const IS_VALID_LEADING_CHARACTER = /[\w,\d,\",\',\+,\-,\_]/;
 
+// Control character validation
+// TOML disallows control characters (0x00-0x1F, 0x7F) except tab (0x09) in comments and strings
+function isControlCharacter(char: string): boolean {
+  if (!char) return false;
+  const code = char.charCodeAt(0);
+  // Control characters: 0x00-0x08, 0x0A-0x1F (excluding tab 0x09), and 0x7F (DEL)
+  return (code >= 0x00 && code <= 0x08) || (code >= 0x0A && code <= 0x1F) || code === 0x7F;
+}
+
+// Check if character is a valid character (not control except tab)
+function isInvalidInComment(char: string): boolean {
+  return isControlCharacter(char);
+}
+
+// For basic strings, control characters except tab are not allowed
+function isInvalidInString(char: string): boolean {
+  return isControlCharacter(char);
+}
+
 export function* tokenize(input: string): IterableIterator<Token> {
   const cursor = new Cursor(iterator(input));
   cursor.next();
@@ -49,7 +68,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       yield specialCharacter(cursor, locate, TokenType.Dot);
     } else if (cursor.value === '#') {
       // Handle comments = # -> EOL
-      yield comment(cursor, locate);
+      yield comment(cursor, locate, input);
     } else {
       const multiline_char =
         checkThree(input, cursor.index, SINGLE_QUOTE) ||
@@ -71,11 +90,19 @@ function specialCharacter(cursor: Cursor<string>, locate: Locator, type: TokenTy
   return { type, raw: cursor.value!, loc: locate(cursor.index, cursor.index + 1) };
 }
 
-function comment(cursor: Cursor<string>, locate: Locator): Token {
+function comment(cursor: Cursor<string>, locate: Locator, input: string): Token {
   const start = cursor.index;
   let raw = cursor.value!;
   while (!cursor.peek().done && !IS_NEW_LINE.test(cursor.peek().value!)) {
     cursor.next();
+    // Validate control characters in comments
+    if (isInvalidInComment(cursor.value!)) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Invalid control character in comment (code: 0x${cursor.value!.charCodeAt(0).toString(16).toUpperCase()})`
+      );
+    }
     raw += cursor.value!;
   }
 
@@ -106,6 +133,20 @@ function multiline(
   // The reason why we need to check if there is more than three is because we have to match the last 3 quotes, not the first 3 that appears consecutively
   // See spec-string-basic-multiline-9.toml
   while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
+    // Validate control characters in multiline strings
+    // For multiline strings, we allow tab, LF (0x0A), and CR (0x0D) but not other control characters
+    if (!cursor.value) break;
+    const code = cursor.value.charCodeAt(0);
+    const isTab = code === 0x09;
+    const isLF = code === 0x0A;
+    const isCR = code === 0x0D;
+    if (isControlCharacter(cursor.value) && !isTab && !isLF && !isCR) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Invalid control character in multiline string (code: 0x${code.toString(16).toUpperCase()})`
+      );
+    }
     raw += cursor.value;
     cursor.next();
   }
@@ -184,6 +225,18 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
 
   while (!cursor.done && !isFinished(cursor)) {
     cursor.next();
+
+    // Validate control characters in quoted strings (before toggling the quote state)
+    if ((double_quoted || single_quoted) && cursor.value !== DOUBLE_QUOTE && cursor.value !== SINGLE_QUOTE) {
+      // For single-quoted (literal) strings, we also need to check for control characters
+      if (cursor.value && isInvalidInString(cursor.value)) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Invalid control character in string (code: 0x${cursor.value.charCodeAt(0).toString(16).toUpperCase()})`
+        );
+      }
+    }
 
     if (cursor.value === DOUBLE_QUOTE) double_quoted = !double_quoted;
     if (cursor.value === SINGLE_QUOTE && !double_quoted) single_quoted = !single_quoted;
