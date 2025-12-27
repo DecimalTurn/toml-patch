@@ -1303,12 +1303,31 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
           'Found "," without previous value in inline table'
         );
       }
+      
+      // Check if previous item already has a comma (double comma)
+      if (previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found consecutive commas in inline table (double comma is not allowed)'
+        );
+      }
 
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
 
       cursor.next();
       continue;
+    }
+
+    // Check if we're adding a key-value when the previous value doesn't have a comma
+    const previous = value.items[value.items.length - 1];
+    if (previous && !previous.comma) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Missing comma between inline table entries'
+      );
     }
 
     const [item] = walkBlock(cursor, input);
