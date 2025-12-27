@@ -670,18 +670,6 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
     );
   }
 
-  // Check for trailing comma before closing brace
-  if (value.items.length > 0) {
-    const lastItem = value.items[value.items.length - 1];
-    if (lastItem.comma) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        'Trailing comma is not allowed in inline tables'
-      );
-    }
-  }
-
   value.loc.end = cursor.value!.loc.end;
 
   return value;
@@ -720,32 +708,11 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         );
       }
 
-      // Check for double comma
-      if (previous.comma) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Double comma is not allowed in arrays'
-        );
-      }
-
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
     } else if ((cursor.value as Token).type === TokenType.Comment) {
       comments.push(comment(cursor));
     } else {
-      // Check if previous item exists and doesn't have a comma
-      if (value.items.length > 0) {
-        const previous = value.items[value.items.length - 1];
-        if (!previous.comma) {
-          throw new ParseError(
-            input,
-            cursor.value!.loc.start,
-            'Missing comma separator between array elements'
-          );
-        }
-      }
-
       const [item, ...additional_comments] = walkValue(cursor, input);
       const inline_item: InlineItem = {
         type: NodeType.InlineItem,
