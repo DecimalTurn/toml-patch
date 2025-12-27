@@ -121,6 +121,14 @@ function expandJSONValue(value: any): any {
   } else if (value.type === 'string') {
     return value.value;
   } else if (value.type === 'float') {
+    // Handle special float values: inf, -inf, nan
+    if (value.value === 'inf') {
+      return Infinity;
+    } else if (value.value === '-inf') {
+      return -Infinity;
+    } else if (value.value === 'nan') {
+      return NaN;
+    }
     return Number(value.value);
   } else if (value.type === 'integer') {
     return Number(value.value);
