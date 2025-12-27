@@ -661,6 +661,96 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       }
     }
   }
+  
+  // Check for invalid fractional seconds (e.g., ".Z" with no digits after the dot)
+  if (/\.\s*[Zz]/.test(raw) || /\.\s*[+-]/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid datetime "${raw}": fractional seconds must have at least one digit after decimal point`
+    );
+  }
+  
+  // Check for trailing +/- without hour/minute (e.g., "2024-01-15T10:30:00+")
+  if (/[+-]\s*$/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid datetime "${raw}": timezone offset requires hour and minute components`
+    );
+  }
+  
+  // Check for invalid date separators (must use hyphens)
+  if (/^\d{6}-/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid date "${raw}": year and month must be separated by hyphen`
+    );
+  }
+  
+  // Check for timezone offset format if present (must come after time, not after date)
+  // Valid: 2024-01-15T10:30:00+09:09 or 2024-01-15T10:30:00Z
+  // Invalid: 2024-01-15+09:09 (offset without time)
+  const hasTime = /\d{2}:\d{2}/.test(raw);
+  const offsetMatch = hasTime ? raw.match(/[+-](\d+):?(\d*)\s*$/) : null;
+  if (offsetMatch) {
+    const [fullOffset, hours, minutes] = offsetMatch;
+    
+    // Check if offset is missing the colon separator (e.g., +0909 instead of +09:09)
+    if (!fullOffset.includes(':')) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": must use colon separator (e.g., +09:09)`
+      );
+    }
+    
+    // Validate hour component (must be exactly 2 digits)
+    if (hours.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": hour must be exactly 2 digits`
+      );
+    }
+    
+    // Validate hour range (00-23, some implementations allow up to 24)
+    const hourNum = parseInt(hours, 10);
+    if (hourNum < 0 || hourNum > 23) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": hour must be between 00 and 23, found ${hours}`
+      );
+    }
+    
+    // Validate minute component exists and is exactly 2 digits
+    if (!minutes || minutes.length === 0) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute component is required`
+      );
+    }
+    if (minutes.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute must be exactly 2 digits`
+      );
+    }
+    
+    // Validate minute range (00-59)
+    const minuteNum = parseInt(minutes, 10);
+    if (minuteNum < 0 || minuteNum > 59) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute must be between 00 and 59, found ${minutes}`
+      );
+    }
+  }
 }
 
 function float(cursor: Cursor<Token>, input: string): Float {
@@ -934,6 +1024,16 @@ function float(cursor: Cursor<Token>, input: string): Float {
 
 function integer(cursor: Cursor<Token>, input: string): Integer {
   const raw = cursor.value!.raw;
+  
+  // Check for date without separator between year and month (e.g., 199709-09)
+  // This is 6 digits followed by a hyphen
+  if (/^\d{6}-/.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid date "${raw}": year and month must be separated by hyphen`
+    );
+  }
   
   // Check if this looks like an invalid date format that didn't match IS_FULL_DATE
   // Patterns like: 199-09-09, 1987-7-05, 1987-07-5, 2020-01-01x
