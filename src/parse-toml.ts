@@ -186,6 +186,19 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       `Expected array of tables opening "[[", found ${cursor.value!.raw + cursor.peek().value!.raw}`
     );
   }
+  
+  // Check for space between [[ in table array
+  if (!is_table) {
+    const firstBracketEnd = cursor.value!.loc.end.column;
+    const secondBracketStart = cursor.peek().value!.loc.start.column;
+    if (secondBracketStart - firstBracketEnd > 0) {
+      throw new ParseError(
+        input,
+        cursor.peek().value!.loc.start,
+        `Invalid table array header: space between "[[" is not allowed`
+      );
+    }
+  }
 
   // Set start location from opening tag
   const key = is_table
@@ -212,6 +225,15 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     raw: cursor.value!.raw,
     value: [parseString(cursor.value!.raw)]
   };
+  
+  // Check for empty table name or just a dot
+  if (cursor.value!.raw === '.' || cursor.value!.raw === '') {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid table name: table name cannot be empty or just a dot`
+    );
+  }
 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
@@ -251,6 +273,19 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
           : cursor.value!.raw + cursor.peek().value!.raw
       }`
     );
+  }
+  
+  // Check for space between ]] in table array closing
+  if (!is_table && !cursor.done && !cursor.peek().done) {
+    const firstBracketEnd = cursor.value!.loc.end.column;
+    const secondBracketStart = cursor.peek().value!.loc.start.column;
+    if (secondBracketStart - firstBracketEnd > 0) {
+      throw new ParseError(
+        input,
+        cursor.peek().value!.loc.start,
+        `Invalid table array closing: space between "]]" is not allowed`
+      );
+    }
   }
 
   // Set end location from closing tag
