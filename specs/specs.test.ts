@@ -33,6 +33,23 @@ const spec_test = spec_test_input
   })
   .filter(Boolean) as Array<string[]>;
 
+const toml_invalid_pattern = 'submodules/toml-test/tests/invalid/**/*.toml';
+const toml_invalid_input = glob(toml_invalid_pattern);
+
+const toml_invalid = toml_invalid_input.map(input => {
+  const relativePath = input.replace('submodules/toml-test/tests/invalid/', '');
+  const name = relativePath.replace('.toml', '');
+  return [name, input];
+}) as Array<string[]>;
+
+const spec_invalid_pattern = 'submodules/spec-tests/errors/*.toml';
+const spec_invalid_input = glob(spec_invalid_pattern);
+
+const spec_invalid = spec_invalid_input.map(input => {
+  const name = basename(input, '.toml');
+  return [name, input];
+}) as Array<string[]>;
+
 test.each(toml_test)('toml-test - %s', async (_name, input_file, expected_file) => {
   const input = await readFile(input_file, 'utf8');
   const expected = expandJSON(JSON.parse(await readFile(expected_file, 'utf8')));
@@ -46,6 +63,16 @@ test.each(spec_test)('spec-test - %s', async (_name, input_file, expected_file) 
 
   const actual = parse(input);
   expect(actual).toEqual(expected);
+});
+
+test.each(toml_invalid)('toml-test invalid - %s', async (_name, input_file) => {
+  const input = await readFile(input_file, 'utf8');
+  expect(() => parse(input)).toThrow();
+});
+
+test.each(spec_invalid)('spec-test invalid - %s', async (_name, input_file) => {
+  const input = await readFile(input_file, 'utf8');
+  expect(() => parse(input)).toThrow();
 });
 
 function expandJSON(value: any): any {
