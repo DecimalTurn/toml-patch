@@ -5,9 +5,9 @@ Successfully improved TOML spec compliance by implementing validation for invali
 
 ## Final Results
 - **Starting Failures**: 298 spec tests
-- **Current Failures**: 194 spec tests
-- **Tests Fixed**: 104 tests (35% improvement)
-- **Pass Rate**: 77.5% (669/863 tests passing)
+- **Current Failures**: 165 spec tests
+- **Tests Fixed**: 133 tests (45% improvement)
+- **Pass Rate**: 80.9% (698/863 tests passing)
 - **Main Library Tests**: ✅ All 419 tests passing
 
 ## Validation Categories Completed
@@ -58,7 +58,18 @@ Successfully improved TOML spec compliance by implementing validation for invali
 - Support newlines in inline tables (TOML 1.1 feature)
 - **Files**: `src/parse-toml.ts`
 
-## Remaining Validation Issues (194 tests)
+### ✅ 8. DateTime Validation (Group 3)
+**Tests Fixed**: 29 tests
+- Leading zero requirements for date/time components
+- Month range validation (01-12)
+- Day range validation with month-specific limits (including leap years)
+- Hour range validation (00-23)
+- Minute range validation (00-59)
+- Second range validation (00-60 for leap seconds)
+- **Files**: `src/parse-toml.ts`
+- **Documented**: `validation-fixes-3-datetime.md`
+
+## Remaining Validation Issues (165 tests)
 
 ### High Priority (74 tests)
 1. **Datetime Validation** (60 tests)
