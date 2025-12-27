@@ -1,19 +1,40 @@
 import { promisify } from 'util';
 import { join, basename } from 'path';
-import { readFile as _readFile, existsSync } from 'fs';
+import { readFile as _readFile, existsSync, readFileSync } from 'fs';
 import { sync as glob } from 'glob';
 import { load } from 'js-yaml';
 import { parse } from '../src/';
 
 const readFile = promisify(_readFile);
 
-const toml_test_pattern = 'submodules/toml-test/tests/valid/*.toml';
-const toml_test_input = glob(toml_test_pattern);
+// TOML version to test against (1.0.0 or 1.1.0)
+const TOML_VERSION = '1.1.0';
+
+// Load the list of files for the specified TOML version
+const tomlVersionFilesPath = `submodules/toml-test/tests/files-toml-${TOML_VERSION}`;
+const tomlVersionFiles = new Set(
+  readFileSync(tomlVersionFilesPath, 'utf8')
+    .split('\n')
+    .filter(line => line.trim())
+    .map(line => line.trim())
+);
+
+// Helper function to check if a file should be included based on TOML version
+function isIncludedInVersion(filePath: string): boolean {
+  const relativePath = filePath.replace('submodules/toml-test/tests/', '');
+  // Check for both .toml and .json files
+  return tomlVersionFiles.has(relativePath) || 
+         tomlVersionFiles.has(relativePath.replace('.json', '.toml'));
+}
+
+const toml_test_pattern = 'submodules/toml-test/tests/valid/**/*.toml';
+const toml_test_input = glob(toml_test_pattern).filter(isIncludedInVersion);
 
 const toml_test = toml_test_input
   .map(input => {
-    const name = basename(input, '.toml');
-    const expected = join('submodules/toml-test/tests/valid', `${name}.json`);
+    const relativePath = input.replace('submodules/toml-test/tests/valid/', '');
+    const name = relativePath.replace('.toml', '');
+    const expected = input.replace('.toml', '.json');
     if (!existsSync(expected)) return;
 
     return [name, input, expected];
@@ -34,7 +55,7 @@ const spec_test = spec_test_input
   .filter(Boolean) as Array<string[]>;
 
 const toml_invalid_pattern = 'submodules/toml-test/tests/invalid/**/*.toml';
-const toml_invalid_input = glob(toml_invalid_pattern);
+const toml_invalid_input = glob(toml_invalid_pattern).filter(isIncludedInVersion);
 
 const toml_invalid = toml_invalid_input.map(input => {
   const relativePath = input.replace('submodules/toml-test/tests/invalid/', '');
