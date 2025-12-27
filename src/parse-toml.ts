@@ -542,6 +542,29 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
     };
   }
 
+  // Validate underscore placement (no leading, trailing, or double underscores)
+  if (/_$/.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid integer "${raw}": underscores cannot be at the end`
+    );
+  }
+  if (/^[+\-]?_/.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid integer "${raw}": underscores cannot be at the start`
+    );
+  }
+  if (/__/.test(raw)) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid integer "${raw}": consecutive underscores are not allowed`
+    );
+  }
+
   // Validate no zero-padding for decimal integers
   // Check if it starts with 0 followed by digit (but allow 0x, 0o, 0b prefixes and standalone 0)
   if (/^[+\-]?0\d/.test(raw) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
@@ -553,6 +576,8 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
   }
 
   let radix = 10;
+  let numericPart = raw;
+  
   if (IS_HEX.test(raw)) {
     radix = 16;
     // Hex, octal, and binary integers cannot have signs
@@ -561,6 +586,24 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
         input,
         cursor.value!.loc.start,
         `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
+      );
+    }
+    // Check for incomplete hex (just "0x" with no digits)
+    numericPart = raw.replace(/^0x/i, '');
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": incomplete hexadecimal number`
+      );
+    }
+    // Validate hex digits (after removing underscores)
+    const hexDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": invalid hexadecimal digits`
       );
     }
   } else if (IS_OCTAL.test(raw)) {
@@ -572,6 +615,24 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
         `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
       );
     }
+    // Check for incomplete octal
+    numericPart = raw.replace(/^0o/i, '');
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": incomplete octal number`
+      );
+    }
+    // Validate octal digits (after removing underscores)
+    const octalDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-7]+$/.test(octalDigits)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": invalid octal digits (must be 0-7)`
+      );
+    }
   } else if (IS_BINARY.test(raw)) {
     radix = 2;
     if (raw[0] === '+' || raw[0] === '-') {
@@ -579,6 +640,24 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
         input,
         cursor.value!.loc.start,
         `Invalid integer "${raw}": non-decimal integers cannot have a sign prefix`
+      );
+    }
+    // Check for incomplete binary
+    numericPart = raw.replace(/^0b/i, '');
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": incomplete binary number`
+      );
+    }
+    // Validate binary digits (after removing underscores)
+    const binaryDigits = numericPart.replace(/_/g, '');
+    if (!/^[01]+$/.test(binaryDigits)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid integer "${raw}": invalid binary digits (must be 0 or 1)`
       );
     }
   }
