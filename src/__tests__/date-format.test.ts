@@ -174,7 +174,7 @@ describe('LocalTime midnight boundary handling', () => {
 
   describe('PR comment concern: day rollover causing incorrect time values', () => {
     // This test directly addresses the concern raised in the PR comment:
-    // "adding 2 hours to '23:00:00' would result in '01:00:00' on 1970-01-02,
+    // "adding 2 hours to '23:00:00' would result in '01:00:00' on 0000-01-02,
     // but the toISOString method doesn't account for day changes"
     
     it('should correctly show 01:00:00 when adding 2 hours to 23:00:00 (PR example)', () => {
@@ -182,9 +182,9 @@ describe('LocalTime midnight boundary handling', () => {
       
       time.setTime(time.getTime() + 2 * 60 * 60 * 1000);
       
-      // The underlying date is now 1970-01-02T01:00:00Z
+      // The underlying date is now 0000-01-02T01:00:00Z
       // Verify the date component actually changed
-      expect(time.getUTCFullYear()).toBe(1970);
+      expect(time.getUTCFullYear()).toBe(0);
       expect(time.getUTCMonth()).toBe(0); // January
       expect(time.getUTCDate()).toBe(2); // Day 2
       

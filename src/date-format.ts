@@ -10,15 +10,15 @@
 export class DateFormatHelper {
   // Patterns for different date/time formats
   static readonly IS_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-  static readonly IS_TIME_ONLY = /^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
-  static readonly IS_LOCAL_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
-  static readonly IS_LOCAL_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
-  static readonly IS_OFFSET_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
-  static readonly IS_OFFSET_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
+  static readonly IS_TIME_ONLY = /^\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/;
+  static readonly IS_LOCAL_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/;
+  static readonly IS_LOCAL_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/;
+  static readonly IS_OFFSET_DATETIME_T = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
+  static readonly IS_OFFSET_DATETIME_SPACE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
   
   // Legacy patterns from parse-toml.ts (for compatibility)
   static readonly IS_FULL_DATE = /(\d{4})-(\d{2})-(\d{2})/;
-  static readonly IS_FULL_TIME = /(\d{2}):(\d{2}):(\d{2})/;
+  static readonly IS_FULL_TIME = /(\d{2}):(\d{2})(?::(\d{2}))?/;
 
   /**
    * Creates a custom date/time object that preserves the original TOML date/time format.
@@ -232,8 +232,8 @@ export class LocalTime extends Date {
   originalFormat: string;
   
   constructor(value: string, originalFormat: string) {
-    // For local time, use a fixed date (1970-01-01) and the provided time
-    super(`1970-01-01T${value}`);
+    // For local time, use year 0000 (as per TOML test suite expectations)
+    super(`0000-01-01T${value}`);
     this.originalFormat = originalFormat;
   }
   
