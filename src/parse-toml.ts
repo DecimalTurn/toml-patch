@@ -1332,12 +1332,31 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
           'Found "," without previous value for inline array'
         );
       }
+      
+      // Check if previous item already has a comma (double comma)
+      if (previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found consecutive commas in array (double comma is not allowed)'
+        );
+      }
 
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
     } else if ((cursor.value as Token).type === TokenType.Comment) {
       comments.push(comment(cursor));
     } else {
+      // Check if we're adding a value when the previous value doesn't have a comma
+      const previous = value.items[value.items.length - 1];
+      if (previous && !previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Missing comma between array elements'
+        );
+      }
+      
       const [item, ...additional_comments] = walkValue(cursor, input);
       const inline_item: InlineItem = {
         type: NodeType.InlineItem,
