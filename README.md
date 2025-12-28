@@ -11,7 +11,7 @@ Hopefully, the work done here can go upstream one day if timhall returns, but un
 
 
 **What's New in v0.5.0:**
-- **truncateZeroTimeInDates option**: New formatting option to automatically serialize JavaScript Date objects with zero time components (midnight) as date-only values in TOML.
+- **truncateZeroTimeInDates option**: New formatting option to automatically serialize JavaScript Date objects with zero time components (midnight) as date-only values in TOML (`2024-01-15T00:00:00.000Z → 2024-01-15`).
 
 **What's New in v0.4.0:**
 - **TomlDocument class**: A new document-oriented API for stateful TOML manipulation
