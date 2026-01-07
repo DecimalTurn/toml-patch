@@ -22,6 +22,7 @@ import { zero, cloneLocation, clonePosition } from './location';
 import { LocalDate } from './parse-toml';
 import { TomlFormat } from './toml-format';
 import { shiftNode } from './writer';
+import { isMultilineString } from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -140,8 +141,16 @@ export function generateKey(value: string[]): Key {
   };
 }
 
-export function generateString(value: string): String {
-  const raw = JSON.stringify(value);
+export function generateString(value: string, existingRaw?: string): String {
+  let raw: string;
+  
+  if (existingRaw && isMultilineString(existingRaw)) {
+    // Preserve multiline format - escape any triple quotes in the value
+    const escaped = value.replace(/"""/g, '\\"""');
+    raw = `"""${escaped}"""`;
+  } else {
+    raw = JSON.stringify(value);
+  }
 
   return {
     type: NodeType.String,

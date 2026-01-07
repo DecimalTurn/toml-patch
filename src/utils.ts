@@ -83,3 +83,12 @@ export function merge<TValue>(target: TValue[], values: TValue[]) {
     target[original_length + i] = values[i];
   }
 }
+
+/**
+ * Checks if a string is a multiline string (starts with """ or ''')
+ * @param raw The raw string value including quotes
+ * @returns true if the string is multiline, false otherwise
+ */
+export function isMultilineString(raw: string): boolean {
+  return raw.startsWith('"""') || raw.startsWith("'''");
+}

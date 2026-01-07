@@ -26,10 +26,12 @@ import {
   Block,
   isBlock,
   DateTime,
-  isDateTime
+  isDateTime,
+  String,
+  isString
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
-import { last } from './utils';
+import { last, isMultilineString } from './utils';
 import traverse from './traverse';
 
 ////////////////////////////////////////
@@ -67,6 +69,18 @@ const getExitOffsets = (root: Root) => {
 };
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
+  
+  // Special handling for String nodes to preserve multiline format
+  if (isString(existing) && isString(replacement)) {
+    // If the existing string is multiline, preserve that format
+    if (isMultilineString(existing.raw)) {
+      const escaped = replacement.value.replace(/"""/g, '\\"""');
+      replacement = {
+        ...replacement,
+        raw: `"""${escaped}"""`
+      } as String;
+    }
+  }
   
   // Special handling for DateTime nodes to preserve original format
   if (isDateTime(existing) && isDateTime(replacement)) {
