@@ -78,23 +78,27 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
       
       const newlineChar = existing.raw.includes('\r\n') ? '\r\n' : '\n';
       
-      // Check if the original has newlines immediately after """ and before """
-      // Pattern: """<newline>content<newline>"""
+      // According to TOML spec, only the first newline after """ is trimmed during parsing.
+      // All other newlines (including trailing ones) are significant and part of the value.
+      // We need to preserve the leading newline formatting if it was present in the original.
       const hasLeadingNewline = existing.raw.startsWith(`"""${newlineChar}`) || existing.raw.startsWith(`'''${newlineChar}`);
-      const hasTrailingNewline = existing.raw.endsWith(`${newlineChar}"""`) || existing.raw.endsWith(`${newlineChar}'''`);
       
       let formattedRaw: string;
-      if (hasLeadingNewline && hasTrailingNewline) {
-        formattedRaw = `"""${newlineChar}${escaped}${newlineChar}"""`;
+      if (hasLeadingNewline) {
+        // Preserve the leading newline format. The escaped value already contains any trailing newlines.
+        formattedRaw = `"""${newlineChar}${escaped}"""`;
         
-        // Update location to account for the 3 lines (opening """\n, content, closing \n""")
+        // Count the number of lines in the formatted raw string
+        const lineCount = (formattedRaw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
+        
+        // Update location to account for the lines
         replacement = {
           ...replacement,
           raw: formattedRaw,
           loc: {
             start: existing.loc.start,
             end: {
-              line: existing.loc.start.line + 2, // 3 lines total (0, 1, 2)
+              line: existing.loc.start.line + lineCount,
               column: 3 // length of """
             }
           }

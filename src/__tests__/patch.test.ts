@@ -327,8 +327,7 @@ test('should patch single-line multiline string to another single-line with newl
     [package]
     name = "example"
     description = """
-    A different description
-    """
+    A different description"""
     version = "1.0.0"
     ` + '\n';
 
