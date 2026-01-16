@@ -309,6 +309,32 @@ test('should patch single-line multiline string to another single-line', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should patch single-line multiline string to another single-line with newline at start and end', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    A simple package
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "A different description";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    A different description
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
 
 test('should patch example with removal of an array element', () => {
   const existing = dedent`

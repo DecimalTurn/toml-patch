@@ -75,10 +75,37 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     // If the existing string is multiline, preserve that format
     if (isMultilineString(existing.raw)) {
       const escaped = replacement.value.replace(/"""/g, '\\"""');
-      replacement = {
-        ...replacement,
-        raw: `"""${escaped}"""`
-      } as String;
+      
+      const newlineChar = existing.raw.includes('\r\n') ? '\r\n' : '\n';
+      
+      // Check if the original has newlines immediately after """ and before """
+      // Pattern: """<newline>content<newline>"""
+      const hasLeadingNewline = existing.raw.startsWith(`"""${newlineChar}`) || existing.raw.startsWith(`'''${newlineChar}`);
+      const hasTrailingNewline = existing.raw.endsWith(`${newlineChar}"""`) || existing.raw.endsWith(`${newlineChar}'''`);
+      
+      let formattedRaw: string;
+      if (hasLeadingNewline && hasTrailingNewline) {
+        formattedRaw = `"""${newlineChar}${escaped}${newlineChar}"""`;
+        
+        // Update location to account for the 3 lines (opening """\n, content, closing \n""")
+        replacement = {
+          ...replacement,
+          raw: formattedRaw,
+          loc: {
+            start: existing.loc.start,
+            end: {
+              line: existing.loc.start.line + 2, // 3 lines total (0, 1, 2)
+              column: 3 // length of """
+            }
+          }
+        } as String;
+      } else {
+        formattedRaw = `"""${escaped}"""`;
+        replacement = {
+          ...replacement,
+          raw: formattedRaw
+        } as String;
+      }
     }
   }
   
