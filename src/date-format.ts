@@ -233,7 +233,8 @@ export class LocalTime extends Date {
   
   constructor(value: string, originalFormat: string) {
     // For local time, use a fixed date (1970-01-01) and the provided time
-    super(`1970-01-01T${value}`);
+    // Add 'Z' to ensure it's parsed as UTC regardless of system timezone
+    super(`1970-01-01T${value}Z`);
     this.originalFormat = originalFormat;
   }
   
