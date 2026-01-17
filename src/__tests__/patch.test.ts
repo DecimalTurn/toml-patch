@@ -373,14 +373,14 @@ test('should preserve multiline string with trailing newline in content', () => 
     ` + '\n';
 
   const obj = parse(existing);
-  obj.package.description = "New content with trailing\n";
+  obj.package.description = "New content with trailing newline\n";
   const patched = patch(existing, obj);
   
   let expectedOutput = dedent`
     [package]
     name = "example"
     description = """
-    New content with trailing
+    New content with trailing newline
     """
     version = "1.0.0"
     ` + '\n';
@@ -418,7 +418,7 @@ test('should preserve multiline string with multiple trailing newlines', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
-test('should preserve multiline string with empty content', () => {
+test('should preserve multiline string with empty content and newline at the start', () => {
   const existing = dedent`
     [package]
     name = "example"
@@ -442,27 +442,49 @@ test('should preserve multiline string with empty content', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should preserve multiline string with empty content without newline at the start', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
 test('should preserve multiline string format when value contains backslashes', () => {
   const existing = dedent`
     [package]
     name = "example"
     description = """
-    Path: C:\\Users\\Example
+    Path: C:\\\\Users\\\\Example
     """
     version = "1.0.0"
     ` + '\n';
 
   const obj = parse(existing);
-  // Note: Multiline strings in TOML are literal strings (backslashes are not escaped)
-  // When we set a JavaScript string with single backslashes, they remain single in multiline TOML
+  // Note: Multiline BASIC strings (""") DO escape backslashes (unlike literal strings with ''')
+  // When we set a JavaScript string with a backslash, it needs to be escaped as \\ in the TOML output
   obj.package.description = "New path: D:\\Data\\Files\n";
   const patched = patch(existing, obj);
   
-  // In the expected output, we need to escape the backslashes in the JavaScript template string
+  // In the expected output, backslashes are escaped in the multiline basic string
   const expectedOutput = `[package]
 name = "example"
 description = """
-New path: D:\\Data\\Files
+New path: D:\\\\Data\\\\Files
 """
 version = "1.0.0"
 `;
