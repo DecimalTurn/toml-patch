@@ -189,4 +189,71 @@ describe('formatMultilineStringReplacement', () => {
       expect(result.raw).toBe('"""\r\nnew value"""');
     });
   });
+
+  describe('location tracking', () => {
+    test('should update location for single-line multiline string (no leading newline)', () => {
+      // Single-line multiline string like """content"""
+      const existing = createStringNode('"""old"""', 'old');
+      existing.loc = { start: { line: 1, column: 10 }, end: { line: 1, column: 19 } };
+      
+      const escapedReplacement = generateString('new longer value', existing.raw);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
+      
+      // Should update end column to reflect new length
+      expect(result.loc.start).toEqual({ line: 1, column: 10 });
+      expect(result.loc.end.line).toBe(1);
+      expect(result.loc.end.column).toBe(10 + result.raw.length);
+      expect(result.raw).toBe('"""new longer value"""');
+    });
+
+    test('should update location for multiline string with leading newline', () => {
+      const existing = createStringNode('"""\nold\nvalue"""', 'old\nvalue');
+      existing.loc = { start: { line: 1, column: 10 }, end: { line: 3, column: 3 } };
+      
+      const escapedReplacement = generateString('new\nmultiline\nvalue', existing.raw);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
+      
+      // Should update end line based on number of newlines
+      expect(result.loc.start).toEqual({ line: 1, column: 10 });
+      expect(result.loc.end.line).toBe(4); // start line (1) + 3 newlines
+      expect(result.loc.end.column).toBe(3); // length of delimiter
+    });
+
+    test('should handle location tracking when value changes from short to long', () => {
+      const existing = createStringNode('"""a"""', 'a');
+      existing.loc = { start: { line: 5, column: 0 }, end: { line: 5, column: 7 } };
+      
+      const escapedReplacement = generateString('much longer replacement value', existing.raw);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
+      
+      expect(result.loc.start).toEqual({ line: 5, column: 0 });
+      expect(result.loc.end).toEqual({ line: 5, column: result.raw.length });
+      expect(result.raw).toBe('"""much longer replacement value"""');
+    });
+
+    test('should handle location tracking when value changes from long to short', () => {
+      const existing = createStringNode('"""very long original value"""', 'very long original value');
+      existing.loc = { start: { line: 2, column: 5 }, end: { line: 2, column: 35 } };
+      
+      const escapedReplacement = generateString('x', existing.raw);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
+      
+      expect(result.loc.start).toEqual({ line: 2, column: 5 });
+      expect(result.loc.end).toEqual({ line: 2, column: 5 + result.raw.length });
+      expect(result.raw).toBe('"""x"""');
+    });
+
+    test('should handle CRLF line counting for location tracking', () => {
+      const existing = createStringNode('"""\r\nold\r\nvalue"""', 'old\r\nvalue');
+      existing.loc = { start: { line: 1, column: 0 }, end: { line: 3, column: 3 } };
+      
+      const escapedReplacement = generateString('new\r\nvalue', existing.raw);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
+      
+      // Should count CRLF as line breaks
+      expect(result.loc.start).toEqual({ line: 1, column: 0 });
+      expect(result.loc.end.line).toBe(3); // start line (1) + 2 CRLF
+      expect(result.loc.end.column).toBe(3);
+    });
+  });
 });
