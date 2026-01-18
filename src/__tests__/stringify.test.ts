@@ -635,3 +635,52 @@ test('should handle deeply nested objects with dates and truncateZeroTimeInDates
 
   expect(result).toEqual(expected);
 });
+
+test('should handle strings with triple quotes when stringifying JS objects', () => {
+  const obj = {
+    text: 'Three quotes: """'
+  };
+  
+  const result = stringify(obj);
+  
+  // Should escape triple quotes properly
+  expect(result).toBe('text = "Three quotes: \\"\\"\\\""\n');
+  
+  // The result should be parseable
+  const { parse } = require('../');
+  const parsed = parse(result);
+  expect(parsed.text).toBe('Three quotes: """');
+});
+
+test('should handle strings with four consecutive quotes when stringifying JS objects', () => {
+  const obj = {
+    text: 'Four quotes: """"'
+  };
+  
+  const result = stringify(obj);
+  
+  // Should escape all four quotes
+  expect(result).toBe('text = "Four quotes: \\"\\"\\"\\\""\n');
+  
+  // The result should be parseable
+  const { parse } = require('../');
+  const parsed = parse(result);
+  expect(parsed.text).toBe('Four quotes: """"');
+});
+
+test('should handle strings with backslashes and quotes when stringifying JS objects', () => {
+  const obj = {
+    text: 'Backslash then quotes: \\"""'
+  };
+  
+  const result = stringify(obj);
+  
+  // Should escape backslash and then quotes
+  expect(result).toContain('\\\\'); // escaped backslash
+  expect(result).toContain('\\"'); // escaped quotes
+  
+  // The result should be parseable
+  const { parse } = require('../');
+  const parsed = parse(result);
+  expect(parsed.text).toBe('Backslash then quotes: \\"""');
+});

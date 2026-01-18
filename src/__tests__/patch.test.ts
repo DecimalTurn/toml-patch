@@ -287,6 +287,530 @@ test('should patch example with triple quotes', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should patch single-line multiline string to another single-line', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """A simple package"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "A different description";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """A different description"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should patch single-line multiline string to another single-line with newline at start and end', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    A simple package
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "A different description";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    A different description"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with actual multiple lines', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    First line
+    Second line
+    Third line"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "Updated line one\nUpdated line two\nUpdated line three";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    Updated line one
+    Updated line two
+    Updated line three"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with trailing newline in content', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    Content with trailing newline
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "New content with trailing newline\n";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    New content with trailing newline
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with multiple trailing newlines', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    Content
+
+
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "New content\n\n\n";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    New content
+
+
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with empty content and newline at the start', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with empty content without newline at the start', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string format when value contains backslashes', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    Path: C:\\\\Users\\\\Example
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  // Note: Multiline BASIC strings (""") DO escape backslashes (unlike literal strings with ''')
+  // When we set a JavaScript string with a backslash, it needs to be escaped as \\ in the TOML output
+  obj.package.description = "New path: D:\\Data\\Files\n";
+  const patched = patch(existing, obj);
+  
+  // In the expected output, backslashes are escaped in the multiline basic string
+  const expectedOutput = `[package]
+name = "example"
+description = """
+New path: D:\\\\Data\\\\Files
+"""
+version = "1.0.0"
+`;
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should handle multiline string with triple quotes in content', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """Content without triple quotes"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = 'Updated content';
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """Updated content"""
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with CRLF line endings', () => {
+  const existing = '[package]\r\nname = "example"\r\ndescription = """\r\nA simple package\r\n"""\r\nversion = "1.0.0"\r\n';
+
+  const obj = parse(existing);
+  obj.package.description = "A different description";
+  const patched = patch(existing, obj);
+  
+  const expectedOutput = '[package]\r\nname = "example"\r\ndescription = """\r\nA different description"""\r\nversion = "1.0.0"\r\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should handle conversion from regular string to multiline string format preserved', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = "Regular string"
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "Updated string";
+  const patched = patch(existing, obj);
+  
+  // Should remain as regular string since original was regular
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = "Updated string"
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+test('should preserve multiline string with only newlines', () => {
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "\n";
+  const patched = patch(existing, obj);
+  
+  let expectedOutput = dedent`
+    [package]
+    name = "example"
+    description = """
+
+    """
+    version = "1.0.0"
+    ` + '\n';
+
+  expect(patched).toEqual(expectedOutput);
+});
+
+// Parameterized tests for both basic (""") and literal (''') multiline strings
+describe('multiline strings - both basic and literal', () => {
+  test.each([
+    { delimiter: '"""', type: 'basic' },
+    { delimiter: "'''", type: 'literal' }
+  ])('should preserve $type multiline string format with simple content', ({ delimiter }) => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      A simple package
+      ${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.package.description = "A different description";
+    const patched = patch(existing, obj);
+    
+    const expectedOutput = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      A different description${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test.each([
+    { delimiter: '"""', type: 'basic' },
+    { delimiter: "'''", type: 'literal' }
+  ])('should preserve $type multiline string with multiple lines', ({ delimiter }) => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      line one
+      line two
+      line three${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.package.description = "New line one\nNew line two\nNew line three";
+    const patched = patch(existing, obj);
+    
+    const expectedOutput = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      New line one
+      New line two
+      New line three${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test.each([
+    { delimiter: '"""', type: 'basic' },
+    { delimiter: "'''", type: 'literal' }
+  ])('should preserve $type multiline string with empty content and leading newline', ({ delimiter }) => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      ${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.package.description = "";
+    const patched = patch(existing, obj);
+    
+    const expectedOutput = dedent`
+      [package]
+      name = "example"
+      description = ${delimiter}
+      ${delimiter}
+      version = "1.0.0"
+      ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test.each([
+    { delimiter: '"""', type: 'basic' },
+    { delimiter: "'''", type: 'literal' }
+  ])('should preserve $type multiline string with CRLF line endings', ({ delimiter }) => {
+    const existing = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA simple package\r\n${delimiter}\r\nversion = "1.0.0"\r\n`;
+
+    const obj = parse(existing);
+    obj.package.description = "A different description";
+    const patched = patch(existing, obj);
+    
+    const expectedOutput = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA different description${delimiter}\r\nversion = "1.0.0"\r\n`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+});
+
+// Specific tests for literal multiline strings (''') - testing literal behavior
+describe('literal multiline strings - specific behavior', () => {
+  test('should preserve literal multiline string without escaping backslashes', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      path = '''
+      C:\\Users\\Example\\Path
+      '''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // When setting a JavaScript string with single backslashes
+    obj.package.path = "D:\\Data\\Files";
+    const patched = patch(existing, obj);
+    
+    // In literal strings, backslashes are NOT doubled - they remain as single backslashes
+    const expectedOutput = dedent`
+      [package]
+      name = "example"
+      path = '''
+      D:\Data\Files'''
+      version = "1.0.0"
+      ` + '\n';
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test('should handle literal multiline string with actual newlines vs escape sequences', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''
+      Old text
+      '''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Setting a JavaScript string that contains the characters \ and n
+    obj.package.text = "Line with \\n literal backslash-n";
+    const patched = patch(existing, obj);
+    
+    // Literal strings show backslash-n as actual characters (not newline)
+    // In the template we need to escape the backslash as \\n
+    const expectedOutput = `[package]
+name = "example"
+text = '''
+Line with \\n literal backslash-n'''
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test('should handle literal multiline string with triple quotes in content', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''Old text'''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Literal strings cannot contain ''' so it should convert to basic string
+    obj.package.text = "Text with ''' quotes";
+    const patched = patch(existing, obj);
+    
+    // Should convert from literal (''') to basic (""")
+    // Note: ''' doesn't need escaping in basic strings, only """ needs escaping
+    const expectedOutput = `[package]
+name = "example"
+text = """Text with ''' quotes"""
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test('should NOT add leading newline when converting literal string with newline in middle', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''line one
+      line two'''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Change value to require conversion to basic string
+    obj.package.text = "has ''' quotes";
+    const patched = patch(existing, obj);
+    
+    // Should convert to basic string WITHOUT leading newline
+    // (the original literal string had newline in content, not at the start)
+    const expectedOutput = `[package]
+name = "example"
+text = """has ''' quotes"""
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test('should preserve leading newline when converting literal string with leading newline', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''
+      Old text
+      '''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Change value to require conversion to basic string
+    obj.package.text = "New with ''' quotes";
+    const patched = patch(existing, obj);
+    
+    // Should convert to basic string WITH leading newline
+    const expectedOutput = `[package]
+name = "example"
+text = """
+New with ''' quotes"""
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+});
+
 
 test('should patch example with removal of an array element', () => {
   const existing = dedent`
