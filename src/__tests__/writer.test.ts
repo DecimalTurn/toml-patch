@@ -1,4 +1,4 @@
-import { insert, applyWrites, fixStringLocation } from '../writer';
+import { insert, applyWrites } from '../writer';
 import toTOML from '../to-toml';
 import {
   generateInlineArray,
@@ -58,7 +58,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Three quotes: """', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Three quotes should be escaped as: two literal quotes + escaped quote
       expect(result.raw).toBe('"""Three quotes: ""\\""""');
@@ -68,7 +68,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Four quotes: """"', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // First three quotes escaped as ""\" and fourth remains literal
       expect(result.raw).toBe('"""Four quotes: ""\\"""""');
@@ -78,7 +78,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Five quotes: """""', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Pattern: ""\" + remaining quotes
       expect(result.raw).toBe('"""Five quotes: ""\\""""""');
@@ -88,7 +88,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Six quotes: """"""', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Two sets of three quotes: ""\" + """ (second set becomes ""\")
       // Input: """""" -> First three (""") becomes ""\", next three (""") becomes ""\"
@@ -99,7 +99,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('First: """ and second: """', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       expect(result.raw).toBe('"""First: ""\\" and second: ""\\""""');
     });
@@ -108,7 +108,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Path: C:\\Data and quotes: """', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Backslashes escaped first, then quotes
       expect(result.raw).toBe('"""Path: C:\\\\Data and quotes: ""\\""""');
@@ -118,7 +118,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('One " or two "" quotes', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Single and double quotes are allowed unescaped
       expect(result.raw).toBe('"""One " or two "" quotes"""');
@@ -128,7 +128,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""old"""', 'old');
       const escapedReplacement = generateString('Tab:\there Newline:\nallowed', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Tab escaped, newlines allowed in multiline strings
       expect(result.raw).toBe('"""Tab:\\there Newline:\nallowed"""');
@@ -140,7 +140,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode("'''old'''", 'old');
       const escapedReplacement = generateString("Three quotes: '''", existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Should convert from literal (''') to basic (""")
       // Note: ''' doesn't need escaping in basic strings
@@ -151,7 +151,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode("'''old'''", 'old');
       const escapedReplacement = generateString("Path: C:\\Data\\Files", existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       // Backslashes are literal in ''' strings
       expect(result.raw).toBe("'''Path: C:\\Data\\Files'''");
@@ -163,7 +163,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"regular"', 'regular');
       const replacement = createStringNode('"new"', 'new value');
       
-      const result = fixStringLocation(existing, replacement);
+      const result = replacement;
       
       // Should return the original replacement unchanged
       expect(result).toBe(replacement);
@@ -175,7 +175,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""\nold"""', 'old');
       const escapedReplacement = generateString('new value', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       expect(result.raw).toBe('"""\nnew value"""');
     });
@@ -184,7 +184,7 @@ describe('formatMultilineStringReplacement', () => {
       const existing = createStringNode('"""\r\nold"""', 'old');
       const escapedReplacement = generateString('new value', existing.raw);
       
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
       expect(result.raw).toBe('"""\r\nnew value"""');
     });
@@ -197,12 +197,12 @@ describe('formatMultilineStringReplacement', () => {
       existing.loc = { start: { line: 1, column: 10 }, end: { line: 1, column: 19 } };
       
       const escapedReplacement = generateString('new longer value', existing.raw);
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
-      // Should update end column to reflect new length
-      expect(result.loc.start).toEqual({ line: 1, column: 10 });
+      // generateString returns base location (not adjusted to existing position - that's done by shiftNode in replace)
+      expect(result.loc.start).toEqual({ line: 1, column: 0 });
       expect(result.loc.end.line).toBe(1);
-      expect(result.loc.end.column).toBe(10 + result.raw.length);
+      expect(result.loc.end.column).toBe(result.raw.length);
       expect(result.raw).toBe('"""new longer value"""');
     });
 
@@ -211,11 +211,11 @@ describe('formatMultilineStringReplacement', () => {
       existing.loc = { start: { line: 1, column: 10 }, end: { line: 3, column: 3 } };
       
       const escapedReplacement = generateString('new\nmultiline\nvalue', existing.raw);
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
-      // Should update end line based on number of newlines
-      expect(result.loc.start).toEqual({ line: 1, column: 10 });
-      expect(result.loc.end.line).toBe(4); // start line (1) + 3 newlines
+      // generateString returns base location (not adjusted to existing position - that's done by shiftNode in replace)
+      expect(result.loc.start).toEqual({ line: 1, column: 0 });
+      expect(result.loc.end.line).toBe(4); // base line (1) + 3 newlines
       expect(result.loc.end.column).toBe(3); // length of delimiter
     });
 
@@ -224,10 +224,11 @@ describe('formatMultilineStringReplacement', () => {
       existing.loc = { start: { line: 5, column: 0 }, end: { line: 5, column: 7 } };
       
       const escapedReplacement = generateString('much longer replacement value', existing.raw);
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
-      expect(result.loc.start).toEqual({ line: 5, column: 0 });
-      expect(result.loc.end).toEqual({ line: 5, column: result.raw.length });
+      // generateString returns base location
+      expect(result.loc.start).toEqual({ line: 1, column: 0 });
+      expect(result.loc.end).toEqual({ line: 1, column: result.raw.length });
       expect(result.raw).toBe('"""much longer replacement value"""');
     });
 
@@ -236,10 +237,11 @@ describe('formatMultilineStringReplacement', () => {
       existing.loc = { start: { line: 2, column: 5 }, end: { line: 2, column: 35 } };
       
       const escapedReplacement = generateString('x', existing.raw);
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
-      expect(result.loc.start).toEqual({ line: 2, column: 5 });
-      expect(result.loc.end).toEqual({ line: 2, column: 5 + result.raw.length });
+      // generateString returns base location
+      expect(result.loc.start).toEqual({ line: 1, column: 0 });
+      expect(result.loc.end).toEqual({ line: 1, column: result.raw.length });
       expect(result.raw).toBe('"""x"""');
     });
 
@@ -248,11 +250,11 @@ describe('formatMultilineStringReplacement', () => {
       existing.loc = { start: { line: 1, column: 0 }, end: { line: 3, column: 3 } };
       
       const escapedReplacement = generateString('new\r\nvalue', existing.raw);
-      const result = fixStringLocation(existing, escapedReplacement);
+      const result = escapedReplacement;
       
-      // Should count CRLF as line breaks
+      // generateString returns base location and counts CRLF as line breaks
       expect(result.loc.start).toEqual({ line: 1, column: 0 });
-      expect(result.loc.end.line).toBe(3); // start line (1) + 2 CRLF
+      expect(result.loc.end.line).toBe(3); // base line (1) + 2 CRLF
       expect(result.loc.end.column).toBe(3);
     });
   });

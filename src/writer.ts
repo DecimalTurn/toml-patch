@@ -68,56 +68,8 @@ const getExitOffsets = (root: Root) => {
   return exit_offsets.get(root)!;
 };
 
-/**
- * Updates location information for a replacement string to match the existing string's position.
- * The actual formatting and escaping is done by generateString().
- * 
- * @param existing - The existing string node with the original format and location
- * @param replacement - The replacement string node (already fully formatted by generateString)
- * @returns The replacement string node with updated location information
- */
-export function fixStringLocation(existing: String, replacement: String): String {
-  if (!isMultilineString(replacement.raw)) {
-    return replacement;
-  }
-
-  // Detect newline character to count lines correctly
-  const newlineChar = replacement.raw.includes('\r\n') ? '\r\n' : '\n';
-  const lineCount = (replacement.raw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
-  
-  // Update location to match existing position and account for multiple lines
-  if (lineCount > 0) {
-    return {
-      ...replacement,
-      loc: {
-        start: existing.loc.start,
-        end: {
-          line: existing.loc.start.line + lineCount,
-          column: 3 // length of delimiter
-        }
-      }
-    } as String;
-  } else {
-    return {
-      ...replacement,
-      loc: {
-        start: existing.loc.start,
-        end: {
-          line: existing.loc.start.line,
-          column: existing.loc.start.column + replacement.raw.length
-        }
-      }
-    } as String;
-  }
-}
-
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
-  
-  // Special handling for String nodes to fix location (formatting is now handled in patch.ts)
-  if (isString(existing) && isString(replacement)) {
-    replacement = fixStringLocation(existing, replacement);
-  }
   
   // Special handling for DateTime nodes to preserve original format by editing replacement values
   if (isDateTime(existing) && isDateTime(replacement)) {
