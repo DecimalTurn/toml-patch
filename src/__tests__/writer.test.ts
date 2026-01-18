@@ -136,15 +136,15 @@ describe('formatMultilineStringReplacement', () => {
   });
 
   describe("literal multiline strings (''')", () => {
-    test('should escape three consecutive single quotes', () => {
+    test('should convert to basic string when value contains triple quotes', () => {
       const existing = createStringNode("'''old'''", 'old');
       const escapedReplacement = generateString("Three quotes: '''", existing.raw);
       
       const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
-      // Verify the escaping pattern: opening ''' + content with escaped quotes + closing '''
-      expect(result.raw).toMatch(/^'''Three quotes: ''\\''.*'''$/);
-      expect(result.raw.includes("''\\''")).toBe(true);
+      // Should convert from literal (''') to basic (""")
+      // Note: ''' doesn't need escaping in basic strings
+      expect(result.raw).toBe('"""Three quotes: \'\'\'"""');
     });
 
     test('should not escape backslashes in literal strings', () => {

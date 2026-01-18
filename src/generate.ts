@@ -152,17 +152,24 @@ export function generateString(value: string, existingRaw?: string): String {
   
   if (existingRaw && isMultilineString(existingRaw)) {
     // Preserve multiline format
-    const isLiteral = existingRaw.startsWith("'''");
+    let isLiteral = existingRaw.startsWith("'''");
+    
+    // Literal strings cannot contain ''' - convert to basic string if needed
+    if (isLiteral && value.includes("'''")) {
+      isLiteral = false;
+    }
+    
     const delimiter = isLiteral ? "'''" : '"""';
     
     // Detect newline character from existing raw
     const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
-    const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`);
+    const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
+                               (existingRaw.startsWith("'''") && !isLiteral && existingRaw.includes('\n'));
     
     let escaped: string;
     if (isLiteral) {
-      // Literal strings: only escape triple single quotes
-      escaped = value.replace(/'''/g, "''\\''");
+      // Literal strings: no escaping needed (we already checked for ''' above)
+      escaped = value;
     } else {
       // Basic multiline strings: escape backslashes, control characters, and triple quotes
       escaped = value

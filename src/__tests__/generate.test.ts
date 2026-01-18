@@ -58,13 +58,14 @@ describe('generateString', () => {
   });
 
   describe('with multiline literal string format preservation', () => {
-    test('should escape three consecutive single quotes', () => {
+    test('should convert to basic string when value contains triple quotes', () => {
       const result = generateString("Three quotes: '''", "'''old'''");
       
       expect(result.type).toBe(NodeType.String);
       expect(result.value).toBe("Three quotes: '''");
-      expect(result.raw).toMatch(/^'''Three quotes: ''\\''.*'''$/);
-      expect(result.raw).toContain("''\\''");
+      // Should convert from literal (''') to basic (""")
+      // Note: ''' doesn't need escaping in basic strings, only """ needs escaping
+      expect(result.raw).toBe('"""Three quotes: \'\'\'"""');
     });
 
     test('should not escape backslashes in literal strings', () => {
