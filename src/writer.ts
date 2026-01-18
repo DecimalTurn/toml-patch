@@ -33,7 +33,6 @@ import {
 import { Span, getSpan, clonePosition } from './location';
 import { last, isMultilineString } from './utils';
 import traverse from './traverse';
-import { generateString } from './generate';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the AST
@@ -115,11 +114,9 @@ export function fixStringLocation(existing: String, replacement: String): String
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
   
-  // Special handling for String nodes to preserve multiline format by editing replacement values
+  // Special handling for String nodes to fix location (formatting is now handled in patch.ts)
   if (isString(existing) && isString(replacement)) {
-    // Regenerate the replacement with proper escaping based on existing format
-    const escapedReplacement = generateString(replacement.value, existing.raw);
-    replacement = fixStringLocation(existing, escapedReplacement);
+    replacement = fixStringLocation(existing, replacement);
   }
   
   // Special handling for DateTime nodes to preserve original format by editing replacement values

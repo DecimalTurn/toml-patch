@@ -17,16 +17,18 @@ import {
   isInlineArray,
   isInlineTable,
   isInlineItem,
+  isString,
   hasItem,
   InlineItem,
   AST,
-  Table
+  Table,
+  Value
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger } from './utils';
+import { last, isInteger, isMultilineString } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem, generateTable } from './generate';
+import { generateInlineItem, generateTable, generateString } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment, calculateTableDepth } from './toml-format';
 
@@ -126,6 +128,41 @@ function reorder(changes: Change[]): Change[] {
   
   return changes;
 
+}
+
+/**
+ * Preserves formatting from the existing node when applying it to the replacement node.
+ * This includes multiline string formats, trailing commas, etc.
+ * 
+ * @param existing - The existing node with formatting to preserve
+ * @param replacement - The replacement node to apply formatting to
+ */
+function preserveFormatting(existing: Value, replacement: Value): void {
+  // Preserve multiline string format
+  if (isString(existing) && isString(replacement) && isMultilineString(existing.raw)) {
+    // Generate new string node with preserved multiline format
+    const newString = generateString(replacement.value, existing.raw);
+    replacement.raw = newString.raw;
+    replacement.loc = newString.loc;
+  }
+  
+  // Preserve array trailing comma format
+  if (isInlineArray(existing) && isInlineArray(replacement)) {
+    const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
+    if (replacement.items.length > 0) {
+      const lastItem = replacement.items[replacement.items.length - 1];
+      lastItem.comma = originalHadTrailingCommas;
+    }
+  }
+  
+  // Preserve inline table trailing comma format
+  if (isInlineTable(existing) && isInlineTable(replacement)) {
+    const originalHadTrailingCommas = tableHadTrailingCommas(existing);
+    if (replacement.items.length > 0) {
+      const lastItem = replacement.items[replacement.items.length - 1];
+      lastItem.comma = originalHadTrailingCommas;
+    }
+  }
 }
 
 /**
@@ -270,30 +307,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
-
-        // Special handling for arrays: preserve original trailing comma format
-        if (isInlineArray(existing.value) && isInlineArray(replacement.value)) {
-          const originalHadTrailingCommas = arrayHadTrailingCommas(existing.value);
-          const newArray = replacement.value;
-          
-          // Apply or remove trailing comma based on original format
-          if (newArray.items.length > 0) {
-            const lastItem = newArray.items[newArray.items.length - 1];
-            lastItem.comma = originalHadTrailingCommas;
-          }
-        }
-        
-        // Special handling for inline tables: preserve original trailing comma format
-        if (isInlineTable(existing.value) && isInlineTable(replacement.value)) {
-          const originalHadTrailingCommas = tableHadTrailingCommas(existing.value);
-          const newTable = replacement.value;
-          
-          // Apply or remove trailing comma based on original format
-          if (newTable.items.length > 0) {
-            const lastItem = newTable.items[newTable.items.length - 1];
-            lastItem.comma = originalHadTrailingCommas;
-          }
-        }
+        // Preserve formatting from existing value in replacement value
+        preserveFormatting(existing.value, replacement.value);
         
         parent = existing;
         existing = existing.value;

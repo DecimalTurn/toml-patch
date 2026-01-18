@@ -204,6 +204,12 @@ export function generateString(value: string, existingRaw?: string): String {
   };
 }
 
+/**
+ * Generates a new Integer node.
+ *
+ * @param value - The integer value.
+ * @returns A new Integer node.
+ */
 export function generateInteger(value: number): Integer {
   const raw = value.toString();
 
