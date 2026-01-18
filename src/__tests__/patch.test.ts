@@ -758,6 +758,57 @@ version = "1.0.0"
 
     expect(patched).toEqual(expectedOutput);
   });
+
+  test('should NOT add leading newline when converting literal string with newline in middle', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''line one
+      line two'''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Change value to require conversion to basic string
+    obj.package.text = "has ''' quotes";
+    const patched = patch(existing, obj);
+    
+    // Should convert to basic string WITHOUT leading newline
+    // (the original literal string had newline in content, not at the start)
+    const expectedOutput = `[package]
+name = "example"
+text = """has ''' quotes"""
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
+
+  test('should preserve leading newline when converting literal string with leading newline', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      text = '''
+      Old text
+      '''
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // Change value to require conversion to basic string
+    obj.package.text = "New with ''' quotes";
+    const patched = patch(existing, obj);
+    
+    // Should convert to basic string WITH leading newline
+    const expectedOutput = `[package]
+name = "example"
+text = """
+New with ''' quotes"""
+version = "1.0.0"
+`;
+
+    expect(patched).toEqual(expectedOutput);
+  });
 });
 
 

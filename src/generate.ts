@@ -164,7 +164,7 @@ export function generateString(value: string, existingRaw?: string): String {
     // Detect newline character from existing raw
     const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
     const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
-                               (existingRaw.startsWith("'''") && !isLiteral && existingRaw.includes('\n'));
+                               ((existingRaw.startsWith("'''\n") || existingRaw.startsWith("'''\r\n")) && !isLiteral);
     
     let escaped: string;
     if (isLiteral) {

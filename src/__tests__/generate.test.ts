@@ -75,6 +75,30 @@ describe('generateString', () => {
       expect(result.value).toBe('Backslash: \\n');
       expect(result.raw).not.toContain('\\\\'); // backslashes should not be escaped
     });
+
+    test('should preserve leading newline when converting from literal to basic (with leading newline)', () => {
+      // Original literal string with leading newline: '''\nold'''
+      const result = generateString("new value with '''", "'''\nold'''");
+      
+      // Should convert to basic and preserve leading newline
+      expect(result.raw).toBe('"""\nnew value with \'\'\'"""');
+    });
+
+    test('should NOT add leading newline when converting from literal without leading newline', () => {
+      // Original literal string WITHOUT leading newline but WITH newline in content: '''old\nnewline'''
+      const result = generateString("value with '''", "'''old\nnewline'''");
+      
+      // Should convert to basic but NOT add leading newline (newline is in middle of content)
+      expect(result.raw).toBe('"""value with \'\'\'"""');
+    });
+
+    test('should preserve leading newline with CRLF when converting from literal to basic', () => {
+      // Original literal string with CRLF leading newline
+      const result = generateString("new with '''", "'''\r\nold'''");
+      
+      // Should convert to basic and preserve CRLF leading newline
+      expect(result.raw).toBe('"""\r\nnew with \'\'\'"""');
+    });
   });
 
   describe('without existing multiline format', () => {
