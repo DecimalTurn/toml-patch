@@ -54,16 +54,16 @@ jobs:
           echo "version=$new_version" >> $GITHUB_OUTPUT
           echo "tag=v$new_version" >> $GITHUB_OUTPUT
 
-      - name: Update package.json
+      - name: Update package.json and jsr.jsonc
         run: |
-          jq '.version = "${{ steps.next_version.outputs.version }}"' package.json > package.json.tmp
+          NEW_VERSION="${{ steps.next_version.outputs.version }}"
+          
+          # Update package.json
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
-
-      - name: Update jsr.jsonc
-        run: |
-          # Remove comments and parse as JSON, update version, format back
-          sed 's|//.*||g' jsr.jsonc | jq '.version = "${{ steps.next_version.outputs.version }}"' > jsr.jsonc.tmp
-          mv jsr.jsonc.tmp jsr.jsonc
+          
+          # Update jsr.jsonc preserving comments
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" jsr.jsonc
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
