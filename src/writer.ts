@@ -77,7 +77,7 @@ const getExitOffsets = (root: Root) => {
  * @param replacement - The replacement string node (already fully formatted by generateString)
  * @returns The replacement string node with updated location information
  */
-export function formatMultilineStringReplacement(existing: String, replacement: String): String {
+export function fixStringLocation(existing: String, replacement: String): String {
   if (!isMultilineString(replacement.raw)) {
     return replacement;
   }
@@ -119,8 +119,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   if (isString(existing) && isString(replacement)) {
     // Regenerate the replacement with proper escaping based on existing format
     const escapedReplacement = generateString(replacement.value, existing.raw);
-    // Then format it to preserve leading newlines and update location
-    replacement = formatMultilineStringReplacement(existing, escapedReplacement);
+    replacement = fixStringLocation(existing, escapedReplacement);
   }
   
   // Special handling for DateTime nodes to preserve original format by editing replacement values
