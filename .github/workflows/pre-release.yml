@@ -1,0 +1,94 @@
+name: Pre-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Which part of the version to bump (major, minor, patch)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Get current version
+        id: current_version
+        run: |
+          current=$(jq -r '.version' package.json)
+          echo "Current version: $current"
+          echo "version=$current" >> $GITHUB_OUTPUT
+
+      - name: Calculate next version
+        id: next_version
+        run: |
+          IFS='.' read -r major minor patch <<< "${{ steps.current_version.outputs.version }}"
+          case "${{ github.event.inputs.version_bump }}" in
+            major)
+              ((major+=1)); minor=0; patch=0;;
+            minor)
+              ((minor+=1)); patch=0;;
+            patch)
+              ((patch+=1));;
+          esac
+          new_version="$major.$minor.$patch"
+          echo "Next version: $new_version"
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+          echo "tag=v$new_version" >> $GITHUB_OUTPUT
+
+      - name: Update package.json
+        run: |
+          jq '.version = "${{ steps.next_version.outputs.version }}"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Update jsr.jsonc
+        run: |
+          # Remove comments and parse as JSON, update version, format back
+          sed 's|//.*||g' jsr.jsonc | jq '.version = "${{ steps.next_version.outputs.version }}"' > jsr.jsonc.tmp
+          mv jsr.jsonc.tmp jsr.jsonc
+
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
+
+      - name: Update CHANGELOG.md
+        run: |
+          today=$(date +%Y-%m-%d)
+          sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${{ steps.next_version.outputs.version }}] - $today/" CHANGELOG.md
+
+      - name: Commit changes
+        id: commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add package.json jsr.jsonc package-lock.json CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.next_version.outputs.version }}"
+          git push origin ${{ github.ref_name }}
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.next_version.outputs.tag }}
+          target_commitish: ${{ steps.commit.outputs.sha }}
+          generate_release_notes: true
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
