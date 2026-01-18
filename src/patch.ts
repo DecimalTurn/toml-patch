@@ -22,7 +22,8 @@ import {
   InlineItem,
   AST,
   Table,
-  Value
+  Value,
+  isDateTime
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
@@ -31,6 +32,7 @@ import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateString } from './generate';
 import { validate } from './validate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment, calculateTableDepth } from './toml-format';
+import { DateFormatHelper } from './date-format';
 
 export function toDocument(ast: AST) : Document  {
   const items = [...ast];
@@ -132,18 +134,39 @@ function reorder(changes: Change[]): Change[] {
 
 /**
  * Preserves formatting from the existing node when applying it to the replacement node.
- * This includes multiline string formats, trailing commas, etc.
+ * This includes multiline string formats, trailing commas, DateTime formats, etc.
  * 
  * @param existing - The existing node with formatting to preserve
  * @param replacement - The replacement node to apply formatting to
  */
 function preserveFormatting(existing: Value, replacement: Value): void {
+  
   // Preserve multiline string format
   if (isString(existing) && isString(replacement) && isMultilineString(existing.raw)) {
     // Generate new string node with preserved multiline format
     const newString = generateString(replacement.value, existing.raw);
     replacement.raw = newString.raw;
     replacement.loc = newString.loc;
+  }
+  
+  // Preserve DateTime format
+  if (isDateTime(existing) && isDateTime(replacement)) {
+    // Analyze the original raw format and create a properly formatted replacement
+    const originalRaw = existing.raw;
+    const newValue = replacement.value;
+    
+    // Create a new date with the original format preserved
+    const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
+    
+    // Update the replacement with the properly formatted date
+    replacement.value = formattedDate;
+    replacement.raw = formattedDate.toISOString();
+    
+    // Adjust the location information to match the new raw length
+    const lengthDiff = replacement.raw.length - originalRaw.length;
+    if (lengthDiff !== 0) {
+      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+    }
   }
   
   // Preserve array trailing comma format
