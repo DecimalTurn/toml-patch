@@ -1,0 +1,116 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Add CHANGELOG.md
+
+### Fixed
+- Fix multiline string handling when patching ([#87](https://github.com/DecimalTurn/toml-patch/pull/87))
+- Fix LocalTime timezone parsing issue (2dea07ffd8377ad2aa30678e7025dcbe6753a8e9)
+
+## [0.5.0] - 2025-12-26
+
+### Added
+- Add `truncateZeroTimeInDates` formatting option for date serialization ([#86](https://github.com/DecimalTurn/toml-patch/pull/86))
+
+### Changed
+- Update dependency dedent to v1.7.1
+
+## [0.4.1] - 2025-12-25
+
+### Added
+- Introduce `TomlDocument` class ([#66](https://github.com/DecimalTurn/toml-patch/pull/66))
+- Add `TomlFormat` class ([#77](https://github.com/DecimalTurn/toml-patch/pull/77))
+- Better Inline vs Multiline Tables formatting ([#79](https://github.com/DecimalTurn/toml-patch/pull/79))
+- Handle TOML date formats when patching ([#82](https://github.com/DecimalTurn/toml-patch/pull/82))
+
+### Fixed
+- Dates will now preserve their formatting when patched
+
+### Changed
+- Updated submodules/toml-test digest to b54f9ff
+- Update actions/checkout action to v6
+- Update actions/upload-artifact action to v6
+- Updated Node.js to v24
+- Updated glob to v13
+- Updated rimraf to v6.1.2
+- Updated js-yaml to v4.1.1
+- Updated ts-jest to v29.4.6
+- Updated rollup-plugin-dts to v6.3.0
+- Skipped rollup v4.53.0 due to upstream issues
+
+## [0.3.8] - 2025-10-25
+
+### Fixed
+- Add roundtrip tests and fix related issues ([#64](https://github.com/DecimalTurn/toml-patch/pull/64))
+  - Ensure trailing end-of-line (EOL) preservation at the end-of-file (ie. if the original TOML doesn't have any EOL at EOF, don't add one and if there's more than one include them)
+  - Fix issues with float values (`Infinity`, `-Infinity`, `NaN`, `-0`)
+  - Fix the regular expression for bare TOML keys ensuring correct quoted keys interpretation (`"tater.man"` != `tater.man`)
+  - Fix nested inline tables issues
+  - Fix ghost offset when TOML has no top-level key/value pairs
+- Fix regex for newline matching
+
+### Security
+- Add Socket Free Firewall ([#53](https://github.com/DecimalTurn/toml-patch/pull/53))
+
+### Changed
+- Updated submodules/toml-test digest to 1d35870
+- Update actions/upload-artifact action to v5
+- Updated rollup to versions up to v4.52.5
+- Updated TypeScript to v5.9.3
+- Updated ts-jest to v29.4.5
+- Updated jest monorepo to v30
+- Updated dedent to v1.7.0
+- Updated js-yaml to v4
+- Updated @rollup/plugin-typescript to v12.3.0
+- Updated actions/setup-node to v6
+- Updated socketdev/action to v1.2.0
+
+### Other
+- Expand benchmarks ([#61](https://github.com/DecimalTurn/toml-patch/pull/61))
+
+## [0.3.7] - 2025-08-20
+
+### Added
+- Package is now available on jsr.io: https://jsr.io/@decimalturn/toml-patch
+
+### Changed
+- Documentation and package description update
+
+## [0.3.3] - 2025-05-10
+
+### Fixed
+- Handle key-value vs inline-item mixup ([#4](https://github.com/DecimalTurn/toml-patch/pull/4))
+
+## [0.3.2] - 2025-04-13
+
+### Fixed
+- Fix replacement from Inline-Table to String Value ([#3](https://github.com/DecimalTurn/toml-patch/pull/3))
+
+## [0.3.1] - 2025-04-12
+
+### Fixed
+- Fix inline-table element deletion ([#1](https://github.com/DecimalTurn/toml-patch/pull/1))
+- Fix inline-table edition ([#2](https://github.com/DecimalTurn/toml-patch/pull/2))
+
+## [0.3.0] - 2025-04-12
+
+This first forked version from [timhall/toml-patch](https://github.com/timhall/toml-patch):
+
+### Added
+- Now available from npm: https://www.npmjs.com/package/@decimalturn/toml-patch
+
+### Fixed
+- Fix [timhall/toml-patch#27](https://github.com/timhall/toml-patch/issues/27)
+- Fix [timhall/toml-patch#25](https://github.com/timhall/toml-patch/issues/25)
+- Fix [timhall/toml-patch#10](https://github.com/timhall/toml-patch/issues/10)
+
+### Changed
+- Updates dependencies
+- Ensures all latest spec tests from https://github.com/iarna/toml-spec-tests are passing (1880b1a)
