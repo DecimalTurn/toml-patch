@@ -140,14 +140,51 @@ export function generateKey(value: string[]): Key {
     value
   };
 }
-
+/**
+ * Generates a new String node, preserving multiline format if existingRaw is provided.
+ *
+ * @param value - The string value.
+ * @param existingRaw - The existing raw string to determine multiline format (optional).
+ * @returns A new String node.
+ */
 export function generateString(value: string, existingRaw?: string): String {
   let raw: string;
   
   if (existingRaw && isMultilineString(existingRaw)) {
-    // Preserve multiline format - escape any triple quotes in the value
-    const escaped = value.replace(/"""/g, '\\"""');
-    raw = `"""${escaped}"""`;
+    // Preserve multiline format
+    const isLiteral = existingRaw.startsWith("'''");
+    const delimiter = isLiteral ? "'''" : '"""';
+    
+    // Detect newline character from existing raw
+    const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
+    const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`);
+    
+    let escaped: string;
+    if (isLiteral) {
+      // Literal strings: only escape triple single quotes
+      escaped = value.replace(/'''/g, "''\\''");
+    } else {
+      // Basic multiline strings: escape backslashes, control characters, and triple quotes
+      escaped = value
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/\x08/g, '\\b') // Backspace (U+0008)
+        .replace(/\f/g, '\\f')   // Form feed (U+000C)
+        .replace(/\t/g, '\\t')   // Tab (U+0009)
+        .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
+          // Escape other control characters
+          const code = char.charCodeAt(0);
+          return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+        })
+        // Escape triple quotes safely: two literal quotes + escaped quote
+        .replace(/"""/g, '""\\\"');
+    }
+    
+    // Format with or without leading newline based on original
+    if (hasLeadingNewline) {
+      raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
+    } else {
+      raw = `${delimiter}${escaped}${delimiter}`;
+    }
   } else {
     raw = JSON.stringify(value);
   }

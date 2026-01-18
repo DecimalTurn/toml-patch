@@ -56,9 +56,9 @@ describe('formatMultilineStringReplacement', () => {
   describe('basic multiline strings (""")', () => {
     test('should escape three consecutive quotes correctly', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Three quotes: """');
+      const escapedReplacement = generateString('Three quotes: """', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Three quotes should be escaped as: two literal quotes + escaped quote
       expect(result.raw).toBe('"""Three quotes: ""\\""""');
@@ -66,9 +66,9 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should escape four consecutive quotes correctly', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Four quotes: """"');
+      const escapedReplacement = generateString('Four quotes: """"', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // First three quotes escaped as ""\" and fourth remains literal
       expect(result.raw).toBe('"""Four quotes: ""\\"""""');
@@ -76,9 +76,9 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should escape five consecutive quotes correctly', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Five quotes: """""');
+      const escapedReplacement = generateString('Five quotes: """""', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Pattern: ""\" + remaining quotes
       expect(result.raw).toBe('"""Five quotes: ""\\""""""');
@@ -86,9 +86,9 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should escape six consecutive quotes correctly', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Six quotes: """"""');
+      const escapedReplacement = generateString('Six quotes: """"""', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Two sets of three quotes: ""\" + """ (second set becomes ""\")
       // Input: """""" -> First three (""") becomes ""\", next three (""") becomes ""\"
@@ -97,18 +97,18 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should handle multiple triple quote sequences', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'First: """ and second: """');
+      const escapedReplacement = generateString('First: """ and second: """', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       expect(result.raw).toBe('"""First: ""\\" and second: ""\\""""');
     });
 
     test('should escape backslashes before escaping quotes', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Path: C:\\Data and quotes: """');
+      const escapedReplacement = generateString('Path: C:\\Data and quotes: """', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Backslashes escaped first, then quotes
       expect(result.raw).toBe('"""Path: C:\\\\Data and quotes: ""\\""""');
@@ -116,9 +116,9 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should handle one or two quotes (not escaped)', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'One " or two "" quotes');
+      const escapedReplacement = generateString('One " or two "" quotes', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Single and double quotes are allowed unescaped
       expect(result.raw).toBe('"""One " or two "" quotes"""');
@@ -126,21 +126,21 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should escape control characters', () => {
       const existing = createStringNode('"""old"""', 'old');
-      const replacement = createStringNode('"new"', 'Tab:\there Newline:\nallowed');
+      const escapedReplacement = generateString('Tab:\there Newline:\nallowed', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Tab escaped, newlines allowed in multiline strings
       expect(result.raw).toBe('"""Tab:\\there Newline:\nallowed"""');
     });
   });
 
-  describe('literal multiline strings (\'\'\')', () => {
+  describe("literal multiline strings (''')", () => {
     test('should escape three consecutive single quotes', () => {
       const existing = createStringNode("'''old'''", 'old');
-      const replacement = createStringNode("'new'", "Three quotes: '''");
+      const escapedReplacement = generateString("Three quotes: '''", existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Verify the escaping pattern: opening ''' + content with escaped quotes + closing '''
       expect(result.raw).toMatch(/^'''Three quotes: ''\\''.*'''$/);
@@ -149,9 +149,9 @@ describe('formatMultilineStringReplacement', () => {
 
     test('should not escape backslashes in literal strings', () => {
       const existing = createStringNode("'''old'''", 'old');
-      const replacement = createStringNode("'new'", "Path: C:\\Data\\Files");
+      const escapedReplacement = generateString("Path: C:\\Data\\Files", existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       // Backslashes are literal in ''' strings
       expect(result.raw).toBe("'''Path: C:\\Data\\Files'''");
@@ -173,18 +173,18 @@ describe('formatMultilineStringReplacement', () => {
   describe('newline handling', () => {
     test('should preserve leading newline format', () => {
       const existing = createStringNode('"""\nold"""', 'old');
-      const replacement = createStringNode('"new"', 'new value');
+      const escapedReplacement = generateString('new value', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       expect(result.raw).toBe('"""\nnew value"""');
     });
 
     test('should detect and use CRLF line endings', () => {
       const existing = createStringNode('"""\r\nold"""', 'old');
-      const replacement = createStringNode('"new"', 'new value');
+      const escapedReplacement = generateString('new value', existing.raw);
       
-      const result = formatMultilineStringReplacement(existing, replacement);
+      const result = formatMultilineStringReplacement(existing, escapedReplacement);
       
       expect(result.raw).toBe('"""\r\nnew value"""');
     });
