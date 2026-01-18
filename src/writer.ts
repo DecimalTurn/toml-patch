@@ -67,76 +67,92 @@ const getExitOffsets = (root: Root) => {
   }
   return exit_offsets.get(root)!;
 };
+
+/**
+ * Formats a replacement string value to preserve multiline string format.
+ * Handles both basic multiline strings (""") and literal multiline strings (''').
+ * 
+ * @param existing - The existing string node with the original format
+ * @param replacement - The replacement string node with the new value
+ * @returns The replacement string node with updated raw value and location, or the original replacement if not multiline
+ */
+export function formatMultilineStringReplacement(existing: String, replacement: String): String {
+  if (!isMultilineString(existing.raw)) {
+    return replacement;
+  }
+
+  // Determine if this is a literal multiline string (''') or basic multiline string (""")
+  const isLiteral = existing.raw.startsWith("'''");
+  
+  let escaped: string = replacement.value;
+  if (isLiteral) {
+    // Literal strings: no escaping needed except for triple single quotes
+    escaped = replacement.value.replace(/'''/g, "''\\''");
+  } else {
+    // Basic multiline strings: need to escape backslashes and control characters (like basic strings)
+    // Escape backslashes first, then control characters, then triple quotes
+    escaped = replacement.value
+      .replace(/\\/g, '\\\\')  // Escape backslashes first
+      .replace(/\x08/g, '\\b') // Backspace (U+0008)
+      .replace(/\f/g, '\\f')   // Form feed (U+000C)
+      .replace(/\t/g, '\\t')   // Tab (U+0009)
+      .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
+        // Escape other control characters (U+0000-U+0007, U+000B, U+000E-U+001F, U+007F)
+        // Note: \n (U+000A) and \r (U+000D) are allowed in multiline strings, so we exclude them
+        const code = char.charCodeAt(0);
+        return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+      })
+      // Escape triple quotes safely: two literal quotes + escaped quote
+      // This prevents issues with 4+ consecutive quotes ("""" would become ""\"  instead of \""")
+      .replace(/"""/g, '""\\\"');
+  }
+  
+  const newlineChar = existing.raw.includes('\r\n') ? '\r\n' : '\n';
+  
+  // According to TOML spec, only the first newline after delimiter is trimmed during parsing.
+  // All other newlines (including trailing ones) are significant and part of the value.
+  // We need to preserve the leading newline formatting if it was present in the original.
+  const delimiter = isLiteral ? "'''" : '"""';
+  const hasLeadingNewline = existing.raw.startsWith(`${delimiter}${newlineChar}`);
+  
+  let formattedRaw: string;
+  if (hasLeadingNewline) {
+    // Preserve the leading newline format. The escaped value already contains any trailing newlines.
+    formattedRaw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
+    
+    // Count the number of lines in the formatted raw string
+    const lineCount = (formattedRaw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
+    
+    // Update location to account for the lines
+    return {
+      ...replacement,
+      raw: formattedRaw,
+      loc: {
+        start: existing.loc.start,
+        end: {
+          line: existing.loc.start.line + lineCount,
+          column: 3 // length of delimiter
+        }
+      }
+    } as String;
+  } else {
+    formattedRaw = `${delimiter}${escaped}${delimiter}`;
+    return {
+      ...replacement,
+      raw: formattedRaw
+    } as String;
+  }
+}
+
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
   
-  // Special handling for String nodes to preserve multiline format
+  // Special handling for String nodes to preserve multiline format by editing replacement values
   if (isString(existing) && isString(replacement)) {
-    // If the existing string is multiline, preserve that format
-    if (isMultilineString(existing.raw)) {
-      // Determine if this is a literal multiline string (''') or basic multiline string (""")
-      const isLiteral = existing.raw.startsWith("'''");
-      
-      let escaped: string;
-      if (isLiteral) {
-        // Literal strings: no escaping needed except for triple single quotes
-        escaped = replacement.value.replace(/'''/g, "''\\''");
-      } else {
-        // Basic multiline strings: need to escape backslashes and control characters (like basic strings)
-        // Escape backslashes first, then control characters, then triple quotes
-        escaped = replacement.value
-          .replace(/\\/g, '\\\\')  // Escape backslashes first
-          .replace(/\x08/g, '\\b') // Backspace (U+0008)
-          .replace(/\f/g, '\\f')   // Form feed (U+000C)
-          .replace(/\t/g, '\\t')   // Tab (U+0009)
-          .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
-            // Escape other control characters (U+0000-U+0007, U+000B, U+000E-U+001F, U+007F)
-            // Note: \n (U+000A) and \r (U+000D) are allowed in multiline strings, so we exclude them
-            const code = char.charCodeAt(0);
-            return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
-          })
-          .replace(/"""/g, '\\"""');  // Escape triple quotes
-      }
-      
-      const newlineChar = existing.raw.includes('\r\n') ? '\r\n' : '\n';
-      
-      // According to TOML spec, only the first newline after delimiter is trimmed during parsing.
-      // All other newlines (including trailing ones) are significant and part of the value.
-      // We need to preserve the leading newline formatting if it was present in the original.
-      const delimiter = isLiteral ? "'''" : '"""';
-      const hasLeadingNewline = existing.raw.startsWith(`${delimiter}${newlineChar}`);
-      
-      let formattedRaw: string;
-      if (hasLeadingNewline) {
-        // Preserve the leading newline format. The escaped value already contains any trailing newlines.
-        formattedRaw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
-        
-        // Count the number of lines in the formatted raw string
-        const lineCount = (formattedRaw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
-        
-        // Update location to account for the lines
-        replacement = {
-          ...replacement,
-          raw: formattedRaw,
-          loc: {
-            start: existing.loc.start,
-            end: {
-              line: existing.loc.start.line + lineCount,
-              column: 3 // length of delimiter
-            }
-          }
-        } as String;
-      } else {
-        formattedRaw = `${delimiter}${escaped}${delimiter}`;
-        replacement = {
-          ...replacement,
-          raw: formattedRaw
-        } as String;
-      }
-    }
+    replacement = formatMultilineStringReplacement(existing, replacement);
   }
   
-  // Special handling for DateTime nodes to preserve original format
+  // Special handling for DateTime nodes to preserve original format by editing replacement values
   if (isDateTime(existing) && isDateTime(replacement)) {
     // Analyze the original raw format and create a properly formatted replacement
     const originalRaw = existing.raw;
