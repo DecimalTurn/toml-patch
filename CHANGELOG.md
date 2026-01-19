@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Fixed 
+- Remove circular reference warning ([#90](https://github.com/DecimalTurn/toml-patch/pull/90))
+
 ## [0.5.1] - 2026-01-18
 
 ### Added

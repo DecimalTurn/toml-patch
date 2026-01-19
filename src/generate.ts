@@ -196,14 +196,38 @@ export function generateString(value: string, existingRaw?: string): String {
     raw = JSON.stringify(value);
   }
 
+  // Calculate proper end location for multiline strings
+  let endLocation;
+  if (raw.includes('\r\n') || (raw.includes('\n') && !raw.includes('\r\n'))) {
+    const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
+    const lineCount = (raw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
+    
+    if (lineCount > 0) {
+      endLocation = {
+        line: 1 + lineCount,
+        column: 3 // length of delimiter (""" or ''')
+      };
+    } else {
+      endLocation = { line: 1, column: raw.length };
+    }
+  } else {
+    endLocation = { line: 1, column: raw.length };
+  }
+
   return {
     type: NodeType.String,
-    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    loc: { start: zero(), end: endLocation },
     raw,
     value
   };
 }
 
+/**
+ * Generates a new Integer node.
+ *
+ * @param value - The integer value.
+ * @returns A new Integer node.
+ */
 export function generateInteger(value: number): Integer {
   const raw = value.toString();
 

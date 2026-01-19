@@ -24,25 +24,16 @@ import {
   InlineItem,
   isInlineItem,
   Block,
-  isBlock,
-  DateTime,
-  isDateTime,
-  String,
-  isString
+  isBlock
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
 import { last, isMultilineString } from './utils';
 import traverse from './traverse';
-import { generateString } from './generate';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the AST
 ////////////////////////////////////////
 
-import { DateFormatHelper } from './date-format';
-
-// Create a shorter alias for convenience
-const dateFormatHelper = DateFormatHelper;
 
 // Root node of the AST
 export type Root = Document | TreeNode;
@@ -69,78 +60,8 @@ const getExitOffsets = (root: Root) => {
   return exit_offsets.get(root)!;
 };
 
-/**
- * Updates location information for a replacement string to match the existing string's position.
- * The actual formatting and escaping is done by generateString().
- * 
- * @param existing - The existing string node with the original format and location
- * @param replacement - The replacement string node (already fully formatted by generateString)
- * @returns The replacement string node with updated location information
- */
-export function fixStringLocation(existing: String, replacement: String): String {
-  if (!isMultilineString(replacement.raw)) {
-    return replacement;
-  }
-
-  // Detect newline character to count lines correctly
-  const newlineChar = replacement.raw.includes('\r\n') ? '\r\n' : '\n';
-  const lineCount = (replacement.raw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
-  
-  // Update location to match existing position and account for multiple lines
-  if (lineCount > 0) {
-    return {
-      ...replacement,
-      loc: {
-        start: existing.loc.start,
-        end: {
-          line: existing.loc.start.line + lineCount,
-          column: 3 // length of delimiter
-        }
-      }
-    } as String;
-  } else {
-    return {
-      ...replacement,
-      loc: {
-        start: existing.loc.start,
-        end: {
-          line: existing.loc.start.line,
-          column: existing.loc.start.column + replacement.raw.length
-        }
-      }
-    } as String;
-  }
-}
-
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {
-  
-  // Special handling for String nodes to preserve multiline format by editing replacement values
-  if (isString(existing) && isString(replacement)) {
-    // Regenerate the replacement with proper escaping based on existing format
-    const escapedReplacement = generateString(replacement.value, existing.raw);
-    replacement = fixStringLocation(existing, escapedReplacement);
-  }
-  
-  // Special handling for DateTime nodes to preserve original format by editing replacement values
-  if (isDateTime(existing) && isDateTime(replacement)) {
-    // Analyze the original raw format and create a properly formatted replacement
-    const originalRaw = existing.raw;
-    const newValue = replacement.value;
-    
-    // Create a new date with the original format preserved
-    const formattedDate = dateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
-    
-    // Update the replacement with the properly formatted date
-    replacement.value = formattedDate;
-    replacement.raw = formattedDate.toISOString();
-    
-    // Adjust the location information to match the new raw length
-    const lengthDiff = replacement.raw.length - originalRaw.length;
-    if (lengthDiff !== 0) {
-      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
-    }
-  }
   
   // First, replace existing node
   // (by index for items, item, or key/value)
