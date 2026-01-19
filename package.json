@@ -10,7 +10,7 @@
   "homepage": "https://github.com/DecimalTurn/toml-patch",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DecimalTurn/toml-patch"
+    "url": "git+https://github.com/DecimalTurn/toml-patch.git"
   },
   "publishConfig": {
     "access": "public"
