@@ -119,7 +119,10 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
       yield integer(cursor);
     }
   } else if (cursor.value!.type === TokenType.Curly) {
-    yield inlineTable(cursor, input);
+    const [inline_table, comments] = inlineTable(cursor, input);
+
+    yield inline_table;
+    yield* comments;
   } else if (cursor.value!.type === TokenType.Bracket) {
     const [inline_array, comments] = inlineArray(cursor, input);
 
@@ -505,7 +508,7 @@ function integer(cursor: Cursor<Token>): Integer {
   };
 }
 
-function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
+function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
       input,
@@ -521,14 +524,16 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
     items: []
   };
 
+  const comments: Comment[] = [];
   cursor.next();
 
   while (
     !cursor.done &&
     !(cursor.value!.type === TokenType.Curly && (cursor.value as Token).raw === '}')
   ) {
-    // TOML 1.1.0: Skip comments in inline tables
+    // TOML 1.1.0: Handle comments in inline tables
     if (cursor.value!.type === TokenType.Comment) {
+      comments.push(comment(cursor));
       cursor.next();
       continue;
     }
@@ -584,7 +589,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
 
   value.loc.end = cursor.value!.loc.end;
 
-  return value;
+  return [value, comments];
 }
 
 function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
