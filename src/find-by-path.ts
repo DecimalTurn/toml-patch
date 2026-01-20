@@ -37,13 +37,27 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
 
           key = key.concat(array_index);
         } else if (isInlineItem(item) && isKeyValue(item.item)) {
+          // For InlineItems wrapping KeyValues, extract the key
           key = item.item.key.value;
         } else if (isInlineItem(item)) {
           key = [index];
         }
 
         if (key.length && arraysEqual(key, path.slice(0, key.length))) {
-          found = findByPath(item, path.slice(key.length));
+          // For InlineItems containing KeyValues, we need to search within the value
+          // but still return the InlineItem or its contents appropriately
+          if (isInlineItem(item) && isKeyValue(item.item)) {
+            if (path.length === key.length) {
+              // If we've matched the full path, return the InlineItem itself
+              // so it can be found and replaced in the parent's items array
+              found = item;
+            } else {
+              // Continue searching within the KeyValue's value
+              found = findByPath(item.item.value, path.slice(key.length));
+            }
+          } else {
+            found = findByPath(item, path.slice(key.length));
+          }
           return true;
         } else {
           return false;
