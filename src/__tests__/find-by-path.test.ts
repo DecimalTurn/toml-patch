@@ -46,6 +46,7 @@ it('should find nodes within nested inline tables', () => {
   expect(serverPort.item.value.value).toEqual(8080);
 
   // Should find nested inline table properties (the key fix!)
+  // Before the fix, this would throw: "Could not find node at path config.database.host"
   const dbHost = findByPath(document, ['config', 'database', 'host']) as any;
   expect(dbHost.type).toEqual('InlineItem');
   expect(dbHost.item.value.value).toEqual('db.local');
@@ -57,4 +58,13 @@ it('should find nodes within nested inline tables', () => {
   const cacheEnabled = findByPath(document, ['config', 'cache', 'enabled']) as any;
   expect(cacheEnabled.type).toEqual('InlineItem');
   expect(cacheEnabled.item.value.value).toEqual(true);
+
+  // Should also be able to find the intermediate nested tables
+  const database = findByPath(document, ['config', 'database']) as any;
+  expect(database.type).toEqual('InlineItem');
+  expect(database.item.value.type).toEqual('InlineTable');
+
+  const cache = findByPath(document, ['config', 'cache']) as any;
+  expect(cache.type).toEqual('InlineItem');
+  expect(cache.item.value.type).toEqual('InlineTable');
 });
