@@ -2376,3 +2376,110 @@ test('should add new date with non-zero time as full timestamp regardless of tru
     event_datetime = 2024-01-15T14:30:00.000Z
     ` + '\n');
 });
+
+// TOML 1.1.0 - Multiline inline tables with newlines and trailing commas
+test('should preserve multiline inline table format (TOML 1.1.0)', () => {
+  const existing = dedent`
+    name = "production"
+    point = {
+        x = 1,
+        y = 2,
+    }
+    ` + '\n';
+
+  const value = parse(existing);
+  value.point.z = 3;
+
+  const patched = patch(existing, value);
+
+  // Should preserve multiline inline table format with trailing comma
+  expect(patched).toContain('point = {');
+  expect(patched).toContain('x = 1,');
+  expect(patched).toContain('y = 2,');
+  expect(patched).toContain('z = 3,');
+  expect(patched).toContain('}');
+});
+
+test('should parse and patch nested multiline inline tables (TOML 1.1.0)', () => {
+  // This is the exact example from TOML 1.1.0 spec
+  const existing = dedent`
+    tbl = {
+        key      = "a string",
+        moar-tbl =  {
+            key = 1,
+        },
+    }
+    ` + '\n';
+
+  const value = parse(existing);
+  // Access nested table using bracket notation for hyphenated keys
+  value.tbl['moar-tbl'].key = 2;
+  value.tbl.another = "value";
+
+  const patched = patch(existing, value);
+
+  // Should preserve the nested multiline inline table structure
+  expect(patched).toContain('tbl = {');
+  expect(patched).toContain('key      = "a string"');
+  expect(patched).toContain('moar-tbl');
+  expect(patched).toContain('key = 2');
+  expect(patched).toContain('another');
+});
+
+test('should handle inline tables with comments (TOML 1.1.0)', () => {
+  const existing = dedent`
+    server = {
+        # Server configuration
+        host = "localhost",
+        port = 8080,
+    }
+    ` + '\n';
+
+  const value = parse(existing);
+  value.server.timeout = 5000;
+
+  const patched = patch(existing, value);
+
+  // Should preserve comments in inline tables (TOML 1.1.0 feature)
+  expect(patched).toContain('# Server configuration');
+  expect(patched).toContain('host = "localhost"');
+  expect(patched).toContain('port = 8080');
+  expect(patched).toContain('timeout = 5000');
+});
+
+test('should add new properties to multiline inline table (TOML 1.1.0)', () => {
+  const existing = dedent`
+    [database]
+    connection = {
+        host = "192.168.1.1",
+        port = 5432,
+    }
+    enabled = true
+    ` + '\n';
+
+  const value = parse(existing);
+  value.database.connection.user = "admin";
+  value.database.connection.password = "secret";
+
+  const patched = patch(existing, value);
+
+  expect(patched).toContain('connection = {');
+  expect(patched).toContain('host = "192.168.1.1"');
+  expect(patched).toContain('port = 5432');
+  expect(patched).toContain('user = "admin"');
+  expect(patched).toContain('password = "secret"');
+});
+
+test('should preserve single-line inline table when updating (backward compatibility)', () => {
+  const existing = dedent`
+    point = { x = 1, y = 2 }
+    ` + '\n';
+
+  const value = parse(existing);
+  value.point.z = 3;
+
+  const patched = patch(existing, value);
+
+  // Should preserve single-line format when possible
+  expect(patched).toContain('point = { x = 1, y = 2, z = 3 }');
+});
