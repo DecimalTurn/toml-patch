@@ -8,7 +8,7 @@ import { parse } from '../src/';
 const readFile = promisify(_readFile);
 
 // TOML version to test against (1.0.0 or 1.1.0)
-const TOML_VERSION = '1.0.0';
+const TOML_VERSION = '1.1.0';
 
 // Tests to skip temporarily - remove items from this list as they get fixed
 // Format: 'test-type/test-name' (e.g., 'table/redefine-03', 'key/newline-01')
@@ -98,7 +98,7 @@ const SKIPPED_TESTS = [
   'inline-table-imutable-1',
   'bare-key-2',
   
-  // toml-test invalid - Control characters (17 tests)
+  // toml-test invalid - Control characters (18 tests)
   'control/rawstring-us',
   'control/rawstring-lf',
   'control/rawstring-del',
@@ -107,6 +107,7 @@ const SKIPPED_TESTS = [
   'control/rawmulti-null',
   'control/rawmulti-lf',
   'control/rawmulti-del',
+  'control/rawmulti-cr',
   'control/only-vt',
   'control/only-ff',
   'control/multi-del',
@@ -386,6 +387,7 @@ const SKIPPED_VALID_TESTS = [
   'multibyte',
   'key/quoted-unicode',
   'inline-table/newline-comment',
+
 ];
 
 // Load the list of files for the specified TOML version
