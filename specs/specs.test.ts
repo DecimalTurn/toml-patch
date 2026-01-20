@@ -60,8 +60,6 @@ const SKIPPED_TESTS = [
   'string/bad-uni-esc-06',
   'string/bad-slash-escape',
   'string/multiline-escaped-crlf',
-  'string/multibyte',
-  'string/multibyte-escape',
   'string/hex-escape',
   'string/escape-tricky',
   'string/escape-esc',
@@ -384,9 +382,7 @@ const SKIPPED_VALID_TESTS = [
   'spec-1.1.0/common-10',
   
   // Other parsing issues
-  'multibyte',
-  'key/quoted-unicode',
-  'inline-table/newline-comment',
+  'inline-table/newline-comment', // TODO: TOML 1.1.0 - inline tables can span multiple lines
 
 ];
 
