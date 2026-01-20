@@ -362,9 +362,8 @@ const SKIPPED_TESTS = [
 
 // Valid tests to skip temporarily (parsing issues, not validation)
 const SKIPPED_VALID_TESTS = [
-  'string/hex-escape', // TODO: TOML 1.1.0 - \x hex escapes not implemented
+
   'string/escape-tricky', // TODO: Complex escape sequences in multiline strings
-  'string/escape-esc', // TODO: TOML 1.1.0 - \x hex escapes not implemented
   
   // TOML 1.1.0 spec features (8 tests)
   'spec-1.1.0/common-9',
