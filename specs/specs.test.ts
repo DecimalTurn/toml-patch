@@ -386,15 +386,6 @@ const SKIPPED_VALID_TESTS = [
   'multibyte',
   'key/quoted-unicode',
   'inline-table/newline-comment',
-  
-  // TODO: Fix these remaining valid tests
-  'spec-1.0.0/table-2',
-  'spec-1.0.0/keys-6',
-  'spec-1.0.0/keys-5',
-  'spec-1.0.0/inline-table-3',
-  'spec-1.0.0/inline-table-2',
-  'spec-1.0.0/inline-table-1',
-  'spec-1.0.0/inline-table-0',
 ];
 
 // Load the list of files for the specified TOML version
@@ -543,41 +534,44 @@ function expandJSON(value: any): any {
 function expandJSONValue(value: any): any {
   if (Array.isArray(value)) {
     return value.map(expandJSONValue);
-  } else if (value.type === 'array') {
-    return value.value.map(expandJSONValue);
-  } else if (value.type === 'datetime') {
-    return new Date(value.value);
-  } else if (value.type === 'datetime-local') {
-    return new Date(value.value);
-  } else if (value.type === 'date') {
-    return new Date(`${value.value}T00:00:00.000Z`);
-  } else if (value.type === 'time') {
-    return new Date(`0000-01-01T${value.value}`);
-  } else if (value.type === 'time-local') {
-    // Local time without date context
-    return new Date(`0000-01-01T${value.value}`);
-  } else if (value.type === 'date-local') {
-    // Local date without time context
-    return new Date(`${value.value}T00:00:00.000Z`);
-  } else if (value.type === 'string') {
-    return value.value;
-  } else if (value.type === 'float') {
-    // Handle special float values: inf, -inf, nan
-    if (value.value === 'inf') {
-      return Infinity;
-    } else if (value.value === '-inf') {
-      return -Infinity;
-    } else if (value.value === 'nan') {
-      return NaN;
+  } else if (value && typeof value === 'object') {
+    // Check if this is a typed value (has both 'type' and 'value' properties)
+    // or a plain object/table
+    if ('type' in value && 'value' in value && typeof value.type === 'string') {
+      // This is a typed value
+      switch (value.type) {
+        case 'array':
+          return value.value.map(expandJSONValue);
+        case 'datetime':
+        case 'datetime-local':
+          return new Date(value.value);
+        case 'date':
+        case 'date-local':
+          return new Date(`${value.value}T00:00:00.000Z`);
+        case 'time':
+        case 'time-local':
+          return new Date(`0000-01-01T${value.value}`);
+        case 'string':
+          return value.value;
+        case 'float':
+          // Handle special float values: inf, -inf, nan
+          if (value.value === 'inf') return Infinity;
+          if (value.value === '-inf') return -Infinity;
+          if (value.value === 'nan') return NaN;
+          return Number(value.value);
+        case 'integer':
+          return Number(value.value);
+        case 'bool':
+          return value.value === 'true';
+        default:
+          throw new Error(`Unknown type "${value.type}"`);
+      }
+    } else {
+      // This is a plain object/table, recursively expand it
+      return expandJSON(value);
     }
-    return Number(value.value);
-  } else if (value.type === 'integer') {
-    return Number(value.value);
-  } else if (value.type === 'bool') {
-    return value.value === 'true';
-  } else if (!('type' in value)) {
-    return expandJSON(value);
-  } else {
-    throw new Error(`Unknown type "${value.type}"`);
   }
+  
+  // Primitive value, return as-is
+  return value;
 }
