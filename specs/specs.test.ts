@@ -362,8 +362,6 @@ const SKIPPED_TESTS = [
 
 // Valid tests to skip temporarily (parsing issues, not validation)
 const SKIPPED_VALID_TESTS = [
-
-  'string/escape-tricky', // TODO: Complex escape sequences in multiline strings
   
   // TOML 1.1.0 spec features (8 tests)
   'spec-1.1.0/common-9',

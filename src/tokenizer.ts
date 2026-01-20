@@ -244,6 +244,12 @@ function checkThree(input: string, current: number, check: string): false | stri
     return false;
   }
 
+  // Only check for escaping in basic strings (double quotes)
+  // Literal strings (single quotes) don't support escape sequences
+  if (check === SINGLE_QUOTE) {
+    return check; // No escaping in literal strings
+  }
+
   // Check if the sequence is escaped
   const precedingText = input.slice(0, current); // Get the text before the current position
   const backslashes  = precedingText.match(/\\+$/); // Match trailing backslashes
