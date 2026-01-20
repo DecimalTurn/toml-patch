@@ -527,6 +527,12 @@ function inlineTable(cursor: Cursor<Token>, input: string): InlineTable {
     !cursor.done &&
     !(cursor.value!.type === TokenType.Curly && (cursor.value as Token).raw === '}')
   ) {
+    // TOML 1.1.0: Skip comments in inline tables
+    if (cursor.value!.type === TokenType.Comment) {
+      cursor.next();
+      continue;
+    }
+
     if ((cursor.value as Token).type === TokenType.Comma) {
       const previous = value.items[value.items.length - 1];
       if (!previous) {

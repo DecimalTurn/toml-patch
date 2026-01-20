@@ -361,10 +361,7 @@ const SKIPPED_TESTS = [
 ];
 
 // Valid tests to skip temporarily (parsing issues, not validation)
-const SKIPPED_VALID_TESTS = [
-  
-  // Other parsing issues
-  'inline-table/newline-comment', // TODO: TOML 1.1.0 - inline tables can span multiple lines
+const SKIPPED_VALID_TESTS: string[] = [
 
 ];
 
