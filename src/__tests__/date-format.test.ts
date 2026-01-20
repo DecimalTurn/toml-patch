@@ -182,9 +182,9 @@ describe('LocalTime midnight boundary handling', () => {
       
       time.setTime(time.getTime() + 2 * 60 * 60 * 1000);
       
-      // The underlying date is now 1970-01-02T01:00:00Z
+      // The underlying date is now 0000-01-02T01:00:00Z
       // Verify the date component actually changed
-      expect(time.getUTCFullYear()).toBe(1970);
+      expect(time.getUTCFullYear()).toBe(0);
       expect(time.getUTCMonth()).toBe(0); // January
       expect(time.getUTCDate()).toBe(2); // Day 2
       

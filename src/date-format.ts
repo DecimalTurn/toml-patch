@@ -232,9 +232,9 @@ export class LocalTime extends Date {
   originalFormat: string;
   
   constructor(value: string, originalFormat: string) {
-    // For local time, use a fixed date (1970-01-01) and the provided time
+    // For local time, use year 0000 as the base (TOML spec compliance)
     // Add 'Z' to ensure it's parsed as UTC regardless of system timezone
-    super(`1970-01-01T${value}Z`);
+    super(`0000-01-01T${value}Z`);
     this.originalFormat = originalFormat;
   }
   

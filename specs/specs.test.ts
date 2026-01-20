@@ -387,17 +387,14 @@ const SKIPPED_VALID_TESTS = [
   'key/quoted-unicode',
   'inline-table/newline-comment',
   
-  // TODO: Fix these 10 valid tests
+  // TODO: Fix these remaining valid tests
   'spec-1.0.0/table-2',
-  'spec-1.0.0/local-time-0',
   'spec-1.0.0/keys-6',
   'spec-1.0.0/keys-5',
   'spec-1.0.0/inline-table-3',
   'spec-1.0.0/inline-table-2',
   'spec-1.0.0/inline-table-1',
   'spec-1.0.0/inline-table-0',
-  'datetime/local-time',
-  'array/array',
 ];
 
 // Load the list of files for the specified TOML version
