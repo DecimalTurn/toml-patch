@@ -363,16 +363,6 @@ const SKIPPED_TESTS = [
 // Valid tests to skip temporarily (parsing issues, not validation)
 const SKIPPED_VALID_TESTS = [
   
-  // TOML 1.1.0 spec features (8 tests)
-  'spec-1.1.0/common-9',
-  'spec-1.1.0/common-50',
-  'spec-1.1.0/common-49',
-  'spec-1.1.0/common-48',
-  'spec-1.1.0/common-47',
-  'spec-1.1.0/common-39',
-  'spec-1.1.0/common-12',
-  'spec-1.1.0/common-10',
-  
   // Other parsing issues
   'inline-table/newline-comment', // TODO: TOML 1.1.0 - inline tables can span multiple lines
 
