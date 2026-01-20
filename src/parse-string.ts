@@ -68,9 +68,17 @@ export function escapeDoubleQuotes(value: string): string {
 
 export function unescapeLargeUnicode(escaped: string): string {
   // TOML 1.1.0: Handle \xHH hex escapes (for codepoints < 255)
-  // Use negative lookbehind to ensure the backslash is not escaped
-  const HEX_ESCAPE = /(?<!\\)\\x([a-fA-F0-9]{2})/g;
-  let withHexEscapes = escaped.replace(HEX_ESCAPE, (match, hex) => {
+  const HEX_ESCAPE = /\\x([a-fA-F0-9]{2})/g;
+  let withHexEscapes = escaped.replace(HEX_ESCAPE, (match, hex, offset) => {
+    // Check if the backslash is escaped by counting preceding backslashes
+    const precedingText = escaped.slice(0, offset);
+    const backslashes = precedingText.match(/\\+$/);
+    const isEscaped = backslashes && backslashes[0].length % 2 !== 0;
+    
+    if (isEscaped) {
+      return match; // Return unchanged if escaped
+    }
+    
     const codePoint = parseInt(hex, 16);
     const asString = String.fromCharCode(codePoint);
     // Escape for JSON if needed
@@ -81,8 +89,18 @@ export function unescapeLargeUnicode(escaped: string): string {
   });
 
   // TOML 1.1.0: Handle \e escape character (ESC = 0x1B)
-  // Use negative lookbehind to ensure the backslash is not escaped
-  withHexEscapes = withHexEscapes.replace(/(?<!\\)\\e/g, '\\u001b');
+  withHexEscapes = withHexEscapes.replace(/\\e/g, (match, offset) => {
+    // Check if the backslash is escaped by counting preceding backslashes
+    const precedingText = escaped.slice(0, offset);
+    const backslashes = precedingText.match(/\\+$/);
+    const isEscaped = backslashes && backslashes[0].length % 2 !== 0;
+    
+    if (isEscaped) {
+      return match; // Return unchanged if escaped
+    }
+    
+    return '\\u001b';
+  });
 
   // JSON.parse handles everything except \UXXXXXXXX
   // replace those instances with code point, escape that, and then parse
