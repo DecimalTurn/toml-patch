@@ -99,9 +99,6 @@ const SKIPPED_TESTS = [
   'control/rawmulti-null',
   'control/rawmulti-lf',
   'control/rawmulti-del',
-  'control/rawmulti-cr',
-  'control/only-vt',
-  'control/only-ff',
   'control/multi-del',
   'control/comment-us',
   'control/comment-null',
@@ -126,16 +123,6 @@ const SKIPPED_TESTS = [
   'bool/almost-true-with-extra',
   'bool/almost-false',
   'bool/almost-false-with-extra',
-  
-  // toml-test invalid - Array validation (8 tests)
-  'array/text-before-array-separator',
-  'array/text-after-array-entries',
-  'array/no-comma-02',
-  'array/no-comma-01',
-  'array/missing-separator-02',
-  'array/missing-separator-01',
-  'array/double-comma-02',
-  'array/double-comma-01',
   
   // spec-test invalid - String control characters (8 tests)
   'string-literal-multiline-control-4',
