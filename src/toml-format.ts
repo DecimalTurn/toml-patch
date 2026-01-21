@@ -306,6 +306,7 @@ export function validateFormatObject(format: any): any {
           case 'trailingComma':
           case 'bracketSpacing':
           case 'truncateZeroTimeInDates':
+          case 'useTabsForIndentation':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
