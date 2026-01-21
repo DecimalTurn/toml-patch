@@ -449,6 +449,30 @@ function float(cursor: Cursor<Token>, input: string): Float {
     value = raw === '-nan' ? -NaN : NaN;
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
+    
+    // Validate integer part before decimal point
+    const intPart = raw;
+    if (/_$/.test(intPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore before decimal point is not allowed'
+      );
+    }
+    if (/^[+\-]?_/.test(intPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Leading underscore is not allowed'
+      );
+    }
+    if (/__/.test(intPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Consecutive underscores are not allowed'
+      );
+    }
 
     // From spec:
     // | A fractional part is a decimal point followed by one or more digits.
@@ -464,8 +488,85 @@ function float(cursor: Cursor<Token>, input: string): Float {
 
     raw += `.${cursor.value!.raw}`;
     loc = { start, end: cursor.value!.loc.end };
+    
+    // Validate underscore placement in fractional part
+    const fracPart = cursor.value!.raw;
+    if (/^_/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Underscore after decimal point is not allowed'
+      );
+    }
+    if (/_$/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Trailing underscore in fractional part is not allowed'
+      );
+    }
+    
+    // Validate underscore before exponent in fractional part
+    if (/_[eE]/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Underscore before exponent is not allowed'
+      );
+    }
+    
+    // Validate underscore at start of exponent in fractional part
+    if (/[eE][+\-]?_/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Underscore at start of exponent is not allowed'
+      );
+    }
+    
     value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
+    // Validate underscore placement in integer part
+    if (/_$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore before decimal point is not allowed'
+      );
+    }
+    if (/^[+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Leading underscore is not allowed'
+      );
+    }
+    if (/__/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Consecutive underscores are not allowed'
+      );
+    }
+    
+    // Validate underscore before exponent
+    if (/_[eE]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore before exponent is not allowed'
+      );
+    }
+    
+    // Validate underscore at start of exponent
+    if (/[eE][+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore at start of exponent is not allowed'
+      );
+    }
+    
     value = Number(raw.replace(IS_DIVIDER, ''));
   }
 
