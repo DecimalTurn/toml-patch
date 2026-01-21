@@ -171,23 +171,6 @@ const SKIPPED_TESTS = [
   'datetime/year-3digits',
   'datetime/day-1digit',
   
-  // toml-test invalid - Float validation (36 tests)
-  'float/exp-double-e-01',
-  'float/exp-double-e-02',
-  'float/inf-capital',
-  'float/inf-incomplete-01',
-  'float/inf-incomplete-02',
-  'float/inf-incomplete-03',
-  'float/inf_underscore',
-  'float/leading-zero',
-  'float/leading-zero-neg',
-  'float/leading-zero-plus',
-  'float/nan-capital',
-  'float/nan-incomplete-01',
-  'float/nan-incomplete-02',
-  'float/nan-incomplete-03',
-  'float/nan_underscore',
-  'float/trailing-us-exp-01',
   
   // toml-test invalid - Inline table validation (8 tests)
   'inline-table/double-comma',
@@ -412,8 +395,11 @@ function expandJSONValue(value: any): any {
         case 'float':
           // Handle special float values: inf, -inf, nan
           if (value.value === 'inf') return Infinity;
+          if (value.value === '+inf') return Infinity;
           if (value.value === '-inf') return -Infinity;
           if (value.value === 'nan') return NaN;
+          if (value.value === '+nan') return NaN;
+          if (value.value === '-nan') return NaN;
           return Number(value.value);
         case 'integer':
           return Number(value.value);
