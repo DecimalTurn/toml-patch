@@ -508,6 +508,50 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
 
 // Helper function to validate datetime format
 function validateDateTimeFormat(raw: string, input: string, loc: any): void {
+  // First, ensure the overall shape is valid (anchors matter).
+  // This catches cases where regexes below might partially match a prefix and ignore trailing junk.
+  const validDateTimePattern =
+    /^\d{4}-\d{2}-\d{2}(?:[Tt ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?)?$/;
+  const validTimePattern = /^\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/;
+
+  if (!validDateTimePattern.test(raw) && !validTimePattern.test(raw)) {
+    // Date cannot end with trailing T without a time component
+    if (/^\d{4}-\d{2}-\d{2}T$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": date cannot end with 'T' without a time component`
+      );
+    }
+
+    // Any unexpected character immediately after a date-only value.
+    // Exclude T/t (date-time separators) from this check.
+    if (/^\d{4}-\d{2}-\d{2}[a-su-zA-SU-Z]/.test(raw)) {
+      throw new ParseError(input, loc, `Invalid date "${raw}": unexpected character after date`);
+    }
+
+    // Missing separator between date and time
+    if (/^\d{4}-\d{2}-\d{2}\d{2}:\d{2}/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid datetime "${raw}": missing separator 'T' or space between date and time`
+      );
+    }
+
+    throw new ParseError(input, loc, `Invalid datetime "${raw}"`);
+  }
+
+  // Check for year with wrong number of digits (must be exactly 4)
+  const yearMatch = raw.match(/^(\d+)-/);
+  if (yearMatch && yearMatch[1].length !== 4) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid date "${raw}": year must be exactly 4 digits, found ${yearMatch[1].length}`
+    );
+  }
+
   // Check for date with wrong number of digits for month/day BEFORE extracting components
   // Pattern should be YYYY-MM-DD (exactly 4, 2, 2 digits)
   const datePattern = /^(\d+)-(\d+)-(\d+)/;
@@ -899,6 +943,12 @@ function float(cursor: Cursor<Token>, input: string): Float {
 function integer(cursor: Cursor<Token>, input: string): Integer {
   const raw = cursor.value!.raw;
   const loc = cursor.value!.loc;
+
+  // Guard: values that look like dates/times must never be parsed as integers.
+  // (Prevents parseInt() from accepting prefixes like "199-09-09" -> 199.)
+  if (/^\d{1,}-\d{1,}/.test(raw) || /^\d{1,}:\d{1,}/.test(raw)) {
+    throw new ParseError(input, loc.start, `Invalid integer "${raw}"`);
+  }
   
   {
     // > Integer values -0 and +0 are valid and identical to an unprefixed zero
@@ -1449,17 +1499,25 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
 
 function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
   if (cursor.value!.type === TokenType.Literal) {
-    if (cursor.value!.raw[0] === DOUBLE_QUOTE || cursor.value!.raw[0] === SINGLE_QUOTE) {
+    const raw = cursor.value!.raw;
+
+    if (raw[0] === DOUBLE_QUOTE || raw[0] === SINGLE_QUOTE) {
       return [string(cursor)];
-    } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
+    } else if (raw === TRUE || raw === FALSE) {
       return [boolean(cursor)];
-    } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
+
+    // Route anything that looks like a date or time through datetime() so invalid formats throw,
+    // instead of being mis-parsed as integers (e.g., "199-09-09" -> 199).
+    } else if (
+      /^\d/.test(raw) &&
+      (/^\d{1,}-\d{1,}/.test(raw) || /^\d{1,}:\d{1,}/.test(raw))
+    ) {
       return [datetime(cursor, input)];
     } else if (
       (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
-      IS_INF.test(cursor.value!.raw) ||
-      IS_NAN.test(cursor.value!.raw) ||
-      (HAS_E.test(cursor.value!.raw) && !IS_HEX.test(cursor.value!.raw))
+      IS_INF.test(raw) ||
+      IS_NAN.test(raw) ||
+      (HAS_E.test(raw) && !IS_HEX.test(raw))
     ) {
       return [float(cursor, input)];
     } else {
