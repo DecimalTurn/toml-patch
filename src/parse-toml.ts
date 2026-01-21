@@ -70,29 +70,31 @@ export {
 export default function* parseTOML(input: string): AST {
   const enableValidation = shouldEnableValidation(input);
   
-  // For deeply nested structures, materialize all tokens upfront to avoid
-  // generator recursion stack overflow during tokenization
-  const tokenIter = tokenize(input);
-  const tokens = enableValidation ? tokenIter : Array.from(tokenIter);
-  const cursor = new Cursor(tokens[Symbol.iterator]());
-
-  try {
+  // For deeply nested structures, use non-generator parsing to avoid stack overflow
+  if (!enableValidation) {
+    const tokenIter = Array.from(tokenize(input));
+    const cursor = new Cursor(tokenIter[Symbol.iterator]());
+    const result: Block[] = [];
+    
     while (!cursor.next().done) {
-      // Manually iterate through walkBlock results instead of using yield*
-      // This reduces generator nesting depth for deeply nested structures
-      for (const item of walkBlock(cursor, input, enableValidation)) {
-        yield item;
-      }
+      const blocks = walkBlockNonGen(cursor, input);
+      result.push(...blocks);
     }
-  } catch (error) {
-    // If we hit a stack overflow during parsing of deeply nested structures,
-    // we've already partially parsed the file. The results yielded so far are valid.
-    // We just need to stop and let the caller deal with the incomplete parse.
-    if (error instanceof RangeError && error.message.includes('stack')) {
-      // Re-throw the error - it will be caught by the test framework
-      throw error;
+    
+    for (const item of result) {
+      yield item;
     }
-    throw error;
+    return;
+  }
+  
+  // Standard generator-based parsing with validation
+  const tokens = tokenize(input);
+  const cursor = new Cursor(tokens);
+
+  while (!cursor.next().done) {
+    for (const item of walkBlock(cursor, input, enableValidation)) {
+      yield item;
+    }
   }
 }
 
@@ -1378,5 +1380,247 @@ function inlineArray(cursor: Cursor<Token>, input: string, enableValidation: boo
 
   value.loc.end = cursor.value!.loc.end;
 
+  return [value, comments];
+}
+
+
+// ========================================================================
+// Non-generator versions for deeply nested structures
+// These avoid generator frame overhead by returning arrays instead of using generators
+// Reuses existing non-recursive functions where possible
+// ========================================================================
+
+function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
+  if (cursor.value!.type === TokenType.Comment) {
+    return [comment(cursor)];
+  } else if (cursor.value!.type === TokenType.Bracket) {
+    // For tables, we can't easily avoid recursion, so just use the existing function
+    // In practice, top-level tables aren't deeply nested
+    return [table(cursor, input, false)];
+  } else if (cursor.value!.type === TokenType.Literal) {
+    return keyValueNonGen(cursor, input);
+  } else {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Unexpected token "${cursor.value!.type}". Expected Comment, Bracket, or String`
+    );
+  }
+}
+
+function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
+  const key: Key = {
+    type: NodeType.Key,
+    loc: cloneLocation(cursor.value!.loc),
+    raw: cursor.value!.raw,
+    value: [parseString(cursor.value!.raw)]
+  };
+
+  while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
+    cursor.next();
+    cursor.next();
+    key.loc.end = cursor.value!.loc.end;
+    key.raw += `.${cursor.value!.raw}`;
+    key.value.push(parseString(cursor.value!.raw));
+  }
+
+  cursor.next();
+
+  if (cursor.done || cursor.value!.type !== TokenType.Equal) {
+    throw new ParseError(
+      input,
+      cursor.done ? key.loc.end : cursor.value!.loc.start,
+      `Expected "=" for key-value`
+    );
+  }
+
+  const equals = cursor.value!.loc.start.column;
+  cursor.next();
+
+  if (cursor.done) {
+    throw new ParseError(input, key.loc.start, `Expected value for key-value`);
+  }
+
+  const results = walkValueNonGen(cursor, input);
+  const value = results[0] as Value;
+  const comments = results.slice(1) as Comment[];
+
+  return [
+    {
+      type: NodeType.KeyValue,
+      key,
+      value: value as Value,
+      loc: { start: clonePosition(key.loc.start), end: clonePosition(value.loc.end) },
+      equals
+    },
+    ...comments
+  ];
+}
+
+function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
+  if (cursor.value!.type === TokenType.Literal) {
+    if (cursor.value!.raw[0] === DOUBLE_QUOTE || cursor.value!.raw[0] === SINGLE_QUOTE) {
+      return [string(cursor)];
+    } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
+      return [boolean(cursor)];
+    } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
+      return [datetime(cursor, input, false)];
+    } else if (
+      (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
+      IS_INF.test(cursor.value!.raw) ||
+      IS_NAN.test(cursor.value!.raw) ||
+      (HAS_E.test(cursor.value!.raw) && !IS_HEX.test(cursor.value!.raw))
+    ) {
+      return [float(cursor, input, false)];
+    } else {
+      return [integer(cursor, input, false)];
+    }
+  } else if (cursor.value!.type === TokenType.Curly) {
+    const [inline_table, comments] = inlineTableNonGen(cursor, input);
+    return [inline_table, ...comments];
+  } else if (cursor.value!.type === TokenType.Bracket) {
+    const [inline_array, comments] = inlineArrayNonGen(cursor, input);
+    return [inline_array, ...comments];
+  } else {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Unrecognized token type`
+    );
+  }
+}
+
+function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
+  if (cursor.value!.raw !== '{') {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected "{" for inline table`
+    );
+  }
+
+  const value: InlineTable = {
+    type: NodeType.InlineTable,
+    loc: cloneLocation(cursor.value!.loc),
+    items: []
+  };
+
+  const comments: Comment[] = [];
+  cursor.next();
+
+  while (
+    !cursor.done &&
+    !(cursor.value!.type === TokenType.Curly && (cursor.value as Token).raw === '}')
+  ) {
+    if (cursor.value!.type === TokenType.Comment) {
+      comments.push(comment(cursor));
+      cursor.next();
+      continue;
+    }
+
+    if ((cursor.value as Token).type === TokenType.Comma) {
+      const previous = value.items[value.items.length - 1];
+      if (previous) {
+        previous.comma = true;
+        previous.loc.end = cursor.value!.loc.start;
+      }
+      cursor.next();
+      continue;
+    }
+
+    // Recursively parse the key-value, but without generators
+    const blocks = walkBlockNonGen(cursor, input);
+    const item = blocks[0];
+    const additional_comments = blocks.slice(1) as Comment[];
+
+    if (item.type === NodeType.KeyValue) {
+      value.items.push({
+        type: NodeType.InlineItem,
+        loc: cloneLocation(item.loc),
+        item: item as KeyValue,
+        comma: false
+      });
+      merge(comments, additional_comments);
+    }
+
+    cursor.next();
+  }
+
+  if (
+    cursor.done ||
+    cursor.value!.type !== TokenType.Curly ||
+    (cursor.value as Token).raw !== '}'
+  ) {
+    throw new ParseError(
+      input,
+      cursor.done ? value.loc.start : cursor.value!.loc.start,
+      `Expected "}"`
+    );
+  }
+
+  value.loc.end = cursor.value!.loc.end;
+  return [value, comments];
+}
+
+function inlineArrayNonGen(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
+  if (cursor.value!.raw !== '[') {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected "[" for inline array`
+    );
+  }
+
+  const value: InlineArray = {
+    type: NodeType.InlineArray,
+    loc: cloneLocation(cursor.value!.loc),
+    items: []
+  };
+
+  const comments: Comment[] = [];
+  cursor.next();
+
+  while (
+    !cursor.done &&
+    !(cursor.value!.type === TokenType.Bracket && (cursor.value as Token).raw === ']')
+  ) {
+    if ((cursor.value as Token).type === TokenType.Comma) {
+      const previous = value.items[value.items.length - 1];
+      if (previous) {
+        previous.comma = true;
+        previous.loc.end = cursor.value!.loc.start;
+      }
+    } else if ((cursor.value as Token).type === TokenType.Comment) {
+      comments.push(comment(cursor));
+    } else {
+      const results = walkValueNonGen(cursor, input);
+      const item = results[0];
+      const additional_comments = results.slice(1) as Comment[];
+
+      value.items.push({
+        type: NodeType.InlineItem,
+        loc: cloneLocation(item.loc),
+        item,
+        comma: false
+      });
+      merge(comments, additional_comments as Comment[]);
+    }
+
+    cursor.next();
+  }
+
+  if (
+    cursor.done ||
+    cursor.value!.type !== TokenType.Bracket ||
+    (cursor.value as Token).raw !== ']'
+  ) {
+    throw new ParseError(
+      input,
+      cursor.done ? value.loc.start : cursor.value!.loc.start,
+      `Expected "]"`
+    );
+  }
+
+  value.loc.end = cursor.value!.loc.end;
   return [value, comments];
 }
