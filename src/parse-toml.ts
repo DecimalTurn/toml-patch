@@ -58,13 +58,18 @@ export {
 } from './date-format';
 
 export default function* parseTOML(input: string): AST {
-  const tokens = tokenize(input);
-  const cursor = new Cursor(tokens);
-
+  // Use non-generator parsing to avoid stack overflow on deeply nested structures
+  const tokenIter = Array.from(tokenize(input));
+  const cursor = new Cursor(tokenIter[Symbol.iterator]());
+  const result: Block[] = [];
+  
   while (!cursor.next().done) {
-    for (const item of walkBlock(cursor, input)) {
-      yield item;
-    }
+    const blocks = walkBlockNonGen(cursor, input);
+    result.push(...blocks);
+  }
+  
+  for (const item of result) {
+    yield item;
   }
 }
 
@@ -81,74 +86,18 @@ export function* continueParsingTOML(existingAst: AST, remainingString: string):
     yield item;
   }
   
-  // Parse and yield all items from the remaining string
-  const tokens = tokenize(remainingString);
-  const cursor = new Cursor(tokens);
-
+  // Parse and yield all items from the remaining string using non-generator path
+  const tokenIter = Array.from(tokenize(remainingString));
+  const cursor = new Cursor(tokenIter[Symbol.iterator]());
+  const result: Block[] = [];
+  
   while (!cursor.next().done) {
-    for (const item of walkBlock(cursor, remainingString)) {
-      yield item;
-    }
+    const blocks = walkBlockNonGen(cursor, remainingString);
+    result.push(...blocks);
   }
-}
-
-function* walkBlock(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): IterableIterator<Block> {
-  if (cursor.value!.type === TokenType.Comment) {
-    yield comment(cursor);
-  } else if (cursor.value!.type === TokenType.Bracket) {
-    yield table(cursor, input, enableValidation);
-  } else if (cursor.value!.type === TokenType.Literal) {
-    // Manually iterate through keyValue results instead of using yield* to avoid deep generator nesting
-    for (const item of keyValue(cursor, input, enableValidation)) {
-      yield item;
-    }
-  } else {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Unexpected token "${cursor.value!.type}". Expected Comment, Bracket, or String`
-    );
-  }
-}
-
-function* walkValue(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): IterableIterator<Value | Comment> {
-  if (cursor.value!.type === TokenType.Literal) {
-    if (cursor.value!.raw[0] === DOUBLE_QUOTE || cursor.value!.raw[0] === SINGLE_QUOTE) {
-      yield string(cursor);
-    } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
-      yield boolean(cursor);
-    } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
-      yield datetime(cursor, input, enableValidation);
-    } else if (
-      (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
-      IS_INF.test(cursor.value!.raw) ||
-      IS_NAN.test(cursor.value!.raw) ||
-      (HAS_E.test(cursor.value!.raw) && !IS_HEX.test(cursor.value!.raw))
-    ) {
-      yield float(cursor, input, enableValidation);
-    } else {
-      yield integer(cursor, input, enableValidation);
-    }
-  } else if (cursor.value!.type === TokenType.Curly) {
-    const [inline_table, comments] = inlineTable(cursor, input, enableValidation);
-
-    yield inline_table;
-    for (const c of comments) {
-      yield c;
-    }
-  } else if (cursor.value!.type === TokenType.Bracket) {
-    const [inline_array, comments] = inlineArray(cursor, input, enableValidation);
-
-    yield inline_array;
-    for (const c of comments) {
-      yield c;
-    }
-  } else {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Unrecognized token type "${cursor.value!.type}". Expected String, Curly, or Bracket`
-    );
+  
+  for (const item of result) {
+    yield item;
   }
 }
 
@@ -162,7 +111,7 @@ function comment(cursor: Cursor<Token>): Comment {
   };
 }
 
-function table(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): Table | TableArray {
+function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   // Table or TableArray
   //
   // [ key ]
@@ -220,7 +169,7 @@ function table(cursor: Cursor<Token>, input: string, enableValidation: boolean =
 
   // Validate that multiline strings are not used as table keys
   const raw = cursor.value!.raw;
-  if (enableValidation) {
+  {
     if (raw.startsWith('"""') || raw.startsWith("'''")) {
       throw new ParseError(
         input,
@@ -260,20 +209,17 @@ function table(cursor: Cursor<Token>, input: string, enableValidation: boolean =
     cursor.next();
     
     // Validate each part of a dotted table key
-    if (enableValidation) {
-      const partRaw = cursor.value!.raw;
-      const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
-      
-      if (!partIsQuoted) {
-        for (let i = 0; i < partRaw.length; i++) {
-          const char = partRaw[i];
-          if (!/[A-Za-z0-9_-]/.test(char)) {
-            throw new ParseError(
-              input,
-              { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-              `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-            );
-          }
+    const partRaw = cursor.value!.raw;
+    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
+    if (!partIsQuoted) {
+      for (let i = 0; i < partRaw.length; i++) {
+        const char = partRaw[i];
+        if (!/[A-Za-z0-9_-]/.test(char)) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
         }
       }
     }
@@ -321,7 +267,7 @@ function table(cursor: Cursor<Token>, input: string, enableValidation: boolean =
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
     cursor.next();
-    merge(items, [...walkBlock(cursor, input)] as Array<KeyValue | Comment>);
+    merge(items, walkBlockNonGen(cursor, input) as Array<KeyValue | Comment>);
   }
 
   return {
@@ -337,7 +283,7 @@ function table(cursor: Cursor<Token>, input: string, enableValidation: boolean =
   } as Table | TableArray;
 }
 
-function keyValue(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): Array<KeyValue | Comment> {
+function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
   // 3. KeyValue
   //
   // key = value
@@ -347,7 +293,7 @@ function keyValue(cursor: Cursor<Token>, input: string, enableValidation: boolea
   
   // Validate that multiline strings are not used as keys
   const raw = cursor.value!.raw;
-  if (enableValidation) {
+  {
     if (raw.startsWith('"""') || raw.startsWith("'''")) {
       throw new ParseError(
         input,
@@ -394,20 +340,17 @@ function keyValue(cursor: Cursor<Token>, input: string, enableValidation: boolea
     cursor.next();
     
     // Validate each part of a dotted key
-    if (enableValidation) {
-      const partRaw = cursor.value!.raw;
-      const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
-      
-      if (!partIsQuoted) {
-        for (let i = 0; i < partRaw.length; i++) {
-          const char = partRaw[i];
-          if (!/[A-Za-z0-9_-]/.test(char)) {
-            throw new ParseError(
-              input,
-              { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-              `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-            );
-          }
+    const partRaw = cursor.value!.raw;
+    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
+    if (!partIsQuoted) {
+      for (let i = 0; i < partRaw.length; i++) {
+        const char = partRaw[i];
+        if (!/[A-Za-z0-9_-]/.test(char)) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
         }
       }
     }
@@ -435,7 +378,7 @@ function keyValue(cursor: Cursor<Token>, input: string, enableValidation: boolea
     throw new ParseError(input, key.loc.start, `Expected value for key-value, reached end of file`);
   }
 
-  const [value, ...comments] = walkValue(cursor, input, enableValidation) as Iterable<Value | Comment>;
+  const [value, ...comments] = walkValueNonGen(cursor, input) as Iterable<Value | Comment>;
 
   return [
     {
@@ -469,7 +412,7 @@ function boolean(cursor: Cursor<Token>): Boolean {
   };
 }
 
-function datetime(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): DateTime {
+function datetime(cursor: Cursor<Token>, input: string): DateTime {
   // Possible values:
   //
   // Offset Date-Time
@@ -522,7 +465,7 @@ function datetime(cursor: Cursor<Token>, input: string, enableValidation: boolea
   }
 
   // Validate datetime format
-  if (enableValidation) {
+  {
     validateDateTimeFormat(raw, input, loc.start);
   }
 
@@ -712,7 +655,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
   }
 }
 
-function float(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): Float {
+function float(cursor: Cursor<Token>, input: string): Float {
   let loc = cursor.value!.loc;
   let raw = cursor.value!.raw;
   let value;
@@ -724,7 +667,7 @@ function float(cursor: Cursor<Token>, input: string, enableValidation: boolean =
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
     
-    if (enableValidation) {
+    {
       // Validate that we don't already have an exponent (e.g., 1e2 cannot have a fractional part after it)
       if (HAS_E.test(raw) && !IS_HEX.test(raw)) {
         throw new ParseError(
@@ -785,7 +728,7 @@ function float(cursor: Cursor<Token>, input: string, enableValidation: boolean =
     raw += `.${cursor.value!.raw}`;
     loc = { start, end: cursor.value!.loc.end };
     
-    if (enableValidation) {
+    {
       // Validate underscore placement in fractional part
       const fracPart = cursor.value!.raw;
       
@@ -852,65 +795,63 @@ function float(cursor: Cursor<Token>, input: string, enableValidation: boolean =
     
     value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
-    if (enableValidation) {
-      // Validate underscore placement in integer part (exponent-only floats like 1e5)
-      if (/_$/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscore before decimal point is not allowed'
-        );
-      }
-      if (/^[+\-]?_/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Leading underscore is not allowed'
-        );
-      }
-      if (/__/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Consecutive underscores are not allowed'
-        );
-      }
-      
-      // Validate incomplete exponent (just E with nothing or just sign after)
-      if (/[eE][+\-]?$/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          `Invalid float "${raw}": incomplete exponent`
-        );
-      }
-      
-      // Validate no decimal point in exponent
-      if (/[eE][+\-]?.*\./.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          `Invalid float "${raw}": decimal point not allowed in exponent`
-        );
-      }
-      
-      // Validate underscore before exponent
-      if (/_[eE]/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscore before exponent is not allowed'
-        );
-      }
-      
-      // Validate underscore at start of exponent
-      if (/[eE][+\-]?_/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscore at start of exponent is not allowed'
-        );
-      }
+    // Validate underscore placement in integer part (exponent-only floats like 1e5)
+    if (/_$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore before decimal point is not allowed'
+      );
+    }
+    if (/^[+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Leading underscore is not allowed'
+      );
+    }
+    if (/__/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Consecutive underscores are not allowed'
+      );
+    }
+    
+    // Validate incomplete exponent (just E with nothing or just sign after)
+    if (/[eE][+\-]?$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float "${raw}": incomplete exponent`
+      );
+    }
+    
+    // Validate no decimal point in exponent
+    if (/[eE][+\-]?.*\./.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float "${raw}": decimal point not allowed in exponent`
+      );
+    }
+    
+    // Validate underscore before exponent
+    if (/_[eE]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore before exponent is not allowed'
+      );
+    }
+    
+    // Validate underscore at start of exponent
+    if (/[eE][+\-]?_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscore at start of exponent is not allowed'
+      );
     }
     
     // Validate no dot after exponent (e.g., 1e2.3 is invalid)
@@ -928,11 +869,11 @@ function float(cursor: Cursor<Token>, input: string, enableValidation: boolean =
   return { type: NodeType.Float, loc, raw, value };
 }
 
-function integer(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): Integer {
+function integer(cursor: Cursor<Token>, input: string): Integer {
   const raw = cursor.value!.raw;
   const loc = cursor.value!.loc;
   
-  if (enableValidation) {
+  {
     // > Integer values -0 and +0 are valid and identical to an unprefixed zero
     if (raw === '-0' || raw === '+0') {
       return {
@@ -989,14 +930,6 @@ function integer(cursor: Cursor<Token>, input: string, enableValidation: boolean
         'Consecutive underscores in numbers are not allowed'
       );
     }
-  } else if (raw === '-0' || raw === '+0') {
-    // Even with validation disabled, handle -0 and +0
-    return {
-      type: NodeType.Integer,
-      loc: loc,
-      raw: raw,
-      value: 0
-    };
   }
 
   let radix = 10;
@@ -1006,168 +939,156 @@ function integer(cursor: Cursor<Token>, input: string, enableValidation: boolean
   if (IS_HEX.test(raw)) {
     radix = 16;
     
-    if (enableValidation) {
-      // Validation: Capital prefix not allowed
-      if (/^[+\-]?0X/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Hexadecimal prefix must be lowercase "0x"'
-        );
-      }
-      
-      // Validation: Underscore after prefix
-      if (/^[+\-]?0x_/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscores in numbers must be surrounded by digits'
-        );
-      }
-      
-      numericPart = raw.replace(/^[+\-]?0x/i, '');
-      
-      // Validation: Incomplete hexadecimal
-      if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Incomplete hexadecimal number'
-        );
-      }
-      
-      // Validation: Invalid hexadecimal digits
-      const hexDigits = numericPart.replace(/_/g, '');
-      if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Invalid hexadecimal digits'
-        );
-      }
-      
-      // Validation: Signed non-decimal numbers not allowed
-      if (/^[+\-]/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Hexadecimal numbers cannot have a sign prefix'
-        );
-      }
-    } else {
-      numericPart = raw.replace(/^[+\-]?0x/i, '');
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0X/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Hexadecimal prefix must be lowercase "0x"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0x_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0x/i, '');
+    
+    // Validation: Incomplete hexadecimal
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete hexadecimal number'
+      );
+    }
+    
+    // Validation: Invalid hexadecimal digits
+    const hexDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid hexadecimal digits'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Hexadecimal numbers cannot have a sign prefix'
+      );
     }
   }
   // Octal validation
   else if (IS_OCTAL.test(raw)) {
     radix = 8;
     
-    if (enableValidation) {
-      // Validation: Capital prefix not allowed
-      if (/^[+\-]?0O/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Octal prefix must be lowercase "0o"'
-        );
-      }
-      
-      // Validation: Underscore after prefix
-      if (/^[+\-]?0o_/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscores in numbers must be surrounded by digits'
-        );
-      }
-      
-      numericPart = raw.replace(/^[+\-]?0o/i, '');
-      
-      // Validation: Incomplete octal
-      if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Incomplete octal number'
-        );
-      }
-      
-      // Validation: Invalid octal digits
-      const octalDigits = numericPart.replace(/_/g, '');
-      if (!/^[0-7]+$/.test(octalDigits)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Invalid octal digits (must be 0-7)'
-        );
-      }
-      
-      // Validation: Signed non-decimal numbers not allowed
-      if (/^[+\-]/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Octal numbers cannot have a sign prefix'
-        );
-      }
-    } else {
-      numericPart = raw.replace(/^[+\-]?0o/i, '');
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0O/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Octal prefix must be lowercase "0o"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0o_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0o/i, '');
+    
+    // Validation: Incomplete octal
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete octal number'
+      );
+    }
+    
+    // Validation: Invalid octal digits
+    const octalDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-7]+$/.test(octalDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid octal digits (must be 0-7)'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Octal numbers cannot have a sign prefix'
+      );
     }
   }
   // Binary validation
   else if (IS_BINARY.test(raw)) {
     radix = 2;
     
-    if (enableValidation) {
-      // Validation: Capital prefix not allowed
-      if (/^[+\-]?0B/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Binary prefix must be lowercase "0b"'
-        );
-      }
-      
-      // Validation: Underscore after prefix
-      if (/^[+\-]?0b_/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscores in numbers must be surrounded by digits'
-        );
-      }
-      
-      numericPart = raw.replace(/^[+\-]?0b/i, '');
-      
-      // Validation: Incomplete binary
-      if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Incomplete binary number'
-        );
-      }
-      
-      // Validation: Invalid binary digits
-      const binaryDigits = numericPart.replace(/_/g, '');
-      if (!/^[01]+$/.test(binaryDigits)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Invalid binary digits (must be 0 or 1)'
-        );
-      }
-      
-      // Validation: Signed non-decimal numbers not allowed
-      if (/^[+\-]/.test(raw)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Binary numbers cannot have a sign prefix'
-        );
-      }
-    } else {
-      numericPart = raw.replace(/^[+\-]?0b/i, '');
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0B/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Binary prefix must be lowercase "0b"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0b_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0b/i, '');
+    
+    // Validation: Incomplete binary
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete binary number'
+      );
+    }
+    
+    // Validation: Invalid binary digits
+    const binaryDigits = numericPart.replace(/_/g, '');
+    if (!/^[01]+$/.test(binaryDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid binary digits (must be 0 or 1)'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Binary numbers cannot have a sign prefix'
+      );
     }
   }
 
@@ -1187,7 +1108,7 @@ function integer(cursor: Cursor<Token>, input: string, enableValidation: boolean
   };
 }
 
-function inlineTable(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): [InlineTable, Comment[]] {
+function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
       input,
@@ -1234,7 +1155,7 @@ function inlineTable(cursor: Cursor<Token>, input: string, enableValidation: boo
       continue;
     }
 
-    const [item, ...additional_comments] = walkBlock(cursor, input, enableValidation);
+    const [item, ...additional_comments] = walkBlockNonGen(cursor, input);
     if (item.type !== NodeType.KeyValue) {
       throw new ParseError(
         input,
@@ -1272,7 +1193,7 @@ function inlineTable(cursor: Cursor<Token>, input: string, enableValidation: boo
   return [value, comments];
 }
 
-function inlineArray(cursor: Cursor<Token>, input: string, enableValidation: boolean = true): [InlineArray, Comment[]] {
+function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
   // 7. InlineArray
   if (cursor.value!.raw !== '[') {
     throw new ParseError(
@@ -1310,7 +1231,7 @@ function inlineArray(cursor: Cursor<Token>, input: string, enableValidation: boo
     } else if ((cursor.value as Token).type === TokenType.Comment) {
       comments.push(comment(cursor));
     } else {
-      const [item, ...additional_comments] = walkValue(cursor, input, enableValidation);
+      const [item, ...additional_comments] = walkValueNonGen(cursor, input);
       const inline_item: InlineItem = {
         type: NodeType.InlineItem,
         loc: cloneLocation(item.loc),
@@ -1355,7 +1276,7 @@ function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
   } else if (cursor.value!.type === TokenType.Bracket) {
     // For tables, we can't easily avoid recursion, so just use the existing function
     // In practice, top-level tables aren't deeply nested
-    return [table(cursor, input, false)];
+    return [table(cursor, input)];
   } else if (cursor.value!.type === TokenType.Literal) {
     return keyValueNonGen(cursor, input);
   } else {
@@ -1368,6 +1289,17 @@ function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
 }
 
 function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
+  // Match the more helpful diagnostic when users write `key: value`.
+  // Depending on tokenization, the ':' may be attached to the key token (e.g. 'name:').
+  const rawKeyToken = cursor.value!.raw;
+  if (rawKeyToken.endsWith(':')) {
+    throw new ParseError(
+      input,
+      { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + rawKeyToken.length - 1 },
+      `Use '=' to separate keys and values, not ':'`
+    );
+  }
+
   const key: Key = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
@@ -1386,6 +1318,13 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
   cursor.next();
 
   if (cursor.done || cursor.value!.type !== TokenType.Equal) {
+    if (!cursor.done && cursor.value!.raw === ':') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Use '=' to separate keys and values, not ':'`
+      );
+    }
     throw new ParseError(
       input,
       cursor.done ? key.loc.end : cursor.value!.loc.start,
@@ -1423,16 +1362,16 @@ function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Co
     } else if (cursor.value!.raw === TRUE || cursor.value!.raw === FALSE) {
       return [boolean(cursor)];
     } else if (dateFormatHelper.IS_FULL_DATE.test(cursor.value!.raw) || dateFormatHelper.IS_FULL_TIME.test(cursor.value!.raw)) {
-      return [datetime(cursor, input, false)];
+      return [datetime(cursor, input)];
     } else if (
       (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) ||
       IS_INF.test(cursor.value!.raw) ||
       IS_NAN.test(cursor.value!.raw) ||
       (HAS_E.test(cursor.value!.raw) && !IS_HEX.test(cursor.value!.raw))
     ) {
-      return [float(cursor, input, false)];
+      return [float(cursor, input)];
     } else {
-      return [integer(cursor, input, false)];
+      return [integer(cursor, input)];
     }
   } else if (cursor.value!.type === TokenType.Curly) {
     const [inline_table, comments] = inlineTableNonGen(cursor, input);
