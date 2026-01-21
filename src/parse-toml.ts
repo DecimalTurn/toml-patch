@@ -699,8 +699,28 @@ function float(cursor: Cursor<Token>, input: string): Float {
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
     
+    // Validate that we don't already have an exponent (e.g., 1e2 cannot have a fractional part after it)
+    if (HAS_E.test(raw) && !IS_HEX.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float "${raw}": cannot have decimal point after exponent`
+      );
+    }
+    
     // Validate integer part before decimal point
     const intPart = raw;
+    
+    // Validate no leading dot (must have at least one digit before the dot)
+    const withoutSign = intPart.replace(/^[+\-]/, '');
+    if (withoutSign === '' || withoutSign === '_') {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float: decimal point must be preceded by at least one digit`
+      );
+    }
+    
     if (/_$/.test(intPart)) {
       throw new ParseError(
         input,
@@ -740,6 +760,16 @@ function float(cursor: Cursor<Token>, input: string): Float {
     
     // Validate underscore placement in fractional part
     const fracPart = cursor.value!.raw;
+    
+    // Validate that fractional part starts with a digit (not 'e')
+    if (!/^\d/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float: fractional part must start with a digit, found "${fracPart}"`
+      );
+    }
+    
     if (/^_/.test(fracPart)) {
       throw new ParseError(
         input,
@@ -773,9 +803,27 @@ function float(cursor: Cursor<Token>, input: string): Float {
       );
     }
     
+    // Validate incomplete exponent in fractional part (just E with nothing or just sign after)
+    if (/[eE][+\-]?$/.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": incomplete exponent`
+      );
+    }
+    
+    // Validate no decimal point in exponent in fractional part
+    if (/[eE][+\-]?.*\./.test(fracPart)) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Invalid float "${raw}": decimal point not allowed in exponent`
+      );
+    }
+    
     value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
-    // Validate underscore placement in integer part
+    // Validate underscore placement in integer part (exponent-only floats like 1e5)
     if (/_$/.test(raw)) {
       throw new ParseError(
         input,
@@ -798,6 +846,24 @@ function float(cursor: Cursor<Token>, input: string): Float {
       );
     }
     
+    // Validate incomplete exponent (just E with nothing or just sign after)
+    if (/[eE][+\-]?$/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float "${raw}": incomplete exponent`
+      );
+    }
+    
+    // Validate no decimal point in exponent
+    if (/[eE][+\-]?.*\./.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        `Invalid float "${raw}": decimal point not allowed in exponent`
+      );
+    }
+    
     // Validate underscore before exponent
     if (/_[eE]/.test(raw)) {
       throw new ParseError(
@@ -813,6 +879,15 @@ function float(cursor: Cursor<Token>, input: string): Float {
         input,
         loc.start,
         'Underscore at start of exponent is not allowed'
+      );
+    }
+    
+    // Validate no dot after exponent (e.g., 1e2.3 is invalid)
+    if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
+      throw new ParseError(
+        input,
+        cursor.peek().value!.loc.start,
+        `Invalid float "${raw}.": cannot have decimal point after exponent`
       );
     }
     
