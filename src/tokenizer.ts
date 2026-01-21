@@ -34,6 +34,28 @@ export function* tokenize(input: string): IterableIterator<Token> {
   const locate = createLocate(input);
 
   while (!cursor.done) {
+    const code = cursor.value!.charCodeAt(0);
+    // VT (0x0B) and FF (0x0C) are not allowed in TOML
+    if (code === 0x0b || code === 0x0c) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+      );
+    }
+
+    // CR (0x0D) is only allowed as part of CRLF
+    if (cursor.value === '\r') {
+      const next = cursor.peek();
+      if (next.done || next.value !== '\n') {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          'Invalid standalone CR (\\r); CR must be part of a CRLF sequence'
+        );
+      }
+    }
+
     if (IS_WHITESPACE.test(cursor.value!)) {
       // (skip whitespace)
     } else if (cursor.value === '[' || cursor.value === ']') {
@@ -106,6 +128,17 @@ function multiline(
   // The reason why we need to check if there is more than three is because we have to match the last 3 quotes, not the first 3 that appears consecutively
   // See spec-string-basic-multiline-9.toml
   while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
+    if (cursor.value === '\r') {
+      const next = cursor.peek();
+      if (next.done || next.value !== '\n') {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          'Invalid standalone CR (\\r) in multiline string (must be part of CRLF sequence)'
+        );
+      }
+    }
+
     raw += cursor.value;
     cursor.next();
   }
