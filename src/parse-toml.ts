@@ -47,16 +47,6 @@ const IS_HEX = /^[+\-]?0x/i;
 const IS_OCTAL = /^[+\-]?0o/i;
 const IS_BINARY = /^[+\-]?0b/i;
 
-// Helper to determine if validation should be enabled
-// Disable for pathological cases with excessive nesting to avoid stack overflow
-// Nesting level ~ braceCount, so 10 braces = ~10 nesting levels
-// Each nesting level can accumulate ~4 generator frames in worst case
-// V8 limit is around 13000-15000 frames for Node.js, but we start hitting perf issues earlier
-// Use 10 as threshold for safety margin
-function shouldEnableValidation(input: string): boolean {
-  const braceCount = (input.match(/\{/g) || []).length;
-  return braceCount <= 10;
-}
 
 // Export the date classes for external use
 export {
@@ -68,31 +58,11 @@ export {
 } from './date-format';
 
 export default function* parseTOML(input: string): AST {
-  const enableValidation = shouldEnableValidation(input);
-  
-  // For deeply nested structures, use non-generator parsing to avoid stack overflow
-  if (!enableValidation) {
-    const tokenIter = Array.from(tokenize(input));
-    const cursor = new Cursor(tokenIter[Symbol.iterator]());
-    const result: Block[] = [];
-    
-    while (!cursor.next().done) {
-      const blocks = walkBlockNonGen(cursor, input);
-      result.push(...blocks);
-    }
-    
-    for (const item of result) {
-      yield item;
-    }
-    return;
-  }
-  
-  // Standard generator-based parsing with validation
   const tokens = tokenize(input);
   const cursor = new Cursor(tokens);
 
   while (!cursor.next().done) {
-    for (const item of walkBlock(cursor, input, enableValidation)) {
+    for (const item of walkBlock(cursor, input)) {
       yield item;
     }
   }
@@ -112,24 +82,13 @@ export function* continueParsingTOML(existingAst: AST, remainingString: string):
   }
   
   // Parse and yield all items from the remaining string
-  const enableValidation = shouldEnableValidation(remainingString);
-  const tokenIter = tokenize(remainingString);
-  const tokens = enableValidation ? tokenIter : Array.from(tokenIter);
-  const cursor = new Cursor(tokens[Symbol.iterator]());
-  
-  try {
-    while (!cursor.next().done) {
-      // Manually iterate through walkBlock results instead of using yield*
-      // This reduces generator nesting depth for deeply nested structures
-      for (const item of walkBlock(cursor, remainingString, enableValidation)) {
-        yield item;
-      }
+  const tokens = tokenize(remainingString);
+  const cursor = new Cursor(tokens);
+
+  while (!cursor.next().done) {
+    for (const item of walkBlock(cursor, remainingString)) {
+      yield item;
     }
-  } catch (error) {
-    if (error instanceof RangeError && error.message.includes('stack')) {
-      throw error;
-    }
-    throw error;
   }
 }
 
