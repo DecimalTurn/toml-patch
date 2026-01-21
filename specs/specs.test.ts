@@ -67,19 +67,6 @@ const SKIPPED_TESTS = [
   'encoding/bad-utf8-in-comment',
   'encoding/bad-codepoint',
   
-  // TOML 1.1.0 spec (version-specific - 12 tests)
-  'spec-1.1.0/common-9',
-  'spec-1.1.0/common-50',
-  'spec-1.1.0/common-49',
-  'spec-1.1.0/common-48',
-  'spec-1.1.0/common-47',
-  'spec-1.1.0/common-39',
-  'spec-1.1.0/common-12',
-  'spec-1.1.0/common-10',
-  'spec-1.1.0/common-50-0',
-  'spec-1.1.0/common-49-0',
-  'spec-1.1.0/common-46-1',
-  'spec-1.1.0/common-46-0',
   
   // Spec test edge cases (8 tests)
   'table-4',
