@@ -401,6 +401,9 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
     raw += `.${cursor.value!.raw}`;
   }
 
+  // Validate datetime format
+  validateDateTimeFormat(raw, input, loc.start);
+
   if (!dateFormatHelper.IS_FULL_DATE.test(raw)) {
     // Local time only (e.g., "07:32:00" or "07:32:00.999")
     if (dateFormatHelper.IS_TIME_ONLY.test(raw)) {
@@ -436,6 +439,155 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
     raw,
     value
   };
+}
+
+// Helper function to validate datetime format
+function validateDateTimeFormat(raw: string, input: string, loc: any): void {
+  // Check for date with wrong number of digits for month/day BEFORE extracting components
+  // Pattern should be YYYY-MM-DD (exactly 4, 2, 2 digits)
+  const datePattern = /^(\d+)-(\d+)-(\d+)/;
+  const dateMatch = raw.match(datePattern);
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch;
+    if (month.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": month must be exactly 2 digits, found ${month.length}`
+      );
+    }
+    if (day.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid date "${raw}": day must be exactly 2 digits, found ${day.length}`
+      );
+    }
+  }
+  
+  // Check for time with wrong number of digits for hour/minute/second
+  const timePattern = /[T ](\d+):(\d+)(?::(\d+))?/;
+  const timeMatch = raw.match(timePattern);
+  if (timeMatch) {
+    const [, hour, minute, second] = timeMatch;
+    if (hour.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": hour must be exactly 2 digits, found ${hour.length}`
+      );
+    }
+    if (minute.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": minute must be exactly 2 digits, found ${minute.length}`
+      );
+    }
+    if (second && second.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": second must be exactly 2 digits, found ${second.length}`
+      );
+    }
+  }
+  
+  // Check for standalone time (no date prefix)
+  const timeOnlyPattern = /^(\d+):(\d+)(?::(\d+))?/;
+  const timeOnlyMatch = raw.match(timeOnlyPattern);
+  if (timeOnlyMatch && !dateMatch) {
+    const [, hour, minute, second] = timeOnlyMatch;
+    if (hour.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": hour must be exactly 2 digits, found ${hour.length}`
+      );
+    }
+    if (minute.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": minute must be exactly 2 digits, found ${minute.length}`
+      );
+    }
+    if (second && second.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid time "${raw}": second must be exactly 2 digits, found ${second.length}`
+      );
+    }
+  }
+  
+  // Extract components for range validation (now we know they have the right length)
+  const dateTimeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  const timeOnlyMatchExact = raw.match(/^(\d{2}):(\d{2})(?::(\d{2}))?/);
+  
+  if (dateTimeMatch) {
+    const [, year, month, day, hour, minute, second] = dateTimeMatch;
+    
+    // Validate month range (01-12)
+    const monthNum = parseInt(month, 10);
+    if (monthNum < 1 || monthNum > 12) {
+      throw new ParseError(input, loc, `Invalid date "${raw}": month must be between 01 and 12`);
+    }
+    
+    // Validate day range (01-31 depending on month)
+    const dayNum = parseInt(day, 10);
+    if (dayNum < 1 || dayNum > 31) {
+      throw new ParseError(input, loc, `Invalid date "${raw}": day must be between 01 and 31`);
+    }
+    
+    // Check if day is valid for the specific month
+    const yearNum = parseInt(year, 10);
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+    if (dayNum > daysInMonth) {
+      throw new ParseError(input, loc, `Invalid date "${raw}": day ${day} is invalid for month ${month} in year ${year}`);
+    }
+    
+    // Validate time component ranges if present
+    if (hour !== undefined) {
+      const hourNum = parseInt(hour, 10);
+      if (hourNum < 0 || hourNum > 23) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": hour must be between 00 and 23`);
+      }
+    }
+    
+    if (minute !== undefined) {
+      const minuteNum = parseInt(minute, 10);
+      if (minuteNum < 0 || minuteNum > 59) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
+      }
+    }
+    
+    if (second !== undefined) {
+      const secondNum = parseInt(second, 10);
+      if (secondNum < 0 || secondNum > 60) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+      }
+    }
+  } else if (timeOnlyMatchExact) {
+    const [, hour, minute, second] = timeOnlyMatchExact;
+    
+    const hourNum = parseInt(hour, 10);
+    if (hourNum < 0 || hourNum > 23) {
+      throw new ParseError(input, loc, `Invalid time "${raw}": hour must be between 00 and 23`);
+    }
+    
+    const minuteNum = parseInt(minute, 10);
+    if (minuteNum < 0 || minuteNum > 59) {
+      throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
+    }
+    
+    if (second !== undefined) {
+      const secondNum = parseInt(second, 10);
+      if (secondNum < 0 || secondNum > 60) {
+        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
+      }
+    }
+  }
 }
 
 function float(cursor: Cursor<Token>, input: string): Float {
