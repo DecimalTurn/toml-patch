@@ -508,6 +508,86 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
 
 // Helper function to validate datetime format
 function validateDateTimeFormat(raw: string, input: string, loc: any): void {
+  // Group 9: fractional seconds and timezone offset validation.
+  // Reject fractional seconds with no digits after the dot (e.g. "...:09.Z" or "...:09.+01:00").
+  if (/\.([Zz]|[+-])/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid datetime "${raw}": fractional seconds must have at least one digit after decimal point`
+    );
+  }
+
+  // Reject trailing +/- without hour/minute (e.g., "...+" or "...-")
+  if (/[+-]$/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc,
+      `Invalid datetime "${raw}": timezone offset requires hour and minute components`
+    );
+  }
+
+  // If an offset is present, it must be [+-]HH:MM and only after a time component.
+  // (Avoid accidentally matching date hyphens by requiring a time first.)
+  const hasTime = /\d{2}:\d{2}/.test(raw);
+  const offsetMatch = hasTime ? raw.match(/([+-])(\d+)(:?)(\d*)$/) : null;
+  if (offsetMatch) {
+
+    const fullOffset = offsetMatch[0];
+    const hours = offsetMatch[2];
+    const colon = offsetMatch[3];
+    const minutes = offsetMatch[4];
+
+    if (colon !== ':') {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": must use colon separator (e.g., +09:09)`
+      );
+    }
+
+    if (hours.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": hour must be exactly 2 digits`
+      );
+    }
+
+    if (!minutes || minutes.length === 0) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute component is required`
+      );
+    }
+    if (minutes.length !== 2) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute must be exactly 2 digits`
+      );
+    }
+
+    const hourNum = parseInt(hours, 10);
+    if (hourNum < 0 || hourNum > 23) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": hour must be between 00 and 23, found ${hours}`
+      );
+    }
+
+    const minuteNum = parseInt(minutes, 10);
+    if (minuteNum < 0 || minuteNum > 59) {
+      throw new ParseError(
+        input,
+        loc,
+        `Invalid timezone offset "${fullOffset}": minute must be between 00 and 59, found ${minutes}`
+      );
+    }
+  }
+
   // First, ensure the overall shape is valid (anchors matter).
   // This catches cases where regexes below might partially match a prefix and ignore trailing junk.
   const validDateTimePattern =
@@ -946,7 +1026,11 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
 
   // Guard: values that look like dates/times must never be parsed as integers.
   // (Prevents parseInt() from accepting prefixes like "199-09-09" -> 199.)
-  if (/^\d{1,}-\d{1,}/.test(raw) || /^\d{1,}:\d{1,}/.test(raw)) {
+  if (
+    /^\d{1,}-\d{1,}/.test(raw) ||
+    /^\d{1,}:\d{1,}/.test(raw) ||
+    /^\d{6}-\d{2}$/.test(raw)
+  ) {
     throw new ParseError(input, loc.start, `Invalid integer "${raw}"`);
   }
   

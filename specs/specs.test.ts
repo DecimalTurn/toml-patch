@@ -150,19 +150,9 @@ const SKIPPED_TESTS = [
   
   // toml-test invalid - DateTime validation (36 tests)
   'datetime/no-year-month-sep',
-  'datetime/offset-minus-minute-1digit',
-  'datetime/offset-minus-no-hour-minute',
-  'datetime/offset-minus-no-hour-minute-sep',
-  'datetime/offset-minus-no-minute',
-  'datetime/offset-overflow-hour',
-  'datetime/offset-overflow-minute',
-  'datetime/offset-plus-minute-1digit',
-  'datetime/offset-plus-no-hour-minute',
-  'datetime/offset-plus-no-hour-minute-sep',
-  'datetime/offset-plus-no-minute',
+  
   'datetime/only-T',
-  'datetime/only-TZ',
-  'datetime/second-trailing-dotz',
+  
 
   // toml-test invalid - Inline table validation (8 tests)
   'inline-table/double-comma',
