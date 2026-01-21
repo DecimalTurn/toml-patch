@@ -150,7 +150,6 @@ const SKIPPED_TESTS = [
   
   // toml-test invalid - DateTime validation (36 tests)
   'datetime/no-date-time-sep',
-  'datetime/no-secs',
   'datetime/no-t',
   'datetime/no-year-month-sep',
   'datetime/offset-minus-minute-1digit',
@@ -195,12 +194,10 @@ const SKIPPED_TESTS = [
   'local-date/year-3digits',
   
   // toml-test invalid - Local datetime validation (13 tests)
-  'local-datetime/no-secs',
   'local-datetime/no-t',
   'local-datetime/y10k',
   
   // toml-test invalid - Local time validation (6 tests)
-  'local-time/no-secs',
   'local-time/time-no-leads-02',
   
   // toml-test invalid - Spec 1.0.0 (4 tests)
