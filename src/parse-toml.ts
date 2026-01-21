@@ -43,9 +43,9 @@ const HAS_E = /e/i;
 const IS_DIVIDER = /\_/g;
 const IS_INF = /inf/;
 const IS_NAN = /nan/;
-const IS_HEX = /^0x/;
-const IS_OCTAL = /^0o/;
-const IS_BINARY = /^0b/;
+const IS_HEX = /^[+\-]?0x/i;
+const IS_OCTAL = /^[+\-]?0o/i;
+const IS_BINARY = /^[+\-]?0b/i;
 
 // Export the date classes for external use
 export {
@@ -116,7 +116,7 @@ function* walkValue(cursor: Cursor<Token>, input: string): IterableIterator<Valu
     ) {
       yield float(cursor, input);
     } else {
-      yield integer(cursor);
+      yield integer(cursor, input);
     }
   } else if (cursor.value!.type === TokenType.Curly) {
     const [inline_table, comments] = inlineTable(cursor, input);
@@ -472,29 +472,210 @@ function float(cursor: Cursor<Token>, input: string): Float {
   return { type: NodeType.Float, loc, raw, value };
 }
 
-function integer(cursor: Cursor<Token>): Integer {
+function integer(cursor: Cursor<Token>, input: string): Integer {
+  const raw = cursor.value!.raw;
+  const loc = cursor.value!.loc;
+  
   // > Integer values -0 and +0 are valid and identical to an unprefixed zero
-  if (cursor.value!.raw === '-0' || cursor.value!.raw === '+0') {
+  if (raw === '-0' || raw === '+0') {
     return {
       type: NodeType.Integer,
-      loc: cursor.value!.loc,
-      raw: cursor.value!.raw,
+      loc: loc,
+      raw: raw,
       value: 0
     };
   }
 
+  // Validation: No trailing underscores
+  if (/_$/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc.start,
+      'Underscores in numbers must be surrounded by digits'
+    );
+  }
+
+  // Validation: No leading underscores (after optional sign)
+  if (/^[+\-]?_/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc.start,
+      'Underscores in numbers must be surrounded by digits'
+    );
+  }
+
+  // Validation: No consecutive underscores
+  if (/__/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc.start,
+      'Consecutive underscores in numbers are not allowed'
+    );
+  }
+
   let radix = 10;
-  if (IS_HEX.test(cursor.value!.raw)) {
+  let numericPart = raw;
+  
+  // Hexadecimal validation
+  if (IS_HEX.test(raw)) {
     radix = 16;
-  } else if (IS_OCTAL.test(cursor.value!.raw)) {
+    
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0X/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Hexadecimal prefix must be lowercase "0x"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0x_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0x/i, '');
+    
+    // Validation: Incomplete hexadecimal
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete hexadecimal number'
+      );
+    }
+    
+    // Validation: Invalid hexadecimal digits
+    const hexDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid hexadecimal digits'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Hexadecimal numbers cannot have a sign prefix'
+      );
+    }
+  }
+  // Octal validation
+  else if (IS_OCTAL.test(raw)) {
     radix = 8;
-  } else if (IS_BINARY.test(cursor.value!.raw)) {
+    
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0O/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Octal prefix must be lowercase "0o"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0o_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0o/i, '');
+    
+    // Validation: Incomplete octal
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete octal number'
+      );
+    }
+    
+    // Validation: Invalid octal digits
+    const octalDigits = numericPart.replace(/_/g, '');
+    if (!/^[0-7]+$/.test(octalDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid octal digits (must be 0-7)'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Octal numbers cannot have a sign prefix'
+      );
+    }
+  }
+  // Binary validation
+  else if (IS_BINARY.test(raw)) {
     radix = 2;
+    
+    // Validation: Capital prefix not allowed
+    if (/^[+\-]?0B/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Binary prefix must be lowercase "0b"'
+      );
+    }
+    
+    // Validation: Underscore after prefix
+    if (/^[+\-]?0b_/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Underscores in numbers must be surrounded by digits'
+      );
+    }
+    
+    numericPart = raw.replace(/^[+\-]?0b/i, '');
+    
+    // Validation: Incomplete binary
+    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Incomplete binary number'
+      );
+    }
+    
+    // Validation: Invalid binary digits
+    const binaryDigits = numericPart.replace(/_/g, '');
+    if (!/^[01]+$/.test(binaryDigits)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Invalid binary digits (must be 0 or 1)'
+      );
+    }
+    
+    // Validation: Signed non-decimal numbers not allowed
+    if (/^[+\-]/.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Binary numbers cannot have a sign prefix'
+      );
+    }
   }
 
   const value = parseInt(
-    cursor
-      .value!.raw.replace(IS_DIVIDER, '')
+    raw
+      .replace(IS_DIVIDER, '')
       .replace(IS_OCTAL, '')
       .replace(IS_BINARY, ''),
     radix
@@ -502,8 +683,8 @@ function integer(cursor: Cursor<Token>): Integer {
 
   return {
     type: NodeType.Integer,
-    loc: cursor.value!.loc,
-    raw: cursor.value!.raw,
+    loc: loc,
+    raw: raw,
     value
   };
 }
