@@ -2400,8 +2400,8 @@ test('should preserve multiline inline table format (TOML 1.1.0)', () => {
   expect(patched).toContain('}');
 });
 
-//TODO TOML v1.1.0 - More tests for multiline inline tables
-it.skip('should parse and patch nested multiline inline tables (TOML 1.1.0)', () => {
+//TOML v1.1.0 - More tests for multiline inline tables
+test('should parse and patch nested multiline inline tables (TOML 1.1.0)', () => {
   // This is the exact example from TOML 1.1.0 spec
   const existing = dedent`
     tbl = {
