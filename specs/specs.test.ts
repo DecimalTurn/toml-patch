@@ -149,8 +149,6 @@ const SKIPPED_TESTS = [
   'control/string-del',
   
   // toml-test invalid - DateTime validation (36 tests)
-  'datetime/no-date-time-sep',
-  'datetime/no-t',
   'datetime/no-year-month-sep',
   'datetime/offset-minus-minute-1digit',
   'datetime/offset-minus-no-hour-minute',
@@ -165,12 +163,7 @@ const SKIPPED_TESTS = [
   'datetime/only-T',
   'datetime/only-TZ',
   'datetime/second-trailing-dotz',
-  'datetime/trailing-x',
-  'datetime/y10k',
-  'datetime/year-3digits',
-  'datetime/day-1digit',
-  
-  
+
   // toml-test invalid - Inline table validation (8 tests)
   'inline-table/double-comma',
   'inline-table/linebreak-01',
@@ -188,17 +181,13 @@ const SKIPPED_TESTS = [
   'key/partial-quoted',
   
   // toml-test invalid - Local date validation (13 tests)
-  'local-date/day-1digit',
-  'local-date/trailing-t',
-  'local-date/y10k',
-  'local-date/year-3digits',
+  
   
   // toml-test invalid - Local datetime validation (13 tests)
-  'local-datetime/no-t',
-  'local-datetime/y10k',
+  
   
   // toml-test invalid - Local time validation (6 tests)
-  'local-time/time-no-leads-02',
+  
   
   // toml-test invalid - Spec 1.0.0 (4 tests)
   'spec-1.0.0/inline-table-2-0',
