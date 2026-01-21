@@ -95,6 +95,22 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
     }
   });
 
+  // Post-process: convert leading spaces to tabs if useTabsForIndentation is enabled
+  if (format.useTabsForIndentation) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Find the leading whitespace
+      const match = line.match(/^( +)/);
+      if (match) {
+        const leadingSpaces = match[1];
+        // Replace entire leading space sequence with equivalent tabs
+        // Each space becomes a tab (preserving the visual width)
+        const leadingTabs = '\t'.repeat(leadingSpaces.length);
+        lines[i] = leadingTabs + line.substr(leadingSpaces.length);
+      }
+    }
+  }
+
   return lines.join(format.newLine) + format.newLine.repeat(format.trailingNewline);
 }
 
@@ -152,12 +168,9 @@ function write(lines: string[], loc: Location, raw: string, paddingChar: string 
     if (is_start_line) {
       const existingBefore = line.substr(0, loc.start.column);
       if (existingBefore.length < loc.start.column) {
-        // Need to pad
-        // Use tabs only if padding from the beginning of the line (column 0)
-        // Otherwise use spaces (e.g., for padding around = signs)
-        const useTabs = existingBefore.length === 0 && loc.start.column > 0;
-        const effectivePadChar = useTabs ? paddingChar : SPACE;
-        before = existingBefore.padEnd(loc.start.column, effectivePadChar);
+        // Need to pad - always use spaces during write phase
+        // Tab conversion happens in post-processing for leading indentation only
+        before = existingBefore.padEnd(loc.start.column, SPACE);
       } else {
         before = existingBefore;
       }
