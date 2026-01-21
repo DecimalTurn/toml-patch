@@ -353,6 +353,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
         parent = existing;
         existing = existing.item;
+      } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
+        // Both are InlineItems wrapping KeyValues (nested inline table edits)
+        // Preserve formatting and edit the value within
+        preserveFormatting(existing.item.value, replacement.item.value);
+        parent = existing.item;
+        existing = existing.item.value;
+        replacement = replacement.item.value;
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits
