@@ -59,11 +59,11 @@ test('should return correct error for invalid toml', () => {
   `;
 
   const expected_error = dedent`
-  Error parsing TOML (2, 7):
+  Error parsing TOML (2, 5):
 
   name: Package Name
-        ^
-  Expected "=" for key-value, found Package
+      ^
+  Use '=' to separate keys and values, not ':'
   `;
 
   // Expect that calling parseTOML with invalid_toml throws an error
