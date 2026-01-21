@@ -2,7 +2,6 @@ import { Value, NodeType, TreeNode, AST, isInlineTable } from './ast';
 import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
-import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 
 /**
  * Converts the given AST to a JavaScript object.
