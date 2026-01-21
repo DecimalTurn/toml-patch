@@ -58,7 +58,7 @@ export function getLine(input: string, position: Position): string {
   const start = lines[position.line - 2] || 0;
   const end = lines[position.line - 1] || input.length;
 
-  return input.substr(start, end - start);
+  return input.substring(start, end);
 }
 
 export function findLines(input: string): number[] {

@@ -106,7 +106,7 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
         // Replace entire leading space sequence with equivalent tabs
         // Each space becomes a tab (preserving the visual width)
         const leadingTabs = '\t'.repeat(leadingSpaces.length);
-        lines[i] = leadingTabs + line.substr(leadingSpaces.length);
+        lines[i] = leadingTabs + line.substring(leadingSpaces.length);
       }
     }
   }
@@ -166,7 +166,7 @@ function write(lines: string[], loc: Location, raw: string, paddingChar: string 
 
     let before = '';
     if (is_start_line) {
-      const existingBefore = line.substr(0, loc.start.column);
+      const existingBefore = line.substring(0, loc.start.column);
       if (existingBefore.length < loc.start.column) {
         // Need to pad - always use spaces during write phase
         // Tab conversion happens in post-processing for leading indentation only
@@ -175,7 +175,7 @@ function write(lines: string[], loc: Location, raw: string, paddingChar: string 
         before = existingBefore;
       }
     }
-    const after = is_end_line ? line.substr(loc.end.column) : '';
+    const after = is_end_line ? line.substring(loc.end.column) : '';
 
     lines[i - 1] = before + raw_lines[i - loc.start.line] + after;
   }
