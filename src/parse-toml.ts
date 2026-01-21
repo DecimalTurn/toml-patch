@@ -1300,6 +1300,30 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
     );
   }
 
+  // Validate that multiline strings are not used as keys
+  if (rawKeyToken.startsWith('"""') || rawKeyToken.startsWith("'''") ) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      'Multiline strings (""" or \'\'\') cannot be used as keys'
+    );
+  }
+
+  // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
+  const isQuotedKey = rawKeyToken.startsWith('"') || rawKeyToken.startsWith("'");
+  if (!isQuotedKey) {
+    for (let i = 0; i < rawKeyToken.length; i++) {
+      const char = rawKeyToken[i];
+      if (!/[A-Za-z0-9_-]/.test(char)) {
+        throw new ParseError(
+          input,
+          { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+          `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+        );
+      }
+    }
+  }
+
   const key: Key = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
@@ -1310,6 +1334,30 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
     cursor.next();
+
+    // Validate each part of a dotted key
+    const partRaw = cursor.value!.raw;
+    if (partRaw.startsWith('"""') || partRaw.startsWith("'''") ) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Multiline strings (""" or \'\'\') cannot be used as keys'
+      );
+    }
+    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
+    if (!partIsQuoted) {
+      for (let i = 0; i < partRaw.length; i++) {
+        const char = partRaw[i];
+        if (!/[A-Za-z0-9_-]/.test(char)) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
+        }
+      }
+    }
+
     key.loc.end = cursor.value!.loc.end;
     key.raw += `.${cursor.value!.raw}`;
     key.value.push(parseString(cursor.value!.raw));
@@ -1418,10 +1466,16 @@ function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, 
 
     if ((cursor.value as Token).type === TokenType.Comma) {
       const previous = value.items[value.items.length - 1];
-      if (previous) {
-        previous.comma = true;
-        previous.loc.end = cursor.value!.loc.start;
+      if (!previous) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found "," without previous value in inline table'
+        );
       }
+
+      previous.comma = true;
+      previous.loc.end = cursor.value!.loc.start;
       cursor.next();
       continue;
     }
@@ -1484,10 +1538,16 @@ function inlineArrayNonGen(cursor: Cursor<Token>, input: string): [InlineArray, 
   ) {
     if ((cursor.value as Token).type === TokenType.Comma) {
       const previous = value.items[value.items.length - 1];
-      if (previous) {
-        previous.comma = true;
-        previous.loc.end = cursor.value!.loc.start;
+      if (!previous) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found "," without previous value for inline array'
+        );
       }
+
+      previous.comma = true;
+      previous.loc.end = cursor.value!.loc.start;
     } else if ((cursor.value as Token).type === TokenType.Comment) {
       comments.push(comment(cursor));
     } else {
