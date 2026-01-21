@@ -14,32 +14,31 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
  * It preserves the original formatting, spacing, and structure of the TOML file.
  * 
  * @param ast - The Abstract Syntax Tree representing the parsed TOML document
- * @param newline - The newline character(s) to use (\n by default)
- * @param options - Optional configuration object
- * @param options.trailingNewline - Number of trailing newlines to add (1 by default)
+ * @param format - The formatting options to use for the output
  * @returns The reconstructed TOML document as a string
  * 
  * @example
  * ```typescript
- * const tomlString = toTOML(ast, '\n', { trailingNewline: 1 });
+ * const tomlString = toTOML(ast, TomlFormat.default());
  * ```
  */
 export default function toTOML(ast: AST, format: TomlFormat): string {
 
   const lines: string[] = [];
+  const paddingChar = format.useTabsForIndentation ? '\t' : SPACE;
 
   traverse(ast, {
     [NodeType.TableKey](node) {
       const { start, end } = node.loc;
 
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[');
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']');
+      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[', paddingChar);
+      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']', paddingChar);
     },
     [NodeType.TableArrayKey](node) {
       const { start, end } = node.loc;
 
-      write(lines, { start, end: { line: start.line, column: start.column + 2 } }, '[[');
-      write(lines, { start: { line: end.line, column: end.column - 2 }, end }, ']]');
+      write(lines, { start, end: { line: start.line, column: start.column + 2 } }, '[[', paddingChar);
+      write(lines, { start: { line: end.line, column: end.column - 2 }, end }, ']]', paddingChar);
     },
 
     [NodeType.KeyValue](node) {
@@ -49,49 +48,50 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
       write(
         lines,
         { start: { line, column: node.equals }, end: { line, column: node.equals + 1 } },
-        '='
+        '=',
+        paddingChar
       );
     },
     [NodeType.Key](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     },
 
     [NodeType.String](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     },
     [NodeType.Integer](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     },
     [NodeType.Float](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     },
     [NodeType.Boolean](node) {
-      write(lines, node.loc, node.value.toString());
+      write(lines, node.loc, node.value.toString(), paddingChar);
     },
     [NodeType.DateTime](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     },
 
     [NodeType.InlineArray](node) {
       const { start, end } = node.loc;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[');
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']');
+      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[', paddingChar);
+      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']', paddingChar);
     },
 
     [NodeType.InlineTable](node) {
       const { start, end } = node.loc;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '{');
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, '}');
+      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '{', paddingChar);
+      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, '}', paddingChar);
     },
     [NodeType.InlineItem](node) {
       if (!node.comma) return;
 
       const start = node.loc.end;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, ',');
+      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, ',', paddingChar);
     },
 
     [NodeType.Comment](node) {
-      write(lines, node.loc, node.raw);
+      write(lines, node.loc, node.raw, paddingChar);
     }
   });
 
@@ -112,6 +112,7 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  *              - end: { line: number, column: number } - Ending position (1-indexed line, 0-indexed column)
  * @param raw - The raw string content to write at the specified location.
  *              Can contain multiple lines separated by \n or \r\n.
+ * @param paddingChar - The character to use for padding (space or tab)
  * 
  * @throws {Error} When there's a mismatch between location span and raw string line count
  * @throws {Error} When attempting to write to an uninitialized line
@@ -120,11 +121,11 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  * ```typescript
  * const lines = ['', ''];
  * const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 3 } };
- * write(lines, location, 'key');
+ * write(lines, location, 'key', ' ');
  * // Result: lines[0] becomes 'key'
  * ```
  */
-function write(lines: string[], loc: Location, raw: string) {
+function write(lines: string[], loc: Location, raw: string, paddingChar: string = SPACE) {
   const raw_lines = raw.split(BY_NEW_LINE).filter(line => line !== '\n' && line !== '\r\n');
   const expected_lines = loc.end.line - loc.start.line + 1;
 
@@ -147,9 +148,20 @@ function write(lines: string[], loc: Location, raw: string) {
     const is_start_line = i === loc.start.line;
     const is_end_line = i === loc.end.line;
 
-    const before = is_start_line
-      ? line.substr(0, loc.start.column).padEnd(loc.start.column, SPACE)
-      : '';
+    let before = '';
+    if (is_start_line) {
+      const existingBefore = line.substr(0, loc.start.column);
+      if (existingBefore.length < loc.start.column) {
+        // Need to pad
+        // Use tabs only if padding from the beginning of the line (column 0)
+        // Otherwise use spaces (e.g., for padding around = signs)
+        const useTabs = existingBefore.length === 0 && loc.start.column > 0;
+        const effectivePadChar = useTabs ? paddingChar : SPACE;
+        before = existingBefore.padEnd(loc.start.column, effectivePadChar);
+      } else {
+        before = existingBefore;
+      }
+    }
     const after = is_end_line ? line.substr(loc.end.column) : '';
 
     lines[i - 1] = before + raw_lines[i - loc.start.line] + after;
