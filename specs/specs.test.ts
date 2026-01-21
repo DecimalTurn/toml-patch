@@ -185,9 +185,6 @@ const SKIPPED_TESTS = [
   'datetime/day-1digit',
   
   // toml-test invalid - Float validation (36 tests)
-  'float/exp-dot-01',
-  'float/exp-dot-02',
-  'float/exp-dot-03',
   'float/exp-double-e-01',
   'float/exp-double-e-02',
   'float/inf-capital',
@@ -195,8 +192,6 @@ const SKIPPED_TESTS = [
   'float/inf-incomplete-02',
   'float/inf-incomplete-03',
   'float/inf_underscore',
-  'float/leading-dot-neg',
-  'float/leading-dot-plus',
   'float/leading-zero',
   'float/leading-zero-neg',
   'float/leading-zero-plus',
@@ -205,10 +200,6 @@ const SKIPPED_TESTS = [
   'float/nan-incomplete-02',
   'float/nan-incomplete-03',
   'float/nan_underscore',
-  'float/trailing-exp',
-  'float/trailing-exp-dot',
-  'float/trailing-exp-minus',
-  'float/trailing-exp-plus',
   'float/trailing-us-exp-01',
   
   // toml-test invalid - Inline table validation (8 tests)
