@@ -836,6 +836,26 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
     };
   }
 
+  // Validation: No double signs (++99, --99)
+  if (/^[+\-]{2,}/.test(raw)) {
+    throw new ParseError(
+      input,
+      loc.start,
+      'Double sign is not allowed in integers'
+    );
+  }
+
+  // Validation: No leading zeros (except for hex/octal/binary with prefixes)
+  // Check after removing underscores to catch cases like 0_0 which is equivalent to 00
+  const withoutUnderscores = raw.replace(/_/g, '');
+  if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
+    throw new ParseError(
+      input,
+      loc.start,
+      'Leading zeros are not allowed in decimal integers'
+    );
+  }
+
   // Validation: No trailing underscores
   if (/_$/.test(raw)) {
     throw new ParseError(
