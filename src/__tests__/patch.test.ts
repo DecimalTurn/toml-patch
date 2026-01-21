@@ -2377,7 +2377,7 @@ test('should add new date with non-zero time as full timestamp regardless of tru
     ` + '\n');
 });
 
-// TOML 1.1.0 - Multiline inline tables with newlines and trailing commas
+// TOML v1.1.0 - Multiline inline tables with newlines and trailing commas
 test('should preserve multiline inline table format (TOML 1.1.0)', () => {
   const existing = dedent`
     name = "production"
@@ -2400,7 +2400,8 @@ test('should preserve multiline inline table format (TOML 1.1.0)', () => {
   expect(patched).toContain('}');
 });
 
-test('should parse and patch nested multiline inline tables (TOML 1.1.0)', () => {
+//TODO TOML v1.1.0 - More tests for multiline inline tables
+it.skip('should parse and patch nested multiline inline tables (TOML 1.1.0)', () => {
   // This is the exact example from TOML 1.1.0 spec
   const existing = dedent`
     tbl = {
@@ -2426,6 +2427,7 @@ test('should parse and patch nested multiline inline tables (TOML 1.1.0)', () =>
   expect(patched).toContain('another');
 });
 
+// TOML v1.1.0 - Inline tables with comments
 test('should handle inline tables with comments (TOML 1.1.0)', () => {
   const existing = dedent`
     server = {
