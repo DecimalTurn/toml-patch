@@ -26,7 +26,6 @@ export const SPACE = ' ';
 export const ESCAPE = '\\';
 
 const IS_VALID_LEADING_CHARACTER = /[\w,\d,\",\',\+,\-,\_]/;
-const IS_VALID_BARE_KEY_CHARACTER = /[A-Za-z0-9_-]/;
 
 export function* tokenize(input: string): IterableIterator<Token> {
   const cursor = new Cursor(iterator(input));
