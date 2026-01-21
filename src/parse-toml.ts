@@ -555,7 +555,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
       continue;
     }
 
-    const [item] = walkBlock(cursor, input);
+    const [item, ...additional_comments] = walkBlock(cursor, input);
     if (item.type !== NodeType.KeyValue) {
       throw new ParseError(
         input,
@@ -572,6 +572,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
     };
 
     value.items.push(inline_item);
+    merge(comments, additional_comments as Comment[]);
     cursor.next();
   }
 
