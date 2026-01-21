@@ -13,28 +13,22 @@ const TOML_VERSION = '1.1.0';
 // Tests to skip temporarily - remove items from this list as they get fixed
 // Format: 'test-type/test-name' (e.g., 'table/redefine-03', 'key/newline-01')
 const SKIPPED_TESTS = [
-  // Table validation (complex AST changes - 11 tests)
+  // Table validation (complex AST changes - 9 tests)
   'table/redefine-03',
   'table/redefine-02',
   'table/newline-03',
   'table/newline-01',
-  'table/multiline-key-02',
-  'table/multiline-key-01',
   'table/duplicate-key-05',
   'table/duplicate-key-04',
   'table/append-with-dotted-keys-05',
   'table/append-with-dotted-keys-02',
   'table/append-with-dotted-keys-01',
   
-  // Key validation (newlines, multiline - 12 tests)
+  // Key validation (newlines - 8 tests)
   'key/newline-06',
   'key/newline-05',
   'key/newline-04',
   'key/newline-01',
-  'key/multiline-key-04',
-  'key/multiline-key-03',
-  'key/multiline-key-02',
-  'key/multiline-key-01',
   'key/duplicate-keys-09',
   'key/after-value',
   'key/after-table',
@@ -232,7 +226,6 @@ const SKIPPED_TESTS = [
   'inline-table/trailing-comma',
   
   // toml-test invalid - Key validation (5 tests)
-  'key/bare-invalid-character-02',
   'key/newline-03',
   'key/no-eol-01',
   'key/no-eol-05',
@@ -265,8 +258,7 @@ const SKIPPED_TESTS = [
   'string/missing-quotes-inline-table',
   'string/no-close-10',
   
-  // toml-test invalid - Table validation (5 tests)
-  'table/bare-invalid-character-02',
+  // toml-test invalid - Table validation (4 tests)
   'table/dot',
   'table/llbrace',
   'table/nested-brackets-open',

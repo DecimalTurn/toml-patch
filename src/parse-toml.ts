@@ -203,6 +203,32 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     throw new ParseError(input, key.loc!.start, `Expected table key, reached end of file`);
   }
 
+  // Validate that multiline strings are not used as table keys
+  const raw = cursor.value!.raw;
+  if (raw.startsWith('"""') || raw.startsWith("'''")) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      'Multiline strings (""" or \'\'\') cannot be used as keys'
+    );
+  }
+
+  // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
+  const isQuoted = raw.startsWith('"') || raw.startsWith("'");
+  
+  if (!isQuoted) {
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw[i];
+      if (!/[A-Za-z0-9_-]/.test(char)) {
+        throw new ParseError(
+          input,
+          { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+          `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+        );
+      }
+    }
+  }
+
   key.item = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
@@ -215,6 +241,24 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     const dot = cursor.value!;
 
     cursor.next();
+    
+    // Validate each part of a dotted table key
+    const partRaw = cursor.value!.raw;
+    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
+    
+    if (!partIsQuoted) {
+      for (let i = 0; i < partRaw.length; i++) {
+        const char = partRaw[i];
+        if (!/[A-Za-z0-9_-]/.test(char)) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
+        }
+      }
+    }
+    
     const before = ' '.repeat(dot.loc.start.column - key.item.loc.end.column);
     const after = ' '.repeat(cursor.value!.loc.start.column - dot.loc.end.column);
 
@@ -281,6 +325,42 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   // ^-^          key
   //     ^        equals
   //       ^---^  value
+  
+  // Validate that multiline strings are not used as keys
+  const raw = cursor.value!.raw;
+  if (raw.startsWith('"""') || raw.startsWith("'''")) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      'Multiline strings (""" or \'\'\') cannot be used as keys'
+    );
+  }
+  
+  // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
+  const isQuoted = raw.startsWith('"') || raw.startsWith("'");
+  
+  if (!isQuoted) {
+    // Check each character in the bare key
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw[i];
+      if (!/[A-Za-z0-9_-]/.test(char)) {
+        // Special case: colon at the end suggests using ":" instead of "="
+        if (char === ':' && i === raw.length - 1) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Use '=' to separate keys and values, not ':'`
+          );
+        }
+        throw new ParseError(
+          input,
+          { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+          `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+        );
+      }
+    }
+  }
+  
   const key: Key = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
@@ -291,6 +371,23 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
     cursor.next();
+    
+    // Validate each part of a dotted key
+    const partRaw = cursor.value!.raw;
+    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
+    
+    if (!partIsQuoted) {
+      for (let i = 0; i < partRaw.length; i++) {
+        const char = partRaw[i];
+        if (!/[A-Za-z0-9_-]/.test(char)) {
+          throw new ParseError(
+            input,
+            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
+            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          );
+        }
+      }
+    }
 
     key.loc.end = cursor.value!.loc.end;
     key.raw += `.${cursor.value!.raw}`;
