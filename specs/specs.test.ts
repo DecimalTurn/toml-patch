@@ -149,12 +149,8 @@ const SKIPPED_TESTS = [
   'string-basic-multiline-control-4',
   'string-basic-control-4',
   
-  // spec-test invalid - Other validation (9 tests)
+  // spec-test invalid - Other validation (5 tests)
   'key-value-pair-2',
-  'int-signed-oct',
-  'int-signed-hex',
-  'int-signed-bin',
-  'int-0-padded',
   'comment-control-4',
   'comment-control-3',
   'comment-control-2',
