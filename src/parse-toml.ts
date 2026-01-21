@@ -41,8 +41,8 @@ const TRUE = 'true';
 const FALSE = 'false';
 const HAS_E = /e/i;
 const IS_DIVIDER = /\_/g;
-const IS_INF = /inf/;
-const IS_NAN = /nan/;
+const IS_INF = /^[+\-]?inf$/;
+const IS_NAN = /^[+\-]?nan$/;
 const IS_HEX = /^[+\-]?0x/i;
 const IS_OCTAL = /^[+\-]?0o/i;
 const IS_BINARY = /^[+\-]?0b/i;
@@ -661,9 +661,9 @@ function float(cursor: Cursor<Token>, input: string): Float {
   let value;
 
   if (IS_INF.test(raw)) {
-    value = raw === '-inf' ? -Infinity : Infinity;
+    value = raw.startsWith('-') ? -Infinity : Infinity;
   } else if (IS_NAN.test(raw)) {
-    value = raw === '-nan' ? -NaN : NaN;
+    value = NaN;
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
     
@@ -679,6 +679,17 @@ function float(cursor: Cursor<Token>, input: string): Float {
       
       // Validate integer part before decimal point
       const intPart = raw;
+
+      // Validate no leading zeros in integer part (after optional sign)
+      // e.g. 00.1, +00.1, 0_0.1 are invalid
+      const withoutUnderscores = intPart.replace(IS_DIVIDER, '');
+      if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(intPart) && !IS_OCTAL.test(intPart) && !IS_BINARY.test(intPart)) {
+        throw new ParseError(
+          input,
+          loc.start,
+          'Leading zeros are not allowed in the integer part of a float'
+        );
+      }
       
       // Validate no leading dot (must have at least one digit before the dot)
       const withoutSign = intPart.replace(/^[+\-]/, '');
@@ -793,7 +804,7 @@ function float(cursor: Cursor<Token>, input: string): Float {
       }
     }
     
-    value = Number(raw.replace(IS_DIVIDER, ''));
+        value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
     // Validate underscore placement in integer part (exponent-only floats like 1e5)
     if (/_$/.test(raw)) {
@@ -862,8 +873,24 @@ function float(cursor: Cursor<Token>, input: string): Float {
         `Invalid float "${raw}.": cannot have decimal point after exponent`
       );
     }
+
+    // Validate no leading zeros in integer part (after optional sign)
+    // e.g. 00e1, +00e1, 0_0e1 are invalid
+    const withoutUnderscores = raw.replace(IS_DIVIDER, '');
+    if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
+      throw new ParseError(
+        input,
+        loc.start,
+        'Leading zeros are not allowed in the integer part of a float'
+      );
+    }
     
     value = Number(raw.replace(IS_DIVIDER, ''));
+  }
+
+  // Reject non-special floats that parse to NaN (e.g. "Inf", "NaN", "1ee2")
+  if (Number.isNaN(value) && !IS_NAN.test(raw)) {
+    throw new ParseError(input, loc.start, `Invalid float "${raw}"`);
   }
 
   return { type: NodeType.Float, loc, raw, value };
@@ -1099,6 +1126,10 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
       .replace(IS_BINARY, ''),
     radix
   );
+
+  if (Number.isNaN(value)) {
+    throw new ParseError(input, loc.start, `Invalid integer "${raw}"`);
+  }
 
   return {
     type: NodeType.Integer,
