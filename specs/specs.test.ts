@@ -93,22 +93,6 @@ const SKIPPED_TESTS = [
   'control/comment-cr',
   'control/bare-cr',
   
-  // toml-test invalid - Boolean validation (12 tests)
-  'bool/wrong-case-true',
-  'bool/wrong-case-false',
-  'bool/starting-same-true',
-  'bool/starting-same-false',
-  'bool/mixed-case-true',
-  'bool/mixed-case-false',
-  'bool/just-t',
-  'bool/just-f',
-  'bool/capitalized-true',
-  'bool/capitalized-false',
-  'bool/almost-true',
-  'bool/almost-true-with-extra',
-  'bool/almost-false',
-  'bool/almost-false-with-extra',
-  
   // spec-test invalid - String control characters (8 tests)
   'string-literal-multiline-control-4',
   'string-literal-multiline-control-3',
