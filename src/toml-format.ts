@@ -279,14 +279,16 @@ export function validateFormatObject(format: any): any {
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
 
-  // Check all enumerable properties of the format object
+  // Check all enumerable properties of the format object, including properties
+  // provided via the prototype chain (common in JS Object.create(...) patterns).
   for (const key in format) {
-    if (Object.prototype.hasOwnProperty.call(format, key)) {
-      if (supportedProperties.has(key)) {
-        const value = format[key];
-        
-        // Type validation for each property
-        switch (key) {
+    const isOwnEnumerable = Object.prototype.hasOwnProperty.call(format, key);
+
+    if (supportedProperties.has(key)) {
+      const value = format[key];
+      
+      // Type validation for each property
+      switch (key) {
           case 'newLine':
             if (typeof value === 'string') {
               validatedFormat.newLine = value;
@@ -324,10 +326,9 @@ export function validateFormatObject(format: any): any {
               invalidTypeProperties.push(`${key} (expected non-negative integer or undefined, got ${typeof value})`);
             }
             break;
-        }
-      } else {
-        unsupportedProperties.push(key);
       }
+    } else if (isOwnEnumerable) {
+      unsupportedProperties.push(key);
     }
   }
 
