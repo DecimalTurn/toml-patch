@@ -157,21 +157,6 @@ const SKIPPED_TESTS = [
   'key/no-eol-05',
   'key/partial-quoted',
   
-  // toml-test invalid - Local date validation (13 tests)
-  
-  
-  // toml-test invalid - Local datetime validation (13 tests)
-  
-  
-  // toml-test invalid - Local time validation (6 tests)
-  
-  
-  // toml-test invalid - Spec 1.0.0 (4 tests)
-  'spec-1.0.0/inline-table-2-0',
-  'spec-1.0.0/inline-table-3-0',
-  'spec-1.0.0/table-9-0',
-  'spec-1.0.0/table-9-1',
-  
   // toml-test invalid - String validation (4 tests)
   'string/missing-quotes',
   'string/missing-quotes-array',
