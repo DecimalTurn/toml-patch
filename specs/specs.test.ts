@@ -69,8 +69,6 @@ const SKIPPED_TESTS = [
   
   
   // Spec test edge cases (8 tests)
-  'table-4',
-  'table-3',
   'string-literal-multiline-quotes',
   'inline-table-trailing-comma',
   'inline-table-imutable-2',
