@@ -223,11 +223,17 @@ const spec_invalid = spec_invalid_input
     return [name, input];
   });
 
-// Log skipped tests information
-if (SKIPPED_TESTS.length > 0 || SKIPPED_VALID_TESTS.length > 0) {
+// Log skipped tests information (opt-in)
+const LOG_SKIPPED_TESTS =
+  process.env.TOML_PATCH_SPECS_LOG_SKIPS === '1' ||
+  process.env.TOML_PATCH_SPECS_LOG_SKIPS === 'true';
+
+if (LOG_SKIPPED_TESTS && (SKIPPED_TESTS.length > 0 || SKIPPED_VALID_TESTS.length > 0)) {
   const totalSkipped = SKIPPED_TESTS.length + SKIPPED_VALID_TESTS.length;
-  console.log(`\n⚠️  Skipping ${totalSkipped} tests temporarily (see SKIPPED_TESTS in specs.test.ts):`);
-  
+  console.log(
+    `\nSkipping ${totalSkipped} tests temporarily (see SKIPPED_TESTS in specs.test.ts):`
+  );
+
   if (SKIPPED_TESTS.length > 0) {
     console.log(`\n   Invalid tests (${SKIPPED_TESTS.length}):`);
     const invalidCategories = SKIPPED_TESTS.reduce((acc, test) => {
@@ -239,7 +245,7 @@ if (SKIPPED_TESTS.length > 0 || SKIPPED_VALID_TESTS.length > 0) {
       console.log(`      - ${category}: ${count} test${count > 1 ? 's' : ''}`);
     });
   }
-  
+
   if (SKIPPED_VALID_TESTS.length > 0) {
     console.log(`\n   Valid tests (${SKIPPED_VALID_TESTS.length}):`);
     const validCategories = SKIPPED_VALID_TESTS.reduce((acc, test) => {
@@ -251,7 +257,7 @@ if (SKIPPED_TESTS.length > 0 || SKIPPED_VALID_TESTS.length > 0) {
       console.log(`      - ${category}: ${count} test${count > 1 ? 's' : ''}`);
     });
   }
-  
+
   console.log('');
 }
 
