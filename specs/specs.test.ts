@@ -125,10 +125,6 @@ const SKIPPED_TESTS = [
   
   // spec-test invalid - Other validation (5 tests)
   'key-value-pair-2',
-  'comment-control-4',
-  'comment-control-3',
-  'comment-control-2',
-  'comment-control-1',
   'bare-key-1',
   
   // toml-test invalid - Additional control characters (2 tests)

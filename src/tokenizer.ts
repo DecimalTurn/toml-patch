@@ -35,8 +35,9 @@ export function* tokenize(input: string): IterableIterator<Token> {
 
   while (!cursor.done) {
     const code = cursor.value!.charCodeAt(0);
-    // VT (0x0B) and FF (0x0C) are not allowed in TOML
-    if (code === 0x0b || code === 0x0c) {
+    // TOML does not allow ASCII control characters other than HT (TAB), LF, and CR.
+    // CR is only allowed as part of CRLF and is validated below.
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09 && code !== 0x0d && code !== 0x0a) {
       throw new ParseError(
         input,
         findPosition(input, cursor.index),
@@ -71,7 +72,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       yield specialCharacter(cursor, locate, TokenType.Dot);
     } else if (cursor.value === '#') {
       // Handle comments = # -> EOL
-      yield comment(cursor, locate);
+      yield comment(cursor, locate, input);
     } else {
       const multiline_char =
         checkThree(input, cursor.index, SINGLE_QUOTE) ||
@@ -93,11 +94,28 @@ function specialCharacter(cursor: Cursor<string>, locate: Locator, type: TokenTy
   return { type, raw: cursor.value!, loc: locate(cursor.index, cursor.index + 1) };
 }
 
-function comment(cursor: Cursor<string>, locate: Locator): Token {
+function comment(cursor: Cursor<string>, locate: Locator, input: string): Token {
   const start = cursor.index;
   let raw = cursor.value!;
-  while (!cursor.peek().done && !IS_NEW_LINE.test(cursor.peek().value!)) {
+
+  // TOML comment ends at CR or LF.
+  while (
+    !cursor.peek().done &&
+    cursor.peek().value !== '\n' &&
+    cursor.peek().value !== '\r'
+  ) {
     cursor.next();
+
+    const code = cursor.value!.charCodeAt(0);
+    // Disallow ASCII control characters in comments (except HT / TAB).
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+      );
+    }
+
     raw += cursor.value!;
   }
 
