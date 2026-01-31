@@ -242,6 +242,31 @@ cache = true
     });
   });
 
+  describe('format auto-detection (JavaScript)', () => {
+    it('should preserve tab indentation when existing TOML uses tabs', () => {
+      const tabIndentedToml = `title = "Tabs"
+
+[settings]
+	debug = true
+`;
+
+      const updated = {
+        title: 'Tabs',
+        settings: {
+          debug: true,
+          servers: ['web', 'api']
+        }
+      };
+
+      const result = patch(tabIndentedToml, updated);
+
+      // Existing line keeps tab
+      expect(result).toContain('\n\tdebug = true\n');
+      // Newly inserted line should also use tabs (auto-detected)
+      expect(result).toContain('\n\tservers = [ "web", "api" ]\n');
+    });
+  });
+
   describe('complex format objects', () => {
     it('should work with multiple format properties using object literals', () => {
       const updatedObject = { ...baseUpdatedObject };
