@@ -107,16 +107,10 @@ export function toValue(node: Value): any {
       return node.items.map(item => toValue(item.item as Value));
 
     case NodeType.DateTime:
-      if (node.value instanceof LocalDate || 
-          node.value instanceof LocalTime || 
-          node.value instanceof LocalDateTime || 
-          node.value instanceof OffsetDateTime) {
-        return new Date(node.value.valueOf());
-      }
-      else {
-        console.warn('Warning: DateTime value is not a recognized custom date class, returning as-is:', node.value);
-        return node.value;
-      }
+      // Preserve TOML date/time custom classes so format is retained when
+      // round-tripping through stringify() (e.g. date-only, time-only, local vs offset).
+      // These classes extend Date, so JS users can still treat them as Dates.
+      return node.value;
 
     case NodeType.String:
     case NodeType.Integer:
