@@ -1313,11 +1313,28 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
         );
       }
 
+      if (previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found consecutive commas in inline table (double comma is not allowed)'
+        );
+      }
+
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
 
       cursor.next();
       continue;
+    }
+
+    const previous = value.items[value.items.length - 1];
+    if (previous && !previous.comma) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Missing comma between inline table items'
+      );
     }
 
     const [item, ...additional_comments] = walkBlockNonGen(cursor, input);
@@ -1660,10 +1677,27 @@ function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, 
         );
       }
 
+      if (previous.comma) {
+        throw new ParseError(
+          input,
+          cursor.value!.loc.start,
+          'Found consecutive commas in inline table (double comma is not allowed)'
+        );
+      }
+
       previous.comma = true;
       previous.loc.end = cursor.value!.loc.start;
       cursor.next();
       continue;
+    }
+
+    const previous = value.items[value.items.length - 1];
+    if (previous && !previous.comma) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Missing comma between inline table items'
+      );
     }
 
     // Recursively parse the key-value, but without generators

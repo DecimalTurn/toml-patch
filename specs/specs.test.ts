@@ -140,17 +140,6 @@ const SKIPPED_TESTS = [
   
   'datetime/only-T',
   
-
-  // toml-test invalid - Inline table validation (8 tests)
-  'inline-table/double-comma',
-  'inline-table/linebreak-01',
-  'inline-table/linebreak-02',
-  'inline-table/linebreak-03',
-  'inline-table/linebreak-04',
-  'inline-table/no-comma-01',
-  'inline-table/no-comma-02',
-  'inline-table/trailing-comma',
-  
   // toml-test invalid - Key validation (5 tests)
   'key/newline-03',
   'key/no-eol-01',
