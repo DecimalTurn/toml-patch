@@ -66,19 +66,23 @@ export function escapeDoubleQuotes(value: string): string {
   return result;
 }
 
+function isBackslashEscaped(source: string, backslashOffset: number): boolean {
+  let precedingBackslashes = 0;
+  for (let i = backslashOffset - 1; i >= 0 && source[i] === '\\'; i--) {
+    precedingBackslashes++;
+  }
+  return precedingBackslashes % 2 !== 0;
+}
+
 export function unescapeLargeUnicode(escaped: string): string {
   // TOML 1.1.0: Handle \xHH hex escapes (for codepoints < 255)
   const HEX_ESCAPE = /\\x([a-fA-F0-9]{2})/g;
-  let withHexEscapes = escaped.replace(HEX_ESCAPE, (match, hex, offset) => {
-    // Check if the backslash is escaped by counting preceding backslashes
-    const precedingText = escaped.slice(0, offset);
-    const backslashes = precedingText.match(/\\+$/);
-    const isEscaped = backslashes && backslashes[0].length % 2 !== 0;
-    
-    if (isEscaped) {
-      return match; // Return unchanged if escaped
+  const hexEscapeSource = escaped;
+  let withHexEscapes = hexEscapeSource.replace(HEX_ESCAPE, (match, hex, offset) => {
+    if (isBackslashEscaped(hexEscapeSource, offset)) {
+      return match;
     }
-    
+
     const codePoint = parseInt(hex, 16);
     const asString = String.fromCharCode(codePoint);
     // Escape for JSON if needed
@@ -89,16 +93,12 @@ export function unescapeLargeUnicode(escaped: string): string {
   });
 
   // TOML 1.1.0: Handle \e escape character (ESC = 0x1B)
-  withHexEscapes = withHexEscapes.replace(/\\e/g, (match, offset) => {
-    // Check if the backslash is escaped by counting preceding backslashes
-    const precedingText = escaped.slice(0, offset);
-    const backslashes = precedingText.match(/\\+$/);
-    const isEscaped = backslashes && backslashes[0].length % 2 !== 0;
-    
-    if (isEscaped) {
-      return match; // Return unchanged if escaped
+  const eEscapeSource = withHexEscapes;
+  withHexEscapes = eEscapeSource.replace(/\\e/g, (match, offset) => {
+    if (isBackslashEscaped(eEscapeSource, offset)) {
+      return match;
     }
-    
+
     return '\\u001b';
   });
 

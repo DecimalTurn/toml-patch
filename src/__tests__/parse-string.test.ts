@@ -34,3 +34,31 @@ test('should escape unicode expressions', () => {
 test('should handle line-ending backslash', () => {
   expect(parseString(line_ending_backslash)).toBe('abcdef');
 });
+
+test('should parse TOML 1.1.0 \\xHH hex escapes', () => {
+  expect(parseString('"\\x41"')).toBe('A');
+});
+
+test('should not parse escaped TOML 1.1.0 \\xHH hex escapes', () => {
+  // "\\x41" in TOML means a literal "\x41" in the value
+  expect(parseString('"\\\\x41"')).toBe('\\x41');
+});
+
+test('should handle odd/even preceding backslashes for \\xHH', () => {
+  // 3 backslashes then x => one literal backslash + hex escape
+  expect(parseString('"\\\\\\x41"')).toBe('\\A');
+});
+
+test('should parse TOML 1.1.0 \\e escape', () => {
+  expect(parseString('"\\e"')).toBe('\u001b');
+});
+
+test('should not parse escaped TOML 1.1.0 \\e escape', () => {
+  // "\\e" in TOML means a literal "\e" in the value
+  expect(parseString('"\\\\e"')).toBe('\\e');
+});
+
+test('should handle odd/even preceding backslashes for \\e', () => {
+  // 3 backslashes then e => one literal backslash + ESC
+  expect(parseString('"\\\\\\e"')).toBe('\\' + '\u001b');
+});
