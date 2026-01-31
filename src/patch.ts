@@ -319,7 +319,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         } else if (format.inlineTableStart === 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
           insert(original, parent, child, undefined, true);
         } else {
-          insert(original, parent, child);
+          // Unwrap InlineItem if we're adding to a Table (not InlineTable)
+          // InlineItems should only exist within InlineTables or InlineArrays
+          let childToInsert = child;
+          if (isInlineItem(child) && (isTable(parent) || isDocument(parent))) {
+            childToInsert = child.item;
+          }
+          insert(original, parent, childToInsert);
         }
       }
 
@@ -347,6 +353,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
         parent = existing;
         existing = existing.item;
+      } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
+        // Both are InlineItems wrapping KeyValues (nested inline table edits)
+        // Preserve formatting and edit the value within
+        preserveFormatting(existing.item.value, replacement.item.value);
+        parent = existing.item;
+        existing = existing.item.value;
+        replacement = replacement.item.value;
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits

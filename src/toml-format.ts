@@ -21,6 +21,7 @@ export const DEFAULT_TRAILING_COMMA = false;
 export const DEFAULT_BRACKET_SPACING = true;
 export const DEFAULT_INLINE_TABLE_START = 1;
 export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
+export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -235,6 +236,33 @@ export function countTrailingNewlines(str: string, newlineChar: string): number 
   return count;
 }
 
+// Detects if tabs are used for indentation by checking the first few indented lines
+export function detectTabsForIndentation(str: string): boolean {
+  const lines = str.split(/\r?\n/);
+  let tabCount = 0;
+  let spaceCount = 0;
+  
+  for (const line of lines) {
+    // Skip empty lines
+    if (line.length === 0) continue;
+    
+    // Check the first character of non-empty lines
+    if (line[0] === '\t') {
+      tabCount++;
+    } else if (line[0] === ' ') {
+      spaceCount++;
+    }
+    
+    // If we've seen enough evidence, make a decision
+    if (tabCount + spaceCount >= 5) {
+      break;
+    }
+  }
+  
+  // Prefer tabs if we see more tabs than spaces
+  return tabCount > spaceCount;
+}
+
 /**
  * Validates a format object and warns about unsupported properties.
  * Throws errors for supported properties with invalid types.
@@ -246,19 +274,21 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart', 'truncateZeroTimeInDates']);
+  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart', 'truncateZeroTimeInDates', 'useTabsForIndentation']);
   const validatedFormat: any = {};
   const unsupportedProperties: string[] = [];
   const invalidTypeProperties: string[] = [];
 
-  // Check all enumerable properties of the format object
+  // Check all enumerable properties of the format object, including properties
+  // provided via the prototype chain (common in JS Object.create(...) patterns).
   for (const key in format) {
-    if (Object.prototype.hasOwnProperty.call(format, key)) {
-      if (supportedProperties.has(key)) {
-        const value = format[key];
-        
-        // Type validation for each property
-        switch (key) {
+    const isOwnEnumerable = Object.prototype.hasOwnProperty.call(format, key);
+
+    if (supportedProperties.has(key)) {
+      const value = format[key];
+      
+      // Type validation for each property
+      switch (key) {
           case 'newLine':
             if (typeof value === 'string') {
               validatedFormat.newLine = value;
@@ -278,6 +308,7 @@ export function validateFormatObject(format: any): any {
           case 'trailingComma':
           case 'bracketSpacing':
           case 'truncateZeroTimeInDates':
+          case 'useTabsForIndentation':
             if (typeof value === 'boolean') {
               validatedFormat[key] = value;
             } else {
@@ -295,10 +326,9 @@ export function validateFormatObject(format: any): any {
               invalidTypeProperties.push(`${key} (expected non-negative integer or undefined, got ${typeof value})`);
             }
             break;
-        }
-      } else {
-        unsupportedProperties.push(key);
       }
+    } else if (isOwnEnumerable) {
+      unsupportedProperties.push(key);
     }
   }
 
@@ -340,6 +370,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
         validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
         validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
+        validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
       );
     }
   } else {
@@ -414,10 +445,20 @@ export class TomlFormat {
    */
   truncateZeroTimeInDates?: boolean;
 
+  /**
+   * Whether to use tabs instead of spaces for indentation/padding.
+   * When enabled, lines that need to be indented will use tabs.
+   * 
+   * @example  
+   * - true:  Uses tabs for indentation
+   * - false: Uses spaces for indentation (default)
+   * 
+   */
+  useTabsForIndentation?: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
-  //useTabs?: boolean;
 
   constructor(
     newLine?: string,
@@ -425,7 +466,8 @@ export class TomlFormat {
     trailingComma?: boolean,
     bracketSpacing?: boolean,
     inlineTableStart?: number,
-    truncateZeroTimeInDates?: boolean
+    truncateZeroTimeInDates?: boolean,
+    useTabsForIndentation?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
@@ -434,6 +476,7 @@ export class TomlFormat {
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
+    this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
   }
 
   /**
@@ -454,7 +497,8 @@ export class TomlFormat {
       DEFAULT_TRAILING_COMMA,
       DEFAULT_BRACKET_SPACING,
       DEFAULT_INLINE_TABLE_START,
-      DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES
+      DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES,
+      DEFAULT_USE_TABS_FOR_INDENTATION
     );
   }
 
@@ -498,6 +542,9 @@ export class TomlFormat {
       format.trailingComma = DEFAULT_TRAILING_COMMA;
       format.bracketSpacing = DEFAULT_BRACKET_SPACING;
     }
+    
+    // Detect if tabs are used for indentation
+    format.useTabsForIndentation = detectTabsForIndentation(tomlString);
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences

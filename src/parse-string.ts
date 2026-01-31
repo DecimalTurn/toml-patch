@@ -66,11 +66,46 @@ export function escapeDoubleQuotes(value: string): string {
   return result;
 }
 
+function isBackslashEscaped(source: string, backslashOffset: number): boolean {
+  let precedingBackslashes = 0;
+  for (let i = backslashOffset - 1; i >= 0 && source[i] === '\\'; i--) {
+    precedingBackslashes++;
+  }
+  return precedingBackslashes % 2 !== 0;
+}
+
 export function unescapeLargeUnicode(escaped: string): string {
+  // TOML 1.1.0: Handle \xHH hex escapes (for codepoints < 255)
+  const HEX_ESCAPE = /\\x([a-fA-F0-9]{2})/g;
+  const hexEscapeSource = escaped;
+  let withHexEscapes = hexEscapeSource.replace(HEX_ESCAPE, (match, hex, offset) => {
+    if (isBackslashEscaped(hexEscapeSource, offset)) {
+      return match;
+    }
+
+    const codePoint = parseInt(hex, 16);
+    const asString = String.fromCharCode(codePoint);
+    // Escape for JSON if needed
+    if (codePoint < 0x20 || codePoint === 0x22 || codePoint === 0x5C) {
+      return trim(JSON.stringify(asString), 1);
+    }
+    return asString;
+  });
+
+  // TOML 1.1.0: Handle \e escape character (ESC = 0x1B)
+  const eEscapeSource = withHexEscapes;
+  withHexEscapes = eEscapeSource.replace(/\\e/g, (match, offset) => {
+    if (isBackslashEscaped(eEscapeSource, offset)) {
+      return match;
+    }
+
+    return '\\u001b';
+  });
+
   // JSON.parse handles everything except \UXXXXXXXX
   // replace those instances with code point, escape that, and then parse
   const LARGE_UNICODE = /\\U[a-fA-F0-9]{8}/g;
-  const json_escaped = escaped.replace(LARGE_UNICODE, value => {
+  const json_escaped = withHexEscapes.replace(LARGE_UNICODE, value => {
     const code_point = parseInt(value.replace('\\U', ''), 16);
     const as_string = String.fromCodePoint(code_point);
 

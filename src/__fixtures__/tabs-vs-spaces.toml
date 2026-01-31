@@ -1,0 +1,6 @@
+inlinetable = {
+	b = 2
+}
+
+	[normaltable]
+	a = 1

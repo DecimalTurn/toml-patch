@@ -551,6 +551,11 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'birthday = 1979-05-27';
       const parsed = parse(toml);
+
+      // JS-specific: parse() should return a Date-like object that preserves TOML formatting
+      expect(parsed.birthday instanceof Date).toBe(true);
+      expect(parsed.birthday.toISOString()).toBe('1979-05-27');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('birthday = 1979-05-27');
@@ -562,6 +567,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'alarm = 07:32:00';
       const parsed = parse(toml);
+
+      expect(parsed.alarm instanceof Date).toBe(true);
+      expect(parsed.alarm.toISOString()).toBe('07:32:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('alarm = 07:32:00');
@@ -573,6 +582,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27T07:32:00';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27T07:32:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27T07:32:00');
@@ -585,6 +598,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27T00:00:00';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27T00:00:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27T00:00:00');
@@ -597,6 +614,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27 07:32:00';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27 07:32:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27 07:32:00');
@@ -609,6 +630,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27T07:32:00Z';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27T07:32:00Z');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27T07:32:00Z');
@@ -619,6 +644,10 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27T00:32:00-07:00';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27T00:32:00-07:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27T00:32:00-07:00');
@@ -629,10 +658,41 @@ describe('stringify() Function JavaScript Integration', () => {
       
       const toml = 'timestamp = 1979-05-27 00:32:00-07:00';
       const parsed = parse(toml);
+
+      expect(parsed.timestamp instanceof Date).toBe(true);
+      expect(parsed.timestamp.toISOString()).toBe('1979-05-27 00:32:00-07:00');
+
       const stringified = stringify(parsed);
       
       expect(stringified).toContain('timestamp = 1979-05-27 00:32:00-07:00');
     });
 
+  });
+
+  describe('truncateZeroTimeInDates option (JavaScript duck-typing)', () => {
+    it('should serialize midnight UTC Date as date-only when enabled', () => {
+      const midnightUtc = new Date(Date.UTC(2024, 0, 15, 0, 0, 0, 0));
+      const result = stringify({ birthday: midnightUtc }, { truncateZeroTimeInDates: true });
+
+      expect(result).toContain('birthday = 2024-01-15');
+      expect(result).not.toContain('T00:00:00');
+      expect(result).not.toContain('Z');
+    });
+
+    it('should keep full datetime when truncateZeroTimeInDates is disabled or missing', () => {
+      const midnightUtc = new Date(Date.UTC(2024, 0, 15, 0, 0, 0, 0));
+      const result = stringify({ birthday: midnightUtc });
+
+      expect(result).toContain('birthday = 2024-01-15T00:00:00.000Z');
+    });
+
+    it('should accept truncateZeroTimeInDates from the prototype chain', () => {
+      const midnightUtc = new Date(Date.UTC(2024, 0, 15, 0, 0, 0, 0));
+      const format = Object.create({ truncateZeroTimeInDates: true });
+      const result = stringify({ birthday: midnightUtc }, format);
+
+      expect(result).toContain('birthday = 2024-01-15');
+      expect(result).not.toContain('T00:00:00');
+    });
   });
 });

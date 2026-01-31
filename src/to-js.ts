@@ -2,6 +2,7 @@ import { Value, NodeType, TreeNode, AST, isInlineTable } from './ast';
 import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
+import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 
 /**
  * Converts the given AST to a JavaScript object.
@@ -105,11 +106,16 @@ export function toValue(node: Value): any {
     case NodeType.InlineArray:
       return node.items.map(item => toValue(item.item as Value));
 
+    case NodeType.DateTime:
+      // Preserve TOML date/time custom classes so format is retained when
+      // round-tripping through stringify() (e.g. date-only, time-only, local vs offset).
+      // These classes extend Date, so JS users can still treat them as Dates.
+      return node.value;
+
     case NodeType.String:
     case NodeType.Integer:
     case NodeType.Float:
     case NodeType.Boolean:
-    case NodeType.DateTime:
       return node.value;
 
     default:
