@@ -34,9 +34,6 @@ const SKIPPED_TESTS = [
   'key/after-table',
   'key/after-array',
   
-  // Inline table validation (newline-comment - 1 test)
-  'inline-table/newline-comment',
-  
   // Encoding validation (UTF-8 - 7 tests)
   'encoding/ideographic-space',
   'encoding/bad-utf8-in-string',
