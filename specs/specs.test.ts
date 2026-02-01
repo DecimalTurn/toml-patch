@@ -24,13 +24,8 @@ const SKIPPED_TESTS = [
   'table/append-with-dotted-keys-02',
   'table/append-with-dotted-keys-01',
   
-  // Key validation (newlines - 8 tests)
+  // Key validation (newlines and syntax - 3 tests requiring parser fixes)
   'key/newline-06',
-  'key/newline-05',
-  'key/newline-04',
-  'key/newline-01',
-  'key/duplicate-keys-09',
-  'key/after-value',
   'key/after-table',
   'key/after-array',
   
@@ -58,12 +53,6 @@ const SKIPPED_TESTS = [
   // toml-test invalid - DateTime validation (2 tests)
   'datetime/no-year-month-sep',
   'datetime/only-T',
-  
-  // toml-test invalid - Key validation (5 tests)
-  'key/newline-03',
-  'key/no-eol-01',
-  'key/no-eol-05',
-  'key/partial-quoted',
 ];
 
 // Valid tests to skip temporarily (parsing issues, not validation)
