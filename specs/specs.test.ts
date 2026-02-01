@@ -67,19 +67,6 @@ const SKIPPED_TESTS = [
   'inline-table/linebreak-03', // Newlines in inline tables are now allowed
   'inline-table/linebreak-04', // Newlines in inline tables are now allowed
   
-  // spec-test invalid - String control characters (10 tests)
-  'string-literal-multiline-control-4',
-  'string-literal-multiline-control-3',
-  'string-literal-multiline-control-2',
-  'string-literal-multiline-control-1',
-  'string-literal-control-4',
-  'string-literal-control-3',
-  'string-literal-control-2',
-  'string-literal-control-1',
-  'string-basic-multiline-control-4',
-  'string-basic-control-4',
-
-  
   // toml-test invalid - DateTime validation (2 tests)
   'datetime/no-year-month-sep',
   'datetime/only-T',
