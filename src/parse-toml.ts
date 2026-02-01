@@ -249,6 +249,23 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
 
   cursor.next();
 
+  // Table headers must not contain newlines - all parts must be on the same line
+  // Example invalid TOML (table/newline-01): [tbl\n]
+  // Example invalid TOML (table/newline-03): ["tbl"\n]
+  if (!cursor.done) {
+    const headerStartLine = is_table
+      ? key.loc!.start.line
+      : key.loc!.start.line; // Both use the opening bracket line
+    
+    if (cursor.value!.loc.start.line !== headerStartLine) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Table header must not contain newlines. Expected closing bracket on line ${headerStartLine}, found on line ${cursor.value!.loc.start.line}`
+      );
+    }
+  }
+
   if (is_table && (cursor.done || cursor.value!.raw !== ']')) {
     throw new ParseError(
       input,

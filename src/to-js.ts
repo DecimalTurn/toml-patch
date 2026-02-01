@@ -260,9 +260,22 @@ function validateKey(
 
   // 0c. A table path cannot later be re-assigned as a value.
   // Example: `type.name = "Nail"` then `type = { edible = false }` is invalid.
-  // (toml-test invalid: spec-1.1.0/common-50-0)
-  if (type === NodeType.KeyValue && state.implicit_tables.has(joined_full_key) && key.length === 1) {
+  // Example: `a.b.c = 1` then `a.b = 2` is invalid (a.b was implicitly created as a table).
+  // (toml-test invalid: spec-1.1.0/common-50-0, table/append-with-dotted-keys-05)
+  if (type === NodeType.KeyValue && state.implicit_tables.has(joined_full_key)) {
     throw new Error(`Invalid key, a table has already been defined named ${joined_full_key}`);
+  }
+
+  // 0d. Dotted keys cannot extend tables that were explicitly defined earlier.
+  // Example: `[a.b.c]` followed by `[a]` then `b.c.t = "value"` is invalid.
+  // (toml-test invalid: table/append-with-dotted-keys-01, table/append-with-dotted-keys-02)
+  if (type === NodeType.KeyValue && key.length > 1) {
+    for (let i = 1; i <= key.length; i++) {
+      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      if (state.tables.has(candidate)) {
+        throw new Error(`Invalid key, cannot add to an explicitly defined table ${candidate} using dotted keys`);
+      }
+    }
   }
 
   // 1. Cannot override primitive value
