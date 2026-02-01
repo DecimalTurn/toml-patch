@@ -148,6 +148,21 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     );
   }
 
+  // Validate that table array brackets are immediately adjacent (no whitespace)
+  if (!is_table) {
+    const firstBracket = cursor.value!;
+    const secondBracket = cursor.peek().value!;
+    // Check if brackets are on the same line and adjacent columns
+    if (firstBracket.loc.end.line !== secondBracket.loc.start.line ||
+        firstBracket.loc.end.column !== secondBracket.loc.start.column) {
+      throw new ParseError(
+        input,
+        firstBracket.loc.start,
+        'Array of tables opening brackets must be immediately adjacent with no whitespace: [[table]]'
+      );
+    }
+  }
+
   // Set start location from opening tag
   const key = is_table
     ? ({
@@ -257,6 +272,21 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
           : cursor.value!.raw + cursor.peek().value!.raw
       }`
     );
+  }
+
+  // Validate that table array closing brackets are immediately adjacent (no whitespace)
+  if (!is_table) {
+    const firstBracket = cursor.value!;
+    const secondBracket = cursor.peek().value!;
+    // Check if brackets are on the same line and adjacent columns
+    if (firstBracket.loc.end.line !== secondBracket.loc.start.line ||
+        firstBracket.loc.end.column !== secondBracket.loc.start.column) {
+      throw new ParseError(
+        input,
+        firstBracket.loc.start,
+        'Array of tables closing brackets must be immediately adjacent with no whitespace: ]]'
+      );
+    }
   }
 
   // Set end location from closing tag

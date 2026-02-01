@@ -124,12 +124,6 @@ const SKIPPED_TESTS = [
   'string/missing-quotes-array',
   'string/missing-quotes-inline-table',
   'string/no-close-10',
-  
-  // toml-test invalid - Table validation (4 tests)
-  'table/dot',
-  'table/llbrace',
-  'table/nested-brackets-open',
-  'table/rrbrace',
 ];
 
 // Valid tests to skip temporarily (parsing issues, not validation)
