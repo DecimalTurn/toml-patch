@@ -118,10 +118,38 @@ export function toValue(node: Value): any {
   switch (node.type) {
     case NodeType.InlineTable:
       const result = blank();
+      const defined_keys = new Set<string>();
 
       node.items.forEach(({ item }) => {
         const key = item.key.value;
         const value = toValue(item.value);
+
+        // Check for duplicate keys and conflicting key paths
+        const full_key = joinKey(key);
+        
+        // Check if this exact key was already defined
+        if (defined_keys.has(full_key)) {
+          throw new Error(`Duplicate key "${full_key}" in inline table`);
+        }
+        
+        // Check if any prefix of this key conflicts with an existing key
+        // e.g., if "a.b" is defined, we can't later define "a.b.c" (overwriting table)
+        // or if "a.b.c" is defined, we can't later define "a.b" (overwriting value)
+        for (let i = 1; i < key.length; i++) {
+          const prefix = joinKey(key.slice(0, i));
+          if (defined_keys.has(prefix)) {
+            throw new Error(`Key "${full_key}" conflicts with already defined key "${prefix}" in inline table`);
+          }
+        }
+        
+        // Check if any existing key is a prefix of this key
+        defined_keys.forEach(existing => {
+          if (full_key.startsWith(existing + '.')) {
+            throw new Error(`Key "${full_key}" conflicts with already defined key "${existing}" in inline table`);
+          }
+        });
+        
+        defined_keys.add(full_key);
 
         const target = key.length > 1 ? ensureTable(result, key.slice(0, -1)) : result;
         target[last(key)!] = value;
