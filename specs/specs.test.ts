@@ -67,11 +67,7 @@ const SKIPPED_TESTS = [
   'encoding/bad-codepoint',
   
   
-  // Spec test edge cases (8 tests)
-  'string-literal-multiline-quotes',
-  'inline-table-trailing-comma',
-  'inline-table-imutable-2',
-  'inline-table-imutable-1',
+
   
   // toml-test invalid - Control characters (18 tests)
   'control/rawstring-us',
