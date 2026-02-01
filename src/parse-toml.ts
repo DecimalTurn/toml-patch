@@ -362,6 +362,17 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   cursor.next();
 
+  // TOML key/value pairs must include '=' on the same line as the key.
+  // Example invalid TOML (spec: bare-key-2):
+  //   barekey\n   = 123
+  if (!cursor.done && cursor.value!.loc.start.line !== key.loc.end.line) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected "=" for key-value on the same line as the key`
+    );
+  }
+
   if (cursor.done || cursor.value!.type !== TokenType.Equal) {
     throw new ParseError(
       input,
@@ -1579,6 +1590,17 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
   }
 
   cursor.next();
+
+  // TOML key/value pairs must include '=' on the same line as the key.
+  // Example invalid TOML (spec: bare-key-2):
+  //   barekey\n   = 123
+  if (!cursor.done && cursor.value!.loc.start.line !== key.loc.end.line) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected "=" for key-value on the same line as the key`
+    );
+  }
 
   if (cursor.done || cursor.value!.type !== TokenType.Equal) {
     if (!cursor.done && cursor.value!.raw === ':') {

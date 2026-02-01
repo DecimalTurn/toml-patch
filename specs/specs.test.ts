@@ -73,7 +73,6 @@ const SKIPPED_TESTS = [
   'inline-table-trailing-comma',
   'inline-table-imutable-2',
   'inline-table-imutable-1',
-  'bare-key-2',
   
   // toml-test invalid - Control characters (18 tests)
   'control/rawstring-us',
