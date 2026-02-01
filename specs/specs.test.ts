@@ -45,8 +45,7 @@ const SKIPPED_TESTS = [
   'inline-table/linebreak-03', // Newlines in inline tables are now allowed
   'inline-table/linebreak-04', // Newlines in inline tables are now allowed
   
-  // toml-test invalid - DateTime validation (2 tests)
-  'datetime/no-year-month-sep',
+  // toml-test invalid - DateTime validation (1 test)
   'datetime/only-T',
 ];
 
