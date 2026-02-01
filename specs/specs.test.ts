@@ -64,12 +64,6 @@ const SKIPPED_TESTS = [
   'key/no-eol-01',
   'key/no-eol-05',
   'key/partial-quoted',
-  
-  // toml-test invalid - String validation (4 tests)
-  'string/missing-quotes',
-  'string/missing-quotes-array',
-  'string/missing-quotes-inline-table',
-  'string/no-close-10',
 ];
 
 // Valid tests to skip temporarily (parsing issues, not validation)
