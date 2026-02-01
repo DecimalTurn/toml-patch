@@ -46,11 +46,6 @@ const SKIPPED_TESTS = [
   'inline-table/duplicate-key-01',
   'inline-table/newline-comment',
   
-  // String validation (invalid escape sequences - 3 tests requiring parser changes)
-  'string/bad-uni-esc-ml-06', // Invalid Unicode surrogate pair \uD801
-  'string/bad-uni-esc-06', // Invalid Unicode surrogate pair \uD801
-  'string/bad-slash-escape', // Invalid escape sequence \/
-  
   // Encoding validation (UTF-8 - 7 tests)
   'encoding/ideographic-space',
   'encoding/bad-utf8-in-string',
