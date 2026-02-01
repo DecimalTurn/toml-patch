@@ -34,11 +34,7 @@ const SKIPPED_TESTS = [
   'key/after-table',
   'key/after-array',
   
-  // Inline table validation (overwrite, duplicate, immutability - 5 tests)
-  'inline-table/overwrite-09',
-  'inline-table/overwrite-05',
-  'inline-table/overwrite-02',
-  'inline-table/overwrite-01',
+  // Inline table validation (newline-comment - 1 test)
   'inline-table/newline-comment',
   
   // Encoding validation (UTF-8 - 7 tests)

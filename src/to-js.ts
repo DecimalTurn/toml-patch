@@ -1,7 +1,24 @@
-import { Value, NodeType, TreeNode, AST, isInlineTable } from './ast';
+import { Value, NodeType, TreeNode, AST, isInlineTable, InlineTable } from './ast';
 import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
+
+/**
+ * Recursively tracks all nested inline tables within an inline table.
+ * This ensures that nested inline tables like { nest = {} } are also tracked as immutable.
+ */
+function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], inlineTables: Set<string>) {
+  for (const item of inlineTable.items) {
+    const keyValue = item.item;
+    const fullPath = basePath.concat(keyValue.key.value);
+    
+    if (keyValue.value.type === NodeType.InlineTable) {
+      inlineTables.add(joinKey(fullPath));
+      // Recursively track nested inline tables
+      trackNestedInlineTables(keyValue.value, fullPath, inlineTables);
+    }
+  }
+}
 
 /**
  * Converts the given AST to a JavaScript object.
@@ -91,7 +108,10 @@ export default function toJS(ast: AST, input: string = ''): any {
         // Inline tables are immutable in TOML: once defined, they cannot be extended.
         // Track their key path so later dotted keys can be rejected.
         if (node.value.type === NodeType.InlineTable) {
-          inline_tables.add(joinKey(active_path.concat(key)));
+          const base_path = active_path.concat(key);
+          inline_tables.add(joinKey(base_path));
+          // Also track nested inline tables within this inline table
+          trackNestedInlineTables(node.value, base_path, inline_tables);
         }
         const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
 
@@ -194,9 +214,24 @@ function validateKey(
   const joined_full_key = joinKey(full_key);
 
   // 0. Inline tables are immutable.
-  // Once a key is assigned an inline table, it cannot be extended by dotted keys.
-  // (toml-test invalid: spec-1.1.0/common-49-0)
+  // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
+  // (toml-test invalid: spec-1.1.0/common-49-0, inline-table/overwrite-02, inline-table/overwrite-05)
   if (type === NodeType.KeyValue && key.length > 1) {
+    for (let i = 1; i < key.length; i++) {
+      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      if (state.inline_tables.has(candidate)) {
+        throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
+      }
+    }
+  }
+  
+  // Also check if a table header tries to extend an inline table
+  if ((type === NodeType.Table || type === NodeType.TableArray) && state.inline_tables.has(joined_full_key)) {
+    throw new Error(`Invalid key, cannot extend an inline table at ${joined_full_key}`);
+  }
+  
+  // Check if table header path contains an inline table
+  if (type === NodeType.Table || type === NodeType.TableArray) {
     for (let i = 1; i < key.length; i++) {
       const candidate = joinKey(prefix.concat(key.slice(0, i)));
       if (state.inline_tables.has(candidate)) {
