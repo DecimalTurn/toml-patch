@@ -13,13 +13,9 @@ const TOML_VERSION = '1.1.0';
 // Tests to skip temporarily - remove items from this list as they get fixed
 // Format: 'test-type/test-name' (e.g., 'table/redefine-03', 'key/newline-01')
 const SKIPPED_TESTS = [
-  // Table validation (complex AST changes - 9 tests)
-  'table/redefine-03',
-  'table/redefine-02',
+  // Table validation (newlines and dotted key conflicts - 5 tests)
   'table/newline-03',
   'table/newline-01',
-  'table/duplicate-key-05',
-  'table/duplicate-key-04',
   'table/append-with-dotted-keys-05',
   'table/append-with-dotted-keys-02',
   'table/append-with-dotted-keys-01',
