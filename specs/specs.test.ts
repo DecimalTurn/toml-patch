@@ -78,21 +78,7 @@ const SKIPPED_TESTS = [
   'inline-table/linebreak-03', // Newlines in inline tables are now allowed
   'inline-table/linebreak-04', // Newlines in inline tables are now allowed
   
-  // toml-test invalid - Control characters in strings (13 tests)
-  'control/rawstring-us',
-  'control/rawstring-lf',
-  'control/rawstring-del',
-  'control/rawstring-cr',
-  'control/rawmulti-us',
-  'control/rawmulti-null',
-  'control/rawmulti-lf',
-  'control/rawmulti-del',
-  'control/multi-del',
-  'control/bare-cr',
-  'control/rawstring-null',
-  'control/string-del',
-  
-  // spec-test invalid - String control characters (8 tests)
+  // spec-test invalid - String control characters (10 tests)
   'string-literal-multiline-control-4',
   'string-literal-multiline-control-3',
   'string-literal-multiline-control-2',
@@ -105,10 +91,7 @@ const SKIPPED_TESTS = [
   'string-basic-control-4',
 
   
-  // toml-test invalid - Additional control characters in strings (2 tests)
-
-  
-  // toml-test invalid - DateTime validation (36 tests)
+  // toml-test invalid - DateTime validation (2 tests)
   'datetime/no-year-month-sep',
   
   'datetime/only-T',

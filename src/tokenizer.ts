@@ -186,6 +186,18 @@ function multiline(
       }
     }
 
+    // Validate control characters in multiline strings
+    const code = cursor.value!.charCodeAt(0);
+    // In multiline strings, control characters are not allowed except tab (0x09), LF (0x0A), and CR (0x0D as part of CRLF)
+    // DEL (0x7F) is also not allowed
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in multiline strings`
+      );
+    }
+
     raw += cursor.value;
     cursor.next();
   }
@@ -264,6 +276,21 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
 
   while (!cursor.done && !isFinished(cursor)) {
     cursor.next();
+
+    // Validate control characters in quoted strings
+    if (double_quoted || single_quoted) {
+      const code = cursor.value!.charCodeAt(0);
+      // In basic strings (double-quoted) and literal strings (single-quoted),
+      // control characters are not allowed except tab (0x09)
+      // DEL (0x7F) is also not allowed
+      if ((code <= 0x1f || code === 0x7f) && code !== 0x09) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in strings`
+        );
+      }
+    }
 
     if (cursor.value === DOUBLE_QUOTE) double_quoted = !double_quoted;
     if (cursor.value === SINGLE_QUOTE && !double_quoted) single_quoted = !single_quoted;
