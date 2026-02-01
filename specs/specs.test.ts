@@ -65,10 +65,10 @@ const SKIPPED_TESTS = [
   'encoding/bad-utf8-in-multiline-literal',
   'encoding/bad-utf8-in-comment',
   'encoding/bad-codepoint',
-    
+  
   // TOML 1.1.0 exclusions (features that became valid in 1.1.0)
   // See https://github.com/toml-lang/toml-test/blob/main/version.go
-'inline-table-trailing-comma', // TOML 1.1.0 allows trailing commas
+  'inline-table-trailing-comma', // TOML 1.1.0 allows trailing commas
   'datetime/no-secs', // Times without seconds are now valid
   'local-time/no-secs', // Times without seconds are now valid
   'local-datetime/no-secs', // Times without seconds are now valid
@@ -78,7 +78,7 @@ const SKIPPED_TESTS = [
   'inline-table/linebreak-03', // Newlines in inline tables are now allowed
   'inline-table/linebreak-04', // Newlines in inline tables are now allowed
   
-  // toml-test invalid - Control characters (18 tests)
+  // toml-test invalid - Control characters in strings (13 tests)
   'control/rawstring-us',
   'control/rawstring-lf',
   'control/rawstring-del',
@@ -88,13 +88,9 @@ const SKIPPED_TESTS = [
   'control/rawmulti-lf',
   'control/rawmulti-del',
   'control/multi-del',
-  'control/comment-us',
-  'control/comment-null',
-  'control/comment-lf',
-  'control/comment-ff',
-  'control/comment-del',
-  'control/comment-cr',
   'control/bare-cr',
+  'control/rawstring-null',
+  'control/string-del',
   
   // spec-test invalid - String control characters (8 tests)
   'string-literal-multiline-control-4',
@@ -109,9 +105,8 @@ const SKIPPED_TESTS = [
   'string-basic-control-4',
 
   
-  // toml-test invalid - Additional control characters (2 tests)
-  'control/rawstring-null',
-  'control/string-del',
+  // toml-test invalid - Additional control characters in strings (2 tests)
+
   
   // toml-test invalid - DateTime validation (36 tests)
   'datetime/no-year-month-sep',
