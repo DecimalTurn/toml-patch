@@ -24,11 +24,11 @@ const SKIPPED_TESTS = [
   
   // TOML 1.1.0 exclusions (features that became valid in 1.1.0)
   // See https://github.com/toml-lang/toml-test/blob/main/version.go
-  'inline-table-trailing-comma', // TOML 1.1.0 allows trailing commas
   'datetime/no-secs', // Times without seconds are now valid
   'local-time/no-secs', // Times without seconds are now valid
   'local-datetime/no-secs', // Times without seconds are now valid
   'string/basic-byte-escapes', // \x is now valid in 1.1.0
+  'inline-table-trailing-comma', // TOML 1.1.0 allows trailing commas
   'inline-table/linebreak-01', // Newlines in inline tables are now allowed
   'inline-table/linebreak-02', // Newlines in inline tables are now allowed
   'inline-table/linebreak-03', // Newlines in inline tables are now allowed
