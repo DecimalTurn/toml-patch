@@ -1,4 +1,28 @@
-export function iterator<T>(value: Iterable<T>): Iterator<T> {
+export function iterator(value: string): Iterator<string>;
+export function iterator<T>(value: Iterable<T>): Iterator<T>;
+export function iterator<T>(value: Iterable<T> | string): Iterator<T | string> {
+  // NOTE: JavaScript's default string iterator iterates over Unicode code points.
+  // This means Cursor.index would count code points, while our locator utilities
+  // (see `src/location.ts`) use JS string indices (UTF-16 code units).
+  // For non-BMP characters (surrogate pairs), that mismatch produces incorrect
+  // token locations.
+  //
+  // To keep Cursor.index aligned with string indices, iterate strings by UTF-16
+  // code units instead.
+  if (typeof value === 'string') {
+    let index = 0;
+    return {
+      next(): IteratorResult<string> {
+        if (index >= value.length) {
+          return { value: undefined as unknown as string, done: true };
+        }
+        const ch = value.charAt(index);
+        index += 1;
+        return { value: ch, done: false };
+      }
+    };
+  }
+
   return value[Symbol.iterator]();
 }
 

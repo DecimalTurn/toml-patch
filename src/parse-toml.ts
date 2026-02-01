@@ -380,6 +380,26 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   const [value, ...comments] = walkValueNonGen(cursor, input) as Iterable<Value | Comment>;
 
+  // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
+  // Example invalid TOML: first = "Tom" last = "Preston-Werner"
+  //
+  // Note: don't reject valid inline-tables like { a = 1, b = 2 } where tokens like ',' or '}'
+  // legitimately follow a value on the same line.
+  if (!cursor.peek().done) {
+    const nextToken = cursor.peek().value!;
+    const startsNewStatement =
+      nextToken.type === TokenType.Literal ||
+      nextToken.type === TokenType.Bracket;
+
+    if (startsNewStatement && nextToken.loc.start.line === (value as Value).loc.end.line) {
+      throw new ParseError(
+        input,
+        nextToken.loc.start,
+        'Key/value pairs must be separated by a newline'
+      );
+    }
+  }
+
   return [
     {
       type: NodeType.KeyValue,
@@ -1585,6 +1605,26 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
   const results = walkValueNonGen(cursor, input);
   const value = results[0] as Value;
   const comments = results.slice(1) as Comment[];
+
+  // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
+  // Example invalid TOML: first = "Tom" last = "Preston-Werner"
+  //
+  // Note: don't reject valid inline-tables like { a = 1, b = 2 } where tokens like ',' or '}'
+  // legitimately follow a value on the same line.
+  if (!cursor.peek().done) {
+    const nextToken = cursor.peek().value!;
+    const startsNewStatement =
+      nextToken.type === TokenType.Literal ||
+      nextToken.type === TokenType.Bracket;
+
+    if (startsNewStatement && nextToken.loc.start.line === value.loc.end.line) {
+      throw new ParseError(
+        input,
+        nextToken.loc.start,
+        'Key/value pairs must be separated by a newline'
+      );
+    }
+  }
 
   return [
     {

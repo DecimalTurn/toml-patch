@@ -74,6 +74,7 @@ const SKIPPED_TESTS = [
   'inline-table-imutable-2',
   'inline-table-imutable-1',
   'bare-key-2',
+  'bare-key-1',
   
   // toml-test invalid - Control characters (18 tests)
   'control/rawstring-us',
@@ -104,10 +105,7 @@ const SKIPPED_TESTS = [
   'string-literal-control-1',
   'string-basic-multiline-control-4',
   'string-basic-control-4',
-  
-  // spec-test invalid - Other validation (5 tests)
-  'key-value-pair-2',
-  'bare-key-1',
+
   
   // toml-test invalid - Additional control characters (2 tests)
   'control/rawstring-null',
