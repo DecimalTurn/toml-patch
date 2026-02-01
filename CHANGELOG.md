@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-02-01
 
+## Added
+- TOML v1.1 support
+
 ## [0.5.2] - 2026-01-19
 
 ## Fixed 
