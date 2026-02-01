@@ -24,11 +24,6 @@ const SKIPPED_TESTS = [
   'table/append-with-dotted-keys-02',
   'table/append-with-dotted-keys-01',
   
-  // Key validation (newlines and syntax - 3 tests requiring parser fixes)
-  'key/newline-06',
-  'key/after-table',
-  'key/after-array',
-  
   // Encoding validation (UTF-8 - 7 tests)
   'encoding/ideographic-space',
   'encoding/bad-utf8-in-string',

@@ -293,6 +293,23 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   if (!is_table) cursor.next();
   key.loc!.end = cursor.value!.loc.end;
 
+  // Table/array headers must be alone on their line - nothing can follow the closing bracket(s)
+  // Example invalid TOML (key/after-table): [error] this = "should not be here"
+  // Example invalid TOML (key/after-array): [[agencies]] owner = "S Cjelli"
+  if (!cursor.peek().done) {
+    const nextToken = cursor.peek().value!;
+    // Check if there's content on the same line after the closing bracket
+    // Comments are the only thing allowed on the same line
+    if (nextToken.loc.start.line === key.loc!.end.line &&
+        nextToken.type !== TokenType.Comment) {
+      throw new ParseError(
+        input,
+        nextToken.loc.start,
+        `Unexpected content after ${is_table ? 'table' : 'array of tables'} header`
+      );
+    }
+  }
+
   // Add child items
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
@@ -412,11 +429,23 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   }
 
   const equals = cursor.value!.loc.start.column;
+  const equalsLine = cursor.value!.loc.start.line;
 
   cursor.next();
 
   if (cursor.done) {
     throw new ParseError(input, key.loc.start, `Expected value for key-value, reached end of file`);
+  }
+
+  // TOML values must be on the same line as the '=' sign.
+  // Example invalid TOML (key/newline-06):
+  //   key =\n1
+  if (cursor.value!.loc.start.line !== equalsLine) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected value on the same line as the '=' sign`
+    );
   }
 
   const [value, ...comments] = walkValueNonGen(cursor, input) as Iterable<Value | Comment>;
@@ -1648,7 +1677,23 @@ function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | 
   }
 
   const equals = cursor.value!.loc.start.column;
+  const equalsLine = cursor.value!.loc.start.line;
   cursor.next();
+
+  if (cursor.done) {
+    throw new ParseError(input, key.loc.start, `Expected value for key-value, reached end of file`);
+  }
+
+  // TOML values must be on the same line as the '=' sign.
+  // Example invalid TOML (key/newline-06):
+  //   key =\n1
+  if (cursor.value!.loc.start.line !== equalsLine) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Expected value on the same line as the '=' sign`
+    );
+  }
 
   if (cursor.done) {
     throw new ParseError(input, key.loc.start, `Expected value for key-value`);
