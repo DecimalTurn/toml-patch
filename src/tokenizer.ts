@@ -135,17 +135,46 @@ function multiline(
   input: string
 ): Token {
   const start = cursor.index;
-  let quotes = multiline_char + multiline_char + multiline_char;
+  const quotes = multiline_char + multiline_char + multiline_char;
   let raw = quotes;
 
-  // Skip over quotes
+  // Skip over opening quotes
   cursor.next();
   cursor.next();
   cursor.next();
 
-  // The reason why we need to check if there is more than three is because we have to match the last 3 quotes, not the first 3 that appears consecutively
-  // See spec-string-basic-multiline-9.toml
-  while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
+  // Multiline strings close on the first unescaped """ / '''.
+  // A run of 4 or 5 quote characters at the end is allowed to include 1 or 2 quotes
+  // immediately before the closing delimiter, but 6+ consecutive quotes is invalid.
+  while (!cursor.done) {
+    const found = checkThree(input, cursor.index, multiline_char);
+    if (found) {
+      let runLength = 3;
+      while (input[cursor.index + runLength] === multiline_char) {
+        runLength++;
+      }
+
+      if (runLength >= 6) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Invalid multiline string: ${runLength} consecutive ${multiline_char} characters`
+        );
+      }
+
+      if (runLength === 3) {
+        break;
+      }
+
+      // runLength is 4 or 5: keep the leading 1 or 2 quote chars as content,
+      // and close on the last 3.
+      raw += multiline_char.repeat(runLength - 3);
+      for (let i = 0; i < runLength - 3; i++) {
+        cursor.next();
+      }
+      break;
+    }
+
     if (cursor.value === '\r') {
       const next = cursor.peek();
       if (next.done || next.value !== '\n') {

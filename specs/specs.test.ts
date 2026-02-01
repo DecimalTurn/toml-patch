@@ -47,7 +47,6 @@ const SKIPPED_TESTS = [
   'inline-table/newline-comment',
   
   // String validation (escape sequences, multiline quotes - 13 tests)
-  'string/multiline-quotes-01',
   'string/literal-multiline-quotes-02',
   'string/literal-multiline-quotes-01',
   'string/bad-uni-esc-ml-06',
