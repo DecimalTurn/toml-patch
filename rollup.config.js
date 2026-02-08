@@ -14,25 +14,8 @@ export default [
     input: 'src/index.ts',
     output: [
       {
-        file: 'dist/toml-patch.es.js',
+        file: 'dist/toml-patch.js',
         format: 'es',
-        banner
-      }
-    ],
-    plugins: [typescript(), filesize()]
-  },
-  {
-    input: 'src/index.ts',
-    output: [
-      {
-        file: 'dist/toml-patch.cjs.min.js',
-        format: 'cjs',
-        banner
-      },
-      {
-        file: 'dist/toml-patch.umd.min.js',
-        format: 'umd',
-        name: 'TOML',
         banner
       }
     ],

@@ -6,7 +6,8 @@
  * ensuring proper backward compatibility and constructor behavior.
  */
 
-const { TomlFormat, patch } = require("../../../dist/toml-patch.cjs.min.js");
+import { jest } from '@jest/globals';
+import { TomlFormat, patch } from "../../../dist/toml-patch.js";
 
 describe('TomlFormat JavaScript Integration', () => {
   const originalToml = `# Configuration file
