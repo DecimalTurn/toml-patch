@@ -1075,7 +1075,7 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
   }
 
   let radix = 10;
-  let numericPart = raw;
+  let numericPart: string;
   
   // Hexadecimal validation
   if (IS_HEX.test(raw)) {
