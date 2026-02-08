@@ -1507,6 +1507,12 @@ function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment>
   } else if (cursor.value!.type === TokenType.Bracket) {
     const [inline_array, comments] = inlineArray(cursor, input);
     return [inline_array, ...comments];
+  } else if (cursor.value!.type === TokenType.Dot) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Invalid number: cannot start with a dot. Numbers must start with a digit`
+    );
   } else {
     throw new ParseError(
       input,
