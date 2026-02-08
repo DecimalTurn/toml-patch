@@ -35,7 +35,7 @@
   "scripts": {
     "dev": "npm run typecheck && npm run build && npm-run-all2 --parallel test:all specs",
     "test": "jest --config jest.config.json",
-    "test:js": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.mjs",
+    "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
     "test:all": "npm run test && npm run test:js",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.cjs",
