@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING**: Migrate to ESM-only distribution, removing CommonJS and UMD builds ([#100](https://github.com/DecimalTurn/toml-patch/pull/100))
+  - Package now requires `"type": "module"` and uses modern `exports` field
+  - Single ESM build: `dist/toml-patch.js` (66 KB minified)
+  - Removed: `dist/toml-patch.cjs.min.js`, `dist/toml-patch.umd.min.js`, and all source maps
+  - Package size reduced by 90% (274 KB → 27.6 KB)
+  - Node.js 22.12.0+/23.3.0+ can directly `require()` this ESM package
+  - Users on older Node.js versions should use dynamic `import()` or stay on v0.x
+
+
 ## [0.7.0] - 2026-02-08
 
 ### Fixed
