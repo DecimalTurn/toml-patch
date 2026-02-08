@@ -618,7 +618,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
   const datePattern = /^(\d+)-(\d+)-(\d+)/;
   const dateMatch = raw.match(datePattern);
   if (dateMatch) {
-    const [, year, month, day] = dateMatch;
+    const [, , month, day] = dateMatch;
     if (month.length !== 2) {
       throw new ParseError(
         input,
