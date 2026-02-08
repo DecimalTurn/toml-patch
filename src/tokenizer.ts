@@ -191,10 +191,25 @@ function multiline(
     // In multiline strings, control characters are not allowed except tab (0x09), LF (0x0A), and CR (0x0D as part of CRLF)
     // DEL (0x7F) is also not allowed
     if ((code <= 0x1f || code === 0x7f) && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      const stringType = multiline_char === DOUBLE_QUOTE ? 'multiline basic strings' : 'multiline literal strings';
+      const hexCode = `0x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+      
+      // Provide friendly names for common control characters
+      let charName = '';
+      if (code === 0x00) {
+        charName = 'Null';
+      } else if (code === 0x7f) {
+        charName = 'DEL';
+      }
+      
+      const message = charName 
+        ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
+        : `Control character ${hexCode} is not allowed in ${stringType}`;
+      
       throw new ParseError(
         input,
         findPosition(input, cursor.index),
-        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in multiline strings`
+        message
       );
     }
 
@@ -300,10 +315,29 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
       // control characters are not allowed except tab (0x09)
       // DEL (0x7F) is also not allowed
       if ((code <= 0x1f || code === 0x7f) && code !== 0x09) {
+        const stringType = double_quoted ? 'basic strings' : 'literal strings';
+        const hexCode = `0x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+        
+        // Provide friendly names for common control characters
+        let charName = '';
+        if (code === 0x0a) {
+          charName = 'Newline';
+        } else if (code === 0x0d) {
+          charName = 'Carriage return';
+        } else if (code === 0x00) {
+          charName = 'Null';
+        } else if (code === 0x7f) {
+          charName = 'DEL';
+        }
+        
+        const message = charName 
+          ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
+          : `Control character ${hexCode} is not allowed in ${stringType}`;
+        
         throw new ParseError(
           input,
           findPosition(input, cursor.index),
-          `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in strings`
+          message
         );
       }
     }
