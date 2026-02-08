@@ -72,3 +72,35 @@ test('should return correct error for invalid toml', () => {
     Array.from(parseTOML(invalid_toml));
   }).toThrow(expected_error);
 });
+
+test('should return correct error for invalid escape sequence in string value', () => {
+  const invalid_escape = `key = "\\q"`;
+  
+  expect(() => {
+    Array.from(parseTOML(invalid_escape));
+  }).toThrow(/Invalid escape sequence: \\q/);
+});
+
+test('should return correct error for invalid escape sequence in key', () => {
+  const invalid_escape = `"key\\q" = "value"`;
+  
+  expect(() => {
+    Array.from(parseTOML(invalid_escape));
+  }).toThrow(/Invalid escape sequence: \\q/);
+});
+
+test('should return correct error for invalid escape sequence in table key', () => {
+  const invalid_escape = `["table\\q"]`;
+  
+  expect(() => {
+    Array.from(parseTOML(invalid_escape));
+  }).toThrow(/Invalid escape sequence: \\q/);
+});
+
+test('should return correct error for invalid escape sequence in dotted key', () => {
+  const invalid_escape = `a."b\\q".c = 1`;
+  
+  expect(() => {
+    Array.from(parseTOML(invalid_escape));
+  }).toThrow(/Invalid escape sequence: \\q/);
+});

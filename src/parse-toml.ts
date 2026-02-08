@@ -202,11 +202,19 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     }
   }
 
+  let keyValue;
+  try {
+    keyValue = [parseString(cursor.value!.raw)];
+  } catch (err) {
+    const e = err as Error;
+    throw new ParseError(input, cursor.value!.loc.start, e.message);
+  }
+  
   key.item = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
     raw: cursor.value!.raw,
-    value: [parseString(cursor.value!.raw)]
+    value: keyValue
   };
 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
@@ -236,7 +244,12 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
 
     key.item.loc.end = cursor.value!.loc.end;
     key.item.raw += `${before}.${after}${cursor.value!.raw}`;
-    key.item.value.push(parseString(cursor.value!.raw));
+    try {
+      key.item.value.push(parseString(cursor.value!.raw));
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, cursor.value!.loc.start, e.message);
+    }
   }
 
   cursor.next();
@@ -339,12 +352,20 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   } as Table | TableArray;
 }
 
-function string(cursor: Cursor<Token>): String {
+function string(cursor: Cursor<Token>, input: string): String {
+  let value;
+  try {
+    value = parseString(cursor.value!.raw);
+  } catch (err) {
+    const e = err as Error;
+    throw new ParseError(input, cursor.value!.loc.start, e.message);
+  }
+  
   return {
     type: NodeType.String,
     loc: cursor.value!.loc,
     raw: cursor.value!.raw,
-    value: parseString(cursor.value!.raw)
+    value
   };
 }
 
@@ -1308,11 +1329,19 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     }
   }
 
+  let keyValue2;
+  try {
+    keyValue2 = [parseString(cursor.value!.raw)];
+  } catch (err) {
+    const e = err as Error;
+    throw new ParseError(input, cursor.value!.loc.start, e.message);
+  }
+  
   const key: Key = {
     type: NodeType.Key,
     loc: cloneLocation(cursor.value!.loc),
     raw: cursor.value!.raw,
-    value: [parseString(cursor.value!.raw)]
+    value: keyValue2
   };
 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
@@ -1344,7 +1373,12 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
     key.loc.end = cursor.value!.loc.end;
     key.raw += `.${cursor.value!.raw}`;
-    key.value.push(parseString(cursor.value!.raw));
+    try {
+      key.value.push(parseString(cursor.value!.raw));
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, cursor.value!.loc.start, e.message);
+    }
   }
 
   cursor.next();
@@ -1439,7 +1473,7 @@ function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment>
     const raw = cursor.value!.raw;
 
     if (raw[0] === DOUBLE_QUOTE || raw[0] === SINGLE_QUOTE) {
-      return [string(cursor)];
+      return [string(cursor, input)];
     } else if (raw === TRUE || raw === FALSE) {
       return [boolean(cursor)];
 

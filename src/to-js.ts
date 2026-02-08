@@ -1,4 +1,4 @@
-import { Value, NodeType, TreeNode, AST, isInlineTable, InlineTable } from './ast';
+import { Value, NodeType, TreeNode, AST, InlineTable } from './ast';
 import traverse from './traverse';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
