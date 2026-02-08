@@ -4,21 +4,10 @@
 [![JSR Version](https://img.shields.io/jsr/v/%40decimalturn/toml-patch?logo=jsr&color=blue)](https://jsr.io/@decimalturn/toml-patch)
 [![GitHub branch status](https://img.shields.io/github/check-runs/DecimalTurn/toml-patch/latest)](https://github.com/DecimalTurn/toml-patch/actions/workflows/test-and-build.yml)
 
-Patch, parse, and stringify [TOML](https://toml.io/en/) while preserving comments and formatting.
+Patch, parse, and stringify [TOML](https://toml.io/en/) (v1.1.0) while preserving comments and formatting.
 
 Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project, add small to medium sized features and perform dev-dependencies updates. 
 Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
-
-
-**What's New in v0.5.0:**
-- **truncateZeroTimeInDates option**: New formatting option to automatically serialize JavaScript Date objects with zero time components (midnight) as date-only values in TOML (`2024-01-15T00:00:00.000Z → 2024-01-15`).
-
-**What's New in v0.4.0:**
-- **TomlDocument class**: A new document-oriented API for stateful TOML manipulation
-- **TomlFormat class**: A class encapsulating all TOML formatting options
-- **TOML date patching support**: You can now safely patch/update a date value inside a TOML document and preserve the original formatting.
-
-Note: The functional API (`patch`, `parse`, `stringify`) remains fully compatible with previous versions. The new `TomlDocument` class is an additive feature that doesn't break existing code. You can also still use anonymous objects to pass in formatting options. Globally, v0.4.0 shouldn't introduce any breaking changes.
 
 ## Table of Contents
 
@@ -47,6 +36,7 @@ Note: The functional API (`patch`, `parse`, `stringify`) remains fully compatibl
   - [Auto-Detection and Patching](#auto-detection-and-patching)
   - [Complete Example](#complete-example)
   - [Legacy Format Objects](#legacy-format-objects)
+- [Changelog](#changelog)
 - [Development](#development)
 
 
@@ -627,6 +617,10 @@ format.trailingComma = true;
 format.bracketSpacing = false;
 const result = stringify(data, format);
 ```
+
+## Changelog
+
+For a detailed history of changes, see the [CHANGELOG](CHANGELOG.md).
 
 ## Development
 
