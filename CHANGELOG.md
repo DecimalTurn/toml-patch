@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-08
+
 ### Fixed
 - Per official [toml-test](https://github.com/toml-lang/toml-test), return error for invalid TOML inputs (keys, strings, inline tables, tables, date/time, control characters, and newline handling) except for encoding issues ([#94](https://github.com/DecimalTurn/toml-patch/pull/95)).
 
