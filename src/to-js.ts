@@ -147,6 +147,7 @@ export function toValue(node: Value): any {
     case NodeType.InlineTable:
       const result = blank();
       const defined_keys = new Set<string>();
+      const defined_prefixes = new Map<string, string>(); // prefix -> one of the full keys that uses it
 
       node.items.forEach(({ item }) => {
         const key = item.key.value;
@@ -161,8 +162,7 @@ export function toValue(node: Value): any {
         }
         
         // Check if any prefix of this key conflicts with an existing key
-        // e.g., if "a.b" is defined, we can't later define "a.b.c" (overwriting table)
-        // or if "a.b.c" is defined, we can't later define "a.b" (overwriting value)
+        // e.g., if "a.b" is defined, we can't later define "a.b.c" (would overwrite the value)
         for (let i = 1; i < key.length; i++) {
           const prefix = joinKey(key.slice(0, i));
           if (defined_keys.has(prefix)) {
@@ -170,14 +170,22 @@ export function toValue(node: Value): any {
           }
         }
         
-        // Check if any existing key is a prefix of this key
-        defined_keys.forEach(existing => {
-          if (full_key.startsWith(existing + '.')) {
-            throw new Error(`Key "${full_key}" conflicts with already defined key "${existing}" in inline table`);
-          }
-        });
+        // Check if this key is a prefix of an already defined key
+        // e.g., if "a.b.c" is defined, we can't later define "a.b" (would overwrite the table)
+        if (defined_prefixes.has(full_key)) {
+          const existing = defined_prefixes.get(full_key)!;
+          throw new Error(`Key "${full_key}" conflicts with already defined key "${existing}" in inline table`);
+        }
         
         defined_keys.add(full_key);
+        
+        // Track all prefixes of this key
+        for (let i = 1; i < key.length; i++) {
+          const prefix = joinKey(key.slice(0, i));
+          if (!defined_prefixes.has(prefix)) {
+            defined_prefixes.set(prefix, full_key);
+          }
+        }
 
         const target = key.length > 1 ? ensureTable(result, key.slice(0, -1)) : result;
         target[last(key)!] = value;
