@@ -59,17 +59,13 @@ export {
 
 export default function* parseTOML(input: string): AST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
-  const tokenIter = Array.from(tokenize(input));
-  const cursor = new Cursor(tokenIter[Symbol.iterator]());
-  const result: Block[] = [];
+  const cursor = new Cursor(tokenize(input));
   
   while (!cursor.next().done) {
-    const blocks = walkBlockNonGen(cursor, input);
-    result.push(...blocks);
-  }
-  
-  for (const item of result) {
-    yield item;
+    const blocks = walkBlock(cursor, input);
+    for (const block of blocks) {
+      yield block;
+    }
   }
 }
 
@@ -87,17 +83,13 @@ export function* continueParsingTOML(existingAst: AST, remainingString: string):
   }
   
   // Parse and yield all items from the remaining string using non-generator path
-  const tokenIter = Array.from(tokenize(remainingString));
-  const cursor = new Cursor(tokenIter[Symbol.iterator]());
-  const result: Block[] = [];
+  const cursor = new Cursor(tokenize(remainingString));
   
   while (!cursor.next().done) {
-    const blocks = walkBlockNonGen(cursor, remainingString);
-    result.push(...blocks);
-  }
-  
-  for (const item of result) {
-    yield item;
+    const blocks = walkBlock(cursor, remainingString);
+    for (const block of blocks) {
+      yield block;
+    }
   }
 }
 
@@ -331,7 +323,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
     cursor.next();
-    merge(items, walkBlockNonGen(cursor, input) as Array<KeyValue | Comment>);
+    merge(items, walkBlock(cursor, input) as Array<KeyValue | Comment>);
   }
 
   return {
@@ -345,161 +337,6 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     key: key as TableKey | TableArrayKey,
     items
   } as Table | TableArray;
-}
-
-function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
-  // 3. KeyValue
-  //
-  // key = value
-  // ^-^          key
-  //     ^        equals
-  //       ^---^  value
-  
-  // Validate that multiline strings are not used as keys
-  const raw = cursor.value!.raw;
-  {
-    if (raw.startsWith('"""') || raw.startsWith("'''")) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        'Multiline strings (""" or \'\'\') cannot be used as keys'
-      );
-    }
-    
-    // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
-    const isQuoted = raw.startsWith('"') || raw.startsWith("'");
-    
-    if (!isQuoted) {
-      // Check each character in the bare key
-      for (let i = 0; i < raw.length; i++) {
-        const char = raw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
-          // Special case: colon at the end suggests using ":" instead of "="
-          if (char === ':' && i === raw.length - 1) {
-            throw new ParseError(
-              input,
-              { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-              `Use '=' to separate keys and values, not ':'`
-            );
-          }
-          throw new ParseError(
-            input,
-            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-          );
-        }
-      }
-    }
-  }
-  
-  const key: Key = {
-    type: NodeType.Key,
-    loc: cloneLocation(cursor.value!.loc),
-    raw: cursor.value!.raw,
-    value: [parseString(cursor.value!.raw)]
-  };
-
-  while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
-    cursor.next();
-    cursor.next();
-    
-    // Validate each part of a dotted key
-    const partRaw = cursor.value!.raw;
-    const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
-    if (!partIsQuoted) {
-      for (let i = 0; i < partRaw.length; i++) {
-        const char = partRaw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
-          throw new ParseError(
-            input,
-            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-          );
-        }
-      }
-    }
-
-    key.loc.end = cursor.value!.loc.end;
-    key.raw += `.${cursor.value!.raw}`;
-    key.value.push(parseString(cursor.value!.raw));
-  }
-
-  cursor.next();
-
-  // TOML key/value pairs must include '=' on the same line as the key.
-  // Example invalid TOML (spec: bare-key-2):
-  //   barekey\n   = 123
-  if (!cursor.done && cursor.value!.loc.start.line !== key.loc.end.line) {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Expected "=" for key-value on the same line as the key`
-    );
-  }
-
-  if (cursor.done || cursor.value!.type !== TokenType.Equal) {
-    throw new ParseError(
-      input,
-      cursor.done ? key.loc.end : cursor.value!.loc.start,
-      `Expected "=" for key-value, found ${cursor.done ? 'end of file' : cursor.value!.raw}`
-    );
-  }
-
-  const equals = cursor.value!.loc.start.column;
-  const equalsLine = cursor.value!.loc.start.line;
-
-  cursor.next();
-
-  if (cursor.done) {
-    throw new ParseError(input, key.loc.start, `Expected value for key-value, reached end of file`);
-  }
-
-  // TOML values must be on the same line as the '=' sign.
-  // Example invalid TOML (key/newline-06):
-  //   key =\n1
-  if (cursor.value!.loc.start.line !== equalsLine) {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Expected value on the same line as the '=' sign`
-    );
-  }
-
-  const [value, ...comments] = walkValueNonGen(cursor, input) as Iterable<Value | Comment>;
-
-  // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
-  // Example invalid TOML: first = "Tom" last = "Preston-Werner"
-  //
-  // Note: don't reject valid inline-tables like { a = 1, b = 2 } where tokens like ',' or '}'
-  // legitimately follow a value on the same line.
-  if (!cursor.peek().done) {
-    const nextToken = cursor.peek().value!;
-    const startsNewStatement =
-      nextToken.type === TokenType.Literal ||
-      nextToken.type === TokenType.Bracket;
-
-    if (startsNewStatement && nextToken.loc.start.line === (value as Value).loc.end.line) {
-      throw new ParseError(
-        input,
-        nextToken.loc.start,
-        'Key/value pairs must be separated by a newline'
-      );
-    }
-  }
-
-  return [
-    {
-      type: NodeType.KeyValue,
-      key,
-      value: value as Value,
-      loc: {
-        start: clonePosition(key.loc.start),
-        end: clonePosition(value.loc.end)
-      },
-      equals
-    },
-    ...(comments as Comment[])
-  ];
 }
 
 function string(cursor: Cursor<Token>): String {
@@ -1444,7 +1281,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
       );
     }
 
-    const [item, ...additional_comments] = walkBlockNonGen(cursor, input);
+    const [item, ...additional_comments] = walkBlock(cursor, input);
     if (item.type !== NodeType.KeyValue) {
       throw new ParseError(
         input,
@@ -1566,13 +1403,15 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
 }
 
 
-// ========================================================================
-// Non-generator versions for deeply nested structures
-// These avoid generator frame overhead by returning arrays instead of using generators
-// Reuses existing non-recursive functions where possible
-// ========================================================================
 
-function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
+/**
+ * Walk a Block (Comment, Table, or KeyValue)
+ * This new version avoids recursion for key-value pairs to improve performance on large files.
+ * @param cursor Cursor<Token>
+ * @param input string
+ * @returns Block[]
+ */
+function walkBlock(cursor: Cursor<Token>, input: string): Block[] {
   if (cursor.value!.type === TokenType.Comment) {
     return [comment(cursor)];
   } else if (cursor.value!.type === TokenType.Bracket) {
@@ -1580,7 +1419,7 @@ function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
     // In practice, top-level tables aren't deeply nested
     return [table(cursor, input)];
   } else if (cursor.value!.type === TokenType.Literal) {
-    return keyValueNonGen(cursor, input);
+    return keyValue(cursor, input);
   } else {
     throw new ParseError(
       input,
@@ -1590,7 +1429,21 @@ function walkBlockNonGen(cursor: Cursor<Token>, input: string): Block[] {
   }
 }
 
-function keyValueNonGen(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
+/**
+ * Walk a KeyValue pair or Comment
+ * This new version avoids recursion for key-value pairs to improve performance on large files.
+ * @param cursor Cursor<Token>
+ * @param input string
+ * @returns Array<KeyValue | Comment>
+ */
+function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
+  // 3. KeyValue
+  //
+  // key = value
+  // ^-^          key
+  //     ^        equals
+  //       ^---^  value
+
   // Match the more helpful diagnostic when users write `key: value`.
   // Depending on tokenization, the ':' may be attached to the key token (e.g. 'name:').
   const rawKeyToken = cursor.value!.raw;
@@ -1855,7 +1708,7 @@ function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, 
     }
 
     // Recursively parse the key-value, but without generators
-    const blocks = walkBlockNonGen(cursor, input);
+    const blocks = walkBlock(cursor, input);
     const item = blocks[0];
     const additional_comments = blocks.slice(1) as Comment[];
 
