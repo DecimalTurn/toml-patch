@@ -182,6 +182,17 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     throw new ParseError(input, key.loc!.start, `Expected table key, reached end of file`);
   }
 
+  // Check if the table/array name is empty (e.g., [[]] or [])
+  if (cursor.value!.type === TokenType.Bracket && cursor.value!.raw === ']') {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      type === NodeType.TableArray 
+        ? 'Array of tables header [[]] requires a table name'
+        : 'Table header [] requires a table name'
+    );
+  }
+
   // Validate that multiline strings are not used as table keys
   const raw = cursor.value!.raw;
   {
