@@ -25,6 +25,7 @@
     "decoder"
   ],
   "type": "module",
+  "types": "./dist/toml-patch.d.ts",
   "exports": {
     ".": {
       "types": "./dist/toml-patch.d.ts",
