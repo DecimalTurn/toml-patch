@@ -1,0 +1,10 @@
+# Test file with emoji and non-BMP characters
+name = "Hello 😀 World"
+description = "🚀 TOML parser"
+
+# Emoji as keys work too
+"🔑" = "key emoji"
+"test🌟value" = 123
+
+[section]
+emoji_array = ["🎉", "🎊", "🎈"]
