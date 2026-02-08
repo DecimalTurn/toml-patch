@@ -104,7 +104,15 @@ export default function toJS(ast: AST, input: string = ''): any {
           }
         }
 
-        const value = toValue(node.value);
+        let value;
+        try {
+          value = toValue(node.value);
+        } catch (err) {
+          // Convert plain Errors from toValue() to ParseErrors with location info
+          const e = err as Error;
+          throw new ParseError(input, node.value.loc.start, e.message);
+        }
+        
         // Inline tables are immutable in TOML: once defined, they cannot be extended.
         // Track their key path so later dotted keys can be rejected.
         if (node.value.type === NodeType.InlineTable) {
