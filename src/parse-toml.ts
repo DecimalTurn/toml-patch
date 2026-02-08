@@ -1217,193 +1217,6 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
   };
 }
 
-function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
-  if (cursor.value!.raw !== '{') {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Expected "{" for inline table, found ${cursor.value!.raw}`
-    );
-  }
-
-  // 6. InlineTable
-  const value: InlineTable = {
-    type: NodeType.InlineTable,
-    loc: cloneLocation(cursor.value!.loc),
-    items: []
-  };
-
-  const comments: Comment[] = [];
-  cursor.next();
-
-  while (
-    !cursor.done &&
-    !(cursor.value!.type === TokenType.Curly && (cursor.value as Token).raw === '}')
-  ) {
-    // TOML 1.1.0: Handle comments in inline tables
-    if (cursor.value!.type === TokenType.Comment) {
-      comments.push(comment(cursor));
-      cursor.next();
-      continue;
-    }
-
-    if ((cursor.value as Token).type === TokenType.Comma) {
-      const previous = value.items[value.items.length - 1];
-      if (!previous) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Found "," without previous value in inline table'
-        );
-      }
-
-      if (previous.comma) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Found consecutive commas in inline table (double comma is not allowed)'
-        );
-      }
-
-      previous.comma = true;
-      previous.loc.end = cursor.value!.loc.start;
-
-      cursor.next();
-      continue;
-    }
-
-    const previous = value.items[value.items.length - 1];
-    if (previous && !previous.comma) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        'Missing comma between inline table items'
-      );
-    }
-
-    const [item, ...additional_comments] = walkBlock(cursor, input);
-    if (item.type !== NodeType.KeyValue) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        `Only key-values are supported in inline tables, found ${item.type}`
-      );
-    }
-
-    const inline_item: InlineItem<KeyValue> = {
-      type: NodeType.InlineItem,
-      loc: cloneLocation(item.loc),
-      item,
-      comma: false
-    };
-
-    value.items.push(inline_item);
-    merge(comments, additional_comments as Comment[]);
-    cursor.next();
-  }
-
-  if (
-    cursor.done ||
-    cursor.value!.type !== TokenType.Curly ||
-    (cursor.value as Token).raw !== '}'
-  ) {
-    throw new ParseError(
-      input,
-      cursor.done ? value.loc.start : cursor.value!.loc.start,
-      `Expected "}", found ${cursor.done ? 'end of file' : cursor.value!.raw}`
-    );
-  }
-
-  value.loc.end = cursor.value!.loc.end;
-
-  return [value, comments];
-}
-
-function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
-  // 7. InlineArray
-  if (cursor.value!.raw !== '[') {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Expected "[" for inline array, found ${cursor.value!.raw}`
-    );
-  }
-
-  const value: InlineArray = {
-    type: NodeType.InlineArray,
-    loc: cloneLocation(cursor.value!.loc),
-    items: []
-  };
-  let comments: Comment[] = [];
-
-  cursor.next();
-
-  while (
-    !cursor.done &&
-    !(cursor.value!.type === TokenType.Bracket && (cursor.value as Token).raw === ']')
-  ) {
-    if ((cursor.value as Token).type === TokenType.Comma) {
-      const previous = value.items[value.items.length - 1];
-      if (!previous) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Found "," without previous value for inline array'
-        );
-      }
-
-      if (previous.comma) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Found consecutive commas in array (double comma is not allowed)'
-        );
-      }
-
-      previous.comma = true;
-      previous.loc.end = cursor.value!.loc.start;
-    } else if ((cursor.value as Token).type === TokenType.Comment) {
-      comments.push(comment(cursor));
-    } else {
-      const previous = value.items[value.items.length - 1];
-      if (previous && !previous.comma) {
-        throw new ParseError(input, cursor.value!.loc.start, 'Missing comma between array elements');
-      }
-
-      const [item, ...additional_comments] = walkValueNonGen(cursor, input);
-      const inline_item: InlineItem = {
-        type: NodeType.InlineItem,
-        loc: cloneLocation(item.loc),
-        item,
-        comma: false
-      };
-
-      value.items.push(inline_item);
-      merge(comments, additional_comments as Comment[]);
-    }
-
-    cursor.next();
-  }
-
-  if (
-    cursor.done ||
-    cursor.value!.type !== TokenType.Bracket ||
-    (cursor.value as Token).raw !== ']'
-  ) {
-    throw new ParseError(
-      input,
-      cursor.done ? value.loc.start : cursor.value!.loc.start,
-      `Expected "]", found ${cursor.done ? 'end of file' : cursor.value!.raw}`
-    );
-  }
-
-  value.loc.end = cursor.value!.loc.end;
-
-  return [value, comments];
-}
-
-
-
 /**
  * Walk a Block (Comment, Table, or KeyValue)
  * This new version avoids recursion for key-value pairs to improve performance on large files.
@@ -1569,7 +1382,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     throw new ParseError(input, key.loc.start, `Expected value for key-value`);
   }
 
-  const results = walkValueNonGen(cursor, input);
+  const results = walkValue(cursor, input);
   const value = results[0] as Value;
   const comments = results.slice(1) as Comment[];
 
@@ -1605,7 +1418,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   ];
 }
 
-function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
+function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
   if (cursor.value!.type === TokenType.Literal) {
     const raw = cursor.value!.raw;
 
@@ -1632,10 +1445,10 @@ function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Co
       return [integer(cursor, input)];
     }
   } else if (cursor.value!.type === TokenType.Curly) {
-    const [inline_table, comments] = inlineTableNonGen(cursor, input);
+    const [inline_table, comments] = inlineTable(cursor, input);
     return [inline_table, ...comments];
   } else if (cursor.value!.type === TokenType.Bracket) {
-    const [inline_array, comments] = inlineArrayNonGen(cursor, input);
+    const [inline_array, comments] = inlineArray(cursor, input);
     return [inline_array, ...comments];
   } else {
     throw new ParseError(
@@ -1646,7 +1459,7 @@ function walkValueNonGen(cursor: Cursor<Token>, input: string): Array<Value | Co
   }
 }
 
-function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
+function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
       input,
@@ -1655,6 +1468,7 @@ function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, 
     );
   }
 
+  // 6. InlineTable
   const value: InlineTable = {
     type: NodeType.InlineTable,
     loc: cloneLocation(cursor.value!.loc),
@@ -1741,7 +1555,8 @@ function inlineTableNonGen(cursor: Cursor<Token>, input: string): [InlineTable, 
   return [value, comments];
 }
 
-function inlineArrayNonGen(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
+function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
+  // 7. InlineArray
   if (cursor.value!.raw !== '[') {
     throw new ParseError(
       input,
@@ -1791,7 +1606,7 @@ function inlineArrayNonGen(cursor: Cursor<Token>, input: string): [InlineArray, 
         throw new ParseError(input, cursor.value!.loc.start, 'Missing comma between array elements');
       }
 
-      const results = walkValueNonGen(cursor, input);
+      const results = walkValue(cursor, input);
       const item = results[0];
       const additional_comments = results.slice(1) as Comment[];
 
