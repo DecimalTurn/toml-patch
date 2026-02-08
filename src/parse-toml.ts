@@ -132,18 +132,26 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       `Expected table opening "[", found ${cursor.value!.raw}`
     );
   }
-  if (!is_table && (cursor.value!.raw !== '[' || cursor.peek().value!.raw !== '[')) {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      `Expected array of tables opening "[[", found ${cursor.value!.raw + cursor.peek().value!.raw}`
-    );
-  }
-
-  // Validate that table array brackets are immediately adjacent (no whitespace)
   if (!is_table) {
+    const next = cursor.peek();
+    if (next.done) {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        'Expected second "[" for array of tables opening, found end of input'
+      );
+    }
+    if (cursor.value!.raw !== '[' || next.value!.raw !== '[') {
+      throw new ParseError(
+        input,
+        cursor.value!.loc.start,
+        `Expected array of tables opening "[[", found ${cursor.value!.raw + next.value!.raw}`
+      );
+    }
+
+    // Validate that table array brackets are immediately adjacent (no whitespace)
     const firstBracket = cursor.value!;
-    const secondBracket = cursor.peek().value!;
+    const secondBracket = next.value!;
     // Check if brackets are on the same line and adjacent columns
     if (firstBracket.loc.end.line !== secondBracket.loc.start.line ||
         firstBracket.loc.end.column !== secondBracket.loc.start.column) {
