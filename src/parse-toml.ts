@@ -1467,6 +1467,18 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   // legitimately follow a value on the same line.
   if (!cursor.peek().done) {
     const nextToken = cursor.peek().value!;
+    
+    // Check for Dot token after a numeric value (likely multiple decimal points)
+    if (nextToken.type === TokenType.Dot && 
+        nextToken.loc.start.line === value.loc.end.line &&
+        (value.type === NodeType.Float || value.type === NodeType.Integer)) {
+      throw new ParseError(
+        input,
+        nextToken.loc.start,
+        'Invalid number: multiple decimal points not allowed'
+      );
+    }
+    
     const startsNewStatement =
       nextToken.type === TokenType.Literal ||
       nextToken.type === TokenType.Bracket;
