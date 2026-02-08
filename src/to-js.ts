@@ -294,7 +294,8 @@ function validateKey(
 
     if (!has(object, part)) return;
     if (isPrimitive(object[part])) {
-      throw new Error(`Invalid key, a value has already been defined for ${parts.join('.')}`);
+      const fullKey = joinKey(prefix.concat(parts));
+      throw new Error(`Invalid key, a value has already been defined for ${fullKey}`);
     }
 
     const joined_parts = joinKey(prefix.concat(parts));
