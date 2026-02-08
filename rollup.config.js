@@ -27,14 +27,12 @@ export default [
       {
         file: 'dist/toml-patch.cjs.min.js',
         format: 'cjs',
-        sourcemap: true,
         banner
       },
       {
         file: 'dist/toml-patch.umd.min.js',
         format: 'umd',
         name: 'TOML',
-        sourcemap: true,
         banner
       }
     ],
