@@ -1278,6 +1278,12 @@ function walkBlock(cursor: Cursor<Token>, input: string): Block[] {
     return [table(cursor, input)];
   } else if (cursor.value!.type === TokenType.Literal) {
     return keyValue(cursor, input);
+  } else if (cursor.value!.type === TokenType.Equal) {
+    throw new ParseError(
+      input,
+      cursor.value!.loc.start,
+      `Missing key before '='`
+    );
   } else {
     throw new ParseError(
       input,
