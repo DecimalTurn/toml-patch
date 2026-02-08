@@ -104,3 +104,11 @@ test('should return correct error for invalid escape sequence in dotted key', ()
     Array.from(parseTOML(invalid_escape));
   }).toThrow(/Invalid escape sequence: \\q/);
 });
+
+test('should return correct ParseError (not TypeError) for incomplete table at EOF', () => {
+  const incomplete_table = `[`;
+  
+  expect(() => {
+    Array.from(parseTOML(incomplete_table));
+  }).toThrow(/Expected table key, reached end of file/);
+});
