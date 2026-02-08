@@ -34,6 +34,29 @@ export function* tokenize(input: string): IterableIterator<Token> {
   const locate = createLocate(input);
 
   while (!cursor.done) {
+    const code = cursor.value!.charCodeAt(0);
+    // TOML does not allow ASCII control characters other than HT (TAB), LF, and CR.
+    // CR is only allowed as part of CRLF and is validated below.
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09 && code !== 0x0d && code !== 0x0a) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+      );
+    }
+
+    // CR (0x0D) is only allowed as part of CRLF
+    if (cursor.value === '\r') {
+      const next = cursor.peek();
+      if (next.done || next.value !== '\n') {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          'Invalid standalone CR (\\r); CR must be part of a CRLF sequence'
+        );
+      }
+    }
+
     if (IS_WHITESPACE.test(cursor.value!)) {
       // (skip whitespace)
     } else if (cursor.value === '[' || cursor.value === ']') {
@@ -49,7 +72,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       yield specialCharacter(cursor, locate, TokenType.Dot);
     } else if (cursor.value === '#') {
       // Handle comments = # -> EOL
-      yield comment(cursor, locate);
+      yield comment(cursor, locate, input);
     } else {
       const multiline_char =
         checkThree(input, cursor.index, SINGLE_QUOTE) ||
@@ -71,11 +94,28 @@ function specialCharacter(cursor: Cursor<string>, locate: Locator, type: TokenTy
   return { type, raw: cursor.value!, loc: locate(cursor.index, cursor.index + 1) };
 }
 
-function comment(cursor: Cursor<string>, locate: Locator): Token {
+function comment(cursor: Cursor<string>, locate: Locator, input: string): Token {
   const start = cursor.index;
   let raw = cursor.value!;
-  while (!cursor.peek().done && !IS_NEW_LINE.test(cursor.peek().value!)) {
+
+  // TOML comment ends at CR or LF.
+  while (
+    !cursor.peek().done &&
+    cursor.peek().value !== '\n' &&
+    cursor.peek().value !== '\r'
+  ) {
     cursor.next();
+
+    const code = cursor.value!.charCodeAt(0);
+    // Disallow ASCII control characters in comments (except HT / TAB).
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09) {
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+      );
+    }
+
     raw += cursor.value!;
   }
 
@@ -95,22 +135,105 @@ function multiline(
   input: string
 ): Token {
   const start = cursor.index;
-  let quotes = multiline_char + multiline_char + multiline_char;
+  const quotes = multiline_char + multiline_char + multiline_char;
   let raw = quotes;
 
-  // Skip over quotes
+  // Skip over opening quotes
   cursor.next();
   cursor.next();
   cursor.next();
 
-  // The reason why we need to check if there is more than three is because we have to match the last 3 quotes, not the first 3 that appears consecutively
-  // See spec-string-basic-multiline-9.toml
-  while (!cursor.done && (!checkThree(input, cursor.index, multiline_char) || CheckMoreThanThree(input, cursor.index, multiline_char))) {
+  // Multiline strings close on the first unescaped """ / '''.
+  // A run of 4 or 5 quote characters at the end is allowed to include 1 or 2 quotes
+  // immediately before the closing delimiter, but 6+ consecutive quotes is invalid.
+  while (!cursor.done) {
+    const found = checkThree(input, cursor.index, multiline_char);
+    if (found) {
+      let runLength = 3;
+      while (input[cursor.index + runLength] === multiline_char) {
+        runLength++;
+      }
+
+      if (runLength >= 6) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Invalid multiline string: ${runLength} consecutive ${multiline_char} characters`
+        );
+      }
+
+      if (runLength === 3) {
+        break;
+      }
+
+      // runLength is 4 or 5: keep the leading 1 or 2 quote chars as content,
+      // and close on the last 3.
+      raw += multiline_char.repeat(runLength - 3);
+      for (let i = 0; i < runLength - 3; i++) {
+        cursor.next();
+      }
+      break;
+    }
+
+    if (cursor.value === '\r') {
+      const next = cursor.peek();
+      if (next.done || next.value !== '\n') {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          'Invalid standalone CR (\\r) in multiline string (must be part of CRLF sequence)'
+        );
+      }
+    }
+
+    // Validate control characters in multiline strings
+    const code = cursor.value!.charCodeAt(0);
+    // In multiline strings, control characters are not allowed except tab (0x09), LF (0x0A), and CR (0x0D as part of CRLF)
+    // DEL (0x7F) is also not allowed
+    if ((code <= 0x1f || code === 0x7f) && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      const stringType = multiline_char === DOUBLE_QUOTE ? 'multiline basic strings' : 'multiline literal strings';
+      const hexCode = `0x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+      
+      // Provide friendly names for common control characters
+      let charName = '';
+      if (code === 0x00) {
+        charName = 'Null';
+      } else if (code === 0x7f) {
+        charName = 'DEL';
+      }
+      
+      const message = charName 
+        ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
+        : `Control character ${hexCode} is not allowed in ${stringType}`;
+      
+      throw new ParseError(
+        input,
+        findPosition(input, cursor.index),
+        message
+      );
+    }
+
     raw += cursor.value;
     cursor.next();
   }
 
   if (cursor.done) {
+    // Check if the issue might be caused by escape sequences preventing proper closure
+    // For multiline basic strings ("""), check if there are backslashes near the end that might be escaping quotes
+    if (multiline_char === DOUBLE_QUOTE) {
+      // Check the last few characters before EOF for patterns like \""" or \"
+      const precedingText = input.slice(0, cursor.index);
+      const hasEscapedQuotes = /\\"+$/.test(precedingText);
+      
+      if (hasEscapedQuotes) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Expected close of multiline string with ${quotes}, reached end of file. Check for escape sequences (\\) that may be preventing proper string closure`
+        );
+      }
+    }
+    
     throw new ParseError(
       input,
       findPosition(input, cursor.index),
@@ -184,6 +307,40 @@ function string(cursor: Cursor<string>, locate: Locator, input: string): Token {
 
   while (!cursor.done && !isFinished(cursor)) {
     cursor.next();
+
+    // Validate control characters in quoted strings
+    if (double_quoted || single_quoted) {
+      const code = cursor.value!.charCodeAt(0);
+      // In basic strings (double-quoted) and literal strings (single-quoted),
+      // control characters are not allowed except tab (0x09)
+      // DEL (0x7F) is also not allowed
+      if ((code <= 0x1f || code === 0x7f) && code !== 0x09) {
+        const stringType = double_quoted ? 'basic strings' : 'literal strings';
+        const hexCode = `0x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+        
+        // Provide friendly names for common control characters
+        let charName = '';
+        if (code === 0x0a) {
+          charName = 'Newline';
+        } else if (code === 0x0d) {
+          charName = 'Carriage return';
+        } else if (code === 0x00) {
+          charName = 'Null';
+        } else if (code === 0x7f) {
+          charName = 'DEL';
+        }
+        
+        const message = charName 
+          ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
+          : `Control character ${hexCode} is not allowed in ${stringType}`;
+        
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          message
+        );
+      }
+    }
 
     if (cursor.value === DOUBLE_QUOTE) double_quoted = !double_quoted;
     if (cursor.value === SINGLE_QUOTE && !double_quoted) single_quoted = !single_quoted;

@@ -75,6 +75,44 @@ function isBackslashEscaped(source: string, backslashOffset: number): boolean {
 }
 
 export function unescapeLargeUnicode(escaped: string): string {
+  // First, validate all escape sequences are valid TOML escapes
+  // Valid TOML escape sequences: \b \t \n \f \r \" \\ \uXXXX \UXXXXXXXX \xHH (1.1.0) \e (1.1.0)
+  const ESCAPE_VALIDATION = /\\(.)/g;
+  let match;
+  while ((match = ESCAPE_VALIDATION.exec(escaped)) !== null) {
+    const offset = match.index;
+    if (isBackslashEscaped(escaped, offset)) {
+      continue; // This backslash is itself escaped, so skip
+    }
+    
+    const escapeChar = match[1];
+    // Valid single-char escapes: b, t, n, f, r, ", \, e
+    // Valid multi-char escapes: u (followed by 4 hex), U (followed by 8 hex), x (followed by 2 hex)
+    const validEscapes = ['b', 't', 'n', 'f', 'r', '"', '\\', 'e', 'u', 'U', 'x'];
+    if (!validEscapes.includes(escapeChar)) {
+      throw new Error(`Invalid escape sequence: \\${escapeChar}`);
+    }
+  }
+
+  // Validate \uXXXX sequences don't use surrogate codepoints (0xD800-0xDFFF)
+  const SMALL_UNICODE = /\\u([a-fA-F0-9]{4})/g;
+  const smallUnicodeSource = escaped;
+  while ((match = SMALL_UNICODE.exec(smallUnicodeSource)) !== null) {
+    const offset = match.index;
+    if (isBackslashEscaped(smallUnicodeSource, offset)) {
+      continue;
+    }
+    
+    const hex = match[1];
+    const codePoint = parseInt(hex, 16);
+    // Surrogate pair range: 0xD800-0xDFFF
+    // High surrogates: 0xD800-0xDBFF
+    // Low surrogates: 0xDC00-0xDFFF
+    if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
+      throw new Error(`Invalid Unicode escape: \\u${hex} (surrogate codepoints are not allowed)`);
+    }
+  }
+
   // TOML 1.1.0: Handle \xHH hex escapes (for codepoints < 255)
   const HEX_ESCAPE = /\\x([a-fA-F0-9]{2})/g;
   const hexEscapeSource = escaped;

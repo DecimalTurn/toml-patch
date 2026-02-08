@@ -1,4 +1,9 @@
-export function iterator<T>(value: Iterable<T>): Iterator<T> {
+export function iterator(value: string): Iterator<string>;
+export function iterator<T>(value: Iterable<T>): Iterator<T>;
+export function iterator<T>(value: Iterable<T> | string): Iterator<T | string> {
+  if (typeof value === 'string') {
+    return utf16Iterator(value);
+  }
   return value[Symbol.iterator]();
 }
 
@@ -66,4 +71,17 @@ export default class Cursor<T> implements Iterator<T | undefined> {
 
 function done(): IteratorResult<undefined> {
   return { value: undefined, done: true };
+}
+
+/**
+ * Creates a UTF-16 code unit iterator for a string.
+ * This is necessary because cursor.index is used to access string positions
+ * via input[cursor.index] and input.slice() throughout the tokenizer.
+ * While Symbol.iterator yields code points (better for humans), we need
+ * UTF-16 indices for correct string access in JavaScript.
+ */
+function* utf16Iterator(str: string): Generator<string, void, unknown> {
+  for (let i = 0; i < str.length; i++) {
+    yield str[i];
+  }
 }

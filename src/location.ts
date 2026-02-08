@@ -5,6 +5,7 @@ export interface Location {
 
 export interface Position {
   // Note: line is 1-indexed while column is 0-indexed
+  // Index is UTF-16 based (from cursor), but column display uses code points for UX
   line: number;
   column: number;
 }
@@ -55,22 +56,31 @@ export function findPosition(input: string | number[], index: number): Position 
 
 export function getLine(input: string, position: Position): string {
   const lines = findLines(input);
-  const start = lines[position.line - 2] || 0;
+
+  const start = lines[position.line - 2] !== undefined ? lines[position.line - 2] + 1 : 0;
   const end = lines[position.line - 1] || input.length;
 
   return input.substring(start, end);
 }
 
 export function findLines(input: string): number[] {
-  // exec is stateful, so create new regexp each time
-  const BY_NEW_LINE = /\r\n|\n/g;
   const indexes: number[] = [];
 
-  let match;
-  while ((match = BY_NEW_LINE.exec(input)) != null) {
-    indexes.push(match.index + match[0].length - 1);
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '\n') {
+      indexes.push(i);
+    } else if (char === '\r') {
+      // Handle \r\n as a single line break
+      if (input[i + 1] === '\n') {
+        indexes.push(i + 1); // Position after \r\n
+        i++; // Skip the \n
+      } else {
+        indexes.push(i);
+      }
+    }
   }
-  indexes.push(input.length + 1);
+  indexes.push(input.length);
 
   return indexes;
 }

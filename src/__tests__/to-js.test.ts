@@ -83,6 +83,14 @@ a = [1, 2, 3]
 a.b = 4
 `;
 
+const inline_table_duplicate_key = `
+t = { a = 1, a = 2 }
+`;
+
+const inline_table_conflicting_key = `
+t = { a.b = 1, a.b.c = 2 }
+`;
+
 describe('validation', () => {
   test("it shouldn't allow writing to the same key multiple times", () => {
     expect(() => toJS(parseTOML(multiple_keys))).toThrow(
@@ -117,6 +125,18 @@ describe('validation', () => {
   test("it shouldn't allow appending key to inline array", () => {
     expect(() => toJS(parseTOML(inline_array_key))).toThrow(
       /Invalid key\, cannot add to a static array/
+    );
+  });
+
+  test("it shouldn't allow duplicate keys in inline tables", () => {
+    expect(() => toJS(parseTOML(inline_table_duplicate_key))).toThrow(
+      /Duplicate key "a" in inline table/
+    );
+  });
+
+  test("it shouldn't allow conflicting keys in inline tables", () => {
+    expect(() => toJS(parseTOML(inline_table_conflicting_key))).toThrow(
+      /Key "a\.b\.c" conflicts with already defined key "a\.b" in inline table/
     );
   });
 });

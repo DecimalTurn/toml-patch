@@ -1,7 +1,7 @@
 /**
  * Tests for LocalTime handling of midnight boundary crossings
  * 
- * The LocalTime class uses a fixed date (1970-01-01) for time-only values.
+ * The LocalTime class uses a fixed date (0000-01-01) for time-only values.
  * This test suite verifies behavior when time arithmetic causes the underlying
  * Date to roll over to a different day (e.g., adding hours to 23:00:00).
  */
