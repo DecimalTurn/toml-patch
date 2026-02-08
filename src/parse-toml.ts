@@ -282,10 +282,13 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       : key.loc!.start.line; // Both use the opening bracket line
     
     if (cursor.value!.loc.start.line !== headerStartLine) {
+      const closingBracket = is_table ? ']' : ']]';
       throw new ParseError(
         input,
         cursor.value!.loc.start,
-        `Table header must not contain newlines. Expected closing bracket on line ${headerStartLine}, found on line ${cursor.value!.loc.start.line}`
+        is_table
+          ? `Table header must not contain newlines. Expected closing ']' on line ${headerStartLine}, found on line ${cursor.value!.loc.start.line}`
+          : `Unclosed array of tables header: expected closing ']]' on line ${headerStartLine}, found newline`
       );
     }
   }
