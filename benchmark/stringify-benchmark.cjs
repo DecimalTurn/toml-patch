@@ -21,7 +21,8 @@ const mri = require('mri');
 const TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
-    path: '../'
+    path: '../dist/toml-patch.js',
+    esm: true
   },
   { 
     name: 'toml-patch (published)',
@@ -62,37 +63,36 @@ const implementationsToRun = packageIndex !== undefined ?
   [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
 
-// First load the current version to parse all TOML files
-const currentToml = require('../');
+// Main async function to handle ESM imports and run benchmarks
+(async function main() {
+  // First load the current version to parse all TOML files
+  const currentToml = await import('../dist/toml-patch.js');
 
-// Determine which files to benchmark
-const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
-               file ? `*${file}*.toml` : 
-               filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
+  // Determine which files to benchmark
+  const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
+                 file ? `*${file}*.toml` : 
+                 filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
 
-const benchmark_dir = join(__dirname, '../submodules/iarna-toml/benchmark');
-const searchPattern = join(benchmark_dir, search).replace(/\\/g, '/');
-const benchmarks = glob(searchPattern).map(path => {
-  const name = basename(path, '.toml');
-  const data = readFileSync(path, 'utf8');
-  try {
-    // Parse the TOML data to get a JS object
-    const parsed = currentToml.parse(data);
-    return { name, data, parsed };
-  } catch (error) {
-    console.error(`Error parsing ${name}: ${error.message}`);
-    return null;
+  const benchmark_dir = join(__dirname, '../submodules/iarna-toml/benchmark');
+  const searchPattern = join(benchmark_dir, search).replace(/\\/g, '/');
+  const benchmarks = glob(searchPattern).map(path => {
+    const name = basename(path, '.toml');
+    const data = readFileSync(path, 'utf8');
+    try {
+      // Parse the TOML data to get a JS object
+      const parsed = currentToml.parse(data);
+      return { name, data, parsed };
+    } catch (error) {
+      console.error(`Error parsing ${name}: ${error.message}`);
+      return null;
+    }
+  }).filter(Boolean);
+
+  if (!benchmarks.length) {
+    throw new Error(`No matching benchmarks found for ${example ? '--example' : 
+                                                       file ? `--file ${file}` : 
+                                                       filter.length > 0 ? filter.join(' ') : 'all files'}`);
   }
-}).filter(Boolean);
-
-if (!benchmarks.length) {
-  throw new Error(`No matching benchmarks found for ${example ? '--example' : 
-                                                     file ? `--file ${file}` : 
-                                                     filter.length > 0 ? filter.join(' ') : 'all files'}`);
-}
-
-// Run benchmarks for each implementation
-(async function runImplementations() {
   for (const implementation of implementationsToRun) {
     // Load TOML module
     let tomlModule;
@@ -114,7 +114,7 @@ if (!benchmarks.length) {
       await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
     }
   }
-})();
+  // Run benchmarks for each implementation
 
 /**
  * Runs a general benchmark suite for stringify operations
@@ -212,4 +212,4 @@ function runDetailedBenchmarks(benchmarks, tomlModule, implementationName) {
       console.log(`${name}: Error - ${error.message}`);
     }
   });
-}
+}})();
