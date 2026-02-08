@@ -203,6 +203,22 @@ function multiline(
   }
 
   if (cursor.done) {
+    // Check if the issue might be caused by escape sequences preventing proper closure
+    // For multiline basic strings ("""), check if there are backslashes near the end that might be escaping quotes
+    if (multiline_char === DOUBLE_QUOTE) {
+      // Check the last few characters before EOF for patterns like \""" or \"
+      const precedingText = input.slice(0, cursor.index);
+      const hasEscapedQuotes = /\\"+$/.test(precedingText);
+      
+      if (hasEscapedQuotes) {
+        throw new ParseError(
+          input,
+          findPosition(input, cursor.index),
+          `Expected close of multiline string with ${quotes}, reached end of file. Check for escape sequences (\\) that may be preventing proper string closure`
+        );
+      }
+    }
+    
     throw new ParseError(
       input,
       findPosition(input, cursor.index),
