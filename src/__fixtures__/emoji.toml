@@ -7,4 +7,4 @@ description = "🚀 TOML parser"
 "test🌟value" = 123
 
 [section]
-emoji_array = ["🎉", "🎊", "🎈"]
+emoji_array = ["🎉","🎊","🎈"]

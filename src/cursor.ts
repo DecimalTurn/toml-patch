@@ -1,28 +1,9 @@
 export function iterator(value: string): Iterator<string>;
 export function iterator<T>(value: Iterable<T>): Iterator<T>;
 export function iterator<T>(value: Iterable<T> | string): Iterator<T | string> {
-  // NOTE: JavaScript's default string iterator iterates over Unicode code points.
-  // This means Cursor.index would count code points, while our locator utilities
-  // (see `src/location.ts`) use JS string indices (UTF-16 code units).
-  // For non-BMP characters (surrogate pairs), that mismatch produces incorrect
-  // token locations.
-  //
-  // To keep Cursor.index aligned with string indices, iterate strings by UTF-16
-  // code units instead.
   if (typeof value === 'string') {
-    let index = 0;
-    return {
-      next(): IteratorResult<string> {
-        if (index >= value.length) {
-          return { value: undefined as unknown as string, done: true };
-        }
-        const ch = value.charAt(index);
-        index += 1;
-        return { value: ch, done: false };
-      }
-    };
+    return utf16Iterator(value);
   }
-
   return value[Symbol.iterator]();
 }
 
@@ -90,4 +71,17 @@ export default class Cursor<T> implements Iterator<T | undefined> {
 
 function done(): IteratorResult<undefined> {
   return { value: undefined, done: true };
+}
+
+/**
+ * Creates a UTF-16 code unit iterator for a string.
+ * This is necessary because cursor.index is used to access string positions
+ * via input[cursor.index] and input.slice() throughout the tokenizer.
+ * While Symbol.iterator yields code points (better for humans), we need
+ * UTF-16 indices for correct string access in JavaScript.
+ */
+function* utf16Iterator(str: string): Generator<string, void, unknown> {
+  for (let i = 0; i < str.length; i++) {
+    yield str[i];
+  }
 }

@@ -1308,11 +1308,10 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   if (rawKeyToken.endsWith(':')) {
     throw new ParseError(
       input,
-      { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + rawKeyToken.length - 1 },
+      { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + [...rawKeyToken].length - 1 },
       `Use '=' to separate keys and values, not ':'`
     );
   }
-
   // Validate that multiline strings are not used as keys
   if (rawKeyToken.startsWith('"""') || rawKeyToken.startsWith("'''") ) {
     throw new ParseError(

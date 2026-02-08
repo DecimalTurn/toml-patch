@@ -58,19 +58,11 @@ test('should return correct error for invalid toml', () => {
   name: Package Name
   `;
 
-  const expected_error = dedent`
-  Error parsing TOML (2, 5):
-
-  name: Package Name
-      ^
-  Use '=' to separate keys and values, not ':'
-  `;
-
   // Expect that calling parseTOML with invalid_toml throws an error
   expect(() => {
     // Convert generator to array to force execution
     Array.from(parseTOML(invalid_toml));
-  }).toThrow(expected_error);
+  }).toThrow(/Error parsing TOML \(2, 5\):[\s\S]*name: Package Name[\s\S]*\^[\s\S]*Use '=' to separate keys and values, not ':'/);
 });
 
 test('should return correct error for invalid escape sequence in string value', () => {

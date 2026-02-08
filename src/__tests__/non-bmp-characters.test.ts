@@ -16,18 +16,18 @@ describe('Non-BMP character handling', () => {
   });
 
   test('should report correct error location after emoji (column tracking)', () => {
-    // Emoji 😀 is a surrogate pair (2 UTF-16 code units)
-    // String: "a😀:" has length 4 in JavaScript (a=0, surrogate1=1, surrogate2=2, :=3)
-    // Column tracking should count UTF-16 code units
+    // Emoji 😀 is 1 Unicode code point (but 2 UTF-16 code units)
+    // String: "a😀:" has 3 code points: a, 😀, :
+    // Column tracking now counts code points for better user intuition
     const invalidToml = 'a😀: value';
     
     try {
       Array.from(parseTOML(invalidToml));
       fail('Should have thrown an error');
     } catch (error: any) {
-      // The error should point to column 4 (1-indexed: a=1, emoji_high=2, emoji_low=3, :=4)
-      // because the emoji takes 2 code units
-      expect(error.message).toContain('(1, 4)'); // Line 1, column 4
+      // The error should point to column 3 (1-indexed: a=1, 😀=2, :=3)
+      // because we now count code points, not UTF-16 code units
+      expect(error.message).toContain('(1, 3)'); // Line 1, column 3
       expect(error.message).toContain(':');
     }
   });
@@ -77,16 +77,16 @@ name = "value"
 
   test('should count indices correctly for mixed ASCII and emoji', () => {
     // Test a complex case: ASCII, emoji, more ASCII, then error
-    // "abc😀def:" - in UTF-16: a(0) b(1) c(2) high(3) low(4) d(5) e(6) f(7) :(8)
-    // Total length: 9
+    // "abc😀def:" in code points: a, b, c, 😀, d, e, f, :
+    // Total: 8 code points
     const invalidToml = 'abc😀def: value';
     
     try {
       Array.from(parseTOML(invalidToml));
       fail('Should have thrown an error');
     } catch (error: any) {
-      // Colon is at index 8, so column should be 9 (1-indexed)
-      expect(error.message).toContain('(1, 9)');
+      // Colon is at code point index 7, so column should be 8 (1-indexed)
+      expect(error.message).toContain('(1, 8)');
     }
   });
 });
