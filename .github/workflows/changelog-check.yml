@@ -1,0 +1,38 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  changelog:
+    # Skip drafts; enforce once PR is ready.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ensure CHANGELOG.md updated
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          echo "Base SHA: ${base_sha}"
+          echo "Head SHA: ${head_sha}"
+
+          echo "Changed files:"
+          git diff --name-only "${base_sha}" "${head_sha}" | tee changed_files.txt
+
+          if ! grep -qx "CHANGELOG.md" changed_files.txt; then
+            echo "::error file=CHANGELOG.md::This PR must include an update to CHANGELOG.md."
+            exit 1
+          fi
