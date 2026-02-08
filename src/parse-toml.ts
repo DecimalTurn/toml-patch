@@ -450,6 +450,22 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   };
 }
 
+// Helper function to calculate days in a month for any year (including 0-99)
+// JavaScript's Date constructor treats years 0-99 as 1900-1999, so we need manual calculation
+function getDaysInMonth(year: number, month: number): number {
+  // Month is 1-12
+  const daysPerMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  
+  if (month === 2) {
+    // Check if it's a leap year
+    // Leap year rules: divisible by 4, except century years (divisible by 100) unless also divisible by 400
+    const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+    return isLeapYear ? 29 : 28;
+  }
+  
+  return daysPerMonth[month - 1];
+}
+
 // Helper function to validate datetime format
 function validateDateTimeFormat(raw: string, input: string, loc: any): void {
   // Group 9: fractional seconds and timezone offset validation.
@@ -675,7 +691,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
     
     // Check if day is valid for the specific month
     const yearNum = parseInt(year, 10);
-    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+    const daysInMonth = getDaysInMonth(yearNum, monthNum);
     if (dayNum > daysInMonth) {
       throw new ParseError(input, loc, `Invalid date "${raw}": day ${day} is invalid for month ${month} in year ${year}`);
     }
