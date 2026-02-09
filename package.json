@@ -43,7 +43,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@0.6.0",
+    "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@0.7.0",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/dedent": "^0.7.2",
