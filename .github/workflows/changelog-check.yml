@@ -6,8 +6,8 @@ on:
 
 jobs:
   changelog:
-    # Skip drafts; enforce once PR is ready.
-    if: ${{ !github.event.pull_request.draft }}
+    # Skip drafts and renovate bot PRs; enforce once PR is ready.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.login != 'renovate[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
