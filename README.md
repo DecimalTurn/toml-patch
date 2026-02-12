@@ -37,7 +37,7 @@ Hopefully, the work done here can go upstream one day if timhall returns, but un
   - [Complete Example](#complete-example)
   - [Legacy Format Objects](#legacy-format-objects)
 - [Changelog](#changelog)
-- [Development](#development)
+- [Contributing](#contributing)
 
 
 ## Installation
@@ -622,13 +622,8 @@ const result = stringify(data, format);
 
 For a detailed history of changes, see the [CHANGELOG](CHANGELOG.md).
 
-## Development
+## Contributing
 
-1. Update submodules: `git submodule update --remote`
-2. Typecheck: `npm run typecheck`
-3. Build: `npm run build`
-4. Test: `npm test`
-5. Specs compliance: `npm run specs`
-6. Benchmark: `npm run benchmark`
+We welcome contributions! Please see the [CONTRIBUTING](CONTRIBUTING.md) guide for details on how to get started, development workflow, and pull request requirements.
 
 [^1]: Tim Hall has been inactive on most of his open source projects for more than 3 years. The sentence wording was inspired by the npm-run-all2 project.
