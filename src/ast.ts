@@ -131,7 +131,7 @@ export interface KeyValue extends Node {
   key: Key;
   value: Value;
 
-  // Column index (0-based) of the equals sign
+  // Column index (0-based) of equals sign
   equals: number;
 }
 export function isKeyValue(node: Node): node is KeyValue {
