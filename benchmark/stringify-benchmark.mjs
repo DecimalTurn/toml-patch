@@ -11,12 +11,16 @@
  *   --file <n>       Run specific file(s) matching pattern
  */
 
-const { join, basename } = require('path');
-const { readFileSync, existsSync, mkdirSync } = require('fs');
-const { Suite, formatNumber } = require('benchmark');
-const { sync: glob } = require('glob');
-const { execSync } = require('child_process');
-const mri = require('mri');
+import { join, basename, resolve, dirname } from 'path';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
+import Benchmark from 'benchmark';
+import { globSync } from 'glob';
+import mri from 'mri';
+
+const { Suite, formatNumber } = Benchmark;
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ANSI color codes
 const colors = {
@@ -73,14 +77,17 @@ function createTable(headers, rows) {
 }
 
 /**
- * Install a specific version to the cache directory
- * @param {string} version - Version to install (e.g., '0.6.0')
- * @returns {string} - Path to the installed module
+ * Install a package to the cache directory
+ * @param {string} packageName - npm package name (e.g., '@decimalturn/toml-patch')
+ * @param {string} [version] - Version to install (e.g., '0.6.0'), or empty for latest
+ * @returns {string|null} - Path to the installed module
  */
-function installVersionToCache(version) {
+function installPackageToCache(packageName, version) {
   const cacheDir = join(__dirname, '../.bench-cache');
-  const versionDir = join(cacheDir, `toml-patch-${version}`);
-  const modulePath = join(versionDir, 'node_modules', '@decimalturn', 'toml-patch');
+  const cacheKey = version ? `${packageName.replace(/[\/@ ]/g, '-')}-${version}` : packageName.replace(/[\/@ ]/g, '-');
+  const versionDir = join(cacheDir, cacheKey);
+  const modulePath = join(versionDir, 'node_modules', packageName);
+  const spec = version ? `${packageName}@${version}` : packageName;
   
   // Check if already cached
   if (existsSync(modulePath)) {
@@ -88,32 +95,50 @@ function installVersionToCache(version) {
   }
   
   // Create cache directory if needed
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
-  }
   if (!existsSync(versionDir)) {
     mkdirSync(versionDir, { recursive: true });
   }
   
-  console.log(c.info(`  📦 Installing v${version} to cache...`));
+  console.log(c.info(`  📦 Installing ${spec} to cache...`));
   
   try {
-    // Install to cache directory
     execSync(
-      `npm install --prefix "${versionDir}" --no-save --no-package-lock @decimalturn/toml-patch@${version}`,
+      `npm install --prefix "${versionDir}" --no-save --no-package-lock ${spec}`,
       { stdio: 'pipe' }
     );
     
     if (existsSync(modulePath)) {
-      console.log(c.success(`  ✓ Cached v${version}`));
+      console.log(c.success(`  ✓ Cached ${spec}`));
       return modulePath;
     } else {
       throw new Error('Installation completed but module not found');
     }
   } catch (error) {
-    console.error(c.error(`  ❌ Failed to install v${version}: ${error.message}`));
+    console.error(c.error(`  ❌ Failed to install ${spec}: ${error.message}`));
     return null;
   }
+}
+
+/**
+ * Dynamically import a module, resolving ESM entry points for cached packages.
+ * @param {string} modulePath - Absolute or relative path to the module
+ * @returns {Promise<object>} - The imported module
+ */
+async function loadModule(modulePath) {
+  const absPath = resolve(__dirname, modulePath);
+  let importPath = absPath;
+
+  // For directories, resolve entry point from package.json
+  const pkgJsonPath = join(absPath, 'package.json');
+  if (existsSync(pkgJsonPath)) {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+    const entry = (pkg.exports && (typeof pkg.exports === 'string' ? pkg.exports :
+      pkg.exports.import || (pkg.exports['.'] && (typeof pkg.exports['.'] === 'string' ? pkg.exports['.'] : pkg.exports['.'].import)))) 
+      || pkg.module || pkg.main;
+    if (entry) importPath = join(absPath, entry);
+  }
+
+  return import(importPath);
 }
 
 // Parse command line args
@@ -126,15 +151,15 @@ const { help, example, detailed, package: packageIndex, file, versions, _: filte
 if (help) {
   console.log(`Run stringify benchmarks for TOML implementations
   
-Usage: node benchmark/stringify-benchmark.js [options]
+Usage: node benchmark/stringify-benchmark.mjs [options]
 
 Options:
   --example          Just run benchmark for spec example
   --detailed         Run detailed profiling of stringify components
   --package <n>      Run benchmark for specific implementation:
-                       0: toml-patch (current) (default)
-                       1: toml-patch (published)
-                       2: @iarna/toml
+                       0: toml-patch (current)
+                       1: @iarna/toml
+                       2: smol-toml
   --file <pattern>   Run specific file(s) matching pattern
   --versions <list>  Test specific versions (comma-separated)
                      Example: --versions 0.6.0,0.7.0
@@ -147,18 +172,16 @@ let TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
     path: '../dist/toml-patch.js',
-    esm: true
-  },
-  { 
-    name: 'toml-patch (published)',
-    path: '../node_modules/@decimalturn/toml-patch'
   },
   {
     name: '@iarna/toml',
-    path: '../submodules/iarna-toml/toml'
+    path: '../submodules/iarna-toml/toml.js',
+  },
+  {
+    name: 'smol-toml',
+    path: installPackageToCache('smol-toml'),
   }
-  
-];
+].filter(impl => impl.path != null);
 
 // Add specific versions if requested
 if (versions) {
@@ -169,7 +192,7 @@ if (versions) {
   
   const versionImpls = [];
   for (const version of versionList) {
-    const modulePath = installVersionToCache(version);
+    const modulePath = installPackageToCache('@decimalturn/toml-patch', version);
     if (modulePath) {
       versionImpls.push({
         name: `toml-patch (v${version})`,
@@ -192,58 +215,57 @@ const implementationsToRun = packageIndex !== undefined ?
   [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
 
-// Main async function to handle ESM imports and run benchmarks
-(async function main() {
-  // First load the current version to parse all TOML files
-  const currentToml = await import('../dist/toml-patch.js');
+// First load the current version to parse all TOML files
+const currentToml = await loadModule('../dist/toml-patch.js');
 
-  // Determine which files to benchmark
-  const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
-                 file ? `*${file}*.toml` : 
-                 filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
+// Determine which files to benchmark
+const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
+               file ? `*${file}*.toml` : 
+               filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
 
-  const benchmark_dir = join(__dirname, '../submodules/iarna-toml/benchmark');
-  const searchPattern = join(benchmark_dir, search).replace(/\\/g, '/');
-  const benchmarks = glob(searchPattern).map(path => {
-    const name = basename(path, '.toml');
-    const data = readFileSync(path, 'utf8');
-    try {
-      // Parse the TOML data to get a JS object
-      const parsed = currentToml.parse(data);
-      return { name, data, parsed };
-    } catch (error) {
-      console.error(`Error parsing ${name}: ${error.message}`);
-      return null;
-    }
-  }).filter(Boolean);
-
-  if (!benchmarks.length) {
-    throw new Error(`No matching benchmarks found for ${example ? '--example' : 
-                                                       file ? `--file ${file}` : 
-                                                       filter.length > 0 ? filter.join(' ') : 'all files'}`);
+const benchmark_dir = join(__dirname, '../submodules/iarna-toml/benchmark');
+const searchPattern = join(benchmark_dir, search).replace(/\\/g, '/');
+const benchmarks = globSync(searchPattern).map(path => {
+  const name = basename(path, '.toml');
+  const data = readFileSync(path, 'utf8');
+  try {
+    // Parse the TOML data to get a JS object
+    const parsed = currentToml.parse(data);
+    return { name, data, parsed };
+  } catch (error) {
+    console.error(`Error parsing ${name}: ${error.message}`);
+    return null;
   }
-  for (const implementation of implementationsToRun) {
-    // Load TOML module
-    let tomlModule;
-    try {
-      tomlModule = require(implementation.path);
-    } catch (error) {
-      console.error(`Error loading ${implementation.name}: ${error.message}`);
-      continue;
-    }
+}).filter(Boolean);
 
-    console.log('\n' + c.title('═'.repeat(60)));
-    console.log(c.title(`  📝 Stringify Benchmark: ${implementation.name}`));
-    console.log(c.title('═'.repeat(60)) + '\n');
+if (!benchmarks.length) {
+  throw new Error(`No matching benchmarks found for ${example ? '--example' : 
+                                                     file ? `--file ${file}` : 
+                                                     filter.length > 0 ? filter.join(' ') : 'all files'}`);
+}
 
-    // Run detailed benchmarks if requested
-    if (detailed) {
-      runDetailedBenchmarks(benchmarks, tomlModule, implementation.name);
-    } else {
-      await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
-    }
+// Run benchmarks for each implementation
+for (const implementation of implementationsToRun) {
+  // Load TOML module
+  let tomlModule;
+  try {
+    tomlModule = await loadModule(implementation.path);
+  } catch (error) {
+    console.error(`Error loading ${implementation.name}: ${error.message}`);
+    continue;
   }
-  // Run benchmarks for each implementation
+
+  console.log('\n' + c.title('═'.repeat(60)));
+  console.log(c.title(`  📝 Stringify Benchmark: ${implementation.name}`));
+  console.log(c.title('═'.repeat(60)) + '\n');
+
+  // Run detailed benchmarks if requested
+  if (detailed) {
+    runDetailedBenchmarks(benchmarks, tomlModule, implementation.name);
+  } else {
+    await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
+  }
+}
 
 /**
  * Runs a general benchmark suite for stringify operations
@@ -378,4 +400,4 @@ function runDetailedBenchmarks(benchmarks, tomlModule, implementationName) {
       console.log(c.error(`❌ ${name}: Error - ${error.message}`));
     }
   });
-}})();
+}

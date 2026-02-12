@@ -42,8 +42,8 @@
     "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:example": "npm-run-all2 \"bench:* -- --example\"",
-    "bench:parse": "node benchmark/parse-benchmark.cjs",
-    "bench:stringify": "node benchmark/stringify-benchmark.cjs",
+    "bench:parse": "node benchmark/parse-benchmark.mjs",
+    "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },
