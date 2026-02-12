@@ -14,7 +14,8 @@
  * - JavaScript-specific object behaviors (duck typing, prototypes, etc.)
  */
 
-const { stringify, TomlFormat } = require("../../../dist/toml-patch.cjs.min.js");
+import { jest } from '@jest/globals';
+import { stringify, TomlFormat, parse } from "../../../dist/toml-patch.js";
 
 describe('stringify() Function JavaScript Integration', () => {
   const testObject = {
@@ -547,7 +548,6 @@ describe('stringify() Function JavaScript Integration', () => {
     // Date objects should preserve their format when stringified back
 
     it('should preserve local date-only format', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'birthday = 1979-05-27';
       const parsed = parse(toml);
@@ -563,7 +563,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve local time-only format', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'alarm = 07:32:00';
       const parsed = parse(toml);
@@ -578,7 +577,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve local datetime with T separator', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27T07:32:00';
       const parsed = parse(toml);
@@ -594,7 +592,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve local datetime with T separator even with 00:00:00', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27T00:00:00';
       const parsed = parse(toml);
@@ -610,7 +607,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve local datetime with space separator', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27 07:32:00';
       const parsed = parse(toml);
@@ -626,7 +622,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve offset datetime with Z', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27T07:32:00Z';
       const parsed = parse(toml);
@@ -640,7 +635,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve offset datetime with numeric offset', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27T00:32:00-07:00';
       const parsed = parse(toml);
@@ -654,7 +648,6 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should preserve offset datetime with space separator', () => {
-      const { parse } = require("../../../dist/toml-patch.cjs.min.js");
       
       const toml = 'timestamp = 1979-05-27 00:32:00-07:00';
       const parsed = parse(toml);

@@ -3,7 +3,7 @@
  * TomlDocument JavaScript integration tests
  */
 
-const { TomlDocument, TomlFormat } = require("../../../dist/toml-patch.cjs.min.js");
+import { TomlDocument, TomlFormat } from "../../../dist/toml-patch.js";
 
 describe('TomlDocument JavaScript Integration', () => {
   const originalToml = `title = "Test App"

@@ -15,7 +15,8 @@
  * 
  */
 
-const { patch, TomlFormat } = require("../../../dist/toml-patch.cjs.min.js");
+import { jest } from '@jest/globals';
+import { patch, TomlFormat } from "../../../dist/toml-patch.js";
 
 describe('patch() Function JavaScript Integration', () => {
   const originalToml = `# Configuration file
@@ -848,8 +849,6 @@ port = 5432
     });
 
     it('should handle TomlFormat constructor with all optional parameters', () => {
-      const { TomlFormat } = require('../../../dist/toml-patch.cjs.min.js');
-
       // Test parameterless constructor - should work and use defaults
       expect(() => {
         const format = new TomlFormat();

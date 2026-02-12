@@ -20,7 +20,8 @@ const mri = require('mri');
 const TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
-    path: '../dist/toml-patch.es.js'
+    path: '../dist/toml-patch.js',
+    esm: true
   },
   { 
     name: 'toml-patch (published)',
@@ -86,7 +87,11 @@ const implementationsToRun = packageIndex !== undefined ?
     // Load TOML module
     let TOML;
     try {
-      TOML = require(implementation.path);
+      if (implementation.esm) {
+        TOML = await import(implementation.path);
+      } else {
+        TOML = require(implementation.path);
+      }
     } catch (error) {
       console.error(`Error loading ${implementation.name}: ${error.message}`);
       continue;

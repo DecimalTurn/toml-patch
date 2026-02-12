@@ -24,21 +24,26 @@
     "encoder",
     "decoder"
   ],
-  "main": "dist/toml-patch.cjs.min.js",
-  "module": "dist/toml-patch.es.js",
-  "browser": "dist/toml-patch.umd.min.js",
-  "types": "dist/toml-patch.d.ts",
+  "type": "module",
+  "types": "./dist/toml-patch.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/toml-patch.d.ts",
+      "import": "./dist/toml-patch.js",
+      "default": "./dist/toml-patch.js"
+    }
+  },
   "scripts": {
     "dev": "npm run typecheck && npm run build && npm-run-all2 --parallel test:all specs",
-    "test": "jest",
-    "test:js": "jest src/__tests__/__js__ --testRegex=\"/__tests__/.*\\.[jt]sx?$\"",
+    "test": "jest --config jest.config.json",
+    "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
     "test:all": "npm run test && npm run test:js",
     "typecheck": "tsc",
-    "specs": "jest --config specs.config.js",
+    "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:example": "npm-run-all2 \"bench:* -- --example\"",
-    "bench:parse": "node benchmark/parse-benchmark.js",
-    "bench:stringify": "node benchmark/stringify-benchmark.js",
+    "bench:parse": "node benchmark/parse-benchmark.cjs",
+    "bench:stringify": "node benchmark/stringify-benchmark.cjs",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },
@@ -64,20 +69,12 @@
     "tslib": "^2.0.0",
     "typescript": "5.9"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "preset": "ts-jest",
-    "testRegex": "/__tests__/(?!__js__).*\\.[jt]sx?$",
-    "snapshotFormat": {
-      "escapeString": true,
-      "printBasicPrototype": true
-    }
-  },
   "prettier": {
     "singleQuote": true,
     "printWidth": 100
   },
   "files": [
-    "dist/"
+    "dist/",
+    "CHANGELOG.md"
   ]
 }
