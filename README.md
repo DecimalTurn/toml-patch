@@ -6,8 +6,9 @@
 
 Patch, parse, and stringify [TOML](https://toml.io/en/) (v1.1.0) while preserving comments and formatting.
 
-Note that this is a maintenance fork of the original toml-patch package. This fork aims at addressing existing issues from the original project, add small to medium sized features and perform dev-dependencies updates. 
-Hopefully, the work done here can go upstream one day if timhall returns, but until then, welcome aboard![^1]
+This project started as a fork of the [original toml-patch](https://github.com/timhall/toml-patch) but has since evolved into a standalone project with significant improvements in reliability and features. We've added TOML v1.1 support, introduced new APIs like `TomlDocument` and `TomlFormat` classes, fixed numerous bugs through comprehensive testing with toml-test, and continue to actively maintain and improve the package.
+
+We hope that these improvements can be incorporated upstream one day if the original author returns, but until then, this project is the actively maintained version.
 
 ## Table of Contents
 
@@ -625,5 +626,3 @@ For a detailed history of changes, see the [CHANGELOG](CHANGELOG.md).
 ## Contributing
 
 We welcome contributions! Please see the [CONTRIBUTING](CONTRIBUTING.md) guide for details on how to get started, development workflow, and pull request requirements.
-
-[^1]: Tim Hall has been inactive on most of his open source projects for more than 3 years. The sentence wording was inspired by the npm-run-all2 project.
