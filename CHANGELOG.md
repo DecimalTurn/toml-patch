@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-02-12
+
 ### Changed
 - **BREAKING**: Migrate to ESM-only distribution, removing CommonJS and UMD builds ([#100](https://github.com/DecimalTurn/toml-patch/pull/100))
   - Package.json now declares `"type": "module"` and uses a modern `exports` field
