@@ -11,9 +11,10 @@
  */
 
 const { join, basename } = require('path');
-const { readFileSync } = require('fs');
+const { readFileSync, existsSync, mkdirSync } = require('fs');
 const { Suite, formatNumber } = require('benchmark');
 const { sync: glob } = require('glob');
+const { execSync } = require('child_process');
 const mri = require('mri');
 
 // ANSI color codes
@@ -70,8 +71,78 @@ function createTable(headers, rows) {
   ].join('\n');
 }
 
+/**
+ * Install a specific version to the cache directory
+ * @param {string} version - Version to install (e.g., '0.6.0')
+ * @returns {string} - Path to the installed module
+ */
+function installVersionToCache(version) {
+  const cacheDir = join(__dirname, '../.bench-cache');
+  const versionDir = join(cacheDir, `toml-patch-${version}`);
+  const modulePath = join(versionDir, 'node_modules', '@decimalturn', 'toml-patch');
+  
+  // Check if already cached
+  if (existsSync(modulePath)) {
+    return modulePath;
+  }
+  
+  // Create cache directory if needed
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+  if (!existsSync(versionDir)) {
+    mkdirSync(versionDir, { recursive: true });
+  }
+  
+  console.log(c.info(`  📦 Installing v${version} to cache...`));
+  
+  try {
+    // Install to cache directory
+    execSync(
+      `npm install --prefix "${versionDir}" --no-save --no-package-lock @decimalturn/toml-patch@${version}`,
+      { stdio: 'pipe' }
+    );
+    
+    if (existsSync(modulePath)) {
+      console.log(c.success(`  ✓ Cached v${version}`));
+      return modulePath;
+    } else {
+      throw new Error('Installation completed but module not found');
+    }
+  } catch (error) {
+    console.error(c.error(`  ❌ Failed to install v${version}: ${error.message}`));
+    return null;
+  }
+}
+
+// Parse command line args
+const { help, example, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'example'],
+  string: ['file', 'versions'],
+  number: ['package']
+});
+
+if (help) {
+  console.log(`Run parse benchmarks for TOML implementations
+  
+Usage: node benchmark/parse-benchmark.js [options]
+
+Options:
+  --example          Just run benchmark for a spec example
+  --package <n>      Run benchmark for specific implementation:
+                       0: toml-patch (current)
+                       1: toml-patch (published)
+                       2: @iarna/toml
+                     (Default: run all implementations)
+  --file <pattern>   Run specific file(s) matching pattern
+  --versions <list>  Test specific versions (comma-separated)
+                     Example: --versions 0.6.0,0.7.0
+                     Versions are automatically downloaded and cached`);
+  process.exit(0);
+}
+
 // Define TOML implementations to test
-const TOML_IMPLEMENTATIONS = [
+let TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
     path: '../dist/toml-patch.js',
@@ -87,26 +158,31 @@ const TOML_IMPLEMENTATIONS = [
   }
 ];
 
-// Parse command line args
-const { help, example, package: packageIndex, file, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'example'],
-  string: ['file'],
-  number: ['package']
-});
-
-if (help) {
-  console.log(`Run parse benchmarks for TOML implementations
+// Add specific versions if requested
+if (versions) {
+  const versionList = versions.split(',').map(v => v.trim());
   
-Usage: node benchmark/parse-benchmark.js [options]
-
-Options:
-  --example       Just run benchmark for a spec example
-  --package <n>   Run benchmark for specific implementation:
-                    0: toml-patch
-                    1: @iarna/toml
-                  (Default: run all implementations)
-  --file <n>      Run specific file(s) matching pattern`);
-  process.exit(0);
+  console.log(c.info(`\n📦 Testing versions: current, ${versionList.join(', ')}`));
+  console.log();
+  
+  const versionImpls = [];
+  for (const version of versionList) {
+    const modulePath = installVersionToCache(version);
+    if (modulePath) {
+      versionImpls.push({
+        name: `toml-patch (v${version})`,
+        path: modulePath
+      });
+    }
+  }
+  
+  // Replace default implementations with current + requested versions
+  TOML_IMPLEMENTATIONS = [
+    TOML_IMPLEMENTATIONS[0], // Keep current
+    ...versionImpls
+  ];
+  
+  console.log();
 }
 
 // Determine which files to benchmark
