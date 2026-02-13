@@ -43,6 +43,20 @@ const IS_DIVIDER = /\_/g;
 const IS_INF = /^[+\-]?inf$/;
 const IS_NAN = /^[+\-]?nan$/;
 const IS_HEX = /^[+\-]?0x/i;
+
+/**
+ * Check if a character code is a valid bare key character (A-Za-z0-9_-).
+ * Uses charCode range checks instead of regex for speed.
+ */
+function isBareKeyCode(code: number): boolean {
+  return (
+    (code >= 0x41 && code <= 0x5a) || // A-Z
+    (code >= 0x61 && code <= 0x7a) || // a-z
+    (code >= 0x30 && code <= 0x39) || // 0-9
+    code === 0x5f ||                   // _
+    code === 0x2d                      // -
+  );
+}
 const IS_OCTAL = /^[+\-]?0o/i;
 const IS_BINARY = /^[+\-]?0b/i;
 
@@ -208,12 +222,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     
     if (!isQuoted) {
       for (let i = 0; i < raw.length; i++) {
-        const char = raw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(raw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${raw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
@@ -246,12 +259,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
       for (let i = 0; i < partRaw.length; i++) {
-        const char = partRaw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
@@ -1348,12 +1360,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   const isQuotedKey = rawKeyToken.startsWith('"') || rawKeyToken.startsWith("'");
   if (!isQuotedKey) {
     for (let i = 0; i < rawKeyToken.length; i++) {
-      const char = rawKeyToken[i];
-      if (!/[A-Za-z0-9_-]/.test(char)) {
+      if (!isBareKeyCode(rawKeyToken.charCodeAt(i))) {
         throw new ParseError(
           input,
           { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-          `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          `Invalid character '${rawKeyToken[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
         );
       }
     }
@@ -1390,12 +1401,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
       for (let i = 0; i < partRaw.length; i++) {
-        const char = partRaw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
