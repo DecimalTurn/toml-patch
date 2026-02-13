@@ -158,6 +158,7 @@ Options:
                        0: toml-patch (current)
                        1: @iarna/toml
                        2: smol-toml
+                       3: @rainbowatcher/toml-edit-js
                      (Default: run all implementations)
   --file <pattern>   Run specific file(s) matching pattern
   --versions <list>  Test specific versions (comma-separated)
@@ -179,6 +180,11 @@ let TOML_IMPLEMENTATIONS = [
   {
     name: 'smol-toml',
     path: installPackageToCache('smol-toml'),
+  },
+  {
+    name: '@rainbowatcher/toml-edit-js',
+    path: installPackageToCache('@rainbowatcher/toml-edit-js'),
+    needsInit: true,
   }
 ].filter(impl => impl.path != null);
 
@@ -241,6 +247,10 @@ for (const implementation of implementationsToRun) {
   let TOML;
   try {
     TOML = await loadModule(implementation.path);
+    // Initialize WASM-based modules if needed
+    if (implementation.needsInit && typeof TOML.init === 'function') {
+      await TOML.init();
+    }
   } catch (error) {
     console.error(`Error loading ${implementation.name}: ${error.message}`);
     continue;
