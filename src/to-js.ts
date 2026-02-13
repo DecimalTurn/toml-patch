@@ -226,15 +226,24 @@ function validateKey(
     inline_tables: Set<string>;
   }
 ) {
-  const full_key = prefix.concat(key);
-  const joined_full_key = joinKey(full_key);
+  // Pre-compute all candidate key strings incrementally to avoid repeated
+  // prefix.concat(key.slice(0, i)) + join allocations.
+  // candidates[i] = joinKey(prefix.concat(key.slice(0, i + 1)))
+  const prefixStr = prefix.length > 0 ? joinKey(prefix) : '';
+  const candidates: string[] = new Array(key.length);
+  let running = prefixStr;
+  for (let i = 0; i < key.length; i++) {
+    running = running ? running + '.' + key[i] : key[i];
+    candidates[i] = running;
+  }
+  const joined_full_key = candidates[key.length - 1];
 
   // 0. Inline tables are immutable.
   // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
   // (toml-test invalid: spec-1.1.0/common-49-0, inline-table/overwrite-02, inline-table/overwrite-05)
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
         throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
       }
@@ -249,7 +258,7 @@ function validateKey(
   // Check if table header path contains an inline table
   if (type === NodeType.Table || type === NodeType.TableArray) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
         throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
       }
@@ -261,7 +270,7 @@ function validateKey(
   // append-with-dotted-keys fixtures.
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.table_arrays.has(candidate)) {
         throw new Error(`Invalid key, cannot traverse into an array of tables at ${candidate}`);
       }
@@ -287,7 +296,7 @@ function validateKey(
   // (toml-test invalid: table/append-with-dotted-keys-01, table/append-with-dotted-keys-02)
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.tables.has(candidate)) {
         throw new Error(`Invalid key, cannot add to an explicitly defined table ${candidate} using dotted keys`);
       }
@@ -295,18 +304,14 @@ function validateKey(
   }
 
   // 1. Cannot override primitive value
-  let parts: string[] = [];
   let index = 0;
   for (const part of key) {
-    parts.push(part);
-
     if (!has(object, part)) return;
     if (isPrimitive(object[part])) {
-      const fullKey = joinKey(prefix.concat(parts));
-      throw new Error(`Invalid key, a value has already been defined for ${fullKey}`);
+      throw new Error(`Invalid key, a value has already been defined for ${candidates[index]}`);
     }
 
-    const joined_parts = joinKey(prefix.concat(parts));
+    const joined_parts = candidates[index];
     if (Array.isArray(object[part]) && !state.table_arrays.has(joined_parts)) {
       throw new Error(`Invalid key, cannot add to a static array at ${joined_parts}`);
     }
