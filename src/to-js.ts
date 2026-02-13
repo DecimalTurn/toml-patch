@@ -10,9 +10,10 @@ import ParseError from './parse-error';
 function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], inlineTables: Set<string>) {
   for (const item of inlineTable.items) {
     const keyValue = item.item;
-    const fullPath = basePath.concat(keyValue.key.value);
     
     if (keyValue.value.type === NodeType.InlineTable) {
+      // Only allocate concat array when we actually have a nested inline table
+      const fullPath = basePath.concat(keyValue.key.value);
       inlineTables.add(joinKey(fullPath));
       // Recursively track nested inline tables
       trackNestedInlineTables(keyValue.value, fullPath, inlineTables);
