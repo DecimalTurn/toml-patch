@@ -142,6 +142,28 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  * ```
  */
 function write(lines: string[], loc: Location, raw: string, paddingChar: string = SPACE) {
+  // Fast path for single-line content (the vast majority of nodes).
+  // Avoids the regex split + filter that allocates two temporary arrays.
+  if (loc.start.line === loc.end.line) {
+    const line = getLine(lines, loc.start.line);
+
+    if (line === undefined) {
+      throw new Error(
+        `Line ${loc.start.line} is uninitialized when writing "${raw}" at ${loc.start.line}:${loc.start.column} to ${loc.end.line}:${loc.end.column}`
+      );
+    }
+
+    const existingBefore = line.substring(0, loc.start.column);
+    const before = existingBefore.length < loc.start.column
+      ? existingBefore.padEnd(loc.start.column, SPACE)
+      : existingBefore;
+    const after = line.substring(loc.end.column);
+
+    lines[loc.start.line - 1] = before + raw + after;
+    return;
+  }
+
+  // Multi-line path: split and filter newline separators
   const raw_lines = raw.split(BY_NEW_LINE).filter(line => line !== '\n' && line !== '\r\n');
   const expected_lines = loc.end.line - loc.start.line + 1;
 

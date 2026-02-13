@@ -77,9 +77,9 @@ if (!raw.includes('\n') && !raw.includes('\r')) {
 
 **Files:** `src/to-toml.ts`
 
-- [ ] Implemented
-- [ ] Tests passing
-- [ ] Benchmarked
+- [x] Implemented
+- [x] Tests passing (549/549)
+- [x] Benchmarked — No measurable change on spec example (927 ops/sec, within noise of 935 baseline). The `toTOML` phase is a small fraction of total stringify time; the bottleneck is in Phase 1 (AST construction). The optimization is still correct and reduces allocations — it will matter more as the bigger bottlenecks (P1/P3) are resolved.
 
 ---
 
