@@ -24,7 +24,6 @@ import { parseString } from './parse-string';
 import Cursor from './cursor';
 import { clonePosition, cloneLocation } from './location';
 import ParseError from './parse-error';
-import { merge } from './utils';
 
 import {
   DateFormatHelper,
@@ -358,7 +357,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
     cursor.next();
-    merge(items, walkBlock(cursor, input) as Array<KeyValue | Comment>);
+    const blocks = walkBlock(cursor, input) as Array<KeyValue | Comment>;
+    // Push directly instead of merge to avoid function call overhead
+    for (let bi = 0; bi < blocks.length; bi++) {
+      items.push(blocks[bi]);
+    }
   }
 
   return {
@@ -1461,7 +1464,6 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   const results = walkValue(cursor, input);
   const value = results[0] as Value;
-  const comments = results.slice(1) as Comment[];
 
   // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
   // Example invalid TOML: first = "Tom" last = "Preston-Werner"
@@ -1495,16 +1497,16 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     }
   }
 
-  return [
-    {
-      type: NodeType.KeyValue,
-      key,
-      value: value as Value,
-      loc: { start: clonePosition(key.loc.start), end: clonePosition(value.loc.end) },
-      equals
-    },
-    ...comments
-  ];
+  // Reuse the walkValue result array: replace position 0 with the KeyValue node.
+  // Comments (if any) remain at indices 1+, avoiding a new array allocation + spread.
+  results[0] = {
+    type: NodeType.KeyValue,
+    key,
+    value: value as Value,
+    loc: { start: clonePosition(key.loc.start), end: clonePosition(value.loc.end) },
+    equals
+  } as any;
+  return results as unknown as Array<KeyValue | Comment>;
 }
 
 function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
@@ -1619,7 +1621,6 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
     // Recursively parse the key-value, but without generators
     const blocks = walkBlock(cursor, input);
     const item = blocks[0];
-    const additional_comments = blocks.slice(1) as Comment[];
 
     if (item.type === NodeType.KeyValue) {
       value.items.push({
@@ -1628,7 +1629,10 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
         item: item as KeyValue,
         comma: false
       });
-      merge(comments, additional_comments);
+      // Push remaining comments directly instead of slice + merge
+      for (let ci = 1; ci < blocks.length; ci++) {
+        comments.push(blocks[ci] as Comment);
+      }
     }
 
     cursor.next();
@@ -1703,7 +1707,6 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
 
       const results = walkValue(cursor, input);
       const item = results[0];
-      const additional_comments = results.slice(1) as Comment[];
 
       value.items.push({
         type: NodeType.InlineItem,
@@ -1711,7 +1714,10 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         item,
         comma: false
       });
-      merge(comments, additional_comments as Comment[]);
+      // Push remaining comments directly instead of slice + merge
+      for (let ci = 1; ci < results.length; ci++) {
+        comments.push(results[ci] as Comment);
+      }
     }
 
     cursor.next();
