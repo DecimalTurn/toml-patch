@@ -80,12 +80,13 @@ export function findLines(input: string): number[] {
   const indexes: number[] = [];
 
   for (let i = 0; i < input.length; i++) {
-    const char = input[i];
-    if (char === '\n') {
+    const code = input.charCodeAt(i);
+    if (code === 0x0a) {
+      // \n
       indexes.push(i);
-    } else if (char === '\r') {
-      // Handle \r\n as a single line break
-      if (input[i + 1] === '\n') {
+    } else if (code === 0x0d) {
+      // \r — handle \r\n as a single line break
+      if (input.charCodeAt(i + 1) === 0x0a) {
         indexes.push(i + 1); // Position after \r\n
         i++; // Skip the \n
       } else {
