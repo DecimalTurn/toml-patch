@@ -55,13 +55,13 @@
 
 ### Medium-complexity (Phase 2c) — Items 8–10
 
-- [ ] **#8 — Inline toJS traversal** (~5-7% est.)
+- [x] **#8 — Inline toJS traversal** (~5-7% est.)
   Replace generic `traverse` dispatch with a specialized walk for `toJS` that only handles the 4 node types it cares about.
 
-- [ ] **#9 — Lazy/incremental line index** (~4% est.)
+- [x] **#9 — Lazy/incremental line index** (~4% est.)
   Build the line-ending index incrementally as the tokenizer scans, instead of a separate upfront `findLines` pass.
 
-- [ ] **#10 — Eliminate unnecessary cloneLocation** (~1% est.)
+- [x] **#10 — Eliminate unnecessary cloneLocation** (~1% est.)
   Audit which locations are never mutated and share references directly instead of cloning.
 
 ### Architectural (Phase 3 — future)
