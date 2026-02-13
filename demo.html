@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>toml-patch — Interactive Demo</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #161922;
+      --border: #2a2e3a;
+      --accent: #e8944c;
+      --accent-dim: #c47a3a;
+      --text: #e2e4e9;
+      --text-dim: #8b8fa3;
+      --green: #4ade80;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --mono: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --radius: 10px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      text-align: center;
+      padding: 3rem 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header h1 span { color: var(--accent); }
+    header p {
+      color: var(--text-dim);
+      margin-top: 0.5rem;
+      font-size: 1.05rem;
+    }
+    header .badges {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    header .badge {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Tabs ────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      padding: 0.6rem 1.25rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Panels ──────────────────────────────── */
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 720px) {
+      .panel-grid { grid-template-columns: 1fr; }
+    }
+    .panel-grid.triple {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    @media (max-width: 900px) {
+      .panel-grid.triple { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg);
+      padding: 0.5rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+    .panel-header .lang {
+      font-size: 0.7rem;
+      background: var(--border);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      background: var(--surface);
+      color: var(--text);
+      border: none;
+      padding: 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
+    }
+    textarea:focus {
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    pre.output {
+      padding: 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      min-height: 260px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow: auto;
+    }
+
+    /* ── Buttons ─────────────────────────────── */
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      padding: 0.55rem 1.4rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover { background: var(--accent-dim); }
+    .btn:active { transform: scale(0.97); }
+    .btn.secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Error / Status ──────────────────────── */
+    .status {
+      margin-top: 0.75rem;
+      text-align: center;
+      font-size: 0.85rem;
+      min-height: 1.4em;
+    }
+    .status.ok { color: var(--green); }
+    .status.err { color: var(--red); }
+
+    /* ── Info Section ────────────────────────── */
+    .info {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .info h2 {
+      font-size: 1.3rem;
+      margin-bottom: 0.75rem;
+    }
+    .info p {
+      color: var(--text-dim);
+      max-width: 640px;
+      margin: 0 auto 1rem;
+      font-size: 0.95rem;
+    }
+    .info code {
+      font-family: var(--mono);
+      background: var(--surface);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .install-block {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      margin: 1rem 0;
+    }
+    .install-block span { color: var(--accent); }
+
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>toml-<span>patch</span></h1>
+  <p>Patch, parse, and stringify TOML while preserving comments and formatting</p>
+  <div class="badges">
+    <span class="badge">TOML v1.1</span>
+    <span class="badge">Zero Dependencies</span>
+    <span class="badge">Browser &amp; Node.js</span>
+    <span class="badge">MIT License</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Tab Navigation -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="parse">Parse</button>
+    <button class="tab-btn" data-tab="stringify">Stringify</button>
+    <button class="tab-btn" data-tab="patch">Patch</button>
+    <button class="tab-btn" data-tab="document">TomlDocument</button>
+  </div>
+
+  <!-- ── Parse Tab ──────────────────────────── -->
+  <div class="tab-panel active" id="tab-parse">
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">Input <span class="lang">TOML</span></div>
+        <textarea id="parse-input"># This is a TOML document
+
+title = "TOML Example"
+
+[owner]
+name = "Tom Preston-Werner"
+
+[database]
+enabled = true
+ports = [8001, 8001, 8002]
+data = [["delta", "phi"], [3.14]]
+temp_targets = { cpu = 79.5, case = 72.0 }
+
+[servers.alpha]
+ip = "10.0.0.1"
+role = "frontend"
+
+[servers.beta]
+ip = "10.0.0.2"
+role = "backend"</textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Output <span class="lang">JSON</span></div>
+        <pre class="output" id="parse-output"></pre>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="runParse()">Parse →</button>
+      <button class="btn secondary" onclick="resetParse()">Reset</button>
+    </div>
+    <div class="status" id="parse-status"></div>
+  </div>
+
+  <!-- ── Stringify Tab ──────────────────────── -->
+  <div class="tab-panel" id="tab-stringify">
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">Input <span class="lang">JSON</span></div>
+        <textarea id="stringify-input">{
+  "title": "TOML Example",
+  "owner": {
+    "name": "Tom Preston-Werner"
+  },
+  "database": {
+    "enabled": true,
+    "ports": [8001, 8001, 8002],
+    "data": [["delta", "phi"], [3.14]],
+    "temp_targets": { "cpu": 79.5, "case": 72.0 }
+  },
+  "servers": {
+    "alpha": { "ip": "10.0.0.1", "role": "frontend" },
+    "beta": { "ip": "10.0.0.2", "role": "backend" }
+  }
+}</textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Output <span class="lang">TOML</span></div>
+        <pre class="output" id="stringify-output"></pre>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="runStringify()">Stringify →</button>
+      <button class="btn secondary" onclick="resetStringify()">Reset</button>
+    </div>
+    <div class="status" id="stringify-status"></div>
+  </div>
+
+  <!-- ── Patch Tab ──────────────────────────── -->
+  <div class="tab-panel" id="tab-patch">
+    <div class="panel-grid triple">
+      <div class="panel">
+        <div class="panel-header">Existing Document <span class="lang">TOML</span></div>
+        <textarea id="patch-existing"># Application Config
+# Last updated: 2025-01-15
+
+title = "My App"
+version = "1.2.0"
+
+[owner]
+name = "Alice"
+email = "alice@example.com"
+
+# Database settings
+[database]
+server = "192.168.1.1"
+ports = [8001, 8001, 8002]
+enabled = true
+</textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Updated Data <span class="lang">JSON</span></div>
+        <textarea id="patch-updated" style="min-height:260px">{
+  "title": "My App",
+  "version": "1.3.0",
+  "owner": {
+    "name": "Bob",
+    "email": "bob@example.com"
+  },
+  "database": {
+    "server": "192.168.1.1",
+    "ports": [8001, 8001, 8002],
+    "enabled": true,
+    "max_connections": 100
+  }
+}</textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Patched Result <span class="lang">TOML</span></div>
+        <pre class="output" id="patch-output"></pre>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="runPatch()">Patch →</button>
+      <button class="btn secondary" onclick="resetPatch()">Reset</button>
+    </div>
+    <div class="status" id="patch-status"></div>
+  </div>
+
+  <!-- ── TomlDocument Tab ───────────────────── -->
+  <div class="tab-panel" id="tab-document">
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">TOML Source <span class="lang">TOML</span></div>
+        <textarea id="doc-input"># Server configuration
+host = "localhost"
+port = 8080
+
+[logging]
+level = "info"
+file = "/var/log/app.log"
+
+[features]
+dark_mode = true
+notifications = false</textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Result <span class="lang">TOML</span></div>
+        <pre class="output" id="doc-output"></pre>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="runDocument()">Run Demo →</button>
+      <button class="btn secondary" onclick="resetDocument()">Reset</button>
+    </div>
+    <div class="status" id="doc-status"></div>
+    <p style="text-align:center;color:var(--text-dim);margin-top:0.5rem;font-size:0.85rem;">
+      Creates a TomlDocument, patches it with updates (port → 9090, logging.level → "debug", features.notifications → true), then outputs the result.
+    </p>
+  </div>
+
+  <!-- ── Info Section ───────────────────────── -->
+  <div class="info">
+    <h2>Get Started</h2>
+    <p>Install via npm or use directly in the browser with unpkg.</p>
+    <div class="install-block">
+      <span>$</span> npm install @decimalturn/toml-patch
+    </div>
+    <p>Or use in the browser with a module script:</p>
+    <div class="install-block" style="text-align:left;font-size:0.82rem;">
+      &lt;script type="module"&gt;<br>
+      &nbsp;&nbsp;import * as TOML from<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;'https://unpkg.com/@decimalturn/toml-patch';<br>
+      &lt;/script&gt;
+    </div>
+    <p style="margin-top:1.5rem;">
+      <strong>Key features:</strong> comment &amp; formatting preservation during patches,
+      full TOML v1.1 support, zero dependencies, works in Node.js and browsers.
+    </p>
+  </div>
+
+</div>
+
+<footer>
+  Built with <a href="https://github.com/DecimalTurn/toml-patch">@decimalturn/toml-patch</a>
+  · Loaded via <a href="https://unpkg.com/@decimalturn/toml-patch">unpkg</a>
+</footer>
+
+<script type="module">
+  // ── Load toml-patch from unpkg ────────────────────────
+  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';
+
+  // Expose to global scope so onclick handlers can use it
+  window.TOML = TOML;
+  console.log('toml-patch loaded:', Object.keys(TOML));
+
+  // Run initial demos on load
+  window.addEventListener('DOMContentLoaded', () => {
+    try { runParse(); } catch (_) {}
+  });
+  // Also run if DOM is already ready
+  if (document.readyState !== 'loading') {
+    try { runParse(); } catch (_) {}
+  }
+</script>
+
+<script>
+  // ── Tab switching ─────────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── Helpers ───────────────────────────────────────────
+  function setStatus(id, msg, isError) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'status ' + (isError ? 'err' : 'ok');
+  }
+
+  function clearStatus(id) {
+    const el = document.getElementById(id);
+    el.textContent = '';
+    el.className = 'status';
+  }
+
+  function elapsed(fn) {
+    const t0 = performance.now();
+    const result = fn();
+    return { result, ms: (performance.now() - t0).toFixed(2) };
+  }
+
+  // ── Default values (for reset) ────────────────────────
+  const defaults = {};
+  document.querySelectorAll('textarea').forEach(ta => {
+    defaults[ta.id] = ta.value;
+  });
+
+  // ── Parse ─────────────────────────────────────────────
+  window.runParse = function () {
+    clearStatus('parse-status');
+    try {
+      const input = document.getElementById('parse-input').value;
+      const { result, ms } = elapsed(() => TOML.parse(input));
+      document.getElementById('parse-output').textContent = JSON.stringify(result, null, 2);
+      setStatus('parse-status', `Parsed in ${ms} ms`);
+    } catch (e) {
+      document.getElementById('parse-output').textContent = '';
+      setStatus('parse-status', `Error: ${e.message}`, true);
+    }
+  };
+
+  window.resetParse = function () {
+    document.getElementById('parse-input').value = defaults['parse-input'];
+    document.getElementById('parse-output').textContent = '';
+    clearStatus('parse-status');
+  };
+
+  // ── Stringify ─────────────────────────────────────────
+  window.runStringify = function () {
+    clearStatus('stringify-status');
+    try {
+      const input = document.getElementById('stringify-input').value;
+      const obj = JSON.parse(input);
+      const { result, ms } = elapsed(() => TOML.stringify(obj));
+      document.getElementById('stringify-output').textContent = result;
+      setStatus('stringify-status', `Stringified in ${ms} ms`);
+    } catch (e) {
+      document.getElementById('stringify-output').textContent = '';
+      setStatus('stringify-status', `Error: ${e.message}`, true);
+    }
+  };
+
+  window.resetStringify = function () {
+    document.getElementById('stringify-input').value = defaults['stringify-input'];
+    document.getElementById('stringify-output').textContent = '';
+    clearStatus('stringify-status');
+  };
+
+  // ── Patch ─────────────────────────────────────────────
+  window.runPatch = function () {
+    clearStatus('patch-status');
+    try {
+      const existing = document.getElementById('patch-existing').value;
+      const updatedJson = document.getElementById('patch-updated').value;
+      const updated = JSON.parse(updatedJson);
+      const { result, ms } = elapsed(() => TOML.patch(existing, updated));
+      document.getElementById('patch-output').textContent = result;
+      setStatus('patch-status', `Patched in ${ms} ms — comments and formatting preserved!`);
+    } catch (e) {
+      document.getElementById('patch-output').textContent = '';
+      setStatus('patch-status', `Error: ${e.message}`, true);
+    }
+  };
+
+  window.resetPatch = function () {
+    document.getElementById('patch-existing').value = defaults['patch-existing'];
+    document.getElementById('patch-updated').value = defaults['patch-updated'];
+    document.getElementById('patch-output').textContent = '';
+    clearStatus('patch-status');
+  };
+
+  // ── TomlDocument ──────────────────────────────────────
+  window.runDocument = function () {
+    clearStatus('doc-status');
+    try {
+      const input = document.getElementById('doc-input').value;
+      const { result, ms } = elapsed(() => {
+        const doc = new TOML.TomlDocument(input);
+        // Apply updates via patch
+        doc.patch({
+          host: 'localhost',
+          port: 9090,
+          logging: { level: 'debug', file: '/var/log/app.log' },
+          features: { dark_mode: true, notifications: true }
+        });
+        return doc.toString();
+      });
+      document.getElementById('doc-output').textContent = result;
+      setStatus('doc-status', `TomlDocument demo completed in ${ms} ms`);
+    } catch (e) {
+      document.getElementById('doc-output').textContent = '';
+      setStatus('doc-status', `Error: ${e.message}`, true);
+    }
+  };
+
+  window.resetDocument = function () {
+    document.getElementById('doc-input').value = defaults['doc-input'];
+    document.getElementById('doc-output').textContent = '';
+    clearStatus('doc-status');
+  };
+</script>
+
+</body>
+</html>
