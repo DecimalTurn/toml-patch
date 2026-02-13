@@ -1,4 +1,4 @@
-import { Location, Locator, createLocate, findPosition } from './location';
+import { Location, Locator, findPosition } from './location';
 import ParseError from './parse-error';
 
 export enum TokenType {
@@ -47,7 +47,15 @@ const CH_DEL = 0x7f;
 export function* tokenize(input: string): IterableIterator<Token> {
   const len = input.length;
   let pos = 0;
-  const locate = createLocate(input);
+
+  // Build line index incrementally as we scan, instead of a separate
+  // upfront findLines pass. Records newline positions in the main loop
+  // and inside multilineToken.
+  const lines: number[] = [];
+  const locate: Locator = (start: number, end: number) => ({
+    start: findPosition(lines, start),
+    end: findPosition(lines, end)
+  });
 
   while (pos < len) {
     const code = input.charCodeAt(pos);
@@ -57,7 +65,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
     if ((code <= 0x1f || code === CH_DEL) && code !== CH_TAB && code !== CH_CR && code !== CH_LF) {
       throw new ParseError(
         input,
-        findPosition(input, pos),
+        findPosition(lines, pos),
         `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
       );
     }
@@ -67,14 +75,17 @@ export function* tokenize(input: string): IterableIterator<Token> {
       if (pos + 1 >= len || input.charCodeAt(pos + 1) !== CH_LF) {
         throw new ParseError(
           input,
-          findPosition(input, pos),
+          findPosition(lines, pos),
           'Invalid standalone CR (\\r); CR must be part of a CRLF sequence'
         );
       }
     }
 
-    if (code === CH_SPACE || code === CH_TAB || code === CH_LF || code === CH_CR) {
-      // (skip whitespace)
+    if (code === CH_SPACE || code === CH_TAB || code === CH_CR) {
+      // skip non-newline whitespace (CR is part of CRLF; LF will be next)
+    } else if (code === CH_LF) {
+      // Record newline position for incremental line index
+      lines.push(pos);
     } else if (code === CH_LBRACKET || code === CH_RBRACKET) {
       yield { type: TokenType.Bracket, raw: input[pos], loc: locate(pos, pos + 1) };
     } else if (code === CH_LBRACE || code === CH_RBRACE) {
@@ -118,7 +129,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       if ((cc <= 0x1f || cc === CH_DEL) && cc !== CH_TAB) {
         throw new ParseError(
           input,
-          findPosition(input, pos),
+          findPosition(lines, pos),
           `Control character 0x${cc.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
         );
       }
@@ -153,7 +164,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
         if (runLength >= 6) {
           throw new ParseError(
             input,
-            findPosition(input, pos),
+            findPosition(lines, pos),
             `Invalid multiline string: ${runLength} consecutive ${multiline_char} characters`
           );
         }
@@ -177,7 +188,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
         if (pos + 1 >= len || input.charCodeAt(pos + 1) !== CH_LF) {
           throw new ParseError(
             input,
-            findPosition(input, pos),
+            findPosition(lines, pos),
             'Invalid standalone CR (\\r) in multiline string (must be part of CRLF sequence)'
           );
         }
@@ -204,9 +215,14 @@ export function* tokenize(input: string): IterableIterator<Token> {
 
         throw new ParseError(
           input,
-          findPosition(input, pos),
+          findPosition(lines, pos),
           message
         );
+      }
+
+      // Record newlines inside multiline strings for incremental line index
+      if (cc === CH_LF) {
+        lines.push(pos);
       }
 
       pos++;
@@ -225,7 +241,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
         if (hasEscapedQuotes) {
           throw new ParseError(
             input,
-            findPosition(input, pos),
+            findPosition(lines, pos),
             `Expected close of multiline string with ${quotes}, reached end of file. Check for escape sequences (\\) that may be preventing proper string closure`
           );
         }
@@ -233,7 +249,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
 
       throw new ParseError(
         input,
-        findPosition(input, pos),
+        findPosition(lines, pos),
         `Expected close of multiline string with ${quotes}, reached end of file`
       );
     }
@@ -272,7 +288,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
     if (!IS_VALID_LEADING_CHARACTER.test(ch)) {
       throw new ParseError(
         input,
-        findPosition(input, pos),
+        findPosition(lines, pos),
         `Unsupported character "${ch}". Expected ALPHANUMERIC, ", ', +, -, or _`
       );
     }
@@ -331,7 +347,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
 
           throw new ParseError(
             input,
-            findPosition(input, pos),
+            findPosition(lines, pos),
             message
           );
         }

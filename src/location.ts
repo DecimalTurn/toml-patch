@@ -49,6 +49,10 @@ export function findPosition(input: string | number[], index: number): Position 
 
   const lines = Array.isArray(input) ? input : findLines(input);
 
+  if (lines.length === 0) {
+    return { line: 1, column: index };
+  }
+
   // Binary search: find first line_index where lines[line_index] >= index
   let lo = 0;
   let hi = lines.length - 1;
@@ -59,6 +63,11 @@ export function findPosition(input: string | number[], index: number): Position 
     } else {
       hi = mid;
     }
+  }
+
+  // If index is past all recorded line endings (no sentinel), advance to next line
+  if (lines[lo] < index) {
+    lo++;
   }
 
   const line = lo + 1;
