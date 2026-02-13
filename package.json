@@ -44,6 +44,7 @@
     "benchmark:example": "npm-run-all2 \"bench:* -- --example\"",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
+    "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && rollup -c",
     "prepublishOnly": "npm run build"
   },
