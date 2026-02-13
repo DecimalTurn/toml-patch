@@ -5,3 +5,6 @@ node_modules
 toml-patch.code-workspace
 
 *.tgz
+
+# Benchmark cache
+.bench-cache
