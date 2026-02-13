@@ -243,7 +243,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   
   key.item = {
     type: NodeType.Key,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     raw: cursor.value!.raw,
     value: keyValue
   };
@@ -1380,7 +1380,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   
   const key: Key = {
     type: NodeType.Key,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     raw: cursor.value!.raw,
     value: keyValue2
   };
@@ -1578,7 +1578,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
   // 6. InlineTable
   const value: InlineTable = {
     type: NodeType.InlineTable,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     items: []
   };
 
@@ -1676,7 +1676,7 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
 
   const value: InlineArray = {
     type: NodeType.InlineArray,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     items: []
   };
 
