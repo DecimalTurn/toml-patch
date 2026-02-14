@@ -11,3 +11,4 @@ toml-patch.code-workspace
 
 # Profile outputs
 *.cpuprofile
+benchmark-*.md

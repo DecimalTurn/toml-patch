@@ -1,8 +1,28 @@
-import { NodeType, AST } from './ast';
-import traverse from './traverse';
+import {
+  NodeType,
+  AST,
+  TreeNode,
+  Document,
+  Table,
+  TableKey,
+  TableArray,
+  TableArrayKey,
+  KeyValue,
+  Key,
+  String as StringNode,
+  Integer,
+  Float,
+  Boolean as BooleanNode,
+  DateTime,
+  InlineArray,
+  InlineTable,
+  InlineItem,
+  Comment
+} from './ast';
 import { Location } from './location';
 import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';
+import { isIterable } from './utils';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -25,75 +45,119 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
 export default function toTOML(ast: AST, format: TomlFormat): string {
 
   const lines: string[] = [];
-  const paddingChar = format.useTabsForIndentation ? '\t' : SPACE;
 
-  traverse(ast, {
-    [NodeType.TableKey](node) {
-      const { start, end } = node.loc;
+  // Inline traversal for monomorphic property access (avoids generic traverse
+  // visitor dispatch which causes megamorphic inline cache misses in V8)
+  function emitNode(node: TreeNode) {
+    switch (node.type) {
+      case NodeType.Document:
+        for (let i = 0; i < (node as Document).items.length; i++)
+          emitNode((node as Document).items[i]);
+        break;
 
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[', paddingChar);
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']', paddingChar);
-    },
-    [NodeType.TableArrayKey](node) {
-      const { start, end } = node.loc;
+      case NodeType.Table: {
+        const tbl = node as Table;
+        emitNode(tbl.key);
+        for (let i = 0; i < tbl.items.length; i++) emitNode(tbl.items[i]);
+        break;
+      }
+      case NodeType.TableKey: {
+        const tk = node as TableKey;
+        const { start, end } = tk.loc;
+        writeSingle(lines, start.line, start.column, '[');
+        writeSingle(lines, end.line, end.column - 1, ']');
+        emitNode(tk.item);
+        break;
+      }
 
-      write(lines, { start, end: { line: start.line, column: start.column + 2 } }, '[[', paddingChar);
-      write(lines, { start: { line: end.line, column: end.column - 2 }, end }, ']]', paddingChar);
-    },
+      case NodeType.TableArray: {
+        const ta = node as TableArray;
+        emitNode(ta.key);
+        for (let i = 0; i < ta.items.length; i++) emitNode(ta.items[i]);
+        break;
+      }
+      case NodeType.TableArrayKey: {
+        const tak = node as TableArrayKey;
+        const { start, end } = tak.loc;
+        writeChars(lines, start.line, start.column, start.column + 2, '[[');
+        writeChars(lines, end.line, end.column - 2, end.column, ']]');
+        emitNode(tak.item);
+        break;
+      }
 
-    [NodeType.KeyValue](node) {
-      const {
-        start: { line }
-      } = node.loc;
-      write(
-        lines,
-        { start: { line, column: node.equals }, end: { line, column: node.equals + 1 } },
-        '=',
-        paddingChar
-      );
-    },
-    [NodeType.Key](node) {
-      write(lines, node.loc, node.raw, paddingChar);
-    },
+      case NodeType.KeyValue: {
+        const kv = node as KeyValue;
+        const line = kv.loc.start.line;
+        writeSingle(lines, line, kv.equals, '=');
+        emitNode(kv.key);
+        emitNode(kv.value);
+        break;
+      }
 
-    [NodeType.String](node) {
-      write(lines, node.loc, node.raw, paddingChar);
-    },
-    [NodeType.Integer](node) {
-      write(lines, node.loc, node.raw, paddingChar);
-    },
-    [NodeType.Float](node) {
-      write(lines, node.loc, node.raw, paddingChar);
-    },
-    [NodeType.Boolean](node) {
-      write(lines, node.loc, node.value.toString(), paddingChar);
-    },
-    [NodeType.DateTime](node) {
-      write(lines, node.loc, node.raw, paddingChar);
-    },
+      case NodeType.Key:
+        write(lines, node.loc, (node as Key).raw);
+        break;
 
-    [NodeType.InlineArray](node) {
-      const { start, end } = node.loc;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '[', paddingChar);
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, ']', paddingChar);
-    },
+      case NodeType.String:
+        write(lines, node.loc, (node as StringNode).raw);
+        break;
+      case NodeType.Integer:
+        write(lines, node.loc, (node as Integer).raw);
+        break;
+      case NodeType.Float:
+        write(lines, node.loc, (node as Float).raw);
+        break;
+      case NodeType.Boolean:
+        write(lines, node.loc, (node as BooleanNode).value.toString());
+        break;
+      case NodeType.DateTime:
+        write(lines, node.loc, (node as DateTime).raw);
+        break;
 
-    [NodeType.InlineTable](node) {
-      const { start, end } = node.loc;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, '{', paddingChar);
-      write(lines, { start: { line: end.line, column: end.column - 1 }, end }, '}', paddingChar);
-    },
-    [NodeType.InlineItem](node) {
-      if (!node.comma) return;
+      case NodeType.InlineArray: {
+        const ia = node as InlineArray;
+        const { start, end } = ia.loc;
+        writeSingle(lines, start.line, start.column, '[');
+        writeSingle(lines, end.line, end.column - 1, ']');
+        for (let i = 0; i < ia.items.length; i++) emitNode(ia.items[i]);
+        break;
+      }
+      case NodeType.InlineTable: {
+        const it = node as InlineTable;
+        const { start, end } = it.loc;
+        writeSingle(lines, start.line, start.column, '{');
+        writeSingle(lines, end.line, end.column - 1, '}');
+        for (let i = 0; i < it.items.length; i++) emitNode(it.items[i]);
+        break;
+      }
+      case NodeType.InlineItem: {
+        const ii = node as InlineItem;
+        emitNode(ii.item);
+        if (ii.comma) {
+          const end = ii.loc.end;
+          writeSingle(lines, end.line, end.column, ',');
+        }
+        break;
+      }
 
-      const start = node.loc.end;
-      write(lines, { start, end: { line: start.line, column: start.column + 1 } }, ',', paddingChar);
-    },
-
-    [NodeType.Comment](node) {
-      write(lines, node.loc, node.raw, paddingChar);
+      case NodeType.Comment:
+        write(lines, node.loc, (node as Comment).raw);
+        break;
+            default: {
+        // Preserve original behavior: throw on unrecognized node types
+        // to catch bugs when new node types are added or invalid nodes appear.
+        const type = (node as any).type;
+        throw new Error(`toTOML: Unrecognized node type: ${String(type)}`);
+            }
     }
-  });
+  }
+
+  // Handle both Document nodes and bare iterables (document.items)
+  if (isIterable(ast)) {
+    for (const item of ast) emitNode(item as TreeNode);
+  } else {
+    emitNode(ast as unknown as TreeNode);
+  }
 
   // Post-process: convert leading spaces to tabs if useTabsForIndentation is enabled
   if (format.useTabsForIndentation) {
@@ -128,7 +192,6 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  *              - end: { line: number, column: number } - Ending position (1-indexed line, 0-indexed column)
  * @param raw - The raw string content to write at the specified location.
  *              Can contain multiple lines separated by \n or \r\n.
- * @param paddingChar - The character to use for padding (space or tab)
  * 
  * @throws {Error} When there's a mismatch between location span and raw string line count
  * @throws {Error} When attempting to write to an uninitialized line
@@ -137,11 +200,27 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  * ```typescript
  * const lines = ['', ''];
  * const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 3 } };
- * write(lines, location, 'key', ' ');
+ * write(lines, location, 'key');
  * // Result: lines[0] becomes 'key'
  * ```
  */
-function write(lines: string[], loc: Location, raw: string, paddingChar: string = SPACE) {
+function write(lines: string[], loc: Location, raw: string) {
+  // Fast path for single-line content (the vast majority of nodes).
+  // Avoids the regex split + filter that allocates two temporary arrays.
+  if (loc.start.line === loc.end.line) {
+    const line = getLine(lines, loc.start.line);
+
+    const existingBefore = line.substring(0, loc.start.column);
+    const before = existingBefore.length < loc.start.column
+      ? existingBefore.padEnd(loc.start.column, SPACE)
+      : existingBefore;
+    const after = line.substring(loc.end.column);
+
+    lines[loc.start.line - 1] = before + raw + after;
+    return;
+  }
+
+  // Multi-line path: split and filter newline separators
   const raw_lines = raw.split(BY_NEW_LINE).filter(line => line !== '\n' && line !== '\r\n');
   const expected_lines = loc.end.line - loc.start.line + 1;
 
@@ -153,13 +232,6 @@ function write(lines: string[], loc: Location, raw: string, paddingChar: string 
 
   for (let i = loc.start.line; i <= loc.end.line; i++) {
     const line = getLine(lines, i);
-
-    //Throw if line is uninitialized
-    if (line === undefined) {
-      throw new Error(
-        `Line ${i} is uninitialized when writing "${raw}" at ${loc.start.line}:${loc.start.column} to ${loc.end.line}:${loc.end.column}`
-      );
-    }
 
     const is_start_line = i === loc.start.line;
     const is_end_line = i === loc.end.line;
@@ -179,6 +251,32 @@ function write(lines: string[], loc: Location, raw: string, paddingChar: string 
 
     lines[i - 1] = before + raw_lines[i - loc.start.line] + after;
   }
+}
+
+/**
+ * Fast path for writing a single character at a specific position.
+ * Avoids creating temporary Location objects.
+ */
+function writeSingle(lines: string[], lineNum: number, column: number, char: string) {
+  const line = getLine(lines, lineNum);
+  const before = line.length < column
+    ? line.padEnd(column, SPACE)
+    : line.substring(0, column);
+  const after = line.substring(column + 1);
+  lines[lineNum - 1] = before + char + after;
+}
+
+/**
+ * Fast path for writing a short string (e.g. '[[', ']]') at a known single-line span.
+ * Avoids creating temporary Location objects.
+ */
+function writeChars(lines: string[], lineNum: number, startCol: number, endCol: number, chars: string) {
+  const line = getLine(lines, lineNum);
+  const before = line.length < startCol
+    ? line.padEnd(startCol, SPACE)
+    : line.substring(0, startCol);
+  const after = line.substring(endCol);
+  lines[lineNum - 1] = before + chars + after;
 }
 
 /**

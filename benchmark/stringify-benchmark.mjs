@@ -5,14 +5,14 @@
  *   npm run benchmark:stringify [-- <options>]
  *   
  * Options:
- *   --example        Run only the spec example benchmark
+ *   --sample         Run curated sample of 10 representative benchmarks
  *   --detailed       Run detailed profiling of stringify components
  *   --package <n>    Run benchmark for specific implementation
  *   --file <n>       Run specific file(s) matching pattern
  */
 
 import { join, basename, resolve, dirname } from 'path';
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
@@ -142,8 +142,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, example, detailed, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'example', 'detailed'],
+const { help, sample, detailed, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'sample', 'detailed'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -154,16 +154,18 @@ if (help) {
 Usage: node benchmark/stringify-benchmark.mjs [options]
 
 Options:
-  --example          Just run benchmark for spec example
-  --detailed         Run detailed profiling of stringify components
-  --package <n>      Run benchmark for specific implementation:
-                       0: toml-patch (current)
-                       1: @iarna/toml
-                       2: smol-toml
-  --file <pattern>   Run specific file(s) matching pattern
-  --versions <list>  Test specific versions (comma-separated)
-                     Example: --versions 0.6.0,0.7.0
-                     Versions are automatically downloaded and cached`);
+  --sample           Run curated sample of 10 representative benchmarks
+  --detailed         Run detailed profiling of stringify process
+  --package <index>  Only run benchmark for the given implementation (0-based index)
+  --file <pattern>   Run benchmarks matching the file pattern
+  --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  
+Examples:
+  npm run benchmark:stringify
+  npm run benchmark:stringify -- --sample
+  npm run benchmark:stringify -- --detailed
+  npm run benchmark:stringify -- --file hard
+  npm run benchmark:stringify -- --package 0`);
   process.exit(0);
 }
 
@@ -180,6 +182,11 @@ let TOML_IMPLEMENTATIONS = [
   {
     name: 'smol-toml',
     path: installPackageToCache('smol-toml'),
+  },
+  {
+    name: '@rainbowatcher/toml-edit-js',
+    path: installPackageToCache('@rainbowatcher/toml-edit-js'),
+    needsInit: true,
   }
 ].filter(impl => impl.path != null);
 
@@ -194,8 +201,12 @@ if (versions) {
   for (const version of versionList) {
     const modulePath = installPackageToCache('@decimalturn/toml-patch', version);
     if (modulePath) {
+      const pkgPath = join(modulePath, 'package.json');
+      const resolvedVersion = existsSync(pkgPath)
+        ? JSON.parse(readFileSync(pkgPath, 'utf8')).version || version
+        : version;
       versionImpls.push({
-        name: `toml-patch (v${version})`,
+        name: `toml-patch (v${resolvedVersion})`,
         path: modulePath
       });
     }
@@ -215,11 +226,28 @@ const implementationsToRun = packageIndex !== undefined ?
   [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
 
+// Collect results across implementations for global comparison
+const allResults = [];
+
 // First load the current version to parse all TOML files
 const currentToml = await loadModule('../dist/toml-patch.js');
 
+// Curated sample of representative benchmarks
+const SAMPLE_FILES = [
+  '0A-spec-01-example-v0.4.0.toml',
+  '0A-spec-02-example-hard-unicode.toml',
+  '01-small-doc-mixed-type-inline-array.toml',
+  '0C-scaling-string-40kb.toml',
+  '0C-scaling-array-inline-1000.toml',
+  '0C-scaling-table-inline-1000.toml',
+  '0B-types-scalar-string-multiline-1079-chars.toml',
+  '0B-types-scalar-datetimes.toml',
+  '0B-types-scalar-ints.toml',
+  '0B-types-table.toml'
+];
+
 // Determine which files to benchmark
-const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
+const search = sample ? `{${SAMPLE_FILES.join(',')}}` : 
                file ? `*${file}*.toml` : 
                filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
 
@@ -239,7 +267,7 @@ const benchmarks = globSync(searchPattern).map(path => {
 }).filter(Boolean);
 
 if (!benchmarks.length) {
-  throw new Error(`No matching benchmarks found for ${example ? '--example' : 
+  throw new Error(`No matching benchmarks found for ${sample ? '--sample' : 
                                                      file ? `--file ${file}` : 
                                                      filter.length > 0 ? filter.join(' ') : 'all files'}`);
 }
@@ -250,6 +278,10 @@ for (const implementation of implementationsToRun) {
   let tomlModule;
   try {
     tomlModule = await loadModule(implementation.path);
+    // Initialize WASM-based modules if needed
+    if (implementation.needsInit && typeof tomlModule.init === 'function') {
+      await tomlModule.init();
+    }
   } catch (error) {
     console.error(`Error loading ${implementation.name}: ${error.message}`);
     continue;
@@ -263,8 +295,15 @@ for (const implementation of implementationsToRun) {
   if (detailed) {
     runDetailedBenchmarks(benchmarks, tomlModule, implementation.name);
   } else {
-    await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
+    const result = await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
+    if (result) allResults.push(result);
   }
+}
+
+// Print global comparison if multiple implementations were benchmarked
+if (allResults.length > 1) {
+  printGlobalSummary(allResults, 'Stringify');
+  writeMarkdownSummary(allResults, 'Stringify', 'benchmark-stringify.md');
 }
 
 /**
@@ -294,9 +333,9 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
   return new Promise(resolve => {
     suite
       .on('start', () => {
-        if (example || file || filter.length > 0) {
+        if (sample || file || filter.length > 0) {
           const count = benchmarks.length;
-          const filter_text = example ? '--example' : 
+          const filter_text = sample ? '--sample' : 
                               file ? `--file ${file}` :
                               filter.length > 0 ? filter.join(' ') : '';
           console.log(c.info(`📁 Filter: ${filter_text ? `"${filter_text}"` : 'none'} → ${count} ${count === 1 ? 'benchmark' : 'benchmarks'}\n`));
@@ -319,7 +358,7 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
       })
       .on('complete', event => {
         const suite = event.currentTarget;
-        if (!suite.length) return resolve();
+        if (!suite.length) return resolve(null);
 
         const hz = suite.reduce((total, benchmark) => total + benchmark.hz, 0) / suite.length;
         const sorted = Array.from(suite).sort((a, b) => b.hz - a.hz);
@@ -344,10 +383,148 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
         console.log(c.highlight(`⚡ Average: ${formatNumber(hz.toFixed(hz < 100 ? 2 : 0))} ops/sec`));
         console.log(c.success(`🏆 Fastest: ${sorted[0].name} (${formatNumber(sorted[0].hz.toFixed(sorted[0].hz < 100 ? 2 : 0))} ops/sec)`));
         console.log(c.warning(`🐌 Slowest: ${sorted[sorted.length-1].name} (${formatNumber(sorted[sorted.length-1].hz.toFixed(sorted[sorted.length-1].hz < 100 ? 2 : 0))} ops/sec)`));
-        resolve();
+        resolve({
+          name: implementationName,
+          benchmarks: Object.fromEntries(Array.from(suite).map(b => [b.name, b.hz])),
+          average: hz
+        });
       })
       .run({ async: true });
   });
+}
+
+/**
+ * Prints a cross-implementation comparison table
+ */
+function printGlobalSummary(allResults, benchmarkType) {
+  console.log('\n' + c.title('═'.repeat(70)));
+  console.log(c.title(`  📊 Cross-Implementation Comparison: ${benchmarkType}`));
+  console.log(c.title('═'.repeat(70)) + '\n');
+
+  const baseline = allResults[0];
+  const benchmarkNames = Object.keys(baseline.benchmarks);
+  const showRatio = allResults.length === 2;
+
+  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  if (showRatio) headers.push('Ratio');
+
+  const rows = [];
+  for (const benchName of benchmarkNames) {
+    const row = [benchName];
+    for (const impl of allResults) {
+      const hz = impl.benchmarks[benchName];
+      row.push(hz != null ? formatNumber(hz.toFixed(hz < 100 ? 2 : 0)) : 'N/A');
+    }
+    if (showRatio) {
+      const baseHz = baseline.benchmarks[benchName];
+      const otherHz = allResults[1].benchmarks[benchName];
+      if (baseHz && otherHz && otherHz > 0) {
+        const ratio = baseHz / otherHz;
+        const formatted = `${ratio.toFixed(2)}x`;
+        row.push(ratio >= 1 ? c.success(formatted) : c.error(formatted));
+      } else {
+        row.push('N/A');
+      }
+    }
+    rows.push(row);
+  }
+
+  // Average row (only when there are multiple benchmarks)
+  if (benchmarkNames.length > 1) {
+    const avgRow = [c.bright('Average')];
+    for (const impl of allResults) {
+      avgRow.push(c.bright(formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0))));
+    }
+    if (showRatio && allResults[1].average > 0) {
+      const ratio = baseline.average / allResults[1].average;
+      const formatted = `${ratio.toFixed(2)}x`;
+      avgRow.push(ratio >= 1 ? c.success(c.bright(formatted)) : c.error(c.bright(formatted)));
+    }
+    rows.push(avgRow);
+  }
+
+  console.log(createTable(headers, rows));
+
+  // Print ranking by average when more than 2 implementations
+  if (allResults.length > 2) {
+    const ranked = [...allResults].sort((a, b) => b.average - a.average);
+    console.log();
+    console.log(c.title('🏆 Ranking by average throughput:'));
+    ranked.forEach((impl, idx) => {
+      const emoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '  ';
+      const ops = formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0));
+      console.log(`  ${emoji} ${impl.name}: ${c.highlight(ops)} ops/sec`);
+    });
+  }
+
+  console.log();
+}
+
+/**
+ * Writes a markdown summary of benchmark results
+ */
+function writeMarkdownSummary(allResults, benchmarkType, filename) {
+  const baseline = allResults[0];
+  const benchmarkNames = Object.keys(baseline.benchmarks);
+  const showRatio = allResults.length === 2;
+
+  let markdown = `# ${benchmarkType} Benchmark Results\n\n`;
+  markdown += `*All measurements in operations per second (ops/sec). Higher is better.*\n\n`;
+  markdown += `## Cross-Implementation Comparison\n\n`;
+
+  // Table header
+  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  if (showRatio) headers.push('Ratio');
+  markdown += '| ' + headers.join(' | ') + ' |\n';
+  markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+
+  // Table rows
+  for (const benchName of benchmarkNames) {
+    const row = [benchName];
+    for (const impl of allResults) {
+      const hz = impl.benchmarks[benchName];
+      row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
+    }
+    if (showRatio) {
+      const baseHz = baseline.benchmarks[benchName];
+      const otherHz = allResults[1].benchmarks[benchName];
+      if (baseHz && otherHz && otherHz > 0) {
+        const ratio = baseHz / otherHz;
+        row.push(ratio.toFixed(2));
+      } else {
+        row.push('N/A');
+      }
+    }
+    markdown += '| ' + row.join(' | ') + ' |\n';
+  }
+
+  // Average row (only when there are multiple benchmarks)
+  if (benchmarkNames.length > 1) {
+    const avgRow = ['**Average**'];
+    for (const impl of allResults) {
+      avgRow.push(`**${impl.average.toFixed(impl.average < 100 ? 2 : 0)}**`);
+    }
+    if (showRatio && allResults[1].average > 0) {
+      const ratio = baseline.average / allResults[1].average;
+      avgRow.push(`**${ratio.toFixed(2)}**`);
+    }
+    markdown += '| ' + avgRow.join(' | ') + ' |\n';
+  }
+
+  // Ranking when more than 2 implementations
+  if (allResults.length > 2) {
+    const ranked = [...allResults].sort((a, b) => b.average - a.average);
+    markdown += '\n## Ranking by Average Throughput\n\n';
+    ranked.forEach((impl, idx) => {
+      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+      const ops = impl.average.toFixed(impl.average < 100 ? 2 : 0);
+      markdown += `${medal} ${impl.name}: ${ops} ops/sec\n`;
+    });
+  }
+
+  // Write to file
+  writeFileSync(filename, markdown, 'utf8');
+  console.log(c.dim(`\n📝 Benchmark results written to ${filename}\n`));
 }
 
 /**
