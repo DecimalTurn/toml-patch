@@ -5,7 +5,7 @@
  *   npm run benchmark [-- <options>]
  *   
  * Options:
- *   --example     Run only the spec example benchmark
+ *   --sample      Run curated sample of 10 representative benchmarks
  *   --package     Only run benchmark for specific package (by index)
  *   --file <n>    Run specific file(s) using a matching pattern
  */
@@ -141,8 +141,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, example, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'example'],
+const { help, sample, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'sample'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -153,17 +153,17 @@ if (help) {
 Usage: node benchmark/parse-benchmark.mjs [options]
 
 Options:
-  --example          Just run benchmark for a spec example
-  --package <n>      Run benchmark for specific implementation:
-                       0: toml-patch (current)
-                       1: @iarna/toml
-                       2: smol-toml
-                       3: @rainbowatcher/toml-edit-js
-                     (Default: run all implementations)
-  --file <pattern>   Run specific file(s) matching pattern
-  --versions <list>  Test specific versions (comma-separated)
-                     Example: --versions 0.6.0,0.7.0
-                     Versions are automatically downloaded and cached`);
+  --sample           Run curated sample of 10 representative benchmarks
+  --package <index>  Only run benchmark for the given implementation (0-based index)
+  --file <pattern>   Run benchmarks matching the file pattern
+  --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  
+Examples:
+  npm run benchmark
+  npm run benchmark -- --sample
+  npm run benchmark -- --file hard
+  npm run benchmark -- --package 0
+  npm run benchmark -- --versions 0.7.0,0.6.0`);
   process.exit(0);
 }
 
@@ -219,8 +219,22 @@ if (versions) {
   console.log();
 }
 
+// Curated sample of representative benchmarks
+const SAMPLE_FILES = [
+  '0A-spec-01-example-v0.4.0.toml',
+  '0A-spec-02-example-hard-unicode.toml',
+  '01-small-doc-mixed-type-inline-array.toml',
+  '0C-scaling-string-40kb.toml',
+  '0C-scaling-array-inline-1000.toml',
+  '0C-scaling-table-inline-1000.toml',
+  '0B-types-scalar-string-multiline-1079-chars.toml',
+  '0B-types-scalar-datetimes.toml',
+  '0B-types-scalar-ints.toml',
+  '0B-types-table.toml'
+];
+
 // Determine which files to benchmark
-const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
+const search = sample ? `{${SAMPLE_FILES.join(',')}}` : 
                file ? `*${file}*.toml` : 
                filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
 
@@ -235,7 +249,7 @@ const benchmarks = globSync(searchPattern).map(path => {
 });
 
 if (!benchmarks.length) {
-  throw new Error(`No matching benchmarks found for ${example ? '--example' : 
+  throw new Error(`No matching benchmarks found for ${sample ? '--sample' : 
                                                      file ? `--file ${file}` : 
                                                      filter.length > 0 ? filter.join(' ') : 'all files'}`);
 }
@@ -280,9 +294,9 @@ for (const implementation of implementationsToRun) {
   await new Promise(resolve => {
     suite
       .on('start', () => {
-        if (example || file || filter.length > 0) {
+        if (sample || file || filter.length > 0) {
           const count = benchmarks.length;
-          const filter_text = example ? '--example' : 
+          const filter_text = sample ? '--sample' : 
                               file ? `--file ${file}` :
                               filter.length > 0 ? filter.join(' ') : '';
           

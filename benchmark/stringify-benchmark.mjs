@@ -5,7 +5,7 @@
  *   npm run benchmark:stringify [-- <options>]
  *   
  * Options:
- *   --example        Run only the spec example benchmark
+ *   --sample         Run curated sample of 10 representative benchmarks
  *   --detailed       Run detailed profiling of stringify components
  *   --package <n>    Run benchmark for specific implementation
  *   --file <n>       Run specific file(s) matching pattern
@@ -142,8 +142,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, example, detailed, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'example', 'detailed'],
+const { help, sample, detailed, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'sample', 'detailed'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -154,17 +154,18 @@ if (help) {
 Usage: node benchmark/stringify-benchmark.mjs [options]
 
 Options:
-  --example          Just run benchmark for spec example
-  --detailed         Run detailed profiling of stringify components
-  --package <n>      Run benchmark for specific implementation:
-                       0: toml-patch (current)
-                       1: @iarna/toml
-                       2: smol-toml
-                       3: @rainbowatcher/toml-edit-js
-  --file <pattern>   Run specific file(s) matching pattern
-  --versions <list>  Test specific versions (comma-separated)
-                     Example: --versions 0.6.0,0.7.0
-                     Versions are automatically downloaded and cached`);
+  --sample           Run curated sample of 10 representative benchmarks
+  --detailed         Run detailed profiling of stringify process
+  --package <index>  Only run benchmark for the given implementation (0-based index)
+  --file <pattern>   Run benchmarks matching the file pattern
+  --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  
+Examples:
+  npm run benchmark:stringify
+  npm run benchmark:stringify -- --sample
+  npm run benchmark:stringify -- --detailed
+  npm run benchmark:stringify -- --file hard
+  npm run benchmark:stringify -- --package 0`);
   process.exit(0);
 }
 
@@ -231,8 +232,22 @@ const allResults = [];
 // First load the current version to parse all TOML files
 const currentToml = await loadModule('../dist/toml-patch.js');
 
+// Curated sample of representative benchmarks
+const SAMPLE_FILES = [
+  '0A-spec-01-example-v0.4.0.toml',
+  '0A-spec-02-example-hard-unicode.toml',
+  '01-small-doc-mixed-type-inline-array.toml',
+  '0C-scaling-string-40kb.toml',
+  '0C-scaling-array-inline-1000.toml',
+  '0C-scaling-table-inline-1000.toml',
+  '0B-types-scalar-string-multiline-1079-chars.toml',
+  '0B-types-scalar-datetimes.toml',
+  '0B-types-scalar-ints.toml',
+  '0B-types-table.toml'
+];
+
 // Determine which files to benchmark
-const search = example ? '0A-spec-01-example-v0.4.0.toml' : 
+const search = sample ? `{${SAMPLE_FILES.join(',')}}` : 
                file ? `*${file}*.toml` : 
                filter.length > 0 ? `*${filter.join('*')}*.toml` : '*.toml';
 
@@ -252,7 +267,7 @@ const benchmarks = globSync(searchPattern).map(path => {
 }).filter(Boolean);
 
 if (!benchmarks.length) {
-  throw new Error(`No matching benchmarks found for ${example ? '--example' : 
+  throw new Error(`No matching benchmarks found for ${sample ? '--sample' : 
                                                      file ? `--file ${file}` : 
                                                      filter.length > 0 ? filter.join(' ') : 'all files'}`);
 }
@@ -318,9 +333,9 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
   return new Promise(resolve => {
     suite
       .on('start', () => {
-        if (example || file || filter.length > 0) {
+        if (sample || file || filter.length > 0) {
           const count = benchmarks.length;
-          const filter_text = example ? '--example' : 
+          const filter_text = sample ? '--sample' : 
                               file ? `--file ${file}` :
                               filter.length > 0 ? filter.join(' ') : '';
           console.log(c.info(`📁 Filter: ${filter_text ? `"${filter_text}"` : 'none'} → ${count} ${count === 1 ? 'benchmark' : 'benchmarks'}\n`));
