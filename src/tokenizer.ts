@@ -31,14 +31,11 @@ const CH_TAB = 0x09;
 const CH_LF = 0x0a;
 const CH_CR = 0x0d;
 const CH_SPACE = 0x20;
-const CH_DOUBLE_QUOTE = 0x22;
 const CH_HASH = 0x23;
-const CH_SINGLE_QUOTE = 0x27;
 const CH_COMMA = 0x2c;
 const CH_DOT = 0x2e;
 const CH_EQUAL = 0x3d;
 const CH_LBRACKET = 0x5b;
-const CH_BACKSLASH = 0x5c;
 const CH_RBRACKET = 0x5d;
 const CH_LBRACE = 0x7b;
 const CH_RBRACE = 0x7d;
@@ -372,7 +369,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
     if (double_quoted || single_quoted) {
       throw new ParseError(
         input,
-        findPosition(input, start),
+        findPosition(lines, start),
         `Expected close of string with ${double_quoted ? DOUBLE_QUOTE : SINGLE_QUOTE}`
       );
     }
