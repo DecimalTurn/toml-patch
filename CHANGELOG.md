@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-02-14
+
 ### Changed
 - Improve parsing and conversion performance ([#105](https://github.com/DecimalTurn/toml-patch/pull/105))
 - Better benchmarking ([#104](https://github.com/DecimalTurn/toml-patch/pull/104))
