@@ -555,7 +555,6 @@ export function applyTrailingComma(
  */
 export function applyWrites(root: TreeNode) {
   if (!dirty_roots.has(root)) return;
-  dirty_roots.delete(root);
 
   const enter = getEnterOffsets(root);
   const exit = getExitOffsets(root);
@@ -684,6 +683,8 @@ export function applyWrites(root: TreeNode) {
 
   visitNode(root);
 
+  // Mark as clean and clear offset maps only after successful traversal
+  dirty_roots.delete(root);
   enter_offsets.delete(root);
   exit_offsets.delete(root);
 }

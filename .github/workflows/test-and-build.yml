@@ -37,7 +37,7 @@ jobs:
       run: npm run test:all
     - name: Specs
       run: npm run specs
-    - name: Benchmark (Example)
+    - name: Benchmark (CI samples)
       run: npm run benchmark:ci
     - name: Check Performance
       run: node benchmark/check-performance.mjs
