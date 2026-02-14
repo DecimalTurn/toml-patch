@@ -1,5 +1,4 @@
-import { Value, NodeType, TreeNode, AST, InlineTable } from './ast';
-import traverse from './traverse';
+import { Value, NodeType, TreeNode, AST, InlineTable, Table, TableArray, KeyValue } from './ast';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
 
@@ -10,9 +9,10 @@ import ParseError from './parse-error';
 function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], inlineTables: Set<string>) {
   for (const item of inlineTable.items) {
     const keyValue = item.item;
-    const fullPath = basePath.concat(keyValue.key.value);
     
     if (keyValue.value.type === NodeType.InlineTable) {
+      // Only allocate concat array when we actually have a nested inline table
+      const fullPath = basePath.concat(keyValue.key.value);
       inlineTables.add(joinKey(fullPath));
       // Recursively track nested inline tables
       trackNestedInlineTables(keyValue.value, fullPath, inlineTables);
@@ -35,111 +35,112 @@ export default function toJS(ast: AST, input: string = ''): any {
   const implicit_tables: Set<string> = new Set();
   const inline_tables: Set<string> = new Set();
   let active: any = result;
-  let previous_active: any;
-  let skip_depth = 0;
   let active_path: string[] = [];
 
-  traverse(ast, {
-    [NodeType.Table](node) {
-      const key = node.key.item.value;
-      try {
-        validateKey(result, [], key, node.type, { tables, table_arrays, defined, implicit_tables, inline_tables });
-      } catch (err) {
-        const e = err as Error;
-        throw new ParseError(input, node.key.loc.start, e.message);
-      }
+  const state = { tables, table_arrays, defined, implicit_tables, inline_tables };
 
-      const joined_key = joinKey(key);
-      tables.add(joined_key);
-      defined.add(joined_key);
-
-      active = ensureTable(result, key);
-      active_path = key;
-    },
-
-    [NodeType.TableArray](node) {
-      const key = node.key.item.value;
-
-      try {
-        validateKey(result, [], key, node.type, { tables, table_arrays, defined, implicit_tables, inline_tables });
-      } catch (err) {
-        const e = err as Error;
-        throw new ParseError(input, node.key.loc.start, e.message);
-      }
-
-      const joined_key = joinKey(key);
-      table_arrays.add(joined_key);
-      defined.add(joined_key);
-
-      active = ensureTableArray(result, key);
-      active_path = key;
-    },
-
-    [NodeType.KeyValue]: {
-      enter(node) {
-        if (skip_depth > 0) return;
-
-        const key = node.key.value;
-        try {
-          validateKey(active, active_path, key, node.type, {
-            tables,
-            table_arrays,
-            defined,
-            implicit_tables,
-            inline_tables
-          });
-        } catch (err) {
-          const e = err as Error;
-          throw new ParseError(input, node.key.loc.start, e.message);
+  // Specialized inline walk — only visits Table, TableArray, and KeyValue.
+  // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
+  // InlineArray recursively). This avoids the overhead of the generic traverse
+  // dispatching through every AST node.
+  for (const block of ast) {
+    switch (block.type) {
+      case NodeType.Table:
+        handleTable(block as Table);
+        for (const item of (block as Table).items) {
+          if (item.type === NodeType.KeyValue) handleKeyValue(item as KeyValue);
         }
+        break;
 
-        // Track implicit tables created by dotted keys.
-        // Example: within [fruit], `apple.color = ...` implicitly defines tables `fruit.apple`.
-        // Example: `type.name = ...` implicitly defines table `product.type`.
-        if (key.length > 1) {
-          for (let i = 1; i < key.length; i++) {
-            const implicit = joinKey(active_path.concat(key.slice(0, i)));
-            implicit_tables.add(implicit);
-            defined.add(implicit);
-          }
+      case NodeType.TableArray:
+        handleTableArray(block as TableArray);
+        for (const item of (block as TableArray).items) {
+          if (item.type === NodeType.KeyValue) handleKeyValue(item as KeyValue);
         }
+        break;
 
-        let value;
-        try {
-          value = toValue(node.value);
-        } catch (err) {
-          // Convert plain Errors from toValue() to ParseErrors with location info
-          const e = err as Error;
-          throw new ParseError(input, node.value.loc.start, e.message);
-        }
-        
-        // Inline tables are immutable in TOML: once defined, they cannot be extended.
-        // Track their key path so later dotted keys can be rejected.
-        if (node.value.type === NodeType.InlineTable) {
-          const base_path = active_path.concat(key);
-          inline_tables.add(joinKey(base_path));
-          // Also track nested inline tables within this inline table
-          trackNestedInlineTables(node.value, base_path, inline_tables);
-        }
-        const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
+      case NodeType.KeyValue:
+        handleKeyValue(block as KeyValue);
+        break;
 
-        target[last(key)!] = value;
-        defined.add(joinKey(active_path.concat(key)));
-      }
-    },
-
-    [NodeType.InlineTable]: {
-      enter() {
-        // Handled by toValue
-        skip_depth++;
-      },
-      exit() {
-        skip_depth--;
-      }
+      // Skip Comments
     }
-  });
+  }
 
   return result;
+
+  function handleTable(node: Table) {
+    const key = node.key.item.value;
+    try {
+      validateKey(result, [], key, node.type, state);
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, node.key.loc.start, e.message);
+    }
+
+    const joined_key = joinKey(key);
+    tables.add(joined_key);
+    defined.add(joined_key);
+
+    active = ensureTable(result, key);
+    active_path = key;
+  }
+
+  function handleTableArray(node: TableArray) {
+    const key = node.key.item.value;
+
+    try {
+      validateKey(result, [], key, node.type, state);
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, node.key.loc.start, e.message);
+    }
+
+    const joined_key = joinKey(key);
+    table_arrays.add(joined_key);
+    defined.add(joined_key);
+
+    active = ensureTableArray(result, key);
+    active_path = key;
+  }
+
+  function handleKeyValue(node: KeyValue) {
+    const key = node.key.value;
+    try {
+      validateKey(active, active_path, key, node.type, state);
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, node.key.loc.start, e.message);
+    }
+
+    // Track implicit tables created by dotted keys.
+    if (key.length > 1) {
+      for (let i = 1; i < key.length; i++) {
+        const implicit = joinKey(active_path.concat(key.slice(0, i)));
+        implicit_tables.add(implicit);
+        defined.add(implicit);
+      }
+    }
+
+    let value;
+    try {
+      value = toValue(node.value);
+    } catch (err) {
+      const e = err as Error;
+      throw new ParseError(input, node.value.loc.start, e.message);
+    }
+    
+    // Inline tables are immutable in TOML
+    if (node.value.type === NodeType.InlineTable) {
+      const base_path = active_path.concat(key);
+      inline_tables.add(joinKey(base_path));
+      trackNestedInlineTables(node.value, base_path, inline_tables);
+    }
+    const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
+
+    target[last(key)!] = value;
+    defined.add(joinKey(active_path.concat(key)));
+  }
 }
 
 export function toValue(node: Value): any {
@@ -226,15 +227,24 @@ function validateKey(
     inline_tables: Set<string>;
   }
 ) {
-  const full_key = prefix.concat(key);
-  const joined_full_key = joinKey(full_key);
+  // Pre-compute all candidate key strings incrementally to avoid repeated
+  // prefix.concat(key.slice(0, i)) + join allocations.
+  // candidates[i] = joinKey(prefix.concat(key.slice(0, i + 1)))
+  const prefixStr = prefix.length > 0 ? joinKey(prefix) : '';
+  const candidates: string[] = new Array(key.length);
+  let running = prefixStr;
+  for (let i = 0; i < key.length; i++) {
+    running = running ? running + '.' + key[i] : key[i];
+    candidates[i] = running;
+  }
+  const joined_full_key = candidates[key.length - 1];
 
   // 0. Inline tables are immutable.
   // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
   // (toml-test invalid: spec-1.1.0/common-49-0, inline-table/overwrite-02, inline-table/overwrite-05)
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
         throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
       }
@@ -249,7 +259,7 @@ function validateKey(
   // Check if table header path contains an inline table
   if (type === NodeType.Table || type === NodeType.TableArray) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
         throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
       }
@@ -261,7 +271,7 @@ function validateKey(
   // append-with-dotted-keys fixtures.
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.table_arrays.has(candidate)) {
         throw new Error(`Invalid key, cannot traverse into an array of tables at ${candidate}`);
       }
@@ -287,7 +297,7 @@ function validateKey(
   // (toml-test invalid: table/append-with-dotted-keys-01, table/append-with-dotted-keys-02)
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
-      const candidate = joinKey(prefix.concat(key.slice(0, i)));
+      const candidate = candidates[i - 1];
       if (state.tables.has(candidate)) {
         throw new Error(`Invalid key, cannot add to an explicitly defined table ${candidate} using dotted keys`);
       }
@@ -295,18 +305,14 @@ function validateKey(
   }
 
   // 1. Cannot override primitive value
-  let parts: string[] = [];
   let index = 0;
   for (const part of key) {
-    parts.push(part);
-
     if (!has(object, part)) return;
     if (isPrimitive(object[part])) {
-      const fullKey = joinKey(prefix.concat(parts));
-      throw new Error(`Invalid key, a value has already been defined for ${fullKey}`);
+      throw new Error(`Invalid key, a value has already been defined for ${candidates[index]}`);
     }
 
-    const joined_parts = joinKey(prefix.concat(parts));
+    const joined_parts = candidates[index];
     if (Array.isArray(object[part]) && !state.table_arrays.has(joined_parts)) {
       throw new Error(`Invalid key, cannot add to a static array at ${joined_parts}`);
     }

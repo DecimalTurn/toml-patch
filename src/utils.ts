@@ -37,7 +37,10 @@ export function isIterable<T>(value: any): value is Iterable<T> {
 }
 
 export function has(object: any, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
+  // All objects come from blank() (Object.create(null)) so there is no
+  // prototype chain — `key in object` is safe and avoids the slow
+  // Object.prototype.hasOwnProperty.call indirection.
+  return key in object;
 }
 
 export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {

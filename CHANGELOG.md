@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Migrate benchmarks from CommonJS to ESM modules ([#104](https://github.com/DecimalTurn/toml-patch/pull/104))
-- Enhance benchmark output with colored tables and formatted results
-- Support benchmarking multiple package versions with automatic caching (`--versions`)
-- Add CLI filters for benchmarks (`--package`, `--file`, `--example`)
+- Improve parsing and conversion performance ([#105](https://github.com/DecimalTurn/toml-patch/pull/105))
+- Better benchmarking ([#104](https://github.com/DecimalTurn/toml-patch/pull/104))
+  - Migrate benchmarks from CommonJS to ESM modules
+  - Improve benchmark output with colored tables and formatted results
+  - Support benchmarking multiple package versions with automatic caching (`--versions`)
+  - Add CLI filters for benchmarks (`--package`, `--file`, `--example`)
+
+### Added
+- Profiling support via `npm run profile` ([#105](https://github.com/DecimalTurn/toml-patch/pull/105))
 
 ## [1.0.0] - 2026-02-12
 

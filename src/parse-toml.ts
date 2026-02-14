@@ -24,7 +24,6 @@ import { parseString } from './parse-string';
 import Cursor from './cursor';
 import { clonePosition, cloneLocation } from './location';
 import ParseError from './parse-error';
-import { merge } from './utils';
 
 import {
   DateFormatHelper,
@@ -44,6 +43,20 @@ const IS_DIVIDER = /\_/g;
 const IS_INF = /^[+\-]?inf$/;
 const IS_NAN = /^[+\-]?nan$/;
 const IS_HEX = /^[+\-]?0x/i;
+
+/**
+ * Check if a character code is a valid bare key character (A-Za-z0-9_-).
+ * Uses charCode range checks instead of regex for speed.
+ */
+function isBareKeyCode(code: number): boolean {
+  return (
+    (code >= 0x41 && code <= 0x5a) || // A-Z
+    (code >= 0x61 && code <= 0x7a) || // a-z
+    (code >= 0x30 && code <= 0x39) || // 0-9
+    code === 0x5f ||                   // _
+    code === 0x2d                      // -
+  );
+}
 const IS_OCTAL = /^[+\-]?0o/i;
 const IS_BINARY = /^[+\-]?0b/i;
 
@@ -209,12 +222,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     
     if (!isQuoted) {
       for (let i = 0; i < raw.length; i++) {
-        const char = raw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(raw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${raw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
@@ -231,7 +243,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   
   key.item = {
     type: NodeType.Key,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     raw: cursor.value!.raw,
     value: keyValue
   };
@@ -247,12 +259,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
       for (let i = 0; i < partRaw.length; i++) {
-        const char = partRaw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
@@ -358,7 +369,11 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
     cursor.next();
-    merge(items, walkBlock(cursor, input) as Array<KeyValue | Comment>);
+    const blocks = walkBlock(cursor, input) as Array<KeyValue | Comment>;
+    // Push directly instead of merge to avoid function call overhead
+    for (let bi = 0; bi < blocks.length; bi++) {
+      items.push(blocks[bi]);
+    }
   }
 
   return {
@@ -1345,12 +1360,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   const isQuotedKey = rawKeyToken.startsWith('"') || rawKeyToken.startsWith("'");
   if (!isQuotedKey) {
     for (let i = 0; i < rawKeyToken.length; i++) {
-      const char = rawKeyToken[i];
-      if (!/[A-Za-z0-9_-]/.test(char)) {
+      if (!isBareKeyCode(rawKeyToken.charCodeAt(i))) {
         throw new ParseError(
           input,
           { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-          `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+          `Invalid character '${rawKeyToken[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
         );
       }
     }
@@ -1366,7 +1380,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   
   const key: Key = {
     type: NodeType.Key,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     raw: cursor.value!.raw,
     value: keyValue2
   };
@@ -1387,12 +1401,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
       for (let i = 0; i < partRaw.length; i++) {
-        const char = partRaw[i];
-        if (!/[A-Za-z0-9_-]/.test(char)) {
+        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
           throw new ParseError(
             input,
             { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${char}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
+            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
           );
         }
       }
@@ -1461,7 +1474,6 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   const results = walkValue(cursor, input);
   const value = results[0] as Value;
-  const comments = results.slice(1) as Comment[];
 
   // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
   // Example invalid TOML: first = "Tom" last = "Preston-Werner"
@@ -1495,16 +1507,16 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     }
   }
 
-  return [
-    {
-      type: NodeType.KeyValue,
-      key,
-      value: value as Value,
-      loc: { start: clonePosition(key.loc.start), end: clonePosition(value.loc.end) },
-      equals
-    },
-    ...comments
-  ];
+  // Reuse the walkValue result array: replace position 0 with the KeyValue node.
+  // Comments (if any) remain at indices 1+, avoiding a new array allocation + spread.
+  results[0] = {
+    type: NodeType.KeyValue,
+    key,
+    value: value as Value,
+    loc: { start: clonePosition(key.loc.start), end: clonePosition(value.loc.end) },
+    equals
+  } as any;
+  return results as unknown as Array<KeyValue | Comment>;
 }
 
 function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
@@ -1566,7 +1578,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
   // 6. InlineTable
   const value: InlineTable = {
     type: NodeType.InlineTable,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     items: []
   };
 
@@ -1619,7 +1631,6 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
     // Recursively parse the key-value, but without generators
     const blocks = walkBlock(cursor, input);
     const item = blocks[0];
-    const additional_comments = blocks.slice(1) as Comment[];
 
     if (item.type === NodeType.KeyValue) {
       value.items.push({
@@ -1628,7 +1639,10 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
         item: item as KeyValue,
         comma: false
       });
-      merge(comments, additional_comments);
+      // Push remaining comments directly instead of slice + merge
+      for (let ci = 1; ci < blocks.length; ci++) {
+        comments.push(blocks[ci] as Comment);
+      }
     }
 
     cursor.next();
@@ -1662,7 +1676,7 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
 
   const value: InlineArray = {
     type: NodeType.InlineArray,
-    loc: cloneLocation(cursor.value!.loc),
+    loc: cursor.value!.loc,
     items: []
   };
 
@@ -1703,7 +1717,6 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
 
       const results = walkValue(cursor, input);
       const item = results[0];
-      const additional_comments = results.slice(1) as Comment[];
 
       value.items.push({
         type: NodeType.InlineItem,
@@ -1711,7 +1724,10 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         item,
         comma: false
       });
-      merge(comments, additional_comments as Comment[]);
+      // Push remaining comments directly instead of slice + merge
+      for (let ci = 1; ci < results.length; ci++) {
+        comments.push(results[ci] as Comment);
+      }
     }
 
     cursor.next();

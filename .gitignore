@@ -8,3 +8,6 @@ toml-patch.code-workspace
 
 # Benchmark cache
 .bench-cache
+
+# Profile outputs
+*.cpuprofile

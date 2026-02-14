@@ -69,8 +69,10 @@ export default class Cursor<T> implements Iterator<T | undefined> {
   }
 }
 
+const DONE: IteratorResult<undefined> = Object.freeze({ value: undefined, done: true });
+
 function done(): IteratorResult<undefined> {
-  return { value: undefined, done: true };
+  return DONE;
 }
 
 /**

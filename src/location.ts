@@ -48,7 +48,29 @@ export function findPosition(input: string | number[], index: number): Position 
   // g = 8: 2 -> 3, 8 - (7 + 1 || 0) = 0
 
   const lines = Array.isArray(input) ? input : findLines(input);
-  const line = lines.findIndex(line_index => line_index >= index) + 1;
+
+  if (lines.length === 0) {
+    return { line: 1, column: index };
+  }
+
+  // Binary search: find first line_index where lines[line_index] >= index
+  let lo = 0;
+  let hi = lines.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (lines[mid] < index) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  // If index is past all recorded line endings (no sentinel), advance to next line
+  if (lines[lo] < index) {
+    lo++;
+  }
+
+  const line = lo + 1;
   const column = index - (lines[line - 2] + 1 || 0);
 
   return { line, column };
@@ -67,12 +89,13 @@ export function findLines(input: string): number[] {
   const indexes: number[] = [];
 
   for (let i = 0; i < input.length; i++) {
-    const char = input[i];
-    if (char === '\n') {
+    const code = input.charCodeAt(i);
+    if (code === 0x0a) {
+      // \n
       indexes.push(i);
-    } else if (char === '\r') {
-      // Handle \r\n as a single line break
-      if (input[i + 1] === '\n') {
+    } else if (code === 0x0d) {
+      // \r — handle \r\n as a single line break
+      if (input.charCodeAt(i + 1) === 0x0a) {
         indexes.push(i + 1); // Position after \r\n
         i++; // Skip the \n
       } else {
