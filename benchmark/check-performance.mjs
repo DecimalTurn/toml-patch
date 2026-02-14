@@ -22,34 +22,65 @@ function extractRatio(markdownPath) {
   const content = readFileSync(markdownPath, 'utf8');
   const lines = content.split('\n');
   
+  // Locate the benchmark table header that includes a Ratio column
+  const headerIdx = lines.findIndex(
+    (line) => line.includes('| Benchmark |') && line.includes('| Ratio |'),
+  );
+
+  if (headerIdx === -1) {
+    console.warn(`⚠️  No Ratio column found in benchmark table in ${markdownPath}`);
+    return null;
+  }
+
+  const headerLine = lines[headerIdx];
+  const headerColumns = headerLine
+    .split('|')
+    .map((col) => col.trim())
+    .filter((col) => col);
+
+  // Find the index of the Ratio column (ignore markdown styling)
+  const ratioColumnIndex = headerColumns.findIndex((col) => col.replace(/\*\*/g, '') === 'Ratio');
+
+  if (ratioColumnIndex === -1) {
+    console.warn(`⚠️  Table header in ${markdownPath} does not contain a Ratio column`);
+    return null;
+  }
+
   // Find the Average row (starts with | **Average**)
-  let avgLine = lines.find(line => line.trim().startsWith('| **Average**'));
-  
+  let avgLine = lines.find((line) => line.trim().startsWith('| **Average**'));
+
   // If no Average row, use the first data row (single benchmark case)
   if (!avgLine) {
-    // Find table start (header row with Benchmark | ... | Ratio)
-    const headerIdx = lines.findIndex(line => line.includes('| Benchmark |') && line.includes('| Ratio |'));
-    if (headerIdx !== -1 && headerIdx + 2 < lines.length) {
+    if (headerIdx + 2 < lines.length) {
       // Data row is 2 lines after header (header, separator, data)
       avgLine = lines[headerIdx + 2];
     }
   }
-  
+
   if (!avgLine) {
-    console.warn(`⚠️  No ratio data found in ${markdownPath}`);
+    console.warn(`⚠️  No ratio data row found in ${markdownPath}`);
     return null;
   }
 
-  // Extract the ratio from the last column
-  const columns = avgLine.split('|').map(col => col.trim()).filter(col => col);
-  const ratioColumn = columns[columns.length - 1];
-  
+  // Extract the ratio from the Ratio column
+  const columns = avgLine
+    .split('|')
+    .map((col) => col.trim())
+    .filter((col) => col);
+
+  if (ratioColumnIndex < 0 || ratioColumnIndex >= columns.length) {
+    console.warn(`⚠️  Ratio column index ${ratioColumnIndex} is out of bounds for data row in ${markdownPath}`);
+    return null;
+  }
+
+  const ratioColumn = columns[ratioColumnIndex];
+
   // Remove ** markdown and parse
   const ratioStr = ratioColumn.replace(/\*\*/g, '');
   const ratio = parseFloat(ratioStr);
-  
+
   if (isNaN(ratio)) {
-    console.warn(`⚠️  Could not parse ratio: ${ratioStr}`);
+    console.warn(`⚠️  Could not parse ratio value '${ratioStr}' from ${markdownPath}`);
     return null;
   }
 
