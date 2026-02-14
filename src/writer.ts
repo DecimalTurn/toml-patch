@@ -651,6 +651,8 @@ export function applyWrites(root: TreeNode) {
         shiftLoc(node);
         shiftEnd(node);
         break;
+      default:
+        throw new Error(`Unrecognized node type "${(node as any).type}"`);
     }
   }
 

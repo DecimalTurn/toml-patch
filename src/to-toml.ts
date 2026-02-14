@@ -144,6 +144,12 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
       case NodeType.Comment:
         write(lines, node.loc, (node as Comment).raw, paddingChar);
         break;
+            default: {
+        // Preserve original behavior: throw on unrecognized node types
+        // to catch bugs when new node types are added or invalid nodes appear.
+        const type = (node as any).type;
+        throw new Error(`toTOML: Unrecognized node type: ${String(type)}`);
+            }
     }
   }
 
