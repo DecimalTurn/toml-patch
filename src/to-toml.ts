@@ -45,7 +45,6 @@ const BY_NEW_LINE = /(\r\n|\n)/g;
 export default function toTOML(ast: AST, format: TomlFormat): string {
 
   const lines: string[] = [];
-  const paddingChar = format.useTabsForIndentation ? '\t' : SPACE;
 
   // Inline traversal for monomorphic property access (avoids generic traverse
   // visitor dispatch which causes megamorphic inline cache misses in V8)
@@ -96,23 +95,23 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
       }
 
       case NodeType.Key:
-        write(lines, node.loc, (node as Key).raw, paddingChar);
+        write(lines, node.loc, (node as Key).raw);
         break;
 
       case NodeType.String:
-        write(lines, node.loc, (node as StringNode).raw, paddingChar);
+        write(lines, node.loc, (node as StringNode).raw);
         break;
       case NodeType.Integer:
-        write(lines, node.loc, (node as Integer).raw, paddingChar);
+        write(lines, node.loc, (node as Integer).raw);
         break;
       case NodeType.Float:
-        write(lines, node.loc, (node as Float).raw, paddingChar);
+        write(lines, node.loc, (node as Float).raw);
         break;
       case NodeType.Boolean:
-        write(lines, node.loc, (node as BooleanNode).value.toString(), paddingChar);
+        write(lines, node.loc, (node as BooleanNode).value.toString());
         break;
       case NodeType.DateTime:
-        write(lines, node.loc, (node as DateTime).raw, paddingChar);
+        write(lines, node.loc, (node as DateTime).raw);
         break;
 
       case NodeType.InlineArray: {
@@ -142,7 +141,7 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
       }
 
       case NodeType.Comment:
-        write(lines, node.loc, (node as Comment).raw, paddingChar);
+        write(lines, node.loc, (node as Comment).raw);
         break;
             default: {
         // Preserve original behavior: throw on unrecognized node types
@@ -193,7 +192,6 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  *              - end: { line: number, column: number } - Ending position (1-indexed line, 0-indexed column)
  * @param raw - The raw string content to write at the specified location.
  *              Can contain multiple lines separated by \n or \r\n.
- * @param paddingChar - The character to use for padding (space or tab)
  * 
  * @throws {Error} When there's a mismatch between location span and raw string line count
  * @throws {Error} When attempting to write to an uninitialized line
@@ -202,11 +200,11 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
  * ```typescript
  * const lines = ['', ''];
  * const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 3 } };
- * write(lines, location, 'key', ' ');
+ * write(lines, location, 'key');
  * // Result: lines[0] becomes 'key'
  * ```
  */
-function write(lines: string[], loc: Location, raw: string, paddingChar: string = SPACE) {
+function write(lines: string[], loc: Location, raw: string) {
   // Fast path for single-line content (the vast majority of nodes).
   // Avoids the regex split + filter that allocates two temporary arrays.
   if (loc.start.line === loc.end.line) {
