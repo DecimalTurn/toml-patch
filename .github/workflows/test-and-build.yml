@@ -39,6 +39,20 @@ jobs:
       run: npm run specs
     - name: Benchmark (Example)
       run: npm run benchmark:ci
+    - name: Check Performance
+      run: node benchmark/check-performance.mjs
+    - name: Write Benchmark Summary
+      if: always()
+      run: |
+        if [ -f benchmark-parse.md ]; then
+          echo "## Parse Benchmark" >> $GITHUB_STEP_SUMMARY
+          cat benchmark-parse.md >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        if [ -f benchmark-stringify.md ]; then
+          echo "## Stringify Benchmark" >> $GITHUB_STEP_SUMMARY
+          cat benchmark-stringify.md >> $GITHUB_STEP_SUMMARY
+        fi
     - name: Create build artifacts
       uses: actions/upload-artifact@v6
       with: 

@@ -11,7 +11,7 @@
  */
 
 import { join, basename, resolve, dirname } from 'path';
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
@@ -348,6 +348,7 @@ for (const implementation of implementationsToRun) {
 // Print global comparison if multiple implementations were benchmarked
 if (allResults.length > 1) {
   printGlobalSummary(allResults, 'Parse');
+  writeMarkdownSummary(allResults, 'Parse', 'benchmark-parse.md');
 }
 
 /**
@@ -415,4 +416,70 @@ function printGlobalSummary(allResults, benchmarkType) {
   }
 
   console.log();
+}
+
+/**
+ * Writes a markdown summary of benchmark results
+ */
+function writeMarkdownSummary(allResults, benchmarkType, filename) {
+  const baseline = allResults[0];
+  const benchmarkNames = Object.keys(baseline.benchmarks);
+  const showRatio = allResults.length === 2;
+
+  let markdown = `# ${benchmarkType} Benchmark Results\n\n`;
+  markdown += `## Cross-Implementation Comparison\n\n`;
+
+  // Table header
+  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  if (showRatio) headers.push('Ratio');
+  markdown += '| ' + headers.join(' | ') + ' |\n';
+  markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+
+  // Table rows
+  for (const benchName of benchmarkNames) {
+    const row = [benchName];
+    for (const impl of allResults) {
+      const hz = impl.benchmarks[benchName];
+      row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
+    }
+    if (showRatio) {
+      const baseHz = baseline.benchmarks[benchName];
+      const otherHz = allResults[1].benchmarks[benchName];
+      if (baseHz && otherHz && otherHz > 0) {
+        const ratio = baseHz / otherHz;
+        row.push(ratio.toFixed(2));
+      } else {
+        row.push('N/A');
+      }
+    }
+    markdown += '| ' + row.join(' | ') + ' |\n';
+  }
+
+  // Average row (only when there are multiple benchmarks)
+  if (benchmarkNames.length > 1) {
+    const avgRow = ['**Average**'];
+    for (const impl of allResults) {
+      avgRow.push(`**${impl.average.toFixed(impl.average < 100 ? 2 : 0)}**`);
+    }
+    if (showRatio && allResults[1].average > 0) {
+      const ratio = baseline.average / allResults[1].average;
+      avgRow.push(`**${ratio.toFixed(2)}**`);
+    }
+    markdown += '| ' + avgRow.join(' | ') + ' |\n';
+  }
+
+  // Ranking when more than 2 implementations
+  if (allResults.length > 2) {
+    const ranked = [...allResults].sort((a, b) => b.average - a.average);
+    markdown += '\n## Ranking by Average Throughput\n\n';
+    ranked.forEach((impl, idx) => {
+      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+      const ops = impl.average.toFixed(impl.average < 100 ? 2 : 0);
+      markdown += `${medal} ${impl.name}: ${ops} ops/sec\n`;
+    });
+  }
+
+  // Write to file
+  writeFileSync(filename, markdown, 'utf8');
+  console.log(c.dim(`\n📝 Benchmark results written to ${filename}\n`));
 }
