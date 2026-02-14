@@ -11,8 +11,8 @@ import {
   generateInlineArray,
   generateInlineTable
 } from './generate';
-import { TomlFormat, formatTopLevel, formatPrintWidth, formatEmptyLines, formatNestedTablesMultiline } from './toml-format';
-import { isObject, isString, isInteger, isFloat, isBoolean, isDate, pipe } from './utils';
+import { TomlFormat, formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './toml-format';
+import { isObject, isString, isInteger, isFloat, isBoolean, isDate } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 
@@ -30,17 +30,12 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
 
   // Heuristics:
   // 1. Top-level objects/arrays should be tables/table arrays
-  // 2. Convert objects/arrays to tables/table arrays based on print width
-  // 3. Convert nested inline tables to separate tables based on preferNestedTablesMultiline
-  const formatted = pipe(
-    document,
-    document => formatTopLevel(document, format),
-    document => formatNestedTablesMultiline(document, format),
-    document => formatPrintWidth(document, format)
-  );
+  // 2. Convert nested inline tables to separate tables based on preferNestedTablesMultiline
+  formatTopLevel(document, format);
+  formatNestedTablesMultiline(document, format);
 
   // Apply formatEmptyLines only once at the end
-  return formatEmptyLines(formatted);
+  return formatEmptyLines(document);
 }
 
 /** 
@@ -127,8 +122,7 @@ function walkInlineTable(value: object, format: TomlFormat): InlineTable | Value
   if (!isObject(value)) return walkValue(value, format);
 
   const inline_table = generateInlineTable();
-  const items = [...walkObject(value, format)];
-  for (const item of items) {
+  for (const item of walkObject(value, format)) {
     const inline_table_item = generateInlineItem(item);
 
     insert(inline_table, inline_table, inline_table_item);

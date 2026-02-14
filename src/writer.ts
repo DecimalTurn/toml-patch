@@ -18,6 +18,8 @@ import {
   isDocument,
   InlineTable,
   TableArray,
+  TableKey,
+  TableArrayKey,
   Table,
   KeyValue,
   Comment,
@@ -558,78 +560,127 @@ export function applyWrites(root: TreeNode) {
   const enter = getEnterOffsets(root);
   const exit = getExitOffsets(root);
 
-  const offset: { lines: number; columns: { [index: number]: number } } = {
-    lines: 0,
-    columns: {}
-  };
+  let offsetLines = 0;
+  const offsetColumns: { [index: number]: number } = {};
 
-  function shiftStart(node: TreeNode) {
+  // Inline shift helpers — access loc directly to keep V8 ICs monomorphic
+  // (the generic traverse version passes many node shapes through the same
+  //  function, causing megamorphic inline caches)
 
-    const lineOffset = offset.lines;
-    node.loc.start.line += lineOffset;
-    
-    const columnOffset = offset.columns[node.loc.start.line] || 0;
-    node.loc.start.column += columnOffset
+  function visitNode(node: TreeNode) {
+    switch (node.type) {
+      case NodeType.Document: {
+        const doc = node as Document;
+        shiftLoc(doc);
+        for (let i = 0; i < doc.items.length; i++) visitNode(doc.items[i]);
+        shiftEnd(doc);
+        break;
+      }
+      case NodeType.Table: {
+        const tbl = node as Table;
+        shiftLoc(tbl);
+        visitNode(tbl.key);
+        for (let i = 0; i < tbl.items.length; i++) visitNode(tbl.items[i]);
+        shiftEnd(tbl);
+        break;
+      }
+      case NodeType.TableArray: {
+        const ta = node as TableArray;
+        shiftLoc(ta);
+        visitNode(ta.key);
+        for (let i = 0; i < ta.items.length; i++) visitNode(ta.items[i]);
+        shiftEnd(ta);
+        break;
+      }
+      case NodeType.TableKey: {
+        const tk = node as TableKey;
+        shiftLoc(tk);
+        visitNode(tk.item);
+        shiftEnd(tk);
+        break;
+      }
+      case NodeType.TableArrayKey: {
+        const tak = node as TableArrayKey;
+        shiftLoc(tak);
+        visitNode(tak.item);
+        shiftEnd(tak);
+        break;
+      }
+      case NodeType.KeyValue: {
+        const kv = node as KeyValue;
+        // Special enter: adjust equals position before shifting
+        const startLine = kv.loc.start.line + offsetLines;
+        const keyExit = exit.get(kv.key);
+        kv.equals += (offsetColumns[startLine] || 0) + (keyExit ? keyExit.columns : 0);
+        shiftLoc(kv);
+        // Children
+        visitNode(kv.key);
+        visitNode(kv.value);
+        shiftEnd(kv);
+        break;
+      }
+      case NodeType.InlineArray: {
+        const ia = node as InlineArray;
+        shiftLoc(ia);
+        for (let i = 0; i < ia.items.length; i++) visitNode(ia.items[i]);
+        shiftEnd(ia);
+        break;
+      }
+      case NodeType.InlineTable: {
+        const it = node as InlineTable;
+        shiftLoc(it);
+        for (let i = 0; i < it.items.length; i++) visitNode(it.items[i]);
+        shiftEnd(it);
+        break;
+      }
+      case NodeType.InlineItem: {
+        const ii = node as InlineItem;
+        shiftLoc(ii);
+        visitNode(ii.item);
+        shiftEnd(ii);
+        break;
+      }
+      // Leaf nodes — no children
+      case NodeType.Key:
+      case NodeType.String:
+      case NodeType.Integer:
+      case NodeType.Float:
+      case NodeType.Boolean:
+      case NodeType.DateTime:
+      case NodeType.Comment:
+        shiftLoc(node);
+        shiftEnd(node);
+        break;
+    }
+  }
+
+  function shiftLoc(node: TreeNode) {
+    node.loc.start.line += offsetLines;
+    const colOff = offsetColumns[node.loc.start.line] || 0;
+    node.loc.start.column += colOff;
 
     const entering = enter.get(node);
     if (entering) {
-      offset.lines += entering.lines;
-      offset.columns[node.loc.start.line] =
-        (offset.columns[node.loc.start.line] || 0) + entering.columns;
+      offsetLines += entering.lines;
+      offsetColumns[node.loc.start.line] =
+        (offsetColumns[node.loc.start.line] || 0) + entering.columns;
     }
   }
 
   function shiftEnd(node: TreeNode) {
-
-    const lineOffset = offset.lines;
-    node.loc.end.line += lineOffset;
-    
-    const columnOffset = offset.columns[node.loc.end.line] || 0;
-    node.loc.end.column += columnOffset;
+    node.loc.end.line += offsetLines;
+    const colOff = offsetColumns[node.loc.end.line] || 0;
+    node.loc.end.column += colOff;
 
     const exiting = exit.get(node);
     if (exiting) {
-      offset.lines += exiting.lines;
-      offset.columns[node.loc.end.line] =
-        (offset.columns[node.loc.end.line] || 0) + exiting.columns;
+      offsetLines += exiting.lines;
+      offsetColumns[node.loc.end.line] =
+        (offsetColumns[node.loc.end.line] || 0) + exiting.columns;
     }
   }
 
-  const shiftLocation = {
-    enter: shiftStart,
-    exit: shiftEnd
-  };
-
-  traverse(root, {
-    [NodeType.Document]: shiftLocation,
-    [NodeType.Table]: shiftLocation,
-    [NodeType.TableArray]: shiftLocation,
-    [NodeType.InlineTable]: shiftLocation,
-    [NodeType.InlineArray]: shiftLocation,
-
-    [NodeType.InlineItem]: shiftLocation,
-    [NodeType.TableKey]: shiftLocation,
-    [NodeType.TableArrayKey]: shiftLocation,
-
-    [NodeType.KeyValue]: {
-      enter(node) {
-        const start_line = node.loc.start.line + offset.lines;
-        const key_offset = exit.get(node.key);
-        node.equals += (offset.columns[start_line] || 0) + (key_offset ? key_offset.columns : 0);
-
-        shiftStart(node);
-      },
-      exit: shiftEnd
-    },
-
-    [NodeType.Key]: shiftLocation,
-    [NodeType.String]: shiftLocation,
-    [NodeType.Integer]: shiftLocation,
-    [NodeType.Float]: shiftLocation,
-    [NodeType.Boolean]: shiftLocation,
-    [NodeType.DateTime]: shiftLocation,
-    [NodeType.Comment]: shiftLocation
-  });
+  visitNode(root);
 
   enter_offsets.delete(root);
   exit_offsets.delete(root);
