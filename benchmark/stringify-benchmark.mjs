@@ -200,8 +200,12 @@ if (versions) {
   for (const version of versionList) {
     const modulePath = installPackageToCache('@decimalturn/toml-patch', version);
     if (modulePath) {
+      const pkgPath = join(modulePath, 'package.json');
+      const resolvedVersion = existsSync(pkgPath)
+        ? JSON.parse(readFileSync(pkgPath, 'utf8')).version || version
+        : version;
       versionImpls.push({
-        name: `toml-patch (v${version})`,
+        name: `toml-patch (v${resolvedVersion})`,
         path: modulePath
       });
     }
@@ -220,6 +224,9 @@ if (versions) {
 const implementationsToRun = packageIndex !== undefined ? 
   [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
+
+// Collect results across implementations for global comparison
+const allResults = [];
 
 // First load the current version to parse all TOML files
 const currentToml = await loadModule('../dist/toml-patch.js');
@@ -273,8 +280,14 @@ for (const implementation of implementationsToRun) {
   if (detailed) {
     runDetailedBenchmarks(benchmarks, tomlModule, implementation.name);
   } else {
-    await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
+    const result = await runGeneralBenchmarks(benchmarks, tomlModule, implementation.name);
+    if (result) allResults.push(result);
   }
+}
+
+// Print global comparison if multiple implementations were benchmarked
+if (allResults.length > 1) {
+  printGlobalSummary(allResults, 'Stringify');
 }
 
 /**
@@ -329,7 +342,7 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
       })
       .on('complete', event => {
         const suite = event.currentTarget;
-        if (!suite.length) return resolve();
+        if (!suite.length) return resolve(null);
 
         const hz = suite.reduce((total, benchmark) => total + benchmark.hz, 0) / suite.length;
         const sorted = Array.from(suite).sort((a, b) => b.hz - a.hz);
@@ -354,10 +367,81 @@ async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) 
         console.log(c.highlight(`⚡ Average: ${formatNumber(hz.toFixed(hz < 100 ? 2 : 0))} ops/sec`));
         console.log(c.success(`🏆 Fastest: ${sorted[0].name} (${formatNumber(sorted[0].hz.toFixed(sorted[0].hz < 100 ? 2 : 0))} ops/sec)`));
         console.log(c.warning(`🐌 Slowest: ${sorted[sorted.length-1].name} (${formatNumber(sorted[sorted.length-1].hz.toFixed(sorted[sorted.length-1].hz < 100 ? 2 : 0))} ops/sec)`));
-        resolve();
+        resolve({
+          name: implementationName,
+          benchmarks: Object.fromEntries(Array.from(suite).map(b => [b.name, b.hz])),
+          average: hz
+        });
       })
       .run({ async: true });
   });
+}
+
+/**
+ * Prints a cross-implementation comparison table
+ */
+function printGlobalSummary(allResults, benchmarkType) {
+  console.log('\n' + c.title('═'.repeat(70)));
+  console.log(c.title(`  📊 Cross-Implementation Comparison: ${benchmarkType}`));
+  console.log(c.title('═'.repeat(70)) + '\n');
+
+  const baseline = allResults[0];
+  const benchmarkNames = Object.keys(baseline.benchmarks);
+  const showRatio = allResults.length === 2;
+
+  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  if (showRatio) headers.push('Ratio');
+
+  const rows = [];
+  for (const benchName of benchmarkNames) {
+    const row = [benchName];
+    for (const impl of allResults) {
+      const hz = impl.benchmarks[benchName];
+      row.push(hz != null ? formatNumber(hz.toFixed(hz < 100 ? 2 : 0)) : 'N/A');
+    }
+    if (showRatio) {
+      const baseHz = baseline.benchmarks[benchName];
+      const otherHz = allResults[1].benchmarks[benchName];
+      if (baseHz && otherHz && otherHz > 0) {
+        const ratio = baseHz / otherHz;
+        const formatted = `${ratio.toFixed(2)}x`;
+        row.push(ratio >= 1 ? c.success(formatted) : c.error(formatted));
+      } else {
+        row.push('N/A');
+      }
+    }
+    rows.push(row);
+  }
+
+  // Average row (only when there are multiple benchmarks)
+  if (benchmarkNames.length > 1) {
+    const avgRow = [c.bright('Average')];
+    for (const impl of allResults) {
+      avgRow.push(c.bright(formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0))));
+    }
+    if (showRatio && allResults[1].average > 0) {
+      const ratio = baseline.average / allResults[1].average;
+      const formatted = `${ratio.toFixed(2)}x`;
+      avgRow.push(ratio >= 1 ? c.success(c.bright(formatted)) : c.error(c.bright(formatted)));
+    }
+    rows.push(avgRow);
+  }
+
+  console.log(createTable(headers, rows));
+
+  // Print ranking by average when more than 2 implementations
+  if (allResults.length > 2) {
+    const ranked = [...allResults].sort((a, b) => b.average - a.average);
+    console.log();
+    console.log(c.title('🏆 Ranking by average throughput:'));
+    ranked.forEach((impl, idx) => {
+      const emoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '  ';
+      const ops = formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0));
+      console.log(`  ${emoji} ${impl.name}: ${c.highlight(ops)} ops/sec`);
+    });
+  }
+
+  console.log();
 }
 
 /**

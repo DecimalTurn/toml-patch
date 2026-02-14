@@ -38,7 +38,7 @@ jobs:
     - name: Specs
       run: npm run specs
     - name: Benchmark (Example)
-      run: npm run benchmark:example
+      run: npm run benchmark:ci
     - name: Create build artifacts
       uses: actions/upload-artifact@v6
       with: 

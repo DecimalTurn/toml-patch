@@ -42,6 +42,7 @@
     "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:example": "npm-run-all2 \"bench:* -- --example\"",
+    "benchmark:ci": "npm-run-all2 \"bench:* -- --versions latest\"",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",
