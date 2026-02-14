@@ -454,6 +454,7 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
   const showRatio = allResults.length === 2;
 
   let markdown = `# ${benchmarkType} Benchmark Results\n\n`;
+  markdown += `*All measurements in operations per second (ops/sec). Higher is better.*\n\n`;
   markdown += `## Cross-Implementation Comparison\n\n`;
 
   // Table header
