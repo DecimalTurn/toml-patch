@@ -44,6 +44,9 @@ export type Root = Document | TreeNode;
 // Others are applied on exit (e.g. shift next items)
 type Offsets = WeakMap<TreeNode, Span>;
 
+// Track which roots have pending offsets to avoid unnecessary applyWrites traversals
+const dirty_roots: WeakSet<Root> = new WeakSet();
+
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {
@@ -117,6 +120,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   };
 
   addOffset(offset, getExitOffsets(root), replacement, existing);
+  dirty_roots.add(root);
 }
 /**
  * Inserts a child node into the AST.
@@ -164,6 +168,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 
   const offsets = getExitOffsets(root);
   offsets.set(child, offset);
+  dirty_roots.add(root);
 }
 
 function insertOnNewLine(
@@ -501,6 +506,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   }
 
   target_offsets.set(target, offset);
+  dirty_roots.add(root);
 }
 
 export function applyBracketSpacing(
@@ -518,6 +524,7 @@ export function applyBracketSpacing(
   // Apply exit to last node in items
   const last_item = last(node.items as TreeNode[])!;
   addOffset({ lines: 0, columns: 1 }, getExitOffsets(root), last_item);
+  dirty_roots.add(root);
 }
 
 export function applyTrailingComma(
@@ -533,6 +540,7 @@ export function applyTrailingComma(
   last_item.comma = true;
 
   addOffset({ lines: 0, columns: 1 }, getExitOffsets(root), last_item);
+  dirty_roots.add(root);
 }
 
 /**
@@ -544,6 +552,9 @@ export function applyTrailingComma(
  * @param root - The root node of the AST tree to which the write offsets will be applied.
  */
 export function applyWrites(root: TreeNode) {
+  if (!dirty_roots.has(root)) return;
+  dirty_roots.delete(root);
+
   const enter = getEnterOffsets(root);
   const exit = getExitOffsets(root);
 
@@ -629,9 +640,66 @@ export function shiftNode(
   span: Span,
   options: { first_line_only?: boolean } = {}
 ): TreeNode {
+  const { lines, columns } = span;
+
+  // Early return for no-op shifts
+  if (lines === 0 && columns === 0) return node;
+
   const { first_line_only = false } = options;
   const start_line = node.loc.start.line;
-  const { lines, columns } = span;
+
+  // Fast path for leaf nodes (no children to traverse)
+  const type = node.type;
+  if (type === NodeType.Key || type === NodeType.String ||
+      type === NodeType.Integer || type === NodeType.Float ||
+      type === NodeType.Boolean || type === NodeType.DateTime ||
+      type === NodeType.Comment) {
+    if (!first_line_only || node.loc.start.line === start_line) {
+      node.loc.start.column += columns;
+      node.loc.end.column += columns;
+    }
+    node.loc.start.line += lines;
+    node.loc.end.line += lines;
+    return node;
+  }
+
+  // Fast path for KeyValue with a leaf value (most common case in stringify).
+  // Handles KeyValue → Key → leaf without function call / switch overhead.
+  if (type === NodeType.KeyValue) {
+    const kv = node as KeyValue;
+    const valType = kv.value.type;
+    if (valType === NodeType.String || valType === NodeType.Integer ||
+        valType === NodeType.Float || valType === NodeType.Boolean ||
+        valType === NodeType.DateTime) {
+      // Move KeyValue
+      if (!first_line_only || kv.loc.start.line === start_line) {
+        kv.loc.start.column += columns;
+        kv.loc.end.column += columns;
+      }
+      kv.loc.start.line += lines;
+      kv.loc.end.line += lines;
+      kv.equals += columns;
+      // Move Key
+      const key = kv.key;
+      if (!first_line_only || key.loc.start.line === start_line) {
+        key.loc.start.column += columns;
+        key.loc.end.column += columns;
+      }
+      key.loc.start.line += lines;
+      key.loc.end.line += lines;
+      // Move leaf Value
+      const val = kv.value;
+      if (!first_line_only || val.loc.start.line === start_line) {
+        val.loc.start.column += columns;
+        val.loc.end.column += columns;
+      }
+      val.loc.start.line += lines;
+      val.loc.end.line += lines;
+      return node;
+    }
+  }
+
+  // Generic path: full traverse for complex nodes
   const move = (node: TreeNode) => {
     if (!first_line_only || node.loc.start.line === start_line) {
       node.loc.start.column += columns;
