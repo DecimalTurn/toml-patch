@@ -108,25 +108,16 @@ pass at the end. This is tightly coupled with P1 since both involve deferring AS
 
 ---
 
-### P4 — Replace WeakMap with Map for stringify path (Low-Medium impact, Medium difficulty)
+### P4 — Replace WeakMap with Map for stringify path ~~(Low-Medium impact, Medium difficulty)~~ **ABANDONED**
 
-**Problem:** Offset storage uses two levels of WeakMap indirection:
-```
-WeakMap<Root, WeakMap<TreeNode, Span>>
-```
-Every `insert`, `remove`, and `applyWrites` call goes through `getEnterOffsets(root)` /
-`getExitOffsets(root)`, doing two WeakMap lookups. The profiler shows `WeakMapLookupHashIndex` +
-`WeakMapGet` at ~2.9% combined. WeakMap is designed for GC-sensitive scenarios — not needed here
-since the AST is freshly generated and discarded immediately after serialization.
+**Problem:** Offset storage uses two levels of WeakMap indirection. The profiler shows
+`WeakMapLookupHashIndex` + `WeakMapGet` at ~2.9% combined.
 
-**Idea:** For the `stringify` code path, use a regular `Map` or direct node properties instead
-of WeakMap. This may require a separate code path or a configurable storage backend.
+**Finding:** Benchmarking showed Map is ~16% **slower** than WeakMap for this use case (860 vs 1,031 ops/sec).
+V8 implements WeakMap via hidden properties on key objects, making `.get(key)` essentially a fast
+property lookup. Regular Map uses a hash table, which is slower for object keys in this pattern.
 
-**Files:** `src/writer.ts`
-
-- [ ] Implemented
-- [ ] Tests passing
-- [ ] Benchmarked
+- [x] Tested — **Map is slower; WeakMap stays**
 
 ---
 
@@ -152,26 +143,60 @@ output phase by adjusting line coordinates on the fly during emission.
 ```typescript
 const items = [...walkObject(value, format)];
 ```
-This allocates a temporary array by spreading the generator, then iterates it again. The generator
-could be consumed directly.
-
-**Idea:** Replace with direct iteration:
-```typescript
-for (const item of walkObject(value, format)) {
-  const inline_table_item = generateInlineItem(item);
-  insert(inline_table, inline_table, inline_table_item);
-}
-```
+This allocates a temporary array by spreading the generator, then iterates it again.
 
 **Files:** `src/parse-js.ts`
 
-- [ ] Implemented
-- [ ] Tests passing
-- [ ] Benchmarked
+- [x] Implemented
+- [x] Tests passing (549/549 + 855/855)
+- [x] Benchmarked — No measurable change on spec example (code path not hit for spec example),
+  but avoids unnecessary array allocation for inline table construction.
+
+---
+
+### P7 — Inline `traverse()` in `applyWrites` and `toTOML` (High impact, Medium difficulty)
+
+**Problem:** The generic `traverse()` function uses a visitor pattern that dispatches all 13+ node
+types through the same `traverseNode()` function and visitor callbacks. V8's inline caches become
+megamorphic (slow) because different node shapes (Document, Table, KeyValue, String, etc.) flow
+through the same property access sites. The profiler shows:
+- `traverseNode`: 13.8% of ticks (single hottest JS function)
+- `LoadIC_Megamorphic`: 11.3% — polymorphic property access
+- `KeyedLoadIC_Megamorphic`: 5.3% — polymorphic keyed access
+- `LoadICTrampoline_Megamorphic`: 3.2% — more IC misses
+- Combined megamorphic overhead: **19.8%** of total ticks
+
+**Approach taken:** Replace generic `traverse()` calls with inline switch/case traversals:
+
+1. **`applyWrites`**: Custom `visitNode()` function with a switch on `node.type`. Each case
+   accesses typed properties directly (e.g., `(node as Table).key`, `(node as Table).items`),
+   enabling V8 to maintain monomorphic inline caches at each access site.
+
+2. **`toTOML`**: Custom `emitNode()` function with a switch on `node.type`. Each case handles
+   both the write operation and child recursion directly. Added `writeSingle()` and `writeChars()`
+   fast paths for bracket/comma writes that avoid creating temporary Location objects.
+
+3. **`parseJS`**: Replaced `pipe()` with direct function calls. Avoids rest args array allocation,
+   `reduce` callback closure, and wrapper arrow functions.
+
+4. **Removed unused `formatPrintWidth()` call** (currently a no-op stub).
+
+**Files:** `src/writer.ts`, `src/to-toml.ts`, `src/parse-js.ts`
+
+- [x] Implemented
+- [x] Tests passing (549/549 unit + 855/855 spec)
+- [x] Benchmarked — Significant gains from reduced megamorphic IC misses:
+  - Spec example: 1,031 → 1,177 ops/sec (**+14%**)
+  - Small doc: 36,581 → 45,738 ops/sec (**+25%**)
+  - Hard unicode: 7,806 → 9,185 ops/sec (**+18%**)
+  - Nested-1000: 4.93 → 6.61 ops/sec (**+34%**)
+  - Full suite average: 3,185 → 3,495 ops/sec (**+10%**)
 
 ---
 
 ## Profiler Data (V8 `--prof`, 5000 iterations, spec example file)
+
+### Pre-optimization profiler
 
 | Function | Ticks % | Notes |
 |---|---|---|
@@ -183,6 +208,28 @@ for (const item of walkObject(value, format)) {
 | `WeakMapLookupHashIndex` + `WeakMapGet` | 2.9% | Double WeakMap indirection for offsets |
 | `RegExpSplit` | 1.1% | `raw.split(BY_NEW_LINE)` in `write()` |
 | `ArrayPrototypeSplice` | 1.1% | `items.splice()` in insert/remove |
+
+### Post-P1+P2 profiler
+
+| Function | Ticks % | Notes |
+|---|---|---|
+| `traverseNode` | 13.8% | Generic AST visitor dispatch — **#1 hottest JS function** |
+| `LoadIC_Megamorphic` | 11.3% | Megamorphic property access (13+ node shapes) |
+| `KeyedLoadIC_Megamorphic` | 5.3% | Megamorphic keyed access |
+| `shiftNode` | 3.6% | Position shifting (leaf fast-path helps but generic path still hot) |
+| `LoadICTrampoline_Megamorphic` | 3.2% | More IC trampoline misses |
+| `shiftStart` (in applyWrites) | 2.9% | Start position shifting in applyWrites |
+| `move` (in shiftNode) | 2.7% | Generic move closure in shiftNode |
+| `WeakMapLookupHashIndex` | 2.0% | WeakMap lookups (faster than Map per P4 finding) |
+| `traverseArray` | 1.6% | Array traversal in generic traverse |
+| `insert` | 1.6% | AST insertion |
+| `walkObject` | 1.6% | Object → KeyValue generator |
+| `WeakMapGet` | 1.6% | WeakMap gets |
+| `toTOML` | 1.1% | AST → string emission |
+| `ArrayPrototypeSplice` | 1.2% | Array splicing in insert/remove |
+| `calculateInlinePositioning` | 1.0% | Inline positioning calc |
+
+> Combined megamorphic overhead: **19.8%** — addressed by P7 (inline traverse).
 
 > Note: `LoadIC_Megamorphic` / `KeyedLoadIC_Megamorphic` are V8 inline cache misses caused by
 > the visitor pattern touching 13+ node types through the same functions. Reducing the total
@@ -202,3 +249,14 @@ smol-toml:       ~35,035 ops/sec
 @iarna/toml:     ~8,685 ops/sec
 toml-edit-js:    ~25,060 ops/sec
 ```
+
+## Progress Summary
+
+| Optimization | Spec Example | Suite Average | Status |
+|---|---|---|---|
+| Baseline | 935 ops/sec | 2,672 ops/sec | — |
+| + P1 (shiftNode/applyWrites) | 1,011 ops/sec (+8%) | 3,160 ops/sec (+18%) | Done |
+| + P2 (fast-path write) | ~1,011 ops/sec (neutral) | ~3,160 ops/sec (neutral) | Done |
+| + P6 (spread removal) | ~1,031 ops/sec (neutral) | ~3,185 ops/sec (neutral) | Done |
+| + P7 (inline traverse) | **1,177 ops/sec (+14%)** | **3,495 ops/sec (+10%)** | Done |
+| **Total improvement** | **+26% from baseline** | **+31% from baseline** | |
