@@ -11,7 +11,7 @@
  */
 
 import { join, basename, resolve, dirname } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
@@ -88,9 +88,14 @@ function installPackageToCache(packageName, version) {
   const modulePath = join(versionDir, 'node_modules', packageName);
   const spec = version ? `${packageName}@${version}` : packageName;
   
-  // Check if already cached
-  if (existsSync(modulePath)) {
+  // Check if already cached (skip cache for 'latest' to ensure we get current version)
+  if (version !== 'latest' && existsSync(modulePath)) {
     return modulePath;
+  }
+  
+  // Clear stale cache for 'latest' tag
+  if (version === 'latest' && existsSync(versionDir)) {
+    rmSync(versionDir, { recursive: true, force: true });
   }
   
   // Create cache directory if needed
