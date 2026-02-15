@@ -209,7 +209,7 @@ let TOML_IMPLEMENTATIONS = [
 if (versions) {
   const versionList = versions.split(',').map(v => v.trim());
   
-  console.log(c.info(`\n📦 Testing versions: current, ${versionList.join(', ')}`));
+  console.log(c.info(`\n📦 Testing versions: ${versionList.join(', ')}, current`));
   console.log();
   
   const versionImpls = [];
@@ -227,10 +227,10 @@ if (versions) {
     }
   }
   
-  // Replace default implementations with current + requested versions
+  // Replace default implementations with requested versions + current
   TOML_IMPLEMENTATIONS = [
-    TOML_IMPLEMENTATIONS[0], // Keep current
-    ...versionImpls
+    ...versionImpls,
+    TOML_IMPLEMENTATIONS[0], // Current last
   ];
   
   console.log();
