@@ -22,6 +22,9 @@ import mri from 'mri';
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Single cache buster for this benchmark run (shared across all module loads)
+const CACHE_BUSTER = `?t=${Date.now()}`;
+
 // ANSI color codes
 const colors = {
   reset: '\x1b[0m',
@@ -143,9 +146,8 @@ async function loadModule(modulePath) {
     if (entry) importPath = join(absPath, entry);
   }
 
-  // Bust Node.js ESM cache to ensure fresh module is loaded
-  const cacheBuster = `?t=${Date.now()}`;
-  const finalPath = importPath + cacheBuster;
+  // Bust Node.js ESM cache to ensure fresh module on each run, but consistent within run
+  const finalPath = importPath + CACHE_BUSTER;
   console.log(c.info(`  📂 Loading: ${importPath}`));
   
   // Show file stats for debugging
