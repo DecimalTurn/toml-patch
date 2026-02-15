@@ -279,6 +279,29 @@ const implementationsToRun = packageIndex !== undefined ?
 // Collect results across implementations for global comparison
 const allResults = [];
 
+/**
+ * Warmup phase to allow V8 to optimize the code before benchmarking
+ */
+async function warmupModule(TOML, benchmarks, implementationName) {
+  console.log(c.dim(`  🔥 Warming up ${implementationName}...`));
+  const warmupIterations = 50;
+  
+  // Run multiple iterations to trigger V8 optimization
+  for (let i = 0; i < warmupIterations; i++) {
+    for (const { data } of benchmarks) {
+      try {
+        TOML.parse(data);
+      } catch (error) {
+        // Ignore errors during warmup
+      }
+    }
+  }
+  
+  // Small delay to let V8 settle optimizations
+  await new Promise(resolve => setTimeout(resolve, 100));
+  console.log(c.dim(`  ✓ Warmup complete\n`));
+}
+
 // Run benchmarks for each implementation
 for (const implementation of implementationsToRun) {
   // Load TOML module
@@ -293,6 +316,9 @@ for (const implementation of implementationsToRun) {
     console.error(`Error loading ${implementation.name}: ${error.message}`);
     continue;
   }
+
+  // Warmup phase to ensure fair V8 optimization
+  await warmupModule(TOML, benchmarks, implementation.name);
 
   // Create benchmark suite
   const suite = new Suite(`${implementation.name}-parse`);

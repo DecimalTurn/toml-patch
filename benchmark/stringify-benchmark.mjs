@@ -324,9 +324,35 @@ if (allResults.length > 1) {
 }
 
 /**
+ * Warmup phase to allow V8 to optimize the code before benchmarking
+ */
+async function warmupModule(tomlModule, benchmarks, implementationName) {
+  console.log(c.dim(`  🔥 Warming up ${implementationName}...`));
+  const warmupIterations = 50;
+  
+  // Run multiple iterations to trigger V8 optimization
+  for (let i = 0; i < warmupIterations; i++) {
+    for (const { parsed } of benchmarks) {
+      try {
+        tomlModule.stringify(parsed);
+      } catch (error) {
+        // Ignore errors during warmup
+      }
+    }
+  }
+  
+  // Small delay to let V8 settle optimizations
+  await new Promise(resolve => setTimeout(resolve, 100));
+  console.log(c.dim(`  ✓ Warmup complete\n`));
+}
+
+/**
  * Runs a general benchmark suite for stringify operations
  */
 async function runGeneralBenchmarks(benchmarks, tomlModule, implementationName) {
+  // Warmup phase to ensure fair V8 optimization
+  await warmupModule(tomlModule, benchmarks, implementationName);
+  
   console.log(c.title('📊 General Stringify Benchmark:\n'));
   
   // Create benchmark suite
