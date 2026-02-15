@@ -11,7 +11,7 @@
  */
 
 import { join, basename, resolve, dirname } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
@@ -144,7 +144,20 @@ async function loadModule(modulePath) {
 
   // Bust Node.js ESM cache to ensure fresh module is loaded
   const cacheBuster = `?t=${Date.now()}`;
-  return import(importPath + cacheBuster);
+  const finalPath = importPath + cacheBuster;
+  console.log(c.info(`  📂 Loading: ${importPath}`));
+  
+  // Show file stats for debugging
+  try {
+    const stats = statSync(importPath);
+    const sizeKB = (stats.size / 1024).toFixed(2);
+    const modTime = stats.mtime.toISOString();
+    console.log(c.info(`     Size: ${sizeKB} KB, Modified: ${modTime}`));
+  } catch (e) {
+    // Ignore if file doesn't exist (e.g., for directories)
+  }
+  
+  return import(finalPath);
 }
 
 // Parse command line args
