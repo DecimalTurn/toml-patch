@@ -37,6 +37,11 @@ jobs:
       run: npm run test:all
     - name: Specs
       run: npm run specs
+    - name: Verify Build
+      run: |
+        ls -lh dist/
+        head -20 dist/toml-patch.js
+        grep "version" dist/toml-patch.js | head -3 || echo "No version found in dist"
     - name: Benchmark (CI samples)
       run: npm run benchmark:ci
     - name: Check Performance
