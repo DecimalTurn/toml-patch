@@ -422,21 +422,21 @@ function printGlobalSummary(allResults, benchmarkType) {
   const benchmarkNames = Object.keys(baseline.benchmarks);
   const showRatio = allResults.length === 2;
 
-  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  const headers = ['Benchmark', ...allResults.map(r => r.name).reverse()];
   if (showRatio) headers.push('Ratio');
 
   const rows = [];
   for (const benchName of benchmarkNames) {
     const row = [benchName];
-    for (const impl of allResults) {
+    for (const impl of [...allResults].reverse()) {
       const hz = impl.benchmarks[benchName];
       row.push(hz != null ? formatNumber(hz.toFixed(hz < 100 ? 2 : 0)) : 'N/A');
     }
     if (showRatio) {
       const baseHz = baseline.benchmarks[benchName];
       const otherHz = allResults[1].benchmarks[benchName];
-      if (baseHz && otherHz && otherHz > 0) {
-        const ratio = baseHz / otherHz;
+      if (baseHz && otherHz && baseHz > 0) {
+        const ratio = otherHz / baseHz;
         const formatted = `${ratio.toFixed(2)}x`;
         row.push(ratio >= 1 ? c.success(formatted) : c.error(formatted));
       } else {
@@ -449,11 +449,11 @@ function printGlobalSummary(allResults, benchmarkType) {
   // Average row (only when there are multiple benchmarks)
   if (benchmarkNames.length > 1) {
     const avgRow = [c.bright('Average')];
-    for (const impl of allResults) {
+    for (const impl of [...allResults].reverse()) {
       avgRow.push(c.bright(formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0))));
     }
-    if (showRatio && allResults[1].average > 0) {
-      const ratio = baseline.average / allResults[1].average;
+    if (showRatio && baseline.average > 0) {
+      const ratio = allResults[1].average / baseline.average;
       const formatted = `${ratio.toFixed(2)}x`;
       avgRow.push(ratio >= 1 ? c.success(c.bright(formatted)) : c.error(c.bright(formatted)));
     }
@@ -490,7 +490,7 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
   markdown += `## Cross-Implementation Comparison\n\n`;
 
   // Table header
-  const headers = ['Benchmark', ...allResults.map(r => r.name)];
+  const headers = ['Benchmark', ...allResults.map(r => r.name).reverse()];
   if (showRatio) headers.push('Ratio');
   markdown += '| ' + headers.join(' | ') + ' |\n';
   markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
@@ -498,15 +498,15 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
   // Table rows
   for (const benchName of benchmarkNames) {
     const row = [benchName];
-    for (const impl of allResults) {
+    for (const impl of [...allResults].reverse()) {
       const hz = impl.benchmarks[benchName];
       row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
     }
     if (showRatio) {
       const baseHz = baseline.benchmarks[benchName];
       const otherHz = allResults[1].benchmarks[benchName];
-      if (baseHz && otherHz && otherHz > 0) {
-        const ratio = baseHz / otherHz;
+      if (baseHz && otherHz && baseHz > 0) {
+        const ratio = otherHz / baseHz;
         row.push(ratio.toFixed(2));
       } else {
         row.push('N/A');
@@ -518,11 +518,11 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
   // Average row (only when there are multiple benchmarks)
   if (benchmarkNames.length > 1) {
     const avgRow = ['**Average**'];
-    for (const impl of allResults) {
+    for (const impl of [...allResults].reverse()) {
       avgRow.push(`**${impl.average.toFixed(impl.average < 100 ? 2 : 0)}**`);
     }
-    if (showRatio && allResults[1].average > 0) {
-      const ratio = baseline.average / allResults[1].average;
+    if (showRatio && baseline.average > 0) {
+      const ratio = allResults[1].average / baseline.average;
       avgRow.push(`**${ratio.toFixed(2)}**`);
     }
     markdown += '| ' + avgRow.join(' | ') + ' |\n';
