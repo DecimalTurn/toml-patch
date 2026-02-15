@@ -142,7 +142,9 @@ async function loadModule(modulePath) {
     if (entry) importPath = join(absPath, entry);
   }
 
-  return import(importPath);
+  // Bust Node.js ESM cache to ensure fresh module is loaded
+  const cacheBuster = `?t=${Date.now()}`;
+  return import(importPath + cacheBuster);
 }
 
 // Parse command line args
