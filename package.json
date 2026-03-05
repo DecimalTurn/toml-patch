@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.0.2",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/dedent": "^0.7.2",
     "@types/jest": "^30.0.0",
