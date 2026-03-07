@@ -94,7 +94,7 @@ function walkValue(value: any, format: TomlFormat): Value {
   } else if (isBoolean(value)) {
     return generateBoolean(value);
   } else if (isDate(value)) {
-    return generateDateTime(value, format);
+    return generateDateTime(value, format.truncateZeroTimeInDates);
   } else if (Array.isArray(value)) {
     return walkInlineArray(value, format);
   } else {

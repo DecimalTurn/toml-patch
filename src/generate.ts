@@ -20,7 +20,6 @@ import {
 } from './ast';
 import { zero, cloneLocation, clonePosition } from './location';
 import { LocalDate } from './parse-toml';
-import { TomlFormat } from './toml-format';
 import { shiftNode } from './writer';
 import { isMultilineString } from './utils';
 
@@ -270,11 +269,11 @@ export function generateBoolean(value: boolean): Boolean {
   };
 }
 
-export function generateDateTime(value: Date, format: TomlFormat): DateTime {
+export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean = false): DateTime {
   
     // Convert Date objects with zero time components to LocalDate
     // so they are serialized as date-only in TOML
-    if (format.truncateZeroTimeInDates &&
+    if (truncateZeroTimeInDates &&
         value.getUTCHours() === 0 &&
         value.getUTCMinutes() === 0 &&
         value.getUTCSeconds() === 0 &&
