@@ -12,7 +12,7 @@
 
 import { join, basename, resolve, dirname } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from 'fs';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
 import { globSync } from 'glob';
@@ -154,7 +154,7 @@ async function loadModule(modulePath) {
     // Ignore if file doesn't exist (e.g., for directories)
   }
   
-  return import(importPath);
+  return import(pathToFileURL(importPath).href);
 }
 
 // Parse command line args
