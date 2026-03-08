@@ -70,6 +70,11 @@
     "tslib": "^2.0.0",
     "typescript": "5.9"
   },
+  "overrides": {
+    "tar": "^7.5.10",
+    "@tootallnate/once": "^3.0.1",
+    "brace-expansion": "^2.0.2"
+  },
   "prettier": {
     "singleQuote": true,
     "printWidth": 100
