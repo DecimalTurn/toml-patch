@@ -1,4 +1,4 @@
-import { TomlFormat, detectNewline, countTrailingNewlines } from '../toml-format';
+import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject } from '../toml-format';
 import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
@@ -450,6 +450,152 @@ data = "test"`;
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(0);
       expect(format.trailingComma).toBe(false); // Fallback value
+    });
+  });
+});
+
+describe('validateFormatObject', () => {
+  describe('returns empty object for non-object input', () => {
+    test.each([null, undefined, 0, '', false])('returns {} for %p', (input) => {
+      expect(validateFormatObject(input)).toEqual({});
+    });
+  });
+
+  describe('accepts valid property types', () => {
+    test('accepts string newLine', () => {
+      expect(validateFormatObject({ newLine: '\r\n' })).toEqual({ newLine: '\r\n' });
+    });
+
+    test('accepts boolean trailingNewline', () => {
+      expect(validateFormatObject({ trailingNewline: true })).toEqual({ trailingNewline: true });
+    });
+
+    test('accepts numeric trailingNewline', () => {
+      expect(validateFormatObject({ trailingNewline: 2 })).toEqual({ trailingNewline: 2 });
+    });
+
+    test('accepts boolean trailingComma', () => {
+      expect(validateFormatObject({ trailingComma: true })).toEqual({ trailingComma: true });
+    });
+
+    test('accepts boolean bracketSpacing', () => {
+      expect(validateFormatObject({ bracketSpacing: false })).toEqual({ bracketSpacing: false });
+    });
+
+    test('accepts non-negative integer inlineTableStart', () => {
+      expect(validateFormatObject({ inlineTableStart: 0 })).toEqual({ inlineTableStart: 0 });
+      expect(validateFormatObject({ inlineTableStart: 3 })).toEqual({ inlineTableStart: 3 });
+    });
+
+    test('accepts null/undefined inlineTableStart', () => {
+      expect(validateFormatObject({ inlineTableStart: null })).toEqual({ inlineTableStart: null });
+      expect(validateFormatObject({ inlineTableStart: undefined })).toEqual({ inlineTableStart: undefined });
+    });
+
+    test('accepts boolean truncateZeroTimeInDates', () => {
+      expect(validateFormatObject({ truncateZeroTimeInDates: true })).toEqual({ truncateZeroTimeInDates: true });
+    });
+
+    test('accepts boolean useTabsForIndentation', () => {
+      expect(validateFormatObject({ useTabsForIndentation: true })).toEqual({ useTabsForIndentation: true });
+    });
+
+    test('accepts all valid properties together', () => {
+      const input = {
+        newLine: '\n',
+        trailingNewline: 1,
+        trailingComma: true,
+        bracketSpacing: false,
+        inlineTableStart: 2,
+        truncateZeroTimeInDates: true,
+        useTabsForIndentation: false,
+      };
+      expect(validateFormatObject(input)).toEqual(input);
+    });
+  });
+
+  describe('rejects invalid property types', () => {
+    test('rejects non-string newLine', () => {
+      expect(() => validateFormatObject({ newLine: 123 })).toThrow(TypeError);
+      expect(() => validateFormatObject({ newLine: 123 })).toThrow(/newLine.*expected string/);
+    });
+
+    test('rejects non-boolean/number trailingNewline', () => {
+      expect(() => validateFormatObject({ trailingNewline: 'yes' })).toThrow(TypeError);
+      expect(() => validateFormatObject({ trailingNewline: 'yes' })).toThrow(/trailingNewline/);
+    });
+
+    test('rejects non-boolean trailingComma', () => {
+      expect(() => validateFormatObject({ trailingComma: 1 })).toThrow(TypeError);
+      expect(() => validateFormatObject({ trailingComma: 1 })).toThrow(/trailingComma.*expected boolean/);
+    });
+
+    test('rejects non-boolean bracketSpacing', () => {
+      expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(TypeError);
+      expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(/bracketSpacing/);
+    });
+
+    test('rejects negative inlineTableStart', () => {
+      expect(() => validateFormatObject({ inlineTableStart: -1 })).toThrow(TypeError);
+      expect(() => validateFormatObject({ inlineTableStart: -1 })).toThrow(/inlineTableStart/);
+    });
+
+    test('rejects non-integer inlineTableStart', () => {
+      expect(() => validateFormatObject({ inlineTableStart: 1.5 })).toThrow(TypeError);
+    });
+
+    test('rejects string inlineTableStart', () => {
+      expect(() => validateFormatObject({ inlineTableStart: 'auto' })).toThrow(TypeError);
+    });
+
+    test('rejects non-boolean truncateZeroTimeInDates', () => {
+      expect(() => validateFormatObject({ truncateZeroTimeInDates: 0 })).toThrow(TypeError);
+    });
+
+    test('rejects non-boolean useTabsForIndentation', () => {
+      expect(() => validateFormatObject({ useTabsForIndentation: 'yes' })).toThrow(TypeError);
+    });
+
+    test('reports multiple invalid properties in one error', () => {
+      expect(() => validateFormatObject({ newLine: 42, trailingComma: 'yes' })).toThrow(
+        /newLine.*trailingComma|trailingComma.*newLine/
+      );
+    });
+  });
+
+  describe('warns about unsupported properties', () => {
+    test('warns and ignores unknown own properties', () => {
+      const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = validateFormatObject({ newLine: '\n', bogus: true });
+      expect(result).toEqual({ newLine: '\n' });
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('bogus'));
+      spy.mockRestore();
+    });
+
+    test('does not warn about inherited (prototype) unsupported properties', () => {
+      const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const proto = { inherited: true };
+      const obj = Object.create(proto);
+      obj.newLine = '\n';
+      const result = validateFormatObject(obj);
+      expect(result).toEqual({ newLine: '\n' });
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  describe('edge cases', () => {
+    test('returns empty object for empty input object', () => {
+      expect(validateFormatObject({})).toEqual({});
+    });
+
+    test('validates properties from prototype chain (supported keys)', () => {
+      const proto = { trailingComma: true };
+      const obj = Object.create(proto);
+      obj.newLine = '\n';
+      // trailingComma is on the prototype but for..in iterates it
+      const result = validateFormatObject(obj);
+      expect(result).toEqual({ newLine: '\n', trailingComma: true });
     });
   });
 });
