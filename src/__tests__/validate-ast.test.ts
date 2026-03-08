@@ -118,7 +118,7 @@ describe('AST position consistency after patching', () => {
   //
   // Verified failing on 2026-03-07:
   //   "KeyValue ends at 1:0-1:19 after parent Document at 1:0-1:12"
-  test.skip('Document end position should encompass all children after add', () => {
+  test('Document end position should encompass all children after add', () => {
     // Adding items to `x = [1]` expands the KV to column 19,
     // but the Document's end stays at column 12.
     const overlaps = getOverlaps('x = [1]\n', { x: [1, 2, 3, 4, 5] });
@@ -127,7 +127,7 @@ describe('AST position consistency after patching', () => {
 
   // Verified failing on 2026-03-07:
   //   "KeyValue ends at 1:0-1:18 after parent Document at 1:0-1:5"
-  test.skip('Document end position should encompass all children after edit', () => {
+  test('Document end position should encompass all children after edit', () => {
     // Replacing `x = 1` with `x = 100000` grows the KV, but Document
     // end position doesn't track the expansion.
     const overlaps = getOverlaps('p = { x = 1 }\n', { p: { x: 100000 } });
