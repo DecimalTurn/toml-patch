@@ -11,7 +11,7 @@ import { Session } from 'node:inspector/promises';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Import individual pipeline stages from dist
-const tomlPatch = await import('../dist/toml-patch.js');
+const tomlPatch = await import('../dist/index.js');
 const smolTomlPath = join(__dirname, '../.bench-cache/smol-toml/node_modules/smol-toml/dist/index.js');
 const smolToml = await import(smolTomlPath);
 

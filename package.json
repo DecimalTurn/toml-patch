@@ -25,12 +25,14 @@
     "decoder"
   ],
   "type": "module",
-  "types": "./dist/toml-patch.d.ts",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
   "exports": {
     ".": {
-      "types": "./dist/toml-patch.d.ts",
-      "import": "./dist/toml-patch.js",
-      "default": "./dist/toml-patch.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {

@@ -15,7 +15,7 @@
  */
 
 import { jest } from '@jest/globals';
-import { stringify, TomlFormat, parse } from "../../../dist/toml-patch.js";
+import { stringify, TomlFormat, parse } from "../../../dist/index.js";
 
 describe('stringify() Function JavaScript Integration', () => {
   const testObject = {

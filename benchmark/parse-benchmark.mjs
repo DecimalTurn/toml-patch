@@ -188,7 +188,7 @@ Examples:
 let TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
-    path: '../dist/toml-patch.js',
+    path: '../dist/index.js',
   },
   { 
     name: '@iarna/toml',
