@@ -217,11 +217,6 @@ function processTableForNestedInlines(table: Table, additionalTables: Table[], f
   }
 }
 
-export function formatPrintWidth(document: Document, format: TomlFormat): Document {
-  // TODO
-  return document;
-}
-
 export function formatEmptyLines(document: Document): Document {
   let shift = 0;
   let previous = 0;

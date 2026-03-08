@@ -427,18 +427,3 @@ function checkThree(input: string, current: number, check: string): false | stri
 
   return isEscaped ? false : check; // Return `check` if not escaped, otherwise `false`
 }
-
-export function CheckMoreThanThree(input: string, current: number, check: string): boolean {
-
-  if (!check) {
-    return false;
-  }
-
-  return (
-    input[current] === check &&
-    input[current + 1] === check &&
-    input[current + 2] === check &&
-    input[current + 3] === check
-  )
-
-}

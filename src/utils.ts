@@ -57,10 +57,6 @@ export function datesEqual(a: any, b: any): boolean {
   return isDate(a) && isDate(b) && a.toISOString() === b.toISOString();
 }
 
-export function pipe<TValue>(value: TValue, ...fns: Array<(value: TValue) => TValue>): TValue {
-  return fns.reduce((value, fn) => fn(value), value);
-}
-
 export function stableStringify(object: any): string {
   if (isObject(object)) {
     const key_values = Object.keys(object)

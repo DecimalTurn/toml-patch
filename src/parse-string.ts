@@ -148,40 +148,6 @@ function unescapeBasicString(value: string, multiline: boolean): string {
   return parts.join('');
 }
 
-/**
- * @deprecated Kept for backward compatibility with external callers.
- * The multiline pipeline now uses unescapeBasicString directly.
- */
-export function escapeDoubleQuotes(value: string): string {
-  let result = '';
-  let precedingBackslashes = 0;
-
-  for (let i = 0; i < value.length; i++) {
-    const char = value[i];
-
-    if (char === '"' && precedingBackslashes % 2 === 0) {
-      result += '\\"';
-    } else {
-      result += char;
-    }
-
-    if (char === '\\') {
-      precedingBackslashes++;
-    } else {
-      precedingBackslashes = 0;
-    }
-  }
-
-  return result;
-}
-
-/**
- * @deprecated Kept for backward compatibility. Use unescapeBasicString instead.
- */
-export function unescapeLargeUnicode(escaped: string): string {
-  return unescapeBasicString(escaped, false);
-}
-
 export function escape(value: string): string {
   const s = JSON.stringify(value);
   return s.slice(1, s.length - 1);
