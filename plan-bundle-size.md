@@ -142,27 +142,28 @@ Examples of verbose → concise:
 
 ## Estimated savings summary
 
-| Phase | Opportunity | Min Est. | Gzip Est. | Effort | Risk |
-|-------|------------|----------|-----------|--------|------|
-| 1 | Remove dead/deprecated code | 0.5–1 kB | 0.1–0.3 kB | Low | None |
-| 2 | Deduplicate validation in parse-toml.ts | 4–6 kB | 1–1.5 kB | Medium | Low |
-| 3 | Deduplicate date-format.ts toISOString | 1.5–2.5 kB | 0.3–0.5 kB | Medium | Low |
-| 4 | Shorten error message strings | 1–2 kB | 0.3–0.5 kB | Medium | Low |
-| 5 | Simplify validateFormatObject | 0.5–1 kB | 0.1–0.2 kB | Low | None |
-| 6 | Verify terser strips all comments | 0.3–0.8 kB | 0.1–0.2 kB | Low | None |
-| **Total** | | **~8–13 kB** | **~2–3 kB** | | |
+| Phase | Opportunity | Min Est. | Gzip Est. | Actual Min | Actual Gz | Status |
+|-------|------------|----------|-----------|------------|-----------|--------|
+| 1 | Remove dead/deprecated code | 0.5–1 kB | 0.1–0.3 kB | ~0.5 kB | ~0.1 kB | ✅ Done |
+| 2 | Deduplicate validation in parse-toml.ts | 4–6 kB | 1–1.5 kB | 3.25 kB | 0.03 kB | ✅ Done |
+| 3 | Deduplicate date-format.ts toISOString | 1.5–2.5 kB | 0.3–0.5 kB | 2.19 kB | 0.35 kB | ✅ Done |
+| 4 | Shorten error message strings | 1–2 kB | 0.3–0.5 kB | 2.31 kB | 0.47 kB | ✅ Done |
+| 5 | Simplify validateFormatObject | 0.5–1 kB | 0.1–0.2 kB | 0.25 kB | 0.05 kB | ✅ Done |
+| 6 | Verify terser strips all comments | 0.3–0.8 kB | 0.1–0.2 kB | 0 kB | 0 kB | ✅ Done (already clean) |
+| **Total** | | **~8–13 kB** | **~2–3 kB** | **~8.5 kB** | **~1 kB** | |
 
-**Projected result: ~54–58 kB minified / ~15–16 kB gzipped**
+**Starting point: 66.56 kB min / 17.83 kB gz**
+**Final result: 58.56 kB min / 16.93 kB gz (-12.0% min / -5.0% gz)**
 
 ## Implementation order
 
-Phases are independent and can be done in any order. Recommended sequence:
+Phases are independent and can be done in any order. All phases completed:
 
-1. **Phase 1** first — trivial, zero risk, validates the workflow
-2. **Phase 6** — quick check, may yield easy wins
-3. **Phase 2** — biggest impact, do early to capture the most savings
-4. **Phase 3** — second-largest impact
-5. **Phase 5** — small but easy
-6. **Phase 4** — do last since it touches many files and requires judgment calls on message clarity
+1. **Phase 1** — removed unused functions (commit 737be40)
+2. **Phase 6** — verified terser strips all comments (no changes needed)
+3. **Phase 2** — deduplicated parse-toml.ts validation (commit b2b7f80)
+4. **Phase 3** — deduplicated date-format.ts helpers (commit 2cef199)
+5. **Phase 5** — schema-driven validateFormatObject (commit 70f9e6d)
+6. **Phase 4** — shortened error messages (commit c745da5)
 
-Each phase should be a separate commit/PR for easy review and revert if needed.
+Each phase is a separate commit on branch `dev-bundle-size` for easy review and revert.
