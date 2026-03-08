@@ -31,7 +31,8 @@ import { last, isInteger, isMultilineString } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateString } from './generate';
 import { validate } from './validate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, resolveTomlFormat, postInlineItemRemovalAdjustment, calculateTableDepth } from './toml-format';
+import { resolveTomlFormat } from './toml-format';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
 import { DateFormatHelper } from './date-format';
 
 export function toDocument(ast: AST) : Document  {

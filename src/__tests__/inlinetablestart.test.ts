@@ -5,7 +5,7 @@
 
 import { stringify } from '../index';
 import patch from '../patch';
-import { calculateTableDepth } from '../toml-format';
+import { calculateTableDepth } from '../formatter';
 
 describe('inlineTableStart option', () => {
   describe('calculateTableDepth function', () => {
