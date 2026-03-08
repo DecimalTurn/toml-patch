@@ -11,30 +11,30 @@ import { truncateAst } from './truncate';
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
  */
 export class TomlDocument {
-  #ast: Block[];
-  #currentTomlString: string;
-  #Format: TomlFormat;
+  private _ast: Block[];
+  private _currentTomlString: string;
+  private _format: TomlFormat;
 
   /**
    * Initializes the TomlDocument with a TOML string, parsing it into an AST.
    * @param tomlString - The TOML string to parse
    */
   constructor(tomlString: string) {
-    this.#currentTomlString = tomlString;
-    this.#ast = Array.from(parseTOML(tomlString));
+    this._currentTomlString = tomlString;
+    this._ast = Array.from(parseTOML(tomlString));
     // Auto-detect formatting preferences from the original TOML string
-    this.#Format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormat(tomlString);
   }
 
   get toTomlString(): string {
-    return this.#currentTomlString;
+    return this._currentTomlString;
   }
 
   /**
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this.#ast);
+    const jsObject = toJS(this._ast);
     // Convert custom date classes to regular JavaScript Date objects
     return convertCustomDateClasses(jsObject);
   }
@@ -44,7 +44,7 @@ export class TomlDocument {
    * @internal
    */
   get ast(): Block[] {
-    return this.#ast;
+    return this._ast;
   }
 
   /**
@@ -55,15 +55,15 @@ export class TomlDocument {
    */
   patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat) : void {
 
-    const fmt = resolveTomlFormat(format, this.#Format);
+    const fmt = resolveTomlFormat(format, this._format);
 
     const { tomlString, document } = patchAst(
-      this.#ast,
+      this._ast,
       updatedObject,
       fmt
     );
-    this.#ast = document.items;
-    this.#currentTomlString = tomlString;
+    this._ast = document.items;
+    this._currentTomlString = tomlString;
   }
 
   /**
@@ -77,7 +77,7 @@ export class TomlDocument {
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this.#Format.newLine);
+    const existingLines = this.toTomlString.split(this._format.newLine);
     const newLineChar = detectNewline(tomlString);
     const newTextLines = tomlString.split(newLineChar);
     let firstDiffLineIndex = 0;
@@ -108,7 +108,7 @@ export class TomlDocument {
     }
 
     let firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
-    const { truncatedAst, lastEndPosition } = truncateAst(this.#ast, firstDiffLine, firstDiffColumn);
+    const { truncatedAst, lastEndPosition } = truncateAst(this._ast, firstDiffLine, firstDiffColumn);
 
     // Determine where to continue parsing from in the new string
     // If lastEndPosition exists, continue from there; otherwise from the start of the document
@@ -124,13 +124,13 @@ export class TomlDocument {
       remainingLines[0] = remainingLines[0].substring(continueFromColumn);
     }
     
-    const remainingToml = remainingLines.join(this.#Format.newLine);
+    const remainingToml = remainingLines.join(this._format.newLine);
     
-    this.#ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
-    this.#currentTomlString = tomlString;
+    this._ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
+    this._currentTomlString = tomlString;
     
     // Update the auto-detected format with the new string's characteristics
-    this.#Format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormat(tomlString);
   }
 
   /**
@@ -144,11 +144,11 @@ export class TomlDocument {
     }
 
     // Re-parse the entire document
-    this.#ast = Array.from(parseTOML(tomlString));
-    this.#currentTomlString = tomlString;
+    this._ast = Array.from(parseTOML(tomlString));
+    this._currentTomlString = tomlString;
     
     // Update the auto-detected format with the new string's characteristics
-    this.#Format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormat(tomlString);
   }
 }
 
