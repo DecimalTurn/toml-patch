@@ -2486,9 +2486,6 @@ test('should preserve single-line inline table when updating (backward compatibi
   expect(patched).toContain('point = { x = 1, y = 2, z = 3 }');
 });
 
-// Bug: adding a key to a nested inline table throws
-// "Unsupported parent type "InlineItem" for insert" because the writer's
-// insert() does not handle InlineItem as a valid parent for inserting children.
 test('should add key to nested inline table', () => {
   const existing = 'config = { server = { host = "localhost" } }\n';
 
