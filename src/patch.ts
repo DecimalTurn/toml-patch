@@ -261,6 +261,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = findParent(original, change.path);
         if (isKeyValue(parent)) {
           parent = parent.value;
+        } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
+          parent = parent.item.value;
         }
       }
 
