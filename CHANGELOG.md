@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Patching: Adding keys to nested inline tables (e.g. `config = { server = { host = "localhost" } }`) now works correctly
+
 ### Changed
 - Remove circular dependency between `toml-format` and `generate` modules ([#118](https://github.com/DecimalTurn/toml-patch/pull/118))
 
