@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Remove circular dependency between `toml-format` and `generate` modules ([#118](https://github.com/DecimalTurn/toml-patch/pull/118))
+
 ## [1.0.2] - 2026-02-14
 
 ## [1.0.1] - 2026-02-14
