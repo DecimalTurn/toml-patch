@@ -69,7 +69,7 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
   }
 
   if (!found) {
-    throw new Error(`Could not find node at path ${path.join('.')}`);
+    throw new Error(`Node not found at ${path.join('.')}`);
   }
 
   return found;
@@ -90,7 +90,7 @@ export function findParent(node: TreeNode, path: Path): TreeNode {
   }
 
   if (!parent) {
-    throw new Error(`Count not find parent node for path ${path.join('.')}`);
+    throw new Error(`Parent not found for ${path.join('.')}`);
   }
 
   return parent;

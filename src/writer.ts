@@ -74,7 +74,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
 
     const index = parent.items.indexOf(existing);
     if (index < 0) {
-      throw new Error(`Could not find existing item in parent node for replace`);
+      throw new Error(`Item not found in parent for replace`);
     }
 
     parent.items.splice(index, 1, replacement);
@@ -86,7 +86,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     
     const index = parent.value.items.indexOf(existing as InlineTableItem);
     if (index < 0) {
-      throw new Error(`Could not find existing item in parent node for replace`);
+      throw new Error(`Item not found in parent for replace`);
     } 
     parent.value.items.splice(index, 1, replacement as InlineTableItem);
 
@@ -421,7 +421,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     index = parent.items.findIndex(item => hasItem(item) && item.item === node);
 
     if (index < 0) {
-      throw new Error('Could not find node in parent for removal');
+      throw new Error('Node not found in parent for removal');
     }
 
     node = parent.items[index];

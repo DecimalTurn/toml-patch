@@ -94,37 +94,37 @@ t = { a.b = 1, a.b.c = 2 }
 describe('validation', () => {
   test("it shouldn't allow writing to the same key multiple times", () => {
     expect(() => toJS(parseTOML(multiple_keys))).toThrow(
-      /Invalid key\, a value has already been defined for a\.e/
+      /Value already defined for a\.e/
     );
   });
 
   test("it shouldn't allow repeat table keys", () => {
     expect(() => toJS(parseTOML(multiple_tables))).toThrow(
-      /Invalid key\, a table has already been defined named a/
+      /Table already defined: a/
     );
   });
 
   test("it shouldn't allow appending to static array", () => {
     expect(() => toJS(parseTOML(static_array))).toThrow(
-      /Invalid key\, cannot add to a static array/
+      /Cannot add to static array/
     );
   });
 
   test("it shouldn't allow appending table array to table", () => {
     expect(() => toJS(parseTOML(table_table_array))).toThrow(
-      /Invalid key\, cannot add an array of tables to a table/
+      /Cannot add Array of Tables to table/
     );
   });
 
   test("it shouldn't allow appending table to table array", () => {
     expect(() => toJS(parseTOML(table_array_table))).toThrow(
-      /Invalid key\, a table has already been defined named/
+      /Table already defined:/
     );
   });
 
   test("it shouldn't allow appending key to inline array", () => {
     expect(() => toJS(parseTOML(inline_array_key))).toThrow(
-      /Invalid key\, cannot add to a static array/
+      /Cannot add to static array/
     );
   });
 
@@ -136,7 +136,7 @@ describe('validation', () => {
 
   test("it shouldn't allow conflicting keys in inline tables", () => {
     expect(() => toJS(parseTOML(inline_table_conflicting_key))).toThrow(
-      /Key "a\.b\.c" conflicts with already defined key "a\.b" in inline table/
+      /Key "a\.b\.c" conflicts with key: "a\.b"/
     );
   });
 });

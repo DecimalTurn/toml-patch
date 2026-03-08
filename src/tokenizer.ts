@@ -63,7 +63,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       throw new ParseError(
         input,
         findPosition(lines, pos),
-        `Control character 0x${code.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+        `Control char 0x${code.toString(16).toUpperCase().padStart(2, '0')} not allowed`
       );
     }
 
@@ -73,7 +73,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
         throw new ParseError(
           input,
           findPosition(lines, pos),
-          'Invalid standalone CR (\\r); CR must be part of a CRLF sequence'
+          'Standalone CR; must be CRLF or LF'
         );
       }
     }
@@ -127,7 +127,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
         throw new ParseError(
           input,
           findPosition(lines, pos),
-          `Control character 0x${cc.toString(16).toUpperCase().padStart(2, '0')} is not allowed in TOML`
+          `Control char 0x${cc.toString(16).toUpperCase().padStart(2, '0')} not allowed`
         );
       }
     }
@@ -186,7 +186,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
           throw new ParseError(
             input,
             findPosition(lines, pos),
-            'Invalid standalone CR (\\r) in multiline string (must be part of CRLF sequence)'
+            'Standalone CR in multiline string; must be CRLF or LF'
           );
         }
       }
@@ -207,8 +207,8 @@ export function* tokenize(input: string): IterableIterator<Token> {
         }
 
         const message = charName
-          ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
-          : `Control character ${hexCode} is not allowed in ${stringType}`;
+          ? `${charName} (${hexCode}) not allowed in ${stringType}`
+          : `Control char ${hexCode} not allowed in ${stringType}`;
 
         throw new ParseError(
           input,
@@ -239,7 +239,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
           throw new ParseError(
             input,
             findPosition(lines, pos),
-            `Expected close of multiline string with ${quotes}, reached end of file. Check for escape sequences (\\) that may be preventing proper string closure`
+            `Unterminated multiline ${quotes} (possible escape issue)`
           );
         }
       }
@@ -247,7 +247,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       throw new ParseError(
         input,
         findPosition(lines, pos),
-        `Expected close of multiline string with ${quotes}, reached end of file`
+        `Unterminated multiline ${quotes}`
       );
     }
 
@@ -286,7 +286,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
       throw new ParseError(
         input,
         findPosition(lines, pos),
-        `Unsupported character "${ch}". Expected ALPHANUMERIC, ", ', +, -, or _`
+        `Unexpected char "${ch}"`
       );
     }
 
@@ -339,8 +339,8 @@ export function* tokenize(input: string): IterableIterator<Token> {
           }
 
           const message = charName
-            ? `${charName} (control character ${hexCode}) is not allowed in ${stringType}`
-            : `Control character ${hexCode} is not allowed in ${stringType}`;
+            ? `${charName} (${hexCode}) not allowed in ${stringType}`
+            : `Control char ${hexCode} not allowed in ${stringType}`;
 
           throw new ParseError(
             input,
