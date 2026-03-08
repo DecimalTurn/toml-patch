@@ -2485,3 +2485,13 @@ test('should preserve single-line inline table when updating (backward compatibi
   // Should preserve single-line format when possible
   expect(patched).toContain('point = { x = 1, y = 2, z = 3 }');
 });
+
+test('should add key to nested inline table', () => {
+  const existing = 'config = { server = { host = "localhost" } }\n';
+
+  const value = parse(existing);
+  value.config.server.port = 8080;
+
+  const patched = patch(existing, value);
+  expect(patched).toContain('port = 8080');
+});
