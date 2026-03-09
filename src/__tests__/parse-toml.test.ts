@@ -190,13 +190,13 @@ describe('ParseError messages', () => {
     }).toThrow(/month must be 01-12/);
   });
 
-  test('should show correct error for invalid hour', () => {
+  test('should show correct error for invalid hour (24)', () => {
     expect(() => {
       Array.from(parseTOML('a = 24:15:00'));
     }).toThrow(/hour must be 00-23/);
   });
 
-  test('should show correct error for invalid hour', () => {
+  test('should show correct error for invalid hour (25)', () => {
     expect(() => {
       Array.from(parseTOML('a = 25:00:00'));
     }).toThrow(/hour must be 00-23/);
