@@ -385,14 +385,30 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       remove(original, parent, node);
     } else if (isMove(change)) {
-      let parent = findByPath(original, change.path);
-      if (hasItem(parent)) parent = parent.item;
-      if (isKeyValue(parent)) parent = parent.value;
+      let parent = tryFindByPath(original, change.path);
+      if (parent) {
+        if (hasItem(parent)) parent = parent.item;
+        if (isKeyValue(parent)) parent = parent.value;
 
-      const node = (parent as WithItems).items[change.from];
+        const node = (parent as WithItems).items[change.from];
 
-      remove(original, parent, node);
-      insert(original, parent, node, change.to);
+        remove(original, parent, node);
+        insert(original, parent, node, change.to);
+      } else {
+        // TableArray sequence: the path refers to a collection of [[name]] entries
+        // spread across Document.items (each at an indexed sub-path).
+        // Find source entry, remove it, then re-insert at the target position.
+        const fromNode = findByPath(original, change.path.concat(change.from));
+        remove(original, original, fromNode);
+
+        // After removal, the entry now at virtual index change.to gives us the
+        // Document.items insertion point.
+        const toEntry = tryFindByPath(original, change.path.concat(change.to));
+        const toIndex = toEntry
+          ? original.items.indexOf(toEntry as any)
+          : original.items.length;
+        insert(original, original, fromNode, toIndex);
+      }
     } else if (isRename(change)) {
       let parent = findByPath(original, change.path.concat(change.from)) as
         | KeyValue
