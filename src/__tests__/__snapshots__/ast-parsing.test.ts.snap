@@ -190,7 +190,7 @@ Object {
       },
       "loc": Object {
         "end": Object {
-          "column": 47,
+          "column": 26,
           "line": 3,
         },
         "start": Object {
@@ -203,7 +203,7 @@ Object {
   ],
   "loc": Object {
     "end": Object {
-      "column": 101,
+      "column": 26,
       "line": 3,
     },
     "start": Object {
