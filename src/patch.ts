@@ -119,8 +119,9 @@ function reorder(changes: Change[]): Change[] {
             next_change.path[1] > change.path[1]) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
-          // We reset i to the beginning of the loop to avoid skipping any changes
-          i = 0
+          // We reset i to -1 so that after the for-loop's i++ the next iteration
+          // starts at 0 and re-checks the newly promoted element.
+          i = -1;
           break;
         }
         j++;
