@@ -191,6 +191,10 @@ describe('AST position consistency after patching', () => {
     expectConsistent('a = []\n', { a: [1, 2, 3] });
   });
 
+  test('clear inline array', () => {
+    expectConsistent('a = [1, 2, 3]\n', { a: [] });
+  });
+
   // ------ inline table mutations ------
 
   test('add to inline table', () => {
@@ -241,10 +245,7 @@ describe('AST position consistency after patching', () => {
     expectConsistent('a = 1\n', { a: 1, b: 2 });
   });
 
-  // Known limitation: after removing a key-value, the Document's end position
-  // is not recalculated to shrink. The removed item's offset shifts the end
-  // backwards, but remaining children may still extend past the new end.
-  test.skip('remove key-value from document root — Document end not shrunk', () => {
+  test('remove key-value from document root', () => {
     expectConsistent('a = 1\nb = 2\n', { a: 1 });
   });
 
@@ -267,9 +268,7 @@ describe('AST position consistency after patching', () => {
     expectConsistent(toml, { server: { host: 'localhost', port: 3000 } });
   });
 
-  // Known limitation: after removing a key-value, the Table's end position
-  // is not recalculated. The remaining child extends past the Table's end.
-  test.skip('remove key from a table section — Table end not shrunk', () => {
+  test('remove key from a table section', () => {
     const toml = dedent`
       [server]
       host = "localhost"
@@ -325,6 +324,20 @@ describe('AST position consistency after patching', () => {
         { name: 'Screw', sku: 123456789 },
       ],
     });
+  });
+
+  test('remove from table array', () => {
+    const toml = dedent`
+      [[items]]
+      id = 1
+
+      [[items]]
+      id = 2
+
+      [[items]]
+      id = 3
+    ` + '\n';
+    expectConsistent(toml, { items: [{ id: 1 }, { id: 3 }] });
   });
 
   test('edit value in table array entry', () => {
@@ -399,6 +412,16 @@ describe('AST position consistency after patching', () => {
 
   test('no inverted locations after adding to inline array', () => {
     expect(getInverted('a = [1]\n', { a: [1, 2, 3, 4, 5] })).toEqual([]);
+  });
+
+  test('no inverted locations after removing from table section', () => {
+    const toml = dedent`
+      [s]
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+    expect(getInverted(toml, { s: { b: 2 } })).toEqual([]);
   });
 
 });
