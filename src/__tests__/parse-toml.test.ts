@@ -115,13 +115,13 @@ describe('ParseError messages', () => {
   test('should show correct error for consecutive underscores in numbers', () => {
     expect(() => {
       Array.from(parseTOML('a = 1__2'));
-    }).toThrow(/Consecutive underscores in numbers are not allowed/);
+    }).toThrow(/Consecutive underscores not allowed/);
   });
 
   test('should show correct error for trailing underscore in numbers', () => {
     expect(() => {
       Array.from(parseTOML('a = 123_'));
-    }).toThrow(/Underscores in numbers must be surrounded by digits/);
+    }).toThrow(/Underscore must be between digits/);
   });
 
   test('should show correct error for hexadecimal with sign', () => {
@@ -181,43 +181,49 @@ describe('ParseError messages', () => {
   test('should show correct error for invalid date with wrong day', () => {
     expect(() => {
       Array.from(parseTOML('a = 2024-02-30'));
-    }).toThrow(/Invalid date "2024-02-30": day 30 is invalid for month 02 in year 2024/);
+    }).toThrow(/day 30 invalid for 2024-02/);
   });
 
   test('should show correct error for invalid month', () => {
     expect(() => {
       Array.from(parseTOML('a = 2024-13-01'));
-    }).toThrow(/Invalid date "2024-13-01": month must be between 01 and 12/);
+    }).toThrow(/month must be 01-12/);
   });
 
-  test('should show correct error for invalid hour', () => {
+  test('should show correct error for invalid hour (24)', () => {
+    expect(() => {
+      Array.from(parseTOML('a = 24:15:00'));
+    }).toThrow(/hour must be 00-23/);
+  });
+
+  test('should show correct error for invalid hour (25)', () => {
     expect(() => {
       Array.from(parseTOML('a = 25:00:00'));
-    }).toThrow(/Invalid time "25:00:00": hour must be between 00 and 23/);
+    }).toThrow(/hour must be 00-23/);
   });
 
   test('should show correct error for invalid minute', () => {
     expect(() => {
       Array.from(parseTOML('a = 12:60:00'));
-    }).toThrow(/Invalid time "12:60:00": minute must be between 00 and 59/);
+    }).toThrow(/minute must be 00-59/);
   });
 
   test('should show correct error for invalid second', () => {
     expect(() => {
       Array.from(parseTOML('a = 12:00:61'));
-    }).toThrow(/Invalid time "12:00:61": second must be between 00 and 60/);
+    }).toThrow(/second must be 00-60/);
   });
 
   test('should show correct error for multiline string as table key', () => {
     expect(() => {
       Array.from(parseTOML('["""key"""]'));
-    }).toThrow(/Multiline strings \(""" or '''\) cannot be used as keys/);
+    }).toThrow(/Multiline strings cannot be keys/);
   });
 
   test('should show correct error for array of tables with whitespace between brackets', () => {
     expect(() => {
       Array.from(parseTOML('[ [table]]'));
-    }).toThrow(/Array of tables opening brackets must be immediately adjacent with no whitespace: \[\[table\]\]/);
+    }).toThrow(/"\[\[" brackets must be adjacent/);
   });
 
   test('should show correct error for leading zeros in float integer part', () => {

@@ -107,7 +107,7 @@ export interface TableArray extends TreeNode {
 }
 
 /**
- * Is a TableArray (aka array of tables)
+ * Is a TableArray (aka Array of Tables)
  * @param node 
  * @returns 
  */

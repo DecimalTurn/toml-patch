@@ -60,6 +60,167 @@ function isBareKeyCode(code: number): boolean {
 const IS_OCTAL = /^[+\-]?0o/i;
 const IS_BINARY = /^[+\-]?0b/i;
 
+// ---------------------------------------------------------------------------
+// Shared validation helpers (extracted to reduce duplication)
+// ---------------------------------------------------------------------------
+
+/** Validate bare key characters (A-Za-z0-9_- only). Throws ParseError on invalid char. */
+function validateBareKeyChars(
+  raw: string, input: string, startLoc: { line: number; column: number }
+): void {
+  for (let i = 0; i < raw.length; i++) {
+    if (!isBareKeyCode(raw.charCodeAt(i))) {
+      throw new ParseError(
+        input,
+        { line: startLoc.line, column: startLoc.column + i },
+        `Invalid bare key char '${raw[i]}'`
+      );
+    }
+  }
+}
+
+/** Reject multiline strings used as keys. */
+function rejectMultilineKey(
+  raw: string, input: string, loc: { line: number; column: number }
+): void {
+  if (raw.startsWith('"""') || raw.startsWith("'''")) {
+    throw new ParseError(
+      input, loc,
+      'Multiline strings cannot be keys'
+    );
+  }
+}
+
+/** Parse a string key, wrapping parse errors as ParseErrors. */
+function parseKeyString(raw: string, input: string, loc: { line: number; column: number }): string {
+  try {
+    return parseString(raw);
+  } catch (err) {
+    throw new ParseError(input, loc, (err as Error).message);
+  }
+}
+
+/** Validate underscore placement in a numeric token. */
+function validateUnderscores(
+  str: string, input: string, loc: any, signed = true
+): void {
+  if (/_$/.test(str)) {
+    throw new ParseError(input, loc, 'Underscore must be between digits');
+  }
+  if (signed ? /^[+\-]?_/.test(str) : /^_/.test(str)) {
+    throw new ParseError(input, loc, 'Underscore must be between digits');
+  }
+  if (/__/.test(str)) {
+    throw new ParseError(input, loc, 'Consecutive underscores not allowed');
+  }
+}
+
+/** Validate no leading zeros in a numeric token (skips hex/octal/binary). */
+function validateLeadingZeros(
+  raw: string, input: string, loc: any, label: string
+): void {
+  const withoutUnderscores = raw.replace(IS_DIVIDER, '');
+  if (
+    /^[+\-]?0\d/.test(withoutUnderscores) &&
+    !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)
+  ) {
+    throw new ParseError(input, loc, `Leading zeros are not allowed in ${label}`);
+  }
+}
+
+/** Validate exponent syntax in a float token. */
+function validateExponent(
+  str: string, fullRaw: string, input: string, loc: any
+): void {
+  if (/_[eE]/.test(str)) {
+    throw new ParseError(input, loc, 'Underscore before exponent is not allowed');
+  }
+  if (/[eE][+\-]?_/.test(str)) {
+    throw new ParseError(input, loc, 'Underscore at start of exponent is not allowed');
+  }
+  if (/[eE][+\-]?$/.test(str)) {
+    throw new ParseError(input, loc, `Invalid float "${fullRaw}": incomplete exponent`);
+  }
+  if (/[eE][+\-]?.*\./.test(str)) {
+    throw new ParseError(input, loc, `Invalid float "${fullRaw}": decimal point not allowed in exponent`);
+  }
+}
+
+/** Validate time-component digit counts (must be exactly 2 each). */
+function validateTimeDigits(
+  hour: string, minute: string, second: string | undefined,
+  raw: string, input: string, loc: any
+): void {
+  if (hour.length !== 2) {
+    throw new ParseError(input, loc, `"${raw}": hour must be 2 digits`);
+  }
+  if (minute.length !== 2) {
+    throw new ParseError(input, loc, `"${raw}": minute must be 2 digits`);
+  }
+  if (second && second.length !== 2) {
+    throw new ParseError(input, loc, `"${raw}": second must be 2 digits`);
+  }
+}
+
+/** Validate time-component value ranges. */
+function validateTimeRange(
+  hour: string | undefined, minute: string | undefined, second: string | undefined,
+  raw: string, input: string, loc: any
+): void {
+  if (hour !== undefined) {
+    const h = parseInt(hour, 10);
+    if (h < 0 || h > 23) {
+      throw new ParseError(input, loc, `"${raw}": hour must be 00-23`);
+    }
+  }
+  if (minute !== undefined) {
+    const m = parseInt(minute, 10);
+    if (m < 0 || m > 59) {
+      throw new ParseError(input, loc, `"${raw}": minute must be 00-59`);
+    }
+  }
+  if (second !== undefined) {
+    const s = parseInt(second, 10);
+    if (s < 0 || s > 60) {
+      throw new ParseError(input, loc, `"${raw}": second must be 00-60`);
+    }
+  }
+}
+
+/**
+ * Validate a prefixed integer (hex, octal, or binary).
+ * @param prefix - lowercase prefix like "0x", "0o", "0b"
+ * @param validDigits - regex matching valid digit characters (e.g. /^[0-9a-fA-F]+$/)
+ * @param name - display name like "Hexadecimal", "Octal", "Binary"
+ */
+function validatePrefixedInt(
+  raw: string, input: string, loc: any,
+  prefix: string, validDigits: RegExp, name: string, invalidMsg?: string
+): void {
+  const upper = prefix[0] + prefix[1].toUpperCase();
+  const capsRe = new RegExp('^[+\\-]?' + upper.replace(/([\[\]])/g, '\\$1'));
+  if (capsRe.test(raw)) {
+    throw new ParseError(input, loc, `${name} prefix must be lowercase "${prefix}"`);
+  }
+  const underRe = new RegExp('^[+\\-]?' + prefix + '_', 'i');
+  if (underRe.test(raw)) {
+    throw new ParseError(input, loc, 'Underscore must be between digits');
+  }
+  const stripRe = new RegExp('^[+\\-]?' + prefix, 'i');
+  const numericPart = raw.replace(stripRe, '');
+  if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+    throw new ParseError(input, loc, `Incomplete ${name.toLowerCase()} number`);
+  }
+  const digits = numericPart.replace(/_/g, '');
+  if (!validDigits.test(digits)) {
+    throw new ParseError(input, loc, invalidMsg ?? `Invalid ${name.toLowerCase()} digits`);
+  }
+  if (/^[+\-]/.test(raw)) {
+    throw new ParseError(input, loc, `${name} numbers cannot have a sign prefix`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 // Export the date classes for external use
 export {
@@ -151,14 +312,14 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       throw new ParseError(
         input,
         cursor.value!.loc.start,
-        'Expected second "[" for array of tables opening, found end of input'
+        'Expected "[[" for Array of Tables, found end of input'
       );
     }
     if (cursor.value!.raw !== '[' || next.value!.raw !== '[') {
       throw new ParseError(
         input,
         cursor.value!.loc.start,
-        `Expected array of tables opening "[[", found ${cursor.value!.raw + next.value!.raw}`
+        `Expected "[[", found ${cursor.value!.raw + next.value!.raw}`
       );
     }
 
@@ -171,7 +332,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       throw new ParseError(
         input,
         firstBracket.loc.start,
-        'Array of tables opening brackets must be immediately adjacent with no whitespace: [[table]]'
+        '"[[" brackets must be adjacent (no whitespace)'
       );
     }
   }
@@ -201,45 +362,21 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       input,
       cursor.value!.loc.start,
       type === NodeType.TableArray 
-        ? 'Array of tables header [[]] requires a table name'
+        ? 'Array of Tables header [[]] requires a table name'
         : 'Table header [] requires a table name'
     );
   }
 
-  // Validate that multiline strings are not used as table keys
+  // Validate table key
   const raw = cursor.value!.raw;
-  {
-    if (raw.startsWith('"""') || raw.startsWith("'''")) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        'Multiline strings (""" or \'\'\') cannot be used as keys'
-      );
-    }
-
-    // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
-    const isQuoted = raw.startsWith('"') || raw.startsWith("'");
-    
-    if (!isQuoted) {
-      for (let i = 0; i < raw.length; i++) {
-        if (!isBareKeyCode(raw.charCodeAt(i))) {
-          throw new ParseError(
-            input,
-            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${raw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-          );
-        }
-      }
-    }
+  rejectMultilineKey(raw, input, cursor.value!.loc.start);
+  const isQuoted = raw.startsWith('"') || raw.startsWith("'");
+  if (!isQuoted) {
+    validateBareKeyChars(raw, input, cursor.value!.loc.start);
   }
 
   let keyValue;
-  try {
-    keyValue = [parseString(cursor.value!.raw)];
-  } catch (err) {
-    const e = err as Error;
-    throw new ParseError(input, cursor.value!.loc.start, e.message);
-  }
+  keyValue = [parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start)];
   
   key.item = {
     type: NodeType.Key,
@@ -258,15 +395,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     const partRaw = cursor.value!.raw;
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
-      for (let i = 0; i < partRaw.length; i++) {
-        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
-          throw new ParseError(
-            input,
-            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-          );
-        }
-      }
+      validateBareKeyChars(partRaw, input, cursor.value!.loc.start);
     }
     
     const before = ' '.repeat(dot.loc.start.column - key.item.loc.end.column);
@@ -298,8 +427,8 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
         input,
         cursor.value!.loc.start,
         is_table
-          ? `Table header must not contain newlines. Expected closing ']' on line ${headerStartLine}, found on line ${cursor.value!.loc.start.line}`
-          : `Unclosed array of tables header: expected closing ']]' on line ${headerStartLine}, found newline`
+          ? `Table header must be single-line`
+          : `Array of Tables header must be single-line`
       );
     }
   }
@@ -321,7 +450,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
     throw new ParseError(
       input,
       cursor.done || cursor.peek().done ? key.item.loc.end : cursor.value!.loc.start,
-      `Expected array of tables closing "]]", found ${
+      `Expected "]]" closing, found ${
         cursor.done || cursor.peek().done
           ? 'end of file'
           : cursor.value!.raw + cursor.peek().value!.raw
@@ -339,7 +468,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       throw new ParseError(
         input,
         firstBracket.loc.start,
-        'Array of tables closing brackets must be immediately adjacent with no whitespace: ]]'
+        '"]]" brackets must be adjacent (no whitespace)'
       );
     }
   }
@@ -360,7 +489,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       throw new ParseError(
         input,
         nextToken.loc.start,
-        `Unexpected content after ${is_table ? 'table' : 'array of tables'} header`
+        `Extra content after ${is_table ? 'table' : 'Array of Tables'} header`
       );
     }
   }
@@ -390,13 +519,7 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
 }
 
 function string(cursor: Cursor<Token>, input: string): String {
-  let value;
-  try {
-    value = parseString(cursor.value!.raw);
-  } catch (err) {
-    const e = err as Error;
-    throw new ParseError(input, cursor.value!.loc.start, e.message);
-  }
+  const value = parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start);
   
   return {
     type: NodeType.String,
@@ -532,7 +655,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
     throw new ParseError(
       input,
       loc,
-      `Invalid datetime "${raw}": fractional seconds must have at least one digit after decimal point`
+      `"${raw}": fractional seconds needs digit after dot`
     );
   }
 
@@ -541,7 +664,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
     throw new ParseError(
       input,
       loc,
-      `Invalid datetime "${raw}": timezone offset requires hour and minute components`
+      `"${raw}": offset needs HH:MM`
     );
   }
 
@@ -560,7 +683,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": must use colon separator (e.g., +09:09)`
+        `Offset "${fullOffset}": missing colon separator`
       );
     }
 
@@ -568,7 +691,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": hour must be exactly 2 digits`
+        `Offset "${fullOffset}": hour must be 2 digits`
       );
     }
 
@@ -576,14 +699,14 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": minute component is required`
+        `Offset "${fullOffset}": minute required`
       );
     }
     if (minutes.length !== 2) {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": minute must be exactly 2 digits`
+        `Offset "${fullOffset}": minute must be 2 digits`
       );
     }
 
@@ -592,7 +715,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": hour must be between 00 and 23, found ${hours}`
+        `Offset "${fullOffset}": hour must be 00-23`
       );
     }
 
@@ -601,7 +724,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid timezone offset "${fullOffset}": minute must be between 00 and 59, found ${minutes}`
+        `Offset "${fullOffset}": minute must be 00-59`
       );
     }
   }
@@ -618,7 +741,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid date "${raw}": date cannot end with 'T' without a time component`
+        `"${raw}": 'T' requires time component`
       );
     }
 
@@ -633,7 +756,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid datetime "${raw}": missing separator 'T' or space between date and time`
+        `"${raw}": missing 'T' or space separator`
       );
     }
 
@@ -646,7 +769,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
     throw new ParseError(
       input,
       loc,
-      `Invalid date "${raw}": year must be exactly 4 digits, found ${yearMatch[1].length}`
+      `"${raw}": year must be 4 digits`
     );
   }
 
@@ -660,14 +783,14 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
       throw new ParseError(
         input,
         loc,
-        `Invalid date "${raw}": month must be exactly 2 digits, found ${month.length}`
+        `"${raw}": month must be 2 digits`
       );
     }
     if (day.length !== 2) {
       throw new ParseError(
         input,
         loc,
-        `Invalid date "${raw}": day must be exactly 2 digits, found ${day.length}`
+        `"${raw}": day must be 2 digits`
       );
     }
   }
@@ -677,27 +800,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
   const timeMatch = raw.match(timePattern);
   if (timeMatch) {
     const [, hour, minute, second] = timeMatch;
-    if (hour.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": hour must be exactly 2 digits, found ${hour.length}`
-      );
-    }
-    if (minute.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": minute must be exactly 2 digits, found ${minute.length}`
-      );
-    }
-    if (second && second.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": second must be exactly 2 digits, found ${second.length}`
-      );
-    }
+    validateTimeDigits(hour, minute, second, raw, input, loc);
   }
   
   // Check for standalone time (no date prefix)
@@ -705,27 +808,7 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
   const timeOnlyMatch = raw.match(timeOnlyPattern);
   if (timeOnlyMatch && !dateMatch) {
     const [, hour, minute, second] = timeOnlyMatch;
-    if (hour.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": hour must be exactly 2 digits, found ${hour.length}`
-      );
-    }
-    if (minute.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": minute must be exactly 2 digits, found ${minute.length}`
-      );
-    }
-    if (second && second.length !== 2) {
-      throw new ParseError(
-        input,
-        loc,
-        `Invalid time "${raw}": second must be exactly 2 digits, found ${second.length}`
-      );
-    }
+    validateTimeDigits(hour, minute, second, raw, input, loc);
   }
   
   // Extract components for range validation (now we know they have the right length)
@@ -738,62 +821,27 @@ function validateDateTimeFormat(raw: string, input: string, loc: any): void {
     // Validate month range (01-12)
     const monthNum = parseInt(month, 10);
     if (monthNum < 1 || monthNum > 12) {
-      throw new ParseError(input, loc, `Invalid date "${raw}": month must be between 01 and 12`);
+      throw new ParseError(input, loc, `"${raw}": month must be 01-12`);
     }
     
     // Validate day range (01-31 depending on month)
     const dayNum = parseInt(day, 10);
     if (dayNum < 1 || dayNum > 31) {
-      throw new ParseError(input, loc, `Invalid date "${raw}": day must be between 01 and 31`);
+      throw new ParseError(input, loc, `"${raw}": day must be 01-31`);
     }
     
     // Check if day is valid for the specific month
     const yearNum = parseInt(year, 10);
     const daysInMonth = getDaysInMonth(yearNum, monthNum);
     if (dayNum > daysInMonth) {
-      throw new ParseError(input, loc, `Invalid date "${raw}": day ${day} is invalid for month ${month} in year ${year}`);
+      throw new ParseError(input, loc, `"${raw}": day ${day} invalid for ${year}-${month}`);
     }
     
     // Validate time component ranges if present
-    if (hour !== undefined) {
-      const hourNum = parseInt(hour, 10);
-      if (hourNum < 0 || hourNum > 23) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": hour must be between 00 and 23`);
-      }
-    }
-    
-    if (minute !== undefined) {
-      const minuteNum = parseInt(minute, 10);
-      if (minuteNum < 0 || minuteNum > 59) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
-      }
-    }
-    
-    if (second !== undefined) {
-      const secondNum = parseInt(second, 10);
-      if (secondNum < 0 || secondNum > 60) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
-      }
-    }
+    validateTimeRange(hour, minute, second, raw, input, loc);
   } else if (timeOnlyMatchExact) {
     const [, hour, minute, second] = timeOnlyMatchExact;
-    
-    const hourNum = parseInt(hour, 10);
-    if (hourNum < 0 || hourNum > 23) {
-      throw new ParseError(input, loc, `Invalid time "${raw}": hour must be between 00 and 23`);
-    }
-    
-    const minuteNum = parseInt(minute, 10);
-    if (minuteNum < 0 || minuteNum > 59) {
-      throw new ParseError(input, loc, `Invalid time "${raw}": minute must be between 00 and 59`);
-    }
-    
-    if (second !== undefined) {
-      const secondNum = parseInt(second, 10);
-      if (secondNum < 0 || secondNum > 60) {
-        throw new ParseError(input, loc, `Invalid time "${raw}": second must be between 00 and 60`);
-      }
-    }
+    validateTimeRange(hour, minute, second, raw, input, loc);
   }
 }
 
@@ -815,7 +863,7 @@ function float(cursor: Cursor<Token>, input: string): Float {
         throw new ParseError(
           input,
           loc.start,
-          `Invalid float "${raw}": cannot have decimal point after exponent`
+          `Float "${raw}": dot after exponent`
         );
       }
       
@@ -823,15 +871,7 @@ function float(cursor: Cursor<Token>, input: string): Float {
       const intPart = raw;
 
       // Validate no leading zeros in integer part (after optional sign)
-      // e.g. 00.1, +00.1, 0_0.1 are invalid
-      const withoutUnderscores = intPart.replace(IS_DIVIDER, '');
-      if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(intPart) && !IS_OCTAL.test(intPart) && !IS_BINARY.test(intPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Leading zeros are not allowed in the integer part of a float'
-        );
-      }
+      validateLeadingZeros(intPart, input, loc.start, 'the integer part of a float');
       
       // Validate no leading dot (must have at least one digit before the dot)
       const withoutSign = intPart.replace(/^[+\-]/, '');
@@ -839,31 +879,11 @@ function float(cursor: Cursor<Token>, input: string): Float {
         throw new ParseError(
           input,
           loc.start,
-          `Invalid float: decimal point must be preceded by at least one digit`
+          `Float: digit required before dot`
         );
       }
       
-      if (/_$/.test(intPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Underscore before decimal point is not allowed'
-        );
-      }
-      if (/^[+\-]?_/.test(intPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Leading underscore is not allowed'
-        );
-      }
-      if (/__/.test(intPart)) {
-        throw new ParseError(
-          input,
-          loc.start,
-          'Consecutive underscores are not allowed'
-        );
-      }
+      validateUnderscores(intPart, input, loc.start);
     }
 
     // From spec:
@@ -890,142 +910,31 @@ function float(cursor: Cursor<Token>, input: string): Float {
         throw new ParseError(
           input,
           cursor.value!.loc.start,
-          `Invalid float: fractional part must start with a digit, found "${fracPart}"`
+          `Float: fraction must start with digit, found "${fracPart}"`
         );
       }
       
-      if (/^_/.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Underscore after decimal point is not allowed'
-        );
-      }
-      if (/_$/.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Trailing underscore in fractional part is not allowed'
-        );
-      }
-      
-      // Validate underscore before exponent in fractional part
-      if (/_[eE]/.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Underscore before exponent is not allowed'
-        );
-      }
-      
-      // Validate underscore at start of exponent in fractional part
-      if (/[eE][+\-]?_/.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          'Underscore at start of exponent is not allowed'
-        );
-      }
-      
-      // Validate incomplete exponent in fractional part (just E with nothing or just sign after)
-      if (/[eE][+\-]?$/.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          `Invalid float "${raw}": incomplete exponent`
-        );
-      }
-      
-      // Validate no decimal point in exponent in fractional part
-      if (/[eE][+\-]?.*\./.test(fracPart)) {
-        throw new ParseError(
-          input,
-          cursor.value!.loc.start,
-          `Invalid float "${raw}": decimal point not allowed in exponent`
-        );
-      }
+      validateUnderscores(fracPart, input, cursor.value!.loc.start, false);
+      validateExponent(fracPart, raw, input, cursor.value!.loc.start);
     }
     
         value = Number(raw.replace(IS_DIVIDER, ''));
   } else {
     // Validate underscore placement in integer part (exponent-only floats like 1e5)
-    if (/_$/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscore before decimal point is not allowed'
-      );
-    }
-    if (/^[+\-]?_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Leading underscore is not allowed'
-      );
-    }
-    if (/__/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Consecutive underscores are not allowed'
-      );
-    }
-    
-    // Validate incomplete exponent (just E with nothing or just sign after)
-    if (/[eE][+\-]?$/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        `Invalid float "${raw}": incomplete exponent`
-      );
-    }
-    
-    // Validate no decimal point in exponent
-    if (/[eE][+\-]?.*\./.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        `Invalid float "${raw}": decimal point not allowed in exponent`
-      );
-    }
-    
-    // Validate underscore before exponent
-    if (/_[eE]/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscore before exponent is not allowed'
-      );
-    }
-    
-    // Validate underscore at start of exponent
-    if (/[eE][+\-]?_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscore at start of exponent is not allowed'
-      );
-    }
+    validateUnderscores(raw, input, loc.start);
+    validateExponent(raw, raw, input, loc.start);
     
     // Validate no dot after exponent (e.g., 1e2.3 is invalid)
     if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
       throw new ParseError(
         input,
         cursor.peek().value!.loc.start,
-        `Invalid float "${raw}.": cannot have decimal point after exponent`
+        `Float "${raw}.": dot after exponent`
       );
     }
 
     // Validate no leading zeros in integer part (after optional sign)
-    // e.g. 00e1, +00e1, 0_0e1 are invalid
-    const withoutUnderscores = raw.replace(IS_DIVIDER, '');
-    if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Leading zeros are not allowed in the integer part of a float'
-      );
-    }
+    validateLeadingZeros(raw, input, loc.start, 'the integer part of a float');
     
     value = Number(raw.replace(IS_DIVIDER, ''));
   }
@@ -1073,202 +982,28 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
     }
 
     // Validation: No leading zeros (except for hex/octal/binary with prefixes)
-    // Check after removing underscores to catch cases like 0_0 which is equivalent to 00
-    const withoutUnderscores = raw.replace(/_/g, '');
-    if (/^[+\-]?0\d/.test(withoutUnderscores) && !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Leading zeros are not allowed in decimal integers'
-      );
-    }
+    validateLeadingZeros(raw, input, loc.start, 'decimal integers');
 
-    // Validation: No trailing underscores
-    if (/_$/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscores in numbers must be surrounded by digits'
-      );
-    }
-
-    // Validation: No leading underscores (after optional sign)
-    if (/^[+\-]?_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscores in numbers must be surrounded by digits'
-      );
-    }
-
-    // Validation: No consecutive underscores
-    if (/__/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Consecutive underscores in numbers are not allowed'
-      );
-    }
+    // Validation: underscore placement
+    validateUnderscores(raw, input, loc.start);
   }
 
   let radix = 10;
-  let numericPart: string;
   
   // Hexadecimal validation
   if (IS_HEX.test(raw)) {
     radix = 16;
-    
-    // Validation: Capital prefix not allowed
-    if (/^[+\-]?0X/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Hexadecimal prefix must be lowercase "0x"'
-      );
-    }
-    
-    // Validation: Underscore after prefix
-    if (/^[+\-]?0x_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscores in numbers must be surrounded by digits'
-      );
-    }
-    
-    numericPart = raw.replace(/^[+\-]?0x/i, '');
-    
-    // Validation: Incomplete hexadecimal
-    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Incomplete hexadecimal number'
-      );
-    }
-    
-    // Validation: Invalid hexadecimal digits
-    const hexDigits = numericPart.replace(/_/g, '');
-    if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Invalid hexadecimal digits'
-      );
-    }
-    
-    // Validation: Signed non-decimal numbers not allowed
-    if (/^[+\-]/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Hexadecimal numbers cannot have a sign prefix'
-      );
-    }
+    validatePrefixedInt(raw, input, loc.start, '0x', /^[0-9a-fA-F]+$/, 'Hexadecimal');
   }
   // Octal validation
   else if (IS_OCTAL.test(raw)) {
     radix = 8;
-    
-    // Validation: Capital prefix not allowed
-    if (/^[+\-]?0O/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Octal prefix must be lowercase "0o"'
-      );
-    }
-    
-    // Validation: Underscore after prefix
-    if (/^[+\-]?0o_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscores in numbers must be surrounded by digits'
-      );
-    }
-    
-    numericPart = raw.replace(/^[+\-]?0o/i, '');
-    
-    // Validation: Incomplete octal
-    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Incomplete octal number'
-      );
-    }
-    
-    // Validation: Invalid octal digits
-    const octalDigits = numericPart.replace(/_/g, '');
-    if (!/^[0-7]+$/.test(octalDigits)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Invalid octal digits (must be 0-7)'
-      );
-    }
-    
-    // Validation: Signed non-decimal numbers not allowed
-    if (/^[+\-]/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Octal numbers cannot have a sign prefix'
-      );
-    }
+    validatePrefixedInt(raw, input, loc.start, '0o', /^[0-7]+$/, 'Octal', 'Invalid octal digits (must be 0-7)');
   }
   // Binary validation
   else if (IS_BINARY.test(raw)) {
     radix = 2;
-    
-    // Validation: Capital prefix not allowed
-    if (/^[+\-]?0B/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Binary prefix must be lowercase "0b"'
-      );
-    }
-    
-    // Validation: Underscore after prefix
-    if (/^[+\-]?0b_/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Underscores in numbers must be surrounded by digits'
-      );
-    }
-    
-    numericPart = raw.replace(/^[+\-]?0b/i, '');
-    
-    // Validation: Incomplete binary
-    if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Incomplete binary number'
-      );
-    }
-    
-    // Validation: Invalid binary digits
-    const binaryDigits = numericPart.replace(/_/g, '');
-    if (!/^[01]+$/.test(binaryDigits)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Invalid binary digits (must be 0 or 1)'
-      );
-    }
-    
-    // Validation: Signed non-decimal numbers not allowed
-    if (/^[+\-]/.test(raw)) {
-      throw new ParseError(
-        input,
-        loc.start,
-        'Binary numbers cannot have a sign prefix'
-      );
-    }
+    validatePrefixedInt(raw, input, loc.start, '0b', /^[01]+$/, 'Binary', 'Invalid binary digits (must be 0 or 1)');
   }
 
   const value = parseInt(
@@ -1317,7 +1052,7 @@ function walkBlock(cursor: Cursor<Token>, input: string): Block[] {
     throw new ParseError(
       input,
       cursor.value!.loc.start,
-      `Unexpected token "${cursor.value!.type}". Expected Comment, Bracket, or String`
+      `Unexpected token "${cursor.value!.type}"`
     );
   }
 }
@@ -1347,36 +1082,15 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
       `Use '=' to separate keys and values, not ':'`
     );
   }
-  // Validate that multiline strings are not used as keys
-  if (rawKeyToken.startsWith('"""') || rawKeyToken.startsWith("'''") ) {
-    throw new ParseError(
-      input,
-      cursor.value!.loc.start,
-      'Multiline strings (""" or \'\'\') cannot be used as keys'
-    );
-  }
-
-  // Validate bare key characters (TOML 1.1.0: A-Za-z0-9_- only)
+  // Validate key
+  rejectMultilineKey(rawKeyToken, input, cursor.value!.loc.start);
   const isQuotedKey = rawKeyToken.startsWith('"') || rawKeyToken.startsWith("'");
   if (!isQuotedKey) {
-    for (let i = 0; i < rawKeyToken.length; i++) {
-      if (!isBareKeyCode(rawKeyToken.charCodeAt(i))) {
-        throw new ParseError(
-          input,
-          { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-          `Invalid character '${rawKeyToken[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-        );
-      }
-    }
+    validateBareKeyChars(rawKeyToken, input, cursor.value!.loc.start);
   }
 
   let keyValue2;
-  try {
-    keyValue2 = [parseString(cursor.value!.raw)];
-  } catch (err) {
-    const e = err as Error;
-    throw new ParseError(input, cursor.value!.loc.start, e.message);
-  }
+  keyValue2 = [parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start)];
   
   const key: Key = {
     type: NodeType.Key,
@@ -1391,34 +1105,15 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
     // Validate each part of a dotted key
     const partRaw = cursor.value!.raw;
-    if (partRaw.startsWith('"""') || partRaw.startsWith("'''") ) {
-      throw new ParseError(
-        input,
-        cursor.value!.loc.start,
-        'Multiline strings (""" or \'\'\') cannot be used as keys'
-      );
-    }
+    rejectMultilineKey(partRaw, input, cursor.value!.loc.start);
     const partIsQuoted = partRaw.startsWith('"') || partRaw.startsWith("'");
     if (!partIsQuoted) {
-      for (let i = 0; i < partRaw.length; i++) {
-        if (!isBareKeyCode(partRaw.charCodeAt(i))) {
-          throw new ParseError(
-            input,
-            { line: cursor.value!.loc.start.line, column: cursor.value!.loc.start.column + i },
-            `Invalid character '${partRaw[i]}' in bare key. Bare keys can only contain A-Z, a-z, 0-9, _, and -`
-          );
-        }
-      }
+      validateBareKeyChars(partRaw, input, cursor.value!.loc.start);
     }
 
     key.loc.end = cursor.value!.loc.end;
     key.raw += `.${cursor.value!.raw}`;
-    try {
-      key.value.push(parseString(cursor.value!.raw));
-    } catch (err) {
-      const e = err as Error;
-      throw new ParseError(input, cursor.value!.loc.start, e.message);
-    }
+    key.value.push(parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start));
   }
 
   cursor.next();
@@ -1430,7 +1125,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     throw new ParseError(
       input,
       cursor.value!.loc.start,
-      `Expected "=" for key-value on the same line as the key`
+      `"=" must be on same line as key`
     );
   }
 
@@ -1454,7 +1149,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
   cursor.next();
 
   if (cursor.done) {
-    throw new ParseError(input, key.loc.start, `Expected value for key-value, reached end of file`);
+    throw new ParseError(input, key.loc.start, `Expected value, reached EOF`);
   }
 
   // TOML values must be on the same line as the '=' sign.
@@ -1464,7 +1159,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     throw new ParseError(
       input,
       cursor.value!.loc.start,
-      `Expected value on the same line as the '=' sign`
+      `Value must be on same line as '='`
     );
   }
 
@@ -1555,7 +1250,7 @@ function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment>
     throw new ParseError(
       input,
       cursor.value!.loc.start,
-      `Invalid number: cannot start with a dot. Numbers must start with a digit`
+      `Number cannot start with a dot`
     );
   } else {
     throw new ParseError(
@@ -1601,7 +1296,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
         throw new ParseError(
           input,
           cursor.value!.loc.start,
-          'Found "," without previous value in inline table'
+          'Leading comma in inline table'
         );
       }
 
@@ -1609,7 +1304,7 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
         throw new ParseError(
           input,
           cursor.value!.loc.start,
-          'Found consecutive commas in inline table (double comma is not allowed)'
+          'Consecutive commas in inline table'
         );
       }
 
@@ -1693,7 +1388,7 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         throw new ParseError(
           input,
           cursor.value!.loc.start,
-          'Found "," without previous value for inline array'
+          'Leading comma in array'
         );
       }
 
@@ -1701,7 +1396,7 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
         throw new ParseError(
           input,
           cursor.value!.loc.start,
-          'Found consecutive commas in array (double comma is not allowed)'
+          'Consecutive commas in array'
         );
       }
 

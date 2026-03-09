@@ -242,72 +242,44 @@ export function validateFormatObject(format: any): any {
     return {};
   }
 
-  const supportedProperties = new Set(['newLine', 'trailingNewline', 'trailingComma', 'bracketSpacing', 'inlineTableStart', 'truncateZeroTimeInDates', 'useTabsForIndentation']);
+  // Schema-driven validation: each key maps to a validator returning an error string or null
+  const isBool = (v: any): string | null =>
+    typeof v === 'boolean' ? null : `expected boolean, got ${typeof v}`;
+  const schema: Record<string, (v: any) => string | null> = {
+    newLine: v => typeof v === 'string' ? null : `expected string, got ${typeof v}`,
+    trailingNewline: v => typeof v === 'boolean' || typeof v === 'number' ? null : `expected boolean or number, got ${typeof v}`,
+    trailingComma: isBool,
+    bracketSpacing: isBool,
+    inlineTableStart: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
+      ? null : `expected non-negative integer or undefined, got ${typeof v}`,
+    truncateZeroTimeInDates: isBool,
+    useTabsForIndentation: isBool,
+  };
+
   const validatedFormat: any = {};
-  const unsupportedProperties: string[] = [];
-  const invalidTypeProperties: string[] = [];
+  const unsupported: string[] = [];
+  const invalid: string[] = [];
 
-  // Check all enumerable properties of the format object, including properties
-  // provided via the prototype chain (common in JS Object.create(...) patterns).
   for (const key in format) {
-    const isOwnEnumerable = Object.prototype.hasOwnProperty.call(format, key);
-
-    if (supportedProperties.has(key)) {
+    const validator = Object.prototype.hasOwnProperty.call(schema, key) ? schema[key] : undefined;
+    if (validator) {
       const value = format[key];
-      
-      // Type validation for each property
-      switch (key) {
-          case 'newLine':
-            if (typeof value === 'string') {
-              validatedFormat.newLine = value;
-            } else {
-              invalidTypeProperties.push(`${key} (expected string, got ${typeof value})`);
-            }
-            break;
-          
-          case 'trailingNewline':
-            if (typeof value === 'boolean' || typeof value === 'number') {
-              validatedFormat.trailingNewline = value;
-            } else {
-              invalidTypeProperties.push(`${key} (expected boolean or number, got ${typeof value})`);
-            }
-            break;
-          
-          case 'trailingComma':
-          case 'bracketSpacing':
-          case 'truncateZeroTimeInDates':
-          case 'useTabsForIndentation':
-            if (typeof value === 'boolean') {
-              validatedFormat[key] = value;
-            } else {
-              invalidTypeProperties.push(`${key} (expected boolean, got ${typeof value})`);
-            }
-            break;
-          
-          case 'inlineTableStart':
-            if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
-              validatedFormat.inlineTableStart = value;
-            } else if (value === undefined || value === null) {
-              // Allow undefined/null to use default
-              validatedFormat.inlineTableStart = value;
-            } else {
-              invalidTypeProperties.push(`${key} (expected non-negative integer or undefined, got ${typeof value})`);
-            }
-            break;
+      const error = validator(value);
+      if (error) {
+        invalid.push(`${key} (${error})`);
+      } else {
+        validatedFormat[key] = value;
       }
-    } else if (isOwnEnumerable) {
-      unsupportedProperties.push(key);
+    } else if (Object.prototype.hasOwnProperty.call(format, key)) {
+      unsupported.push(key);
     }
   }
 
-  // Warn about unsupported properties
-  if (unsupportedProperties.length > 0) {
-    console.warn(`toml-patch: Ignoring unsupported format properties: ${unsupportedProperties.join(', ')}. Supported properties are: ${Array.from(supportedProperties).join(', ')}`);
+  if (unsupported.length > 0) {
+    console.warn(`toml-patch: Ignoring unsupported format properties: ${unsupported.join(', ')}. Supported properties are: ${Object.keys(schema).join(', ')}`);
   }
-
-  // Throw error for invalid types
-  if (invalidTypeProperties.length > 0) {
-    throw new TypeError(`Invalid types for format properties: ${invalidTypeProperties.join(', ')}`);
+  if (invalid.length > 0) {
+    throw new TypeError(`Invalid types for format properties: ${invalid.join(', ')}`);
   }
 
   return validatedFormat;

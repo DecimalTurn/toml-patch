@@ -2,8 +2,17 @@ import parseJS from '../parse-js';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import dedent from 'dedent';
-import { toDocument } from '../patch';
+import { NodeType, AST, Document } from '../ast';
 import { TomlFormat } from '../toml-format';
+
+function toDocument(ast: AST): Document {
+  const items = [...ast];
+  return {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    items,
+  };
+}
 
 const value = {
   a: '1',

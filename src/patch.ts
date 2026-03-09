@@ -30,19 +30,9 @@ import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, isMultilineString } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateString } from './generate';
-import { validate } from './validate';
 import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
 import { DateFormatHelper } from './date-format';
-
-export function toDocument(ast: AST) : Document  {
-  const items = [...ast];
-  return  {
-    type: NodeType.Document,
-    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
-    items
-  };
-}
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -94,10 +84,6 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
   }
 
   const patched_document = applyChanges(existing_document, updated_document, changes, format);
-
-  // Validate the patched_document
-  // This would prevent overlapping element positions in the AST, but since those are handled at stringification time, we can skip this for now
-  //validate(patched_document);
 
   return {
     tomlString: toTOML(patched_document.items, format),

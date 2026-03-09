@@ -62,7 +62,7 @@ function unescapeBasicString(value: string, multiline: boolean): string {
     if (i > start) parts.push(value.slice(start, i));
 
     i++; // advance past backslash
-    if (i >= len) throw new Error('Invalid escape sequence: trailing backslash');
+    if (i >= len) throw new Error('Trailing backslash');
 
     const esc = value[i];
     switch (esc) {
@@ -82,7 +82,7 @@ function unescapeBasicString(value: string, multiline: boolean): string {
         }
         const cp = hexVal4(value, i + 1);
         if (cp >= 0xD800 && cp <= 0xDFFF) {
-          throw new Error(`Invalid Unicode escape: \\u${value.slice(i + 1, i + 5)} (surrogate codepoints are not allowed)`);
+          throw new Error(`Invalid \\u${value.slice(i + 1, i + 5)}: surrogates not allowed`);
         }
         parts.push(String.fromCharCode(cp));
         i += 4;
@@ -146,40 +146,6 @@ function unescapeBasicString(value: string, multiline: boolean): string {
   if (start < len) parts.push(value.slice(start));
 
   return parts.join('');
-}
-
-/**
- * @deprecated Kept for backward compatibility with external callers.
- * The multiline pipeline now uses unescapeBasicString directly.
- */
-export function escapeDoubleQuotes(value: string): string {
-  let result = '';
-  let precedingBackslashes = 0;
-
-  for (let i = 0; i < value.length; i++) {
-    const char = value[i];
-
-    if (char === '"' && precedingBackslashes % 2 === 0) {
-      result += '\\"';
-    } else {
-      result += char;
-    }
-
-    if (char === '\\') {
-      precedingBackslashes++;
-    } else {
-      precedingBackslashes = 0;
-    }
-  }
-
-  return result;
-}
-
-/**
- * @deprecated Kept for backward compatibility. Use unescapeBasicString instead.
- */
-export function unescapeLargeUnicode(escaped: string): string {
-  return unescapeBasicString(escaped, false);
 }
 
 export function escape(value: string): string {

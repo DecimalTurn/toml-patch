@@ -167,7 +167,7 @@ export function toValue(node: Value): any {
         for (let i = 1; i < key.length; i++) {
           const prefix = joinKey(key.slice(0, i));
           if (defined_keys.has(prefix)) {
-            throw new Error(`Key "${full_key}" conflicts with already defined key "${prefix}" in inline table`);
+            throw new Error(`Key "${full_key}" conflicts with key: "${prefix}"`);
           }
         }
         
@@ -175,7 +175,7 @@ export function toValue(node: Value): any {
         // e.g., if "a.b.c" is defined, we can't later define "a.b" (would overwrite the table)
         if (defined_prefixes.has(full_key)) {
           const existing = defined_prefixes.get(full_key)!;
-          throw new Error(`Key "${full_key}" conflicts with already defined key "${existing}" in inline table`);
+          throw new Error(`Key "${full_key}" conflicts with key: "${existing}"`);
         }
         
         defined_keys.add(full_key);
@@ -246,14 +246,14 @@ function validateKey(
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
-        throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
+        throw new Error(`Cannot extend inline table at ${candidate}`);
       }
     }
   }
   
   // Also check if a table header tries to extend an inline table
   if ((type === NodeType.Table || type === NodeType.TableArray) && state.inline_tables.has(joined_full_key)) {
-    throw new Error(`Invalid key, cannot extend an inline table at ${joined_full_key}`);
+    throw new Error(`Cannot extend inline table at ${joined_full_key}`);
   }
   
   // Check if table header path contains an inline table
@@ -261,19 +261,19 @@ function validateKey(
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
       if (state.inline_tables.has(candidate)) {
-        throw new Error(`Invalid key, cannot extend an inline table at ${candidate}`);
+        throw new Error(`Cannot extend inline table at ${candidate}`);
       }
     }
   }
 
-  // 0a. Dotted key-value assignments cannot traverse into an array-of-tables.
+  // 0a. Dotted key-value assignments cannot traverse into an Array of Tables.
   // This would be ambiguous (which element?) and is rejected by toml-test's
   // append-with-dotted-keys fixtures.
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
       if (state.table_arrays.has(candidate)) {
-        throw new Error(`Invalid key, cannot traverse into an array of tables at ${candidate}`);
+        throw new Error(`Cannot traverse Array of Tables at ${candidate}`);
       }
     }
   }
@@ -281,7 +281,7 @@ function validateKey(
   // 0b. Tables created implicitly by dotted keys cannot be re-opened via table headers.
   // (toml-test invalid: spec-1.1.0/common-46-0 and common-46-1)
   if ((type === NodeType.Table || type === NodeType.TableArray) && state.implicit_tables.has(joined_full_key)) {
-    throw new Error(`Invalid key, a table has already been defined implicitly named ${joined_full_key}`);
+    throw new Error(`Implicit table already defined: ${joined_full_key}`);
   }
 
   // 0c. A table path cannot later be re-assigned as a value.
@@ -289,7 +289,7 @@ function validateKey(
   // Example: `a.b.c = 1` then `a.b = 2` is invalid (a.b was implicitly created as a table).
   // (toml-test invalid: spec-1.1.0/common-50-0, table/append-with-dotted-keys-05)
   if (type === NodeType.KeyValue && state.implicit_tables.has(joined_full_key)) {
-    throw new Error(`Invalid key, a table has already been defined named ${joined_full_key}`);
+    throw new Error(`Table already defined: ${joined_full_key}`);
   }
 
   // 0d. Dotted keys cannot extend tables that were explicitly defined earlier.
@@ -299,7 +299,7 @@ function validateKey(
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
       if (state.tables.has(candidate)) {
-        throw new Error(`Invalid key, cannot add to an explicitly defined table ${candidate} using dotted keys`);
+        throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }
   }
@@ -309,12 +309,12 @@ function validateKey(
   for (const part of key) {
     if (!has(object, part)) return;
     if (isPrimitive(object[part])) {
-      throw new Error(`Invalid key, a value has already been defined for ${candidates[index]}`);
+      throw new Error(`Value already defined for ${candidates[index]}`);
     }
 
     const joined_parts = candidates[index];
     if (Array.isArray(object[part]) && !state.table_arrays.has(joined_parts)) {
-      throw new Error(`Invalid key, cannot add to a static array at ${joined_parts}`);
+      throw new Error(`Cannot add to static array at ${joined_parts}`);
     }
 
     const next_is_last = index++ < key.length - 1;
@@ -325,20 +325,20 @@ function validateKey(
 
   // 2. Cannot override table
   if (object && type === NodeType.Table && state.defined.has(joined_key)) {
-    throw new Error(`Invalid key, a table has already been defined named ${joined_key}`);
+    throw new Error(`Table already defined: ${joined_key}`);
   }
 
   // 2b. Cannot assign a value to a path that is already a table (explicit or implicit).
   if (object && type === NodeType.KeyValue && key.length === 1 && state.defined.has(joined_key)) {
     // If the path exists as a structured value, overriding it is invalid.
     if (!isPrimitive(object)) {
-      throw new Error(`Invalid key, a table has already been defined named ${joined_key}`);
+      throw new Error(`Table already defined: ${joined_key}`);
     }
   }
 
   // 3. Cannot add table array to static array or table
   if (object && type === NodeType.TableArray && !state.table_arrays.has(joined_key)) {
-    throw new Error(`Invalid key, cannot add an array of tables to a table at ${joined_key}`);
+    throw new Error(`Cannot add Array of Tables to table at ${joined_key}`);
   }
 }
 
