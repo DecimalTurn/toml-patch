@@ -261,7 +261,7 @@ export function validateFormatObject(format: any): any {
   const invalid: string[] = [];
 
   for (const key in format) {
-    const validator = schema[key];
+    const validator = Object.prototype.hasOwnProperty.call(schema, key) ? schema[key] : undefined;
     if (validator) {
       const value = format[key];
       const error = validator(value);
