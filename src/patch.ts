@@ -60,10 +60,23 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
+  // Compute the Document's end position from its children so that
+  // offset-based position updates in applyWrites start from the correct
+  // baseline (instead of 0,0 which under-counts after expansion).
+  let endLine = 1;
+  let endColumn = 0;
+  for (const item of items) {
+    const e = item.loc.end;
+    if (e.line > endLine || (e.line === endLine && e.column > endColumn)) {
+      endLine = e.line;
+      endColumn = e.column;
+    }
+  }
+
   const existing_js = toJS(items);
   const existing_document: Document = {
     type: NodeType.Document,
-    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
     items
   };
 
