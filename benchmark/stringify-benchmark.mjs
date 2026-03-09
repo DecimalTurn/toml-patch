@@ -9,6 +9,7 @@
  *   --detailed       Run detailed profiling of stringify components
  *   --package <n>    Run benchmark for specific implementation
  *   --file <n>       Run specific file(s) matching pattern
+ *   --output         Write results to output-<commit-hash>.md
  */
 
 import { join, basename, resolve, dirname } from 'path';
@@ -159,8 +160,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, detailed, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'sample', 'detailed'],
+const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'sample', 'detailed', 'output'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -176,13 +177,15 @@ Options:
   --package <index>  Only run benchmark for the given implementation (0-based index)
   --file <pattern>   Run benchmarks matching the file pattern
   --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  --output           Write results to output-<commit-hash>.md
   
 Examples:
   npm run benchmark:stringify
   npm run benchmark:stringify -- --sample
   npm run benchmark:stringify -- --detailed
   npm run benchmark:stringify -- --file hard
-  npm run benchmark:stringify -- --package 0`);
+  npm run benchmark:stringify -- --package 0
+  npm run benchmark:stringify -- --output`);
   process.exit(0);
 }
 
@@ -317,10 +320,30 @@ for (const implementation of implementationsToRun) {
   }
 }
 
+// Resolve output filename
+function getOutputFilename() {
+  if (output) {
+    try {
+      const hash = execSync('git rev-parse --short HEAD', { cwd: join(__dirname, '..'), stdio: 'pipe' })
+        .toString()
+        .trim();
+      return join(__dirname, `output-stringify-${hash}.md`);
+    } catch {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      return join(__dirname, `output-stringify-${ts}.md`);
+    }
+  }
+  return null;
+}
+
 // Print global comparison if multiple implementations were benchmarked
 if (allResults.length > 1) {
   printGlobalSummary(allResults, 'Stringify');
-  writeMarkdownSummary(allResults, 'Stringify', 'benchmark-stringify.md');
+  const mdFile = getOutputFilename() ?? join(__dirname, '..', 'benchmark-stringify.md');
+  writeMarkdownSummary(allResults, 'Stringify', mdFile);
+} else if (output && allResults.length === 1) {
+  const mdFile = getOutputFilename();
+  writeMarkdownSummary(allResults, 'Stringify', mdFile);
 }
 
 /**

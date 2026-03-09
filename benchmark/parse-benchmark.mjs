@@ -8,6 +8,7 @@
  *   --sample      Run curated sample of 10 representative benchmarks
  *   --package     Only run benchmark for specific package (by index)
  *   --file <n>    Run specific file(s) using a matching pattern
+ *   --output      Write results to output-<commit-hash>.md
  */
 
 import { join, basename, resolve, dirname } from 'path';
@@ -158,8 +159,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, package: packageIndex, file, versions, _: filter } = mri(process.argv.slice(2), {
-  boolean: ['help', 'sample'],
+const { help, sample, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2), {
+  boolean: ['help', 'sample', 'output'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -174,13 +175,15 @@ Options:
   --package <index>  Only run benchmark for the given implementation (0-based index)
   --file <pattern>   Run benchmarks matching the file pattern
   --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  --output           Write results to output-<commit-hash>.md
   
 Examples:
   npm run benchmark
   npm run benchmark -- --sample
   npm run benchmark -- --file hard
   npm run benchmark -- --package 0
-  npm run benchmark -- --versions 0.7.0,0.6.0`);
+  npm run benchmark -- --versions 0.7.0,0.6.0
+  npm run benchmark -- --output`);
   process.exit(0);
 }
 
@@ -198,11 +201,11 @@ let TOML_IMPLEMENTATIONS = [
     name: 'smol-toml',
     path: installPackageToCache('smol-toml'),
   },
-  {
-    name: '@rainbowatcher/toml-edit-js',
-    path: installPackageToCache('@rainbowatcher/toml-edit-js'),
-    needsInit: true,
-  }
+  // {
+  //   name: '@rainbowatcher/toml-edit-js',
+  //   path: installPackageToCache('@rainbowatcher/toml-edit-js'),
+  //   needsInit: true,
+  // }
 ].filter(impl => impl.path != null);
 
 // Add specific versions if requested
@@ -402,10 +405,30 @@ for (const implementation of implementationsToRun) {
   });
 }
 
+// Resolve output filename
+function getOutputFilename() {
+  if (output) {
+    try {
+      const hash = execSync('git rev-parse --short HEAD', { cwd: join(__dirname, '..'), stdio: 'pipe' })
+        .toString()
+        .trim();
+      return join(__dirname, `output-parse-${hash}.md`);
+    } catch {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      return join(__dirname, `output-parse-${ts}.md`);
+    }
+  }
+  return null;
+}
+
 // Print global comparison if multiple implementations were benchmarked
 if (allResults.length > 1) {
   printGlobalSummary(allResults, 'Parse');
-  writeMarkdownSummary(allResults, 'Parse', 'benchmark-parse.md');
+  const mdFile = getOutputFilename() ?? join(__dirname, '..', 'benchmark-parse.md');
+  writeMarkdownSummary(allResults, 'Parse', mdFile);
+} else if (output && allResults.length === 1) {
+  const mdFile = getOutputFilename();
+  writeMarkdownSummary(allResults, 'Parse', mdFile);
 }
 
 /**
