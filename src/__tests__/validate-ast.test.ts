@@ -14,17 +14,36 @@ import dedent from 'dedent';
 // Position-overlap helpers
 // ---------------------------------------------------------------------------
 
-/** True when position a <= position b (line-major, column-minor). */
+/**
+ * True when position `a` is less than or equal to position `b`.
+ * Comparison is line-major, column-minor.
+ *
+ * @param a - The left-hand position.
+ * @param b - The right-hand position.
+ * @returns `true` when a ≤ b.
+ */
 function posLe(a: Position, b: Position): boolean {
   return a.line < b.line || (a.line === b.line && a.column <= b.column);
 }
 
-/** Format a location as "line:col-line:col". */
+/**
+ * Format a {@link Location} as the human-readable string `"line:col-line:col"`.
+ *
+ * @param loc - The location to format.
+ * @returns A compact string representation of the location range.
+ */
 function locStr(loc: Location): string {
   return `${loc.start.line}:${loc.start.column}-${loc.end.line}:${loc.end.column}`;
 }
 
-/** Return an error string if child's location exceeds parent's, else null. */
+/**
+ * Check whether `child`'s location is fully contained within `parent`'s location.
+ *
+ * @param parent - The enclosing AST node.
+ * @param child  - The nested AST node whose location is being validated.
+ * @returns A human-readable error string describing the violation, or `null` when
+ *   the child is properly contained.
+ */
 function checkContainment(
   parent: TreeNode,
   child: TreeNode,
@@ -51,12 +70,15 @@ function checkContainment(
  * Walk the AST and return an array of human-readable overlap descriptions.
  * An empty array means all child positions fit within their parents.
  *
- * This validates every parent→child edge in the tree, including:
- *   Document → Block (KeyValue | Table | TableArray | Comment)
- *   Table / TableArray → TableKey/TableArrayKey + row items
- *   KeyValue → Key + Value
- *   InlineArray / InlineTable → InlineItem children
- *   InlineItem → inner item
+ * Validates every parent→child edge in the tree, including:
+ * - `Document` → Block (`KeyValue` | `Table` | `TableArray` | `Comment`)
+ * - `Table` / `TableArray` → `TableKey`/`TableArrayKey` + row items
+ * - `KeyValue` → `Key` + `Value`
+ * - `InlineArray` / `InlineTable` → `InlineItem` children
+ * - `InlineItem` → inner item
+ *
+ * @param doc - The root {@link Document} node to validate.
+ * @returns An array of violation strings; empty when all locations are consistent.
  */
 function findPositionOverlaps(doc: Document): string[] {
   const overlaps: string[] = [];
@@ -110,7 +132,13 @@ function findPositionOverlaps(doc: Document): string[] {
   return overlaps;
 }
 
-/** Self-consistency check: node's end must be >= its start. */
+/**
+ * Self-consistency check: every node's `end` position must be ≥ its `start`.
+ * Nodes where `end` < `start` are flagged as "inverted" locations.
+ *
+ * @param doc - The root {@link Document} node to validate.
+ * @returns An array of violation strings; empty when all locations are non-inverted.
+ */
 function findInvertedLocations(doc: Document): string[] {
   const violations: string[] = [];
   traverse(doc, {
@@ -141,17 +169,40 @@ function findInvertedLocations(doc: Document): string[] {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse `toml`, apply `updated` as a patch, and return any parent-child
+ * location-overlap violations found in the resulting AST.
+ *
+ * @param toml    - TOML source string to parse and patch.
+ * @param updated - Plain JS object representing the desired document state.
+ * @returns Overlap violation strings from {@link findPositionOverlaps}.
+ */
 function getOverlaps(toml: string, updated: any): string[] {
   const { document } = patchAst(parseTOML(toml), updated, new TomlFormat());
   return findPositionOverlaps(document);
 }
 
+/**
+ * Parse `toml`, apply `updated` as a patch, and return any inverted-location
+ * violations found in the resulting AST.
+ *
+ * @param toml    - TOML source string to parse and patch.
+ * @param updated - Plain JS object representing the desired document state.
+ * @returns Inverted-location violation strings from {@link findInvertedLocations}.
+ */
 function getInverted(toml: string, updated: any): string[] {
   const { document } = patchAst(parseTOML(toml), updated, new TomlFormat());
   return findInvertedLocations(document);
 }
 
-/** Convenience: assert both overlap and inversion checks pass. */
+/**
+ * Convenience assertion: verifies that both the overlap check
+ * ({@link findPositionOverlaps}) and the inversion check
+ * ({@link findInvertedLocations}) report zero violations after patching.
+ *
+ * @param toml    - TOML source string to parse and patch.
+ * @param updated - Plain JS object representing the desired document state.
+ */
 function expectConsistent(toml: string, updated: any) {
   expect(getOverlaps(toml, updated)).toEqual([]);
   expect(getInverted(toml, updated)).toEqual([]);
@@ -219,6 +270,15 @@ describe('AST position consistency after patching', () => {
   test('Document end position should encompass all children after edit', () => {
     // Replacing a short value with a longer one grows the KV.
     expectConsistent('p = { x = 1 }\n', { p: { x: 100000 } });
+  });
+
+  test('Document end position contracts after key removal', () => {
+    // Removing `b = 2` from a two-key document should shrink the document end
+    // to the last remaining line (line 1 / `a = 1`).
+    const { document } = patchAst(parseTOML('a = 1\nb = 2\n'), { a: 1 }, new TomlFormat());
+    expect(document.loc.end.line).toBe(1);
+    expect(document.loc.end.column).toBe(5);
+    expectConsistent('a = 1\nb = 2\n', { a: 1 });
   });
 
   // ------ scalar value edits ------
