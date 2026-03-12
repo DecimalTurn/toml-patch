@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Remove circular dependency between `toml-format` and `generate` modules ([#118](https://github.com/DecimalTurn/toml-patch/pull/118))
 - Reduce bundle size by deduplicating internal parsing and date-formatting helpers, implementing schema-based validation and shortening error messages ([#122](https://github.com/DecimalTurn/toml-patch/pull/122))
+- Improve internal representation handling for faster write performance (~3–4% speedup in benchmarks) by fixing inconsistencies in how positions are tracked internally ([#125](https://github.com/DecimalTurn/toml-patch/pull/125))
 
 ## [1.0.2] - 2026-02-14
 
