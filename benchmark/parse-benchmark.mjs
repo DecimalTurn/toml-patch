@@ -84,7 +84,7 @@ function createTable(headers, rows) {
  */
 function installPackageToCache(packageName, version) {
   const cacheDir = join(__dirname, '../.bench-cache');
-  const cacheKey = version ? `${packageName.replace(/[\/@ ]/g, '-')}-${version}` : packageName.replace(/[\/@ ]/g, '-');
+  const cacheKey = version ? `${packageName.replace(/[/@ ]/g, '-')}-${version}` : packageName.replace(/[/@ ]/g, '-');
   const versionDir = join(cacheDir, cacheKey);
   const modulePath = join(versionDir, 'node_modules', packageName);
   const spec = version ? `${packageName}@${version}` : packageName;
