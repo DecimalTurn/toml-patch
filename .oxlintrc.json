@@ -4,6 +4,7 @@
   "categories": {},
   "rules": {
     "no-control-regex": "off",
+    // For unused vars, we use the recommendation from here: https://stackoverflow.com/questions/57802057/eslint-configuring-no-unused-vars-for-typescript
     "no-unused-vars": "off",
     "@typescript-eslint/no-unused-vars": ["error", { "caughtErrors": "none", "argsIgnorePattern": "^_$", "varsIgnorePattern": "^_$" }]
   },
