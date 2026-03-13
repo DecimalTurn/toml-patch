@@ -2552,7 +2552,7 @@ test('should remove multiple leading KVs and preserve table section', () => {
 
 // BUG: Same as validate-ast 'remove table array after leading KV' —
 // findByPath fails for whole-table-array removal path ['tasks'].
-test.skip('should remove table array and preserve leading KV', () => {
+test('should remove table array and preserve leading KV', () => {
   const existing = dedent`
     title = "Project"
     [[tasks]]

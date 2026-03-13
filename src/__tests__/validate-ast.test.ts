@@ -570,7 +570,7 @@ describe('AST position consistency after patching', () => {
 
   // BUG: Removing an entire table array by path ['tasks'] fails because
   // TableArray entries are indexed as ['tasks', 0], ['tasks', 1], etc.
-  test.skip('remove table array after leading KV', () => {
+  test('remove table array after leading KV', () => {
     const toml = dedent`
       title = "Project"
       [[tasks]]
@@ -682,7 +682,7 @@ describe('AST position consistency after patching', () => {
 
   // BUG: Removing a nested sub-table [server.tls] fails because the
   // removal logic cannot locate the sub-table node within its parent.
-  test.skip('remove nested sub-table', () => {
+  test('remove nested sub-table', () => {
     const toml = dedent`
       [server]
       host = "localhost"

@@ -19,6 +19,7 @@ import {
   isInlineItem,
   isString,
   hasItem,
+  hasItems,
   InlineItem,
   AST,
   Table,
@@ -377,12 +378,35 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       replace(original, parent, existing, replacement);
     } else if (isRemove(change)) {
-      let parent = findParent(original, change.path);
-      if (isKeyValue(parent)) parent = parent.value;
+      const node = tryFindByPath(original, change.path);
 
-      const node = findByPath(original, change.path);
+      if (!node) {
+        // The path likely refers to all entries of a TableArray sequence
+        // (e.g. path ['tasks'] when the AST stores entries at ['tasks',0], ['tasks',1]…).
+        // Remove all entries by repeatedly pulling the one at index 0.
+        const first = tryFindByPath(original, change.path.concat(0));
+        if (first) {
+          let entry: TreeNode | undefined;
+          while ((entry = tryFindByPath(original, change.path.concat(0)))) {
+            remove(original, original, entry);
+          }
+        } else {
+          // Not a table array — let findByPath throw the descriptive error.
+          findByPath(original, change.path);
+        }
+      } else {
+        let parent = findParent(original, change.path);
+        if (isKeyValue(parent)) parent = parent.value;
 
-      remove(original, parent, node);
+        // The logical (JS-object) parent may differ from the AST parent.
+        // For example, [server.tls] lives in document.items, not [server].items.
+        // Fall back to the document root when the parent doesn't contain the node.
+        if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {
+          parent = original;
+        }
+
+        remove(original, parent, node);
+      }
     } else if (isMove(change)) {
       let parent = tryFindByPath(original, change.path);
       if (parent) {
