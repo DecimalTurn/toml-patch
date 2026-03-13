@@ -3,7 +3,7 @@
  * when parsing invalid TOML files from the toml-test suite.
  */
 
-import { join, dirname, relative } from 'path';
+import { join, dirname } from 'path';
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
@@ -147,7 +147,7 @@ let md = `# Error Message Comparison: smol-toml vs @decimalturn/toml-patch\n\n`;
 md += `## How to generate this report\n\n`;
 md += `From the repository root:\n\n`;
 md += `1. Build the package (required so \`dist/toml-patch.js\` exists):\n`;
-md += `   \`npm run build\`\n`;
+md += `   \`pnpm run build\`\n`;
 md += `2. Run the comparison script:\n`;
 md += `   \`node benchmark/error-comparison.mjs\`\n\n`;
 md += `The script writes this file (\`benchmark/error-comparison.md\`) directly.\n\n`;

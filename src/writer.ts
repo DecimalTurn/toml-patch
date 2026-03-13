@@ -29,7 +29,7 @@ import {
   isBlock
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
-import { last, isMultilineString } from './utils';
+import { last } from './utils';
 import traverse from './traverse';
 
 ////////////////////////////////////////

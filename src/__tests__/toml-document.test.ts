@@ -211,6 +211,8 @@ describe('TomlDocument', () => {
       );
       doc.update(updatedToml);
       
+      // The update should have actually changed the string
+      expect(doc.toTomlString).not.toBe(originalString);
       // Should preserve the comment structure
       expect(doc.toTomlString).toBe(updatedToml);
       expect(doc.toTomlString).toContain('# " Annoying, isn\'t it?');

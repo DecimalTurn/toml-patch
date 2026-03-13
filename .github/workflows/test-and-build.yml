@@ -5,6 +5,7 @@ on:
       - latest
       - master
       - dev
+      - dev-*
   pull_request:
   workflow_dispatch:
 
@@ -20,25 +21,31 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version: 24.x
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        run_install: false
     # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
     - uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143 # v1.3.0
       with:
         mode: firewall
         firewall-version: latest # or use a pinned version (see releases)
     - name: Install
-      run: sfw npm install
+      run: sfw pnpm install --frozen-lockfile
       env:
         CI: true
     - name: Typecheck
-      run: npm run typecheck
+      run: pnpm run typecheck
+    - name: Lint
+      run: pnpm run lint
     - name: Build
-      run: npm run build
+      run: pnpm run build
     - name: Test
-      run: npm run test:all
+      run: pnpm run test:all
     - name: Specs
-      run: npm run specs
+      run: pnpm run specs
     - name: Benchmark (CI samples)
-      run: npm run benchmark:ci
+      run: pnpm run benchmark:ci
     - name: Check Performance
       run: node benchmark/check-performance.mjs
     - name: Write Benchmark Summary

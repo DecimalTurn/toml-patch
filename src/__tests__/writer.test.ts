@@ -161,12 +161,10 @@ describe('formatMultilineStringReplacement', () => {
   describe('non-multiline strings', () => {
     test('should return replacement unchanged for regular strings', () => {
       const existing = createStringNode('"regular"', 'regular');
-      const replacement = createStringNode('"new"', 'new value');
+      const result = generateString('new value', existing.raw);
       
-      const result = replacement;
-      
-      // Should return the original replacement unchanged
-      expect(result).toBe(replacement);
+      // Non-multiline existing string: result should be a plain basic string
+      expect(result.raw).toBe('"new value"');
     });
   });
 

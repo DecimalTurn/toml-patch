@@ -471,37 +471,32 @@ describe('stringify() Function JavaScript Integration', () => {
       expect(result).toContain('[features]');
     });
 
-    it('should validate types of format properties and throw errors for invalid types', () => {
-      // Test invalid types for each property - these should throw TypeErrors
-      const invalidFormats = [
-        { newLine: 123 },
-        { newLine: true },
-        { newLine: null },
-        { trailingNewline: 'invalid' },
-        { trailingComma: 'invalid' },
-        { trailingComma: [] },
-        { bracketSpacing: 42 },
-        { bracketSpacing: {} }
-      ];
-
-      invalidFormats.forEach((format, index) => {
-        expect(() => {
-          stringify(testObject, format);
-        }).toThrow('Invalid types for format properties');
-      });
-
-      // Test that valid types don't throw errors
+    // Test invalid types for each property - these should throw TypeErrors
+    it.each([
+      { newLine: 123 },
+      { newLine: true },
+      { newLine: null },
+      { trailingNewline: 'invalid' },
+      { trailingComma: 'invalid' },
+      { trailingComma: [] },
+      { bracketSpacing: 42 },
+      { bracketSpacing: {} }
+    ])('should throw for invalid format %j', (format) => {
       expect(() => {
-        const validFormat = {
-          newLine: '\\r\\n',
-          trailingNewline: true,
-          trailingComma: false,
-          bracketSpacing: true
-        };
-        
-        const result = stringify(testObject, validFormat);
-        expect(result).toBeTruthy();
-      }).not.toThrow();
+        stringify(testObject, format);
+      }).toThrow('Invalid types for format properties');
+    });
+
+    it('should not throw for valid format types', () => {
+      const validFormat = {
+        newLine: '\\r\\n',
+        trailingNewline: true,
+        trailingComma: false,
+        bracketSpacing: true
+      };
+
+      const result = stringify(testObject, validFormat);
+      expect(result).toBeTruthy();
     });
   });
 

@@ -24,7 +24,7 @@ export const SINGLE_QUOTE = `'`;
 export const SPACE = ' ';
 export const ESCAPE = '\\';
 
-const IS_VALID_LEADING_CHARACTER = /[\w,\d,\",\',\+,\-,\_]/;
+const IS_VALID_LEADING_CHARACTER = /[\w,\d,",',+,\-,_]/;
 
 // Character code constants for hot-path comparisons
 const CH_TAB = 0x09;

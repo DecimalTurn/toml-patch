@@ -85,7 +85,7 @@ function createTable(headers, rows) {
  */
 function installPackageToCache(packageName, version) {
   const cacheDir = join(__dirname, '../.bench-cache');
-  const cacheKey = version ? `${packageName.replace(/[\/@ ]/g, '-')}-${version}` : packageName.replace(/[\/@ ]/g, '-');
+  const cacheKey = version ? `${packageName.replace(/[/@ ]/g, '-')}-${version}` : packageName.replace(/[/@ ]/g, '-');
   const versionDir = join(cacheDir, cacheKey);
   const modulePath = join(versionDir, 'node_modules', packageName);
   const spec = version ? `${packageName}@${version}` : packageName;
@@ -160,7 +160,7 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2), {
+const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
   boolean: ['help', 'sample', 'detailed', 'output'],
   string: ['file', 'versions'],
   number: ['package']

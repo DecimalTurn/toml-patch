@@ -1,4 +1,4 @@
-import { TreeNode, isKeyValue, isTable, isTableArray, hasItems, isInlineItem, hasItem } from './ast';
+import { TreeNode, isKeyValue, isTable, isTableArray, hasItems, isInlineItem } from './ast';
 import { arraysEqual, stableStringify } from './utils';
 
 export type Path = Array<string | number>;

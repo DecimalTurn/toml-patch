@@ -14,16 +14,20 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version: 24.x
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        run_install: false
     # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
     - uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143 # v1.3.0
       with:
         mode: firewall
         firewall-version: latest # or use a pinned version (see releases)
     - name: Install
-      run: sfw npm install
+      run: sfw pnpm install --frozen-lockfile
       env:
         CI: true
     - name: Build
-      run: npm run build
+      run: pnpm run build
     - name: Full Benchmark Suite
-      run: npm run benchmark
+      run: pnpm run benchmark

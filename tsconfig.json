@@ -3,7 +3,7 @@
     "strict": true,
     "target": "es2015",
     "moduleResolution": "node",
-    "lib": ["es2015"],
+    "lib": ["es2019"],
     "esModuleInterop": true,
     "noEmit": true,
     "skipLibCheck": true

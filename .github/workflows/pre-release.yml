@@ -30,6 +30,11 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Get current version
         id: current_version
         run: |
@@ -65,8 +70,8 @@ jobs:
           # Update jsr.jsonc preserving comments
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" jsr.jsonc
 
-      - name: Update package-lock.json
-        run: npm install --package-lock-only
+      - name: Update pnpm-lock.yaml
+        run: pnpm install --lockfile-only
 
       - name: Update CHANGELOG.md
         run: |
@@ -78,7 +83,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json jsr.jsonc package-lock.json CHANGELOG.md
+          git add package.json jsr.jsonc pnpm-lock.yaml CHANGELOG.md
           git commit -m "chore: bump version to ${{ steps.next_version.outputs.version }}"
           git push origin ${{ github.ref_name }}
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT

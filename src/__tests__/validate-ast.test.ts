@@ -1,5 +1,5 @@
 import {
-  Document, NodeType, TreeNode, Table, TableArray, TableKey, TableArrayKey,
+  Document, NodeType, TreeNode, Table, TableArray,
   InlineArray, InlineTable, InlineItem, KeyValue
 } from '../ast';
 import { Location, Position } from '../location';
@@ -106,12 +106,12 @@ function findPositionOverlaps(doc: Document): string[] {
       },
     },
     InlineArray: {
-      enter(node: InlineArray, parent: TreeNode | null) {
+      enter(node: InlineArray) {
         for (const item of node.items) pushIfBad(node, item as unknown as TreeNode);
       },
     },
     InlineTable: {
-      enter(node: InlineTable, parent: TreeNode | null) {
+      enter(node: InlineTable) {
         for (const item of node.items) pushIfBad(node, item as unknown as TreeNode);
       },
     },
@@ -121,7 +121,7 @@ function findPositionOverlaps(doc: Document): string[] {
       },
     },
     KeyValue: {
-      enter(node: KeyValue, parent: TreeNode | null) {
+      enter(node: KeyValue) {
         pushIfBad(node, node.key);
         pushIfBad(node, node.value);
       },

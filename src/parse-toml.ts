@@ -14,7 +14,6 @@ import {
   DateTime,
   InlineTable,
   InlineArray,
-  InlineItem,
   Comment,
   AST,
   Block
@@ -39,10 +38,10 @@ const dateFormatHelper = DateFormatHelper;
 const TRUE = 'true';
 const FALSE = 'false';
 const HAS_E = /e/i;
-const IS_DIVIDER = /\_/g;
-const IS_INF = /^[+\-]?inf$/;
-const IS_NAN = /^[+\-]?nan$/;
-const IS_HEX = /^[+\-]?0x/i;
+const IS_DIVIDER = /_/g;
+const IS_INF = /^[+-]?inf$/;
+const IS_NAN = /^[+-]?nan$/;
+const IS_HEX = /^[+-]?0x/i;
 
 /**
  * Check if a character code is a valid bare key character (A-Za-z0-9_-).
@@ -57,8 +56,8 @@ function isBareKeyCode(code: number): boolean {
     code === 0x2d                      // -
   );
 }
-const IS_OCTAL = /^[+\-]?0o/i;
-const IS_BINARY = /^[+\-]?0b/i;
+const IS_OCTAL = /^[+-]?0o/i;
+const IS_BINARY = /^[+-]?0b/i;
 
 // ---------------------------------------------------------------------------
 // Shared validation helpers (extracted to reduce duplication)
@@ -104,10 +103,10 @@ function parseKeyString(raw: string, input: string, loc: { line: number; column:
 function validateUnderscores(
   str: string, input: string, loc: any, signed = true
 ): void {
-  if (/_$/.test(str)) {
+  if (str.endsWith('_')) {
     throw new ParseError(input, loc, 'Underscore must be between digits');
   }
-  if (signed ? /^[+\-]?_/.test(str) : /^_/.test(str)) {
+  if (signed ? /^[+-]?_/.test(str) : str.startsWith('_')) {
     throw new ParseError(input, loc, 'Underscore must be between digits');
   }
   if (/__/.test(str)) {
@@ -121,7 +120,7 @@ function validateLeadingZeros(
 ): void {
   const withoutUnderscores = raw.replace(IS_DIVIDER, '');
   if (
-    /^[+\-]?0\d/.test(withoutUnderscores) &&
+    /^[+-]?0\d/.test(withoutUnderscores) &&
     !IS_HEX.test(raw) && !IS_OCTAL.test(raw) && !IS_BINARY.test(raw)
   ) {
     throw new ParseError(input, loc, `Leading zeros are not allowed in ${label}`);
@@ -135,13 +134,13 @@ function validateExponent(
   if (/_[eE]/.test(str)) {
     throw new ParseError(input, loc, 'Underscore before exponent is not allowed');
   }
-  if (/[eE][+\-]?_/.test(str)) {
+  if (/[eE][+-]?_/.test(str)) {
     throw new ParseError(input, loc, 'Underscore at start of exponent is not allowed');
   }
-  if (/[eE][+\-]?$/.test(str)) {
+  if (/[eE][+-]?$/.test(str)) {
     throw new ParseError(input, loc, `Invalid float "${fullRaw}": incomplete exponent`);
   }
-  if (/[eE][+\-]?.*\./.test(str)) {
+  if (/[eE][+-]?.*\./.test(str)) {
     throw new ParseError(input, loc, `Invalid float "${fullRaw}": decimal point not allowed in exponent`);
   }
 }
@@ -198,7 +197,7 @@ function validatePrefixedInt(
   prefix: string, validDigits: RegExp, name: string, invalidMsg?: string
 ): void {
   const upper = prefix[0] + prefix[1].toUpperCase();
-  const capsRe = new RegExp('^[+\\-]?' + upper.replace(/([\[\]])/g, '\\$1'));
+  const capsRe = new RegExp('^[+\\-]?' + upper.replace(/([[\]])/g, '\\$1'));
   if (capsRe.test(raw)) {
     throw new ParseError(input, loc, `${name} prefix must be lowercase "${prefix}"`);
   }
@@ -208,14 +207,14 @@ function validatePrefixedInt(
   }
   const stripRe = new RegExp('^[+\\-]?' + prefix, 'i');
   const numericPart = raw.replace(stripRe, '');
-  if (!numericPart || numericPart === '_' || /^_/.test(numericPart)) {
+  if (!numericPart || numericPart === '_' || numericPart.startsWith('_')) {
     throw new ParseError(input, loc, `Incomplete ${name.toLowerCase()} number`);
   }
   const digits = numericPart.replace(/_/g, '');
   if (!validDigits.test(digits)) {
     throw new ParseError(input, loc, invalidMsg ?? `Invalid ${name.toLowerCase()} digits`);
   }
-  if (/^[+\-]/.test(raw)) {
+  if (/^[+-]/.test(raw)) {
     throw new ParseError(input, loc, `${name} numbers cannot have a sign prefix`);
   }
 }
@@ -422,7 +421,6 @@ function table(cursor: Cursor<Token>, input: string): Table | TableArray {
       : key.loc!.start.line; // Both use the opening bracket line
     
     if (cursor.value!.loc.start.line !== headerStartLine) {
-      const closingBracket = is_table ? ']' : ']]';
       throw new ParseError(
         input,
         cursor.value!.loc.start,
@@ -874,7 +872,7 @@ function float(cursor: Cursor<Token>, input: string): Float {
       validateLeadingZeros(intPart, input, loc.start, 'the integer part of a float');
       
       // Validate no leading dot (must have at least one digit before the dot)
-      const withoutSign = intPart.replace(/^[+\-]/, '');
+      const withoutSign = intPart.replace(/^[+-]/, '');
       if (withoutSign === '' || withoutSign === '_') {
         throw new ParseError(
           input,
@@ -973,7 +971,7 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
     }
 
     // Validation: No double signs (++99, --99)
-    if (/^[+\-]{2,}/.test(raw)) {
+    if (/^[+-]{2,}/.test(raw)) {
       throw new ParseError(
         input,
         loc.start,

@@ -2,7 +2,7 @@
  * Benchmark parse function using iarna-toml files
  * 
  * Usage:
- *   npm run benchmark [-- <options>]
+ *   pnpm run benchmark [-- <options>]
  *   
  * Options:
  *   --sample      Run curated sample of 10 representative benchmarks
@@ -84,7 +84,7 @@ function createTable(headers, rows) {
  */
 function installPackageToCache(packageName, version) {
   const cacheDir = join(__dirname, '../.bench-cache');
-  const cacheKey = version ? `${packageName.replace(/[\/@ ]/g, '-')}-${version}` : packageName.replace(/[\/@ ]/g, '-');
+  const cacheKey = version ? `${packageName.replace(/[/@ ]/g, '-')}-${version}` : packageName.replace(/[/@ ]/g, '-');
   const versionDir = join(cacheDir, cacheKey);
   const modulePath = join(versionDir, 'node_modules', packageName);
   const spec = version ? `${packageName}@${version}` : packageName;
@@ -159,7 +159,7 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2), {
+const { help, sample, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
   boolean: ['help', 'sample', 'output'],
   string: ['file', 'versions'],
   number: ['package']
@@ -178,12 +178,12 @@ Options:
   --output           Write results to output-<commit-hash>.md
   
 Examples:
-  npm run benchmark
-  npm run benchmark -- --sample
-  npm run benchmark -- --file hard
-  npm run benchmark -- --package 0
-  npm run benchmark -- --versions 0.7.0,0.6.0
-  npm run benchmark -- --output`);
+  pnpm run benchmark
+  pnpm run benchmark -- --sample
+  pnpm run benchmark -- --file hard
+  pnpm run benchmark -- --package 0
+  pnpm run benchmark -- --versions 0.7.0,0.6.0
+  pnpm run benchmark -- --output`);
   process.exit(0);
 }
 
@@ -294,7 +294,7 @@ async function warmupModule(TOML, benchmarks, implementationName) {
     for (const { data } of benchmarks) {
       try {
         TOML.parse(data);
-      } catch (error) {
+      } catch (_) {
         // Ignore errors during warmup
       }
     }

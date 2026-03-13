@@ -1,8 +1,7 @@
 import parseTOML, { continueParsingTOML } from './parse-toml';
-import toTOML from './to-toml';
 import toJS from './to-js';
 import { TomlFormat } from './toml-format';
-import { AST, Block } from './ast';
+import { Block } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
