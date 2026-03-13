@@ -24,6 +24,7 @@
     "encoder",
     "decoder"
   ],
+  "packageManager": "pnpm@10.32.1",
   "type": "module",
   "types": "./dist/toml-patch.d.ts",
   "exports": {
@@ -34,10 +35,10 @@
     }
   },
   "scripts": {
-    "dev": "npm run typecheck && npm run build && npm-run-all2 --parallel test:all specs",
+    "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "jest --config jest.config.json",
     "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
-    "test:all": "npm run test && npm run test:js",
+    "test:all": "pnpm run test && pnpm run test:js",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
@@ -46,7 +47,7 @@
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && rollup -c",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.0.2",
@@ -62,6 +63,7 @@
     "js-yaml": "^4.0.0",
     "mri": "^1",
     "npm-run-all2": "^8.0.0",
+    "oxlint": "^1.55.0",
     "rimraf": "^6.0.0",
     "rollup": ">=4.0.0 <4.53.0 || >4.53.0",
     "rollup-plugin-dts": "^6.2.1",
@@ -70,10 +72,12 @@
     "tslib": "^2.0.0",
     "typescript": "5.9"
   },
-  "overrides": {
-    "tar": "^7.5.10",
-    "@tootallnate/once": "^3.0.1",
-    "brace-expansion": "^2.0.2"
+  "pnpm": {
+    "overrides": {
+      "tar": "^7.5.10",
+      "@tootallnate/once": "^3.0.1",
+      "brace-expansion": "^2.0.2"
+    }
   },
   "prettier": {
     "singleQuote": true,

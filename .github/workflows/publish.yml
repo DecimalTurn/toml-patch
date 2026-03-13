@@ -28,22 +28,21 @@ jobs:
           node-version: 24.x
           registry-url: 'https://registry.npmjs.org/'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Install
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         env:
           CI: true
-          
+
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Build
-        run: npm run build
-           
-      - name: Publish to npm
-        id: npm-publish
-        run: npm publish --provenance
-        # env:
-        #  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm run build
         continue-on-error: true
 
       - name: Check git status

@@ -2,7 +2,7 @@
  * Benchmark parse function using iarna-toml files
  * 
  * Usage:
- *   npm run benchmark [-- <options>]
+ *   pnpm run benchmark [-- <options>]
  *   
  * Options:
  *   --sample      Run curated sample of 10 representative benchmarks
@@ -178,12 +178,12 @@ Options:
   --output           Write results to output-<commit-hash>.md
   
 Examples:
-  npm run benchmark
-  npm run benchmark -- --sample
-  npm run benchmark -- --file hard
-  npm run benchmark -- --package 0
-  npm run benchmark -- --versions 0.7.0,0.6.0
-  npm run benchmark -- --output`);
+  pnpm run benchmark
+  pnpm run benchmark -- --sample
+  pnpm run benchmark -- --file hard
+  pnpm run benchmark -- --package 0
+  pnpm run benchmark -- --versions 0.7.0,0.6.0
+  pnpm run benchmark -- --output`);
   process.exit(0);
 }
 

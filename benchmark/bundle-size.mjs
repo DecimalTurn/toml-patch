@@ -5,7 +5,7 @@
  *   node benchmark/bundle-size.mjs
  *
  * Prerequisites:
- *   npm run build   (so dist/toml-patch.js exists)
+ *   pnpm run build   (so dist/toml-patch.js exists)
  *
  * The script:
  *   1. Installs smol-toml into .bench-cache (reuses if already present)
@@ -77,7 +77,7 @@ function getSmolTomlEntry() {
 function getTomlPatchEntry() {
   const distFile = join(rootDir, 'dist', 'toml-patch.js');
   if (!existsSync(distFile)) {
-    console.error('dist/toml-patch.js not found. Run `npm run build` first.');
+    console.error('dist/toml-patch.js not found. Run `pnpm run build` first.');
     process.exit(1);
   }
   return distFile;
@@ -141,7 +141,7 @@ let md = `# Bundle Size Comparison: smol-toml vs @decimalturn/toml-patch\n\n`;
 md += `## How to generate this report\n\n`;
 md += `From the repository root:\n\n`;
 md += `1. Build the package (required so \`dist/toml-patch.js\` exists):\n`;
-md += `   \`npm run build\`\n`;
+md += `   \`pnpm run build\`\n`;
 md += `2. Run the comparison script:\n`;
 md += `   \`node benchmark/bundle-size.mjs\`\n\n`;
 md += `The script writes this file (\`benchmark/bundle-size.md\`) directly.\n\n`;
