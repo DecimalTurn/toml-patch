@@ -160,7 +160,7 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2), {
+const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
   boolean: ['help', 'sample', 'detailed', 'output'],
   string: ['file', 'versions'],
   number: ['package']
