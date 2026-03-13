@@ -2495,3 +2495,181 @@ test('should add key to nested inline table', () => {
   const patched = patch(existing, value);
   expect(patched).toContain('port = 8080');
 });
+
+// ------ Edge cases: KV + table section ordering during removal ------
+
+test('should remove leading KV and preserve table section', () => {
+  const existing = dedent`
+    title = "My App"
+    [server]
+    host = "localhost"
+    port = 8080
+  ` + '\n';
+
+  const patched = patch(existing, {
+    server: { host: 'localhost', port: 8080 },
+  });
+
+  expect(patched).not.toContain('title');
+  expect(patched).toContain('[server]');
+  expect(patched).toContain('host = "localhost"');
+  expect(patched).toContain('port = 8080');
+});
+
+test('should remove table section and preserve leading KV', () => {
+  const existing = dedent`
+    title = "My App"
+    [server]
+    host = "localhost"
+    port = 8080
+  ` + '\n';
+
+  const patched = patch(existing, { title: 'My App' });
+
+  expect(patched).toContain('title = "My App"');
+  expect(patched).not.toContain('[server]');
+  expect(patched).not.toContain('host');
+  expect(patched).not.toContain('port');
+});
+
+test('should remove multiple leading KVs and preserve table section', () => {
+  const existing = dedent`
+    a = 1
+    b = 2
+    c = 3
+    [config]
+    debug = true
+  ` + '\n';
+
+  const patched = patch(existing, { config: { debug: true } });
+
+  expect(patched).not.toContain('a = 1');
+  expect(patched).not.toContain('b = 2');
+  expect(patched).not.toContain('c = 3');
+  expect(patched).toContain('[config]');
+  expect(patched).toContain('debug = true');
+});
+
+// BUG: Same as validate-ast 'remove table array after leading KV' —
+// findByPath fails for whole-table-array removal path ['tasks'].
+test.skip('should remove table array and preserve leading KV', () => {
+  const existing = dedent`
+    title = "Project"
+    [[tasks]]
+    name = "build"
+    [[tasks]]
+    name = "test"
+  ` + '\n';
+
+  const patched = patch(existing, { title: 'Project' });
+
+  expect(patched).toContain('title = "Project"');
+  expect(patched).not.toContain('[[tasks]]');
+  expect(patched).not.toContain('name');
+});
+
+test('should remove leading KV and preserve table array', () => {
+  const existing = dedent`
+    title = "Project"
+    [[tasks]]
+    name = "build"
+    [[tasks]]
+    name = "test"
+  ` + '\n';
+
+  const patched = patch(existing, {
+    tasks: [{ name: 'build' }, { name: 'test' }],
+  });
+
+  expect(patched).not.toContain('title');
+  expect(patched).toContain('[[tasks]]');
+  expect(patched).toContain('name = "build"');
+  expect(patched).toContain('name = "test"');
+});
+
+test('should remove all tables and keep multiple root KVs', () => {
+  const existing = dedent`
+    name = "app"
+    version = "1.0"
+    [database]
+    host = "db"
+    [cache]
+    ttl = 60
+  ` + '\n';
+
+  const patched = patch(existing, { name: 'app', version: '1.0' });
+
+  expect(patched).toContain('name = "app"');
+  expect(patched).toContain('version = "1.0"');
+  expect(patched).not.toContain('[database]');
+  expect(patched).not.toContain('[cache]');
+});
+
+test('should remove all root KVs and keep all tables', () => {
+  const existing = dedent`
+    name = "app"
+    version = "1.0"
+    [database]
+    host = "db"
+    [cache]
+    ttl = 60
+  ` + '\n';
+
+  const patched = patch(existing, {
+    database: { host: 'db' },
+    cache: { ttl: 60 },
+  });
+
+  expect(patched).not.toContain('name =');
+  expect(patched).not.toContain('version =');
+  expect(patched).toContain('[database]');
+  expect(patched).toContain('host = "db"');
+  expect(patched).toContain('[cache]');
+  expect(patched).toContain('ttl = 60');
+});
+
+test('should edit leading KV and remove table entry simultaneously', () => {
+  const existing = dedent`
+    version = 1
+    [server]
+    host = "localhost"
+    port = 8080
+  ` + '\n';
+
+  const patched = patch(existing, {
+    version: 2,
+    server: { host: 'localhost' },
+  });
+
+  expect(patched).toContain('version = 2');
+  expect(patched).toContain('[server]');
+  expect(patched).toContain('host = "localhost"');
+  expect(patched).not.toContain('port');
+});
+
+test('should replace KV value and delete table in same patch', () => {
+  const existing = dedent`
+    name = "old"
+    [config]
+    debug = true
+    verbose = false
+  ` + '\n';
+
+  const patched = patch(existing, { name: 'new' });
+
+  expect(patched).toContain('name = "new"');
+  expect(patched).not.toContain('[config]');
+  expect(patched).not.toContain('debug');
+});
+
+test('should remove everything leaving empty document', () => {
+  const existing = dedent`
+    a = 1
+    [section]
+    key = "value"
+  ` + '\n';
+
+  const patched = patch(existing, {});
+  // Should be empty or just whitespace
+  expect(patched.trim()).toBe('');
+});

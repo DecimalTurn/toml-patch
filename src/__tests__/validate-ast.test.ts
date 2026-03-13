@@ -484,4 +484,257 @@ describe('AST position consistency after patching', () => {
     expect(getInverted(toml, { s: { b: 2 } })).toEqual([]);
   });
 
+  // ------ KV before/after table section removal edge cases ------
+
+  test('remove leading KV before a table section', () => {
+    const toml = dedent`
+      title = "My App"
+      [server]
+      host = "localhost"
+    ` + '\n';
+    expectConsistent(toml, { server: { host: 'localhost' } });
+  });
+
+  test('remove table section after a leading KV', () => {
+    const toml = dedent`
+      title = "My App"
+      [server]
+      host = "localhost"
+    ` + '\n';
+    expectConsistent(toml, { title: 'My App' });
+  });
+
+  test('remove leading KV, keep table and table array', () => {
+    const toml = dedent`
+      version = 1
+      [database]
+      host = "localhost"
+      [[entries]]
+      id = 1
+    ` + '\n';
+    expectConsistent(toml, {
+      database: { host: 'localhost' },
+      entries: [{ id: 1 }],
+    });
+  });
+
+  test('remove multiple leading KVs before table section', () => {
+    const toml = dedent`
+      a = 1
+      b = 2
+      c = 3
+      [config]
+      debug = true
+    ` + '\n';
+    expectConsistent(toml, { config: { debug: true } });
+  });
+
+  test('remove table section between two KVs', () => {
+    // This is unusual TOML but structurally valid after patching
+    const toml = dedent`
+      top = "value"
+      [middle]
+      x = 1
+    ` + '\n';
+    expectConsistent(toml, { top: 'value' });
+  });
+
+  test('remove all table sections, keep root KVs', () => {
+    const toml = dedent`
+      name = "app"
+      version = "1.0"
+      [database]
+      host = "db"
+      [cache]
+      ttl = 60
+    ` + '\n';
+    expectConsistent(toml, { name: 'app', version: '1.0' });
+  });
+
+  test('remove all root KVs, keep all table sections', () => {
+    const toml = dedent`
+      name = "app"
+      version = "1.0"
+      [database]
+      host = "db"
+      [cache]
+      ttl = 60
+    ` + '\n';
+    expectConsistent(toml, {
+      database: { host: 'db' },
+      cache: { ttl: 60 },
+    });
+  });
+
+  // ------ table array removal edge cases ------
+
+  // BUG: Removing an entire table array by path ['tasks'] fails because
+  // TableArray entries are indexed as ['tasks', 0], ['tasks', 1], etc.
+  test.skip('remove table array after leading KV', () => {
+    const toml = dedent`
+      title = "Project"
+      [[tasks]]
+      name = "build"
+      [[tasks]]
+      name = "test"
+    ` + '\n';
+    expectConsistent(toml, { title: 'Project' });
+  });
+
+  test('remove leading KV before table array', () => {
+    const toml = dedent`
+      title = "Project"
+      [[tasks]]
+      name = "build"
+      [[tasks]]
+      name = "test"
+    ` + '\n';
+    expectConsistent(toml, {
+      tasks: [{ name: 'build' }, { name: 'test' }],
+    });
+  });
+
+  test('remove middle entries from table array', () => {
+    const toml = dedent`
+      [[items]]
+      id = 1
+      [[items]]
+      id = 2
+      [[items]]
+      id = 3
+      [[items]]
+      id = 4
+    ` + '\n';
+    expectConsistent(toml, { items: [{ id: 1 }, { id: 4 }] });
+  });
+
+  test('shrink table array to single entry', () => {
+    const toml = dedent`
+      [[items]]
+      id = 1
+      [[items]]
+      id = 2
+      [[items]]
+      id = 3
+    ` + '\n';
+    expectConsistent(toml, { items: [{ id: 2 }] });
+  });
+
+  // ------ remove everything ------
+
+  test('remove all content from document', () => {
+    const toml = dedent`
+      a = 1
+      b = 2
+      [section]
+      key = "value"
+    ` + '\n';
+    expectConsistent(toml, {});
+  });
+
+  // ------ mixed add + remove in same patch ------
+
+  test('remove KV and add new table in same patch', () => {
+    const toml = dedent`
+      title = "old"
+      [server]
+      port = 80
+    ` + '\n';
+    expectConsistent(toml, {
+      server: { port: 80 },
+      logging: { level: 'debug' },
+    });
+  });
+
+  test('replace root KV with different value and delete table', () => {
+    const toml = dedent`
+      name = "old"
+      [config]
+      debug = true
+      verbose = false
+    ` + '\n';
+    expectConsistent(toml, { name: 'new' });
+  });
+
+  test('edit root KV and remove table entry simultaneously', () => {
+    const toml = dedent`
+      version = 1
+      [server]
+      host = "localhost"
+      port = 8080
+    ` + '\n';
+    expectConsistent(toml, { version: 2, server: { host: 'localhost' } });
+  });
+
+  // ------ documents with blank lines between sections ------
+
+  test('remove KV from doc with blank line separators', () => {
+    const toml = 'a = 1\n\nb = 2\n\n[section]\nkey = "v"\n';
+    expectConsistent(toml, { b: 2, section: { key: 'v' } });
+  });
+
+  test('remove table from doc with blank line separators', () => {
+    const toml = 'a = 1\n\n[section]\nkey = "v"\n\n[other]\nx = 2\n';
+    expectConsistent(toml, { a: 1, other: { x: 2 } });
+  });
+
+  // ------ nested table sections ------
+
+  // BUG: Removing a nested sub-table [server.tls] fails because the
+  // removal logic cannot locate the sub-table node within its parent.
+  test.skip('remove nested sub-table', () => {
+    const toml = dedent`
+      [server]
+      host = "localhost"
+      [server.tls]
+      cert = "server.pem"
+      key = "server.key"
+    ` + '\n';
+    expectConsistent(toml, { server: { host: 'localhost' } });
+  });
+
+  test('add nested sub-table to existing table', () => {
+    const toml = dedent`
+      [server]
+      host = "localhost"
+    ` + '\n';
+    expectConsistent(toml, {
+      server: { host: 'localhost', tls: { cert: 'server.pem' } },
+    });
+  });
+
+  // ------ inline table at document root ------
+
+  test('remove root inline table, keep KV', () => {
+    const toml = 'point = { x = 1, y = 2 }\nname = "origin"\n';
+    expectConsistent(toml, { name: 'origin' });
+  });
+
+  test('remove root KV, keep inline table', () => {
+    const toml = 'name = "origin"\npoint = { x = 1, y = 2 }\n';
+    expectConsistent(toml, { point: { x: 1, y: 2 } });
+  });
+
+  // ------ single-item documents ------
+
+  test('edit the only KV in a single-item document', () => {
+    expectConsistent('key = "old"\n', { key: 'new' });
+  });
+
+  test('replace the only KV completely', () => {
+    expectConsistent('old_key = 1\n', { new_key: 2 });
+  });
+
+  // ------ wide values that test column offset propagation ------
+
+  test('remove wide KV before narrow sibling', () => {
+    const toml = 'long_description = "This is a very long string value that takes up many columns"\nid = 1\n';
+    expectConsistent(toml, { id: 1 });
+  });
+
+  test('remove narrow KV before wide sibling', () => {
+    const toml = 'id = 1\nlong_description = "This is a very long string value that takes up many columns"\n';
+    expectConsistent(toml, { long_description: 'This is a very long string value that takes up many columns' });
+  });
+
 });
