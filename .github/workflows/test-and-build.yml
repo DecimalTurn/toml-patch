@@ -5,6 +5,7 @@ on:
       - latest
       - master
       - dev
+      - dev-*
   pull_request:
   workflow_dispatch:
 
