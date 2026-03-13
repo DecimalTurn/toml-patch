@@ -6,7 +6,6 @@ import { Location, Position } from '../location';
 import parseTOML from '../parse-toml';
 import { patchAst } from '../patch';
 import { TomlFormat } from '../toml-format';
-import toTOML from '../to-toml';
 import traverse from '../traverse';
 import dedent from 'dedent';
 
