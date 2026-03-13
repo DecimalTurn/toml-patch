@@ -1,5 +1,5 @@
 import {
-  Document, NodeType, TreeNode, Table, TableArray, TableKey, TableArrayKey,
+  Document, NodeType, TreeNode, Table, TableArray,
   InlineArray, InlineTable, InlineItem, KeyValue
 } from '../ast';
 import { Location, Position } from '../location';

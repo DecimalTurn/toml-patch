@@ -1,9 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": null,
+  "plugins": ["typescript"],
   "categories": {},
   "rules": {
-    "no-control-regex": "off"
+    "no-control-regex": "off",
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "caughtErrors": "none", "argsIgnorePattern": "^_$", "varsIgnorePattern": "^_$" }]
   },
   "settings": {
     "jsx-a11y": {
@@ -38,5 +40,7 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": []
+  "ignorePatterns": [
+    "submodules/**",
+  ]
 }

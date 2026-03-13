@@ -47,7 +47,7 @@ test('should stringify simple example', () => {
     a = "b"
     ` + '\n';
 
-  const x = [...parseTOML(expectedOutput)];
+  void [...parseTOML(expectedOutput)];
 
   expect(ouput).toEqual(expectedOutput);
 
@@ -78,7 +78,7 @@ test('should stringify simple example with simple value at the end', () => {
     a = "b"
     ` + '\n';
 
-  const x = [...parseTOML(expectedOutput)];
+  void [...parseTOML(expectedOutput)];
 
   expect(ouput).toEqual(expectedOutput);
 
@@ -111,7 +111,7 @@ test('should stringify simple example with empty object', () => {
     ` + '\n';
 
   //Ensure that parsing the expected output doesn't throw
-  const x = [...parseTOML(expectedOutput)];
+  void [...parseTOML(expectedOutput)];
 
   expect(ouput).toEqual(expectedOutput);
 

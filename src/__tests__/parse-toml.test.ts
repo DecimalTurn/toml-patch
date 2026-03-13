@@ -1,5 +1,5 @@
 import parseTOML from '../parse-toml';
-import { Table, KeyValue, InlineArray, DateTime, Document, AST } from '../ast';
+import { Table, KeyValue, InlineArray, DateTime } from '../ast';
 import { example, fruit, hard_example, hard_example_unicode, kitchen_sink } from '../__fixtures__';
 import dedent from 'dedent';
 

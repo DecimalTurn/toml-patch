@@ -1955,7 +1955,6 @@ test('should patch offset datetime with T separator and timezone offset', () => 
   const value = parse(existing);
   
   // Update the offset datetime by adding one day
-  const currentDateTime = value.start_datetime as Date;
   const newDateTime = new OffsetDateTime('2024-01-16T10:30:00-07:00', false);
   value.start_datetime = newDateTime;
 
@@ -2027,7 +2026,7 @@ test('should patch offset datetime with milliseconds and preserve precision', ()
     ` + '\n');
 });
 
-test('should preserve all TOML date/time formats when patching', () => {
+describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
     {
       name: 'Local Date',
@@ -2067,6 +2066,7 @@ test('should preserve all TOML date/time formats when patching', () => {
   ];
 
   testCases.forEach(({ name, input, expected }) => {
+    test(name, () => {
     const parsed = parse(input);
     const key = Object.keys(parsed)[0];
     const originalDate = parsed[key] as Date;
@@ -2113,6 +2113,7 @@ test('should preserve all TOML date/time formats when patching', () => {
     const patched = patch(input, parsed);
     
     expect(patched.trim()).toEqual(expected);
+    });
   });
 });
 

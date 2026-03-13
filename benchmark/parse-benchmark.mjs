@@ -294,7 +294,7 @@ async function warmupModule(TOML, benchmarks, implementationName) {
     for (const { data } of benchmarks) {
       try {
         TOML.parse(data);
-      } catch (error) {
+      } catch (_) {
         // Ignore errors during warmup
       }
     }

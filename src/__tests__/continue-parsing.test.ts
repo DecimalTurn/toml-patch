@@ -1,6 +1,5 @@
 import parseTOML, { continueParsingTOML } from '../parse-toml';
 import toJS from '../to-js';
-import toTOML from '../to-toml';
 import dedent from 'dedent';
 
 describe('continueParsingTOML', () => {

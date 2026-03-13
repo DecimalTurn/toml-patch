@@ -18,7 +18,7 @@
 
 import { join, dirname } from 'path';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { gzipSync } from 'zlib';
 

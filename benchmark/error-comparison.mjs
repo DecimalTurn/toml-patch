@@ -3,7 +3,7 @@
  * when parsing invalid TOML files from the toml-test suite.
  */
 
-import { join, dirname, relative } from 'path';
+import { join, dirname } from 'path';
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';

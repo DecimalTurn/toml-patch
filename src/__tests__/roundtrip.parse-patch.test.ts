@@ -1,4 +1,4 @@
-import { parse, patch, stringify } from '../';
+import { parse, patch } from '../';
 import { readFileSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
 
