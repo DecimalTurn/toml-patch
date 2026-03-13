@@ -462,7 +462,10 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
 
   const offset = {
     lines: -(removed_span.lines - (keep_line ? 1 : 0)),
-    columns: -removed_span.columns
+    // Column offsets only apply when removing inline content on the same line.
+    // For block-level removals (entire lines removed), subsequent items on
+    // different lines need no column adjustment — only a line shift.
+    columns: keep_line ? -removed_span.columns : 0
   };
 
   // If there is nothing left, don't perform any offsets
