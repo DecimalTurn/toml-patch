@@ -352,10 +352,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         existing = existing.value;
         replacement = replacement.item.value;
       } else if (isInlineItem(existing) && isKeyValue(replacement)) {
-        // Editing inline table item: existing is InlineItem, replacement is KeyValue
-        // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
-        parent = existing;
-        existing = existing.item;
+        // Editing inline table item: existing is InlineItem, replacement is a block-style KeyValue.
+        // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
+        // not the whole KeyValue — otherwise alignment spaces for the key are lost.
+        const existingKeyValue = existing.item as KeyValue;
+        parent = existingKeyValue;
+        existing = existingKeyValue.value;
+        replacement = replacement.value;
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
         // Both are InlineItems wrapping KeyValues (nested inline table edits)
         // Preserve formatting and edit the value within
