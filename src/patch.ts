@@ -19,6 +19,7 @@ import {
   isInlineItem,
   isString,
   hasItem,
+  hasItems,
   InlineItem,
   AST,
   Table,
@@ -60,10 +61,23 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_ast];
 
+  // Compute the Document's end position from its children so that
+  // offset-based position updates in applyWrites start from the correct
+  // baseline (instead of 0,0 which under-counts after expansion).
+  let endLine = 1;
+  let endColumn = 0;
+  for (const item of items) {
+    const e = item.loc.end;
+    if (e.line > endLine || (e.line === endLine && e.column > endColumn)) {
+      endLine = e.line;
+      endColumn = e.column;
+    }
+  }
+
   const existing_js = toJS(items);
   const existing_document: Document = {
     type: NodeType.Document,
-    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
     items
   };
 
@@ -94,8 +108,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
 function reorder(changes: Change[]): Change[] {
   //Reorder deletions among themselves to avoid index issues
   // We want the path to be looking at the last item in the array first and go down from there
- 
-  let sorted = false;
+
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
     if (isRemove(change)) {
@@ -106,8 +119,9 @@ function reorder(changes: Change[]): Change[] {
             next_change.path[1] > change.path[1]) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
-          // We reset i to the beginning of the loop to avoid skipping any changes
-          i = 0
+          // We reset i to -1 so that after the for-loop's i++ the next iteration
+          // starts at 0 and re-checks the newly promoted element.
+          i = -1;
           break;
         }
         j++;
@@ -364,21 +378,60 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       replace(original, parent, existing, replacement);
     } else if (isRemove(change)) {
-      let parent = findParent(original, change.path);
-      if (isKeyValue(parent)) parent = parent.value;
+      const node = tryFindByPath(original, change.path);
 
-      const node = findByPath(original, change.path);
+      if (!node) {
+        // The path likely refers to all entries of a TableArray sequence
+        // (e.g. path ['tasks'] when the AST stores entries at ['tasks',0], ['tasks',1]…).
+        // Remove all entries by repeatedly pulling the one at index 0.
+        const first = tryFindByPath(original, change.path.concat(0));
+        if (first) {
+          let entry: TreeNode | undefined;
+          while ((entry = tryFindByPath(original, change.path.concat(0)))) {
+            remove(original, original, entry);
+          }
+        } else {
+          // Not a table array — let findByPath throw the descriptive error.
+          findByPath(original, change.path);
+        }
+      } else {
+        let parent = findParent(original, change.path);
+        if (isKeyValue(parent)) parent = parent.value;
 
-      remove(original, parent, node);
+        // The logical (JS-object) parent may differ from the AST parent.
+        // For example, [server.tls] lives in document.items, not [server].items.
+        // Fall back to the document root when the parent doesn't contain the node.
+        if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {
+          parent = original;
+        }
+
+        remove(original, parent, node);
+      }
     } else if (isMove(change)) {
-      let parent = findByPath(original, change.path);
-      if (hasItem(parent)) parent = parent.item;
-      if (isKeyValue(parent)) parent = parent.value;
+      let parent = tryFindByPath(original, change.path);
+      if (parent) {
+        if (hasItem(parent)) parent = parent.item;
+        if (isKeyValue(parent)) parent = parent.value;
 
-      const node = (parent as WithItems).items[change.from];
+        const node = (parent as WithItems).items[change.from];
 
-      remove(original, parent, node);
-      insert(original, parent, node, change.to);
+        remove(original, parent, node);
+        insert(original, parent, node, change.to);
+      } else {
+        // TableArray sequence: the path refers to a collection of [[name]] entries
+        // spread across Document.items (each at an indexed sub-path).
+        // Find source entry, remove it, then re-insert at the target position.
+        const fromNode = findByPath(original, change.path.concat(change.from));
+        remove(original, original, fromNode);
+
+        // After removal, the entry now at virtual index change.to gives us the
+        // Document.items insertion point.
+        const toEntry = tryFindByPath(original, change.path.concat(change.to));
+        const toIndex = toEntry
+          ? original.items.indexOf(toEntry as any)
+          : original.items.length;
+        insert(original, original, fromNode, toIndex);
+      }
     } else if (isRename(change)) {
       let parent = findByPath(original, change.path.concat(change.from)) as
         | KeyValue

@@ -16,12 +16,14 @@ import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from '.
 import { isObject, isString, isInteger, isFloat, isBoolean, isDate } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
-
+/**
+ * Parses a JavaScript object into an AST Document, applying formatting options from TomlFormat.
+ * @param value - The JavaScript object to parse.
+ * @param format - The formatting options to apply.
+ * @returns The resulting AST Document.
+ */
 export default function parseJS(value: any, format: TomlFormat = TomlFormat.default()): Document {
   value = toJSON(value);
-
-  // Reorder the elements in the object
-  value = reorderElements(value);
 
   const document = generateDocument();
   for (const item of walkObject(value, format)) {
@@ -37,42 +39,6 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
 
   // Apply formatEmptyLines only once at the end
   return formatEmptyLines(document);
-}
-
-/** 
-This function makes sure that properties that are simple values (not objects or arrays) are ordered first,
-and that objects and arrays are ordered last. This makes parseJS more reliable and easier to test.
-*/
-function reorderElements(value:any) : Object {
-  // Pre-sort keys to avoid multiple iterations
-  const simpleKeys: string[] = [];
-  const complexKeys: string[] = [];
-  
-  // Separate keys in a single pass
-  for (const key in value) {
-    if (isObject(value[key]) || Array.isArray(value[key])) {
-      complexKeys.push(key);
-    } else {
-      simpleKeys.push(key);
-    }
-  }
-  
-  // Create result with the correct order
-  const result: Record<string, any> = {};
-  
-  // Add simple values first
-  for (let i = 0; i < simpleKeys.length; i++) {
-    const key = simpleKeys[i];
-    result[key] = value[key];
-  }
-  
-  // Then add complex values
-  for (let i = 0; i < complexKeys.length; i++) {
-    const key = complexKeys[i];
-    result[key] = value[key];
-  }
-  
-  return result;
 }
 
 function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue> {

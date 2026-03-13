@@ -462,7 +462,10 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
 
   const offset = {
     lines: -(removed_span.lines - (keep_line ? 1 : 0)),
-    columns: -removed_span.columns
+    // Column offsets only apply when removing inline content on the same line.
+    // For block-level removals (entire lines removed), subsequent items on
+    // different lines need no column adjustment — only a line shift.
+    columns: keep_line ? -removed_span.columns : 0
   };
 
   // If there is nothing left, don't perform any offsets
@@ -492,9 +495,27 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     }
   }
 
-  // Apply offsets after preceding node or before children of parent node
-  const target = previous || parent;
-  const target_offsets = previous ? getExitOffsets(root) : getEnterOffsets(root);
+  // Apply offsets after preceding node or before remaining siblings.
+  //
+  // When the first item of a Table or TableArray is removed, we must NOT place
+  // the enter offset on the parent — that would shift the table's key header
+  // (which is visited before the items) by the removal offset, corrupting
+  // its position (e.g. shifting it to line 0).  Instead, place the offset as
+  // an EXIT offset on the parent's key: the key itself is processed first
+  // (unaffected), and the offset takes effect for the subsequently visited items.
+  let target: TreeNode;
+  let target_offsets: WeakMap<TreeNode, { lines: number; columns: number }>;
+
+  if (previous) {
+    target = previous;
+    target_offsets = getExitOffsets(root);
+  } else if ((isTable(parent) || isTableArray(parent)) && 'key' in parent) {
+    target = (parent as Table | TableArray).key;
+    target_offsets = getExitOffsets(root);
+  } else {
+    target = parent;
+    target_offsets = getEnterOffsets(root);
+  }
   const node_offsets = getExitOffsets(root);
   const previous_offset = target_offsets.get(target);
   if (previous_offset) {
@@ -566,6 +587,37 @@ export function applyWrites(root: TreeNode) {
   // (the generic traverse version passes many node shapes through the same
   //  function, causing megamorphic inline caches)
 
+  // After all children have been visited and their positions updated, recalculate
+  // the container's end position as the max of all its children's ends.
+  //
+  // This is necessary because the offset-based shiftEnd approach can produce wrong
+  // container ends when a block-level child is removed: the column offset for the
+  // removed line bleeds into the previous sibling's line after the line-count shift,
+  // causing the container end to shrink below its remaining children.
+  function recalcContainerEnd(container: Document | Table | TableArray) {
+    let endLine = container.loc.start.line;
+    let endCol  = container.loc.start.column;
+
+    // Include the key for Table and TableArray
+    if ('key' in container) {
+      const ke = (container as Table | TableArray).key.loc.end;
+      if (ke.line > endLine || (ke.line === endLine && ke.column > endCol)) {
+        endLine = ke.line;
+        endCol  = ke.column;
+      }
+    }
+
+    for (let i = 0; i < container.items.length; i++) {
+      const e = container.items[i].loc.end;
+      if (e.line > endLine || (e.line === endLine && e.column > endCol)) {
+        endLine = e.line;
+        endCol  = e.column;
+      }
+    }
+
+    container.loc.end = { line: endLine, column: endCol };
+  }
+
   function visitNode(node: TreeNode) {
     switch (node.type) {
       case NodeType.Document: {
@@ -573,6 +625,7 @@ export function applyWrites(root: TreeNode) {
         shiftLoc(doc);
         for (let i = 0; i < doc.items.length; i++) visitNode(doc.items[i]);
         shiftEnd(doc);
+        recalcContainerEnd(doc);
         break;
       }
       case NodeType.Table: {
@@ -581,6 +634,7 @@ export function applyWrites(root: TreeNode) {
         visitNode(tbl.key);
         for (let i = 0; i < tbl.items.length; i++) visitNode(tbl.items[i]);
         shiftEnd(tbl);
+        recalcContainerEnd(tbl);
         break;
       }
       case NodeType.TableArray: {
@@ -589,6 +643,7 @@ export function applyWrites(root: TreeNode) {
         visitNode(ta.key);
         for (let i = 0; i < ta.items.length; i++) visitNode(ta.items[i]);
         shiftEnd(ta);
+        recalcContainerEnd(ta);
         break;
       }
       case NodeType.TableKey: {
