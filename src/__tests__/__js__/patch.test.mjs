@@ -781,25 +781,23 @@ port = 5432
       expect(supportedProperties.size).toBe(4);
     });
 
+    // Test invalid types for each property - these should throw TypeErrors
+    it.each([
+      { newLine: 123 },
+      { newLine: true },
+      { newLine: null },
+      { trailingNewline: 'invalid' },
+      { trailingComma: 'invalid' },
+      { trailingComma: [] },
+      { bracketSpacing: 42 },
+      { bracketSpacing: {} }
+    ])('should throw for invalid format %j', (format) => {
+      expect(() => {
+        patch(originalToml, baseUpdatedObject, format);
+      }).toThrow('Invalid types for format properties');
+    });
+
     it('should validate types of format properties and throw errors for invalid types', () => {
-      // Test invalid types for each property - these should throw TypeErrors
-      const invalidFormats = [
-        { newLine: 123 },
-        { newLine: true },
-        { newLine: null },
-        { trailingNewline: 'invalid' },
-        { trailingComma: 'invalid' },
-        { trailingComma: [] },
-        { bracketSpacing: 42 },
-        { bracketSpacing: {} }
-      ];
-
-      invalidFormats.forEach((format, index) => {
-        expect(() => {
-          patch(originalToml, baseUpdatedObject, format);
-        }).toThrow('Invalid types for format properties');
-      });
-
       // Test multiple invalid types at once
       const multipleInvalids = {
         newLine: null,
@@ -812,26 +810,18 @@ port = 5432
       }).toThrow(TypeError);
 
       // Test that valid types don't throw errors
-      expect(() => {
-        const validFormat = {
-          newLine: '\r\n',
-          trailingNewline: true,
-          trailingComma: false,
-          bracketSpacing: true
-        };
-        
-        const result = patch(originalToml, baseUpdatedObject, validFormat);
-        expect(result).toBeTruthy();
-      }).not.toThrow();
+      const validFormat = {
+        newLine: '\r\n',
+        trailingNewline: true,
+        trailingComma: false,
+        bracketSpacing: true
+      };
+      const result = patch(originalToml, baseUpdatedObject, validFormat);
+      expect(result).toBeTruthy();
 
       // Test that trailingNewline accepts both boolean and number
-      expect(() => {
-        patch(originalToml, baseUpdatedObject, { trailingNewline: 2 });
-      }).not.toThrow();
-      
-      expect(() => {
-        patch(originalToml, baseUpdatedObject, { trailingNewline: false });
-      }).not.toThrow();
+      expect(() => patch(originalToml, baseUpdatedObject, { trailingNewline: 2 })).not.toThrow();
+      expect(() => patch(originalToml, baseUpdatedObject, { trailingNewline: false })).not.toThrow();
 
       // Test that unsupported properties still only warn (don't throw)
       const originalWarn = console.warn;
