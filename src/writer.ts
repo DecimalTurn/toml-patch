@@ -362,8 +362,8 @@ function insertInline(
     child.comma = true;
   }
 
-  // Use new line for inline arrays that span multiple lines
-  const use_new_line = isInlineArray(parent) && perLine(parent);
+  // Use new line for arrays/tables that span multiple lines (one item per line)
+  const use_new_line = perLine(parent as InlineArray);
   const has_trailing_comma = is_last && child.comma === true;
 
   return calculateInlinePositioning(parent, child, index, {
