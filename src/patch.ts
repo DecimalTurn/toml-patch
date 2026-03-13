@@ -107,8 +107,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
 function reorder(changes: Change[]): Change[] {
   //Reorder deletions among themselves to avoid index issues
   // We want the path to be looking at the last item in the array first and go down from there
- 
-  let sorted = false;
+
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
     if (isRemove(change)) {
