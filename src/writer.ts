@@ -499,9 +499,15 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     offset.columns -= 2;
   }
 
-  // If first element in array/inline-table, remove space for comma and space after element
+  // If first element in array/inline-table, remove space for comma and space after element.
+  // For single-line inline containers the next item shifts left to fill the gap.
+  // For multiline (perLine) containers items live on their own lines, so no column
+  // adjustment is needed — and applying one would corrupt the column tracking for
+  // any root-level node (e.g. an extracted comment) that lands on the opening-brace line.
   if (is_inline && !previous && next) {
-    offset.columns -= 2;
+    if (!perLine(parent as InlineArray)) {
+      offset.columns -= 2;
+    }
   }
 
   if (is_inline && previous && !next) {
