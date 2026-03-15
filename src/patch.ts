@@ -399,11 +399,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       } else {
         let parent = findParent(original, change.path);
-        if (isKeyValue(parent)) parent = parent.value;
+        if (isKeyValue(parent)) {
+          parent = parent.value;
+        }
         // When the parent is an InlineItem wrapping a KeyValue (nested inline table), unwrap to the
         // inner InlineTable so `remove` receives a node type that `hasItems` accepts.
-        if (isInlineItem(parent) && isKeyValue((parent as InlineItem).item)) parent = ((parent as InlineItem).item as KeyValue).value;
-
+        if (isInlineItem(parent) && isKeyValue((parent as InlineItem).item)) {
+          parent = ((parent as InlineItem).item as KeyValue).value;
+        } 
         // The logical (JS-object) parent may differ from the AST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
         // Fall back to the document root when the parent doesn't contain the node.
