@@ -55,6 +55,12 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
               // Continue searching within the KeyValue's value
               found = findByPath(item.item.value, path.slice(key.length));
             }
+          } else if (isInlineItem(item) && path.length > key.length) {
+            // For non-KeyValue InlineItems (e.g. an InlineTable inside an array),
+            // when there is still path to resolve, recurse into the inner node.
+            // Without this, findByPath(InlineItem, ['key']) would fail because
+            // InlineItem itself has no .items to traverse.
+            found = findByPath(item.item, path.slice(key.length));
           } else {
             found = findByPath(item, path.slice(key.length));
           }
