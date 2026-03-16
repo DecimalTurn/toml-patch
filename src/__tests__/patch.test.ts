@@ -983,6 +983,58 @@ test('should edit an element of a root-level inline array', () => {
     ` + '\n');
 });
 
+// Verifies that an array written across multiple lines is edited correctly
+// and that the per-line spacing and indentation are preserved.
+test('should edit an element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      1,
+      2,
+      3,
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[0] = 99;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      99,
+      2,
+      3,
+    ]
+    ` + '\n');
+});
+
+// Verifies that editing a key inside an inline table that is an element of an
+// array written on separate lines works correctly.
+// Previously this threw "Node not found at arr.2.a" because findByPath could
+// not traverse into InlineItem<InlineTable> — it only handled InlineItem<KeyValue>.
+test('should edit a key inside an inline table element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 3 },
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[2]['a'] = 4;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 4 },
+    ]
+    ` + '\n');
+});
+
 // This complex example includes a replacement from Inline-Table to single string
 test('should patch complex vba-block example', () => {
   const existing = dedent`
