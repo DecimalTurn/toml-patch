@@ -1035,6 +1035,29 @@ test('should edit a key inside an inline table element of an array written on se
     ` + '\n');
 });
 
+test('should replace an inline table element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 3 },
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[2] = 4;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      4,
+    ]
+    ` + '\n');
+});
+
 // This complex example includes a replacement from Inline-Table to single string
 test('should patch complex vba-block example', () => {
   const existing = dedent`
