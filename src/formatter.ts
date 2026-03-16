@@ -45,8 +45,8 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     const is_inline_table = isInlineTable(item.value);
     const is_inline_array =
       isInlineArray(item.value) &&
-      item.value.items.length &&
-      isInlineTable(item.value.items[0].item);
+      item.value.items.length > 0 &&
+      item.value.items.every(i => isInlineTable(i.item));
 
     // Only move to top level if the depth is less than inlineTableStart
     if (is_inline_table || is_inline_array) {
