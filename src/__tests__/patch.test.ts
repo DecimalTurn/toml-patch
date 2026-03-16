@@ -936,17 +936,20 @@ test('should patch example of modification of an inline-table element', () => {
 });
 
 // Regression guard for the cast `existing.item as KeyValue` inside the
-// `isInlineItem(existing) && isKeyValue(replacement)` branch of applyChanges.
+// `isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)` branch
+// of applyChanges (condition 3).
 //
-// When a root-level inline table is patched, `formatTopLevel` in parseJS converts
-// the object in the updated document to a block [table] section, so
-// `replacement = findByPath(updated, path)` yields a bare KeyValue (not InlineItem).
-// Meanwhile `existing = findByPath(original, path)` is an InlineItem<KeyValue> since
-// the original doc keeps the inline table.  The `existing.item as KeyValue` cast
-// inside that branch is safe here because InlineTableItem always wraps a KeyValue —
-// but it would throw at runtime if `existing` were ever an InlineItem from an
-// InlineArray (where `.item` is a plain value).  This test confirms the cast does
-// not throw and that alignment/spacing is preserved.
+// Condition 3 fires when:
+//   - `existing` (from the original AST) is an InlineItem<KeyValue>  — i.e. a named key
+//     inside a root-level inline table such as `target = { type = "xlsm", path = "…" }`
+//   - `replacement` (from parseJS on the updated object) is a bare KeyValue  — because
+//     `formatTopLevel` in parseJS promotes root-level objects to block [table] sections.
+//
+// NOTE: Inline *array* items (e.g. arr = [1, 2, 3]) do NOT hit this branch.
+// For those, `findByPath` returns InlineItem<Integer>, but `replacement` is also
+// InlineItem<Integer> (parseJS keeps arrays inline), so `isKeyValue(replacement)` is
+// false and the code falls through to the `else` branch instead.  A separate test
+// below covers that path.
 test('should edit a value inside a root-level inline table (exercises InlineItem→KeyValue cast)', () => {
   const existing = dedent`
     target = { type = "xlsm", path = "targets/xlsm" }
@@ -959,6 +962,24 @@ test('should edit a value inside a root-level inline table (exercises InlineItem
 
   expect(patched).toEqual(dedent`
     target = { type = "xlsm", path = "out/xlsm" }
+    ` + '\n');
+});
+
+// Verifies that editing an element of an inline array is handled by the `else`
+// branch of applyChanges (not by the InlineItem→KeyValue cast branch above).
+// Both `existing` and `replacement` are InlineItem<Integer>, so no KeyValue cast occurs.
+test('should edit an element of a root-level inline array', () => {
+  const existing = dedent`
+    arr = [1, 2, 3]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[0] = 99;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [99, 2, 3]
     ` + '\n');
 });
 
