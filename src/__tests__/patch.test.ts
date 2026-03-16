@@ -152,6 +152,30 @@ test('should patch example 2', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+// Key reordering inside a regular table is a missing feature: the diff algorithm
+// currently treats key reordering as a no-op because TOML maps are semantically unordered.
+test.skip('should swap two kv pairs inside a regular table', () => {
+  const existing = dedent`
+    [foo]
+    a = 1
+    b = 2
+    ` + '\n';
+
+  const value = parse(existing);
+  const aVal = value.foo.a;
+  delete value.foo.a;
+  value.foo.a = aVal;
+  // value.foo is now { b: 2, a: 1 }
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    [foo]
+    b = 2
+    a = 1
+    ` + '\n');
+});
+
 
 // A reasonable JSON object to patch a simpler toml file
 // This seems to cause a problem with the [src] table appearing at the top
@@ -3180,4 +3204,87 @@ describe('TOML v1.1 multiline inline tables - fixture (multiline-inline-table.to
       }#comment
       ` + '\n');
   });
+});
+
+describe('TOML v1.1 multiline inline tables - reordering', () => {
+  // Key reordering is a missing feature: the diff algorithm currently treats
+  // key reordering as a no-op because TOML maps are semantically unordered.
+  // These tests are skipped until the feature is implemented.
+
+  test.skip('should move first key to last position in a multiline inline table', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+          c = 3,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    // Delete 'a' and re-assign it so that JS object order places it last
+    const aVal = value.t.a;
+    delete value.t.a;
+    value.t.a = aVal;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          b = 2,
+          c = 3,
+          a = 1,
+      }
+      ` + '\n');
+  });
+
+  test.skip('should move last key to first position in a multiline inline table', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+          c = 3,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    // Rebuild the object with 'c' first
+    const cVal = value.t.c;
+    delete value.t.c;
+    const newT: Record<string, number> = { c: cVal };
+    for (const [k, v] of Object.entries(value.t)) newT[k] = v as number;
+    value.t = newT;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          c = 3,
+          a = 1,
+          b = 2,
+      }
+      ` + '\n');
+  });
+
+  test.skip('should swap two adjacent keys in a multiline inline table', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+          c = 3,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    // Rebuild object with a and b swapped
+    const { a, b, c } = value.t;
+    value.t = { b, a, c };
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          b = 2,
+          a = 1,
+          c = 3,
+      }
+      ` + '\n');
+  });
+
 });
