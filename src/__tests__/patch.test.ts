@@ -935,6 +935,33 @@ test('should patch example of modification of an inline-table element', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+// Regression guard for the cast `existing.item as KeyValue` inside the
+// `isInlineItem(existing) && isKeyValue(replacement)` branch of applyChanges.
+//
+// When a root-level inline table is patched, `formatTopLevel` in parseJS converts
+// the object in the updated document to a block [table] section, so
+// `replacement = findByPath(updated, path)` yields a bare KeyValue (not InlineItem).
+// Meanwhile `existing = findByPath(original, path)` is an InlineItem<KeyValue> since
+// the original doc keeps the inline table.  The `existing.item as KeyValue` cast
+// inside that branch is safe here because InlineTableItem always wraps a KeyValue —
+// but it would throw at runtime if `existing` were ever an InlineItem from an
+// InlineArray (where `.item` is a plain value).  This test confirms the cast does
+// not throw and that alignment/spacing is preserved.
+test('should edit a value inside a root-level inline table (exercises InlineItem→KeyValue cast)', () => {
+  const existing = dedent`
+    target = { type = "xlsm", path = "targets/xlsm" }
+    ` + '\n';
+
+  const value = parse(existing);
+  value.target.path = 'out/xlsm';
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    target = { type = "xlsm", path = "out/xlsm" }
+    ` + '\n');
+});
+
 // This complex example includes a replacement from Inline-Table to single string
 test('should patch complex vba-block example', () => {
   const existing = dedent`
