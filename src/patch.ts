@@ -354,7 +354,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       } else if (isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)) {
         // Editing inline table item: existing is InlineItem, replacement is a block-style KeyValue.
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
-        // not the whole KeyValue — otherwise alignment spaces for the key are lost.
+        // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
         const existingKeyValue = existing.item;
         parent = existingKeyValue;
         existing = existingKeyValue.value;
