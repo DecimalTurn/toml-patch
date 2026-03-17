@@ -185,9 +185,35 @@ export function generateString(value: string, existingRaw?: string): String {
         .replace(/"""/g, '""\\\"');
     }
     
-    // Format with or without leading newline based on original
+    // Format with or without leading newline based on original.
+    // For the common case, wrap escaped content between the delimiter+newline and closing delimiter.
+    // Special case: if the existing body has a single content line ending with an odd number of
+    // trailing backslashes (a TOML line-continuation), and the new value is also single-line,
+    // preserve the structural suffix: the line-continuation backslash and the closing indent.
     if (hasLeadingNewline) {
-      raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
+      const bodyStart = delimiter.length + newlineChar.length;
+      const bodyEnd = existingRaw.length - delimiter.length;
+      const existingBody = existingRaw.slice(bodyStart, bodyEnd);
+      const lastNewlineIdx = existingBody.lastIndexOf(newlineChar);
+
+      let preserved = false;
+      if (lastNewlineIdx >= 0 && !escaped.includes(newlineChar)) {
+        const closingIndent = existingBody.slice(lastNewlineIdx + newlineChar.length);
+        const contentArea = existingBody.slice(0, lastNewlineIdx);
+
+        if (!contentArea.includes(newlineChar)) {
+          const trailingBackslashes = contentArea.match(/(\\+)$/);
+          if (trailingBackslashes && trailingBackslashes[1].length % 2 === 1) {
+            // Odd trailing backslashes = line-continuation; preserve the closing structure.
+            raw = `${delimiter}${newlineChar}${escaped}\\${newlineChar}${closingIndent}${delimiter}`;
+            preserved = true;
+          }
+        }
+      }
+
+      if (!preserved) {
+        raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
+      }
     } else {
       raw = `${delimiter}${escaped}${delimiter}`;
     }
