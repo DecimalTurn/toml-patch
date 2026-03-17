@@ -12,42 +12,59 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x, 24.x]
+
     steps:
     - name: Checkout
       uses: actions/checkout@v6
       with:
         submodules: true
+
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: 24.x
+        node-version: ${{ matrix.node-version }}
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
       with:
         run_install: false
-    # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
-    - uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143 # v1.3.0
+
+    # Protection Against Supply Chain Attacks
+    - uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143
       with:
         mode: firewall
-        firewall-version: latest # or use a pinned version (see releases)
+        firewall-version: latest
+
     - name: Install
       run: sfw pnpm install --frozen-lockfile
       env:
         CI: true
+
     - name: Typecheck
       run: pnpm run typecheck
+
     - name: Lint
       run: pnpm run lint
+
     - name: Build
       run: pnpm run build
+
     - name: Test
       run: pnpm run test:all
+
     - name: Specs
       run: pnpm run specs
+
     - name: Benchmark (CI samples)
       run: pnpm run benchmark:ci
+
     - name: Check Performance
       run: node benchmark/check-performance.mjs
+
     - name: Write Benchmark Summary
       if: always()
       run: |
@@ -60,9 +77,9 @@ jobs:
           echo "## Stringify Benchmark" >> $GITHUB_STEP_SUMMARY
           cat benchmark-stringify.md >> $GITHUB_STEP_SUMMARY
         fi
+
     - name: Create build artifacts
       uses: actions/upload-artifact@v7
       with: 
         path: dist/
-        name: dist
-        
+        name: dist-${{ matrix.node-version }}
