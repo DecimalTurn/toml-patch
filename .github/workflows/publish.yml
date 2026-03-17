@@ -45,6 +45,10 @@ jobs:
         run: pnpm run build
         continue-on-error: true
 
+      - name: Publish to npm
+        id: pnpm-publish
+        run: pnpm publish --provenance
+
       - name: Check git status
         run: git status && git diff
 
