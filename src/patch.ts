@@ -356,6 +356,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
         // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
         const existingKeyValue = existing.item;
+        preserveFormatting(existingKeyValue.value, replacement.value);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
