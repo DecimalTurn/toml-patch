@@ -2930,22 +2930,35 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
   });
 
   test('should edit a value in an inline table that contains a multiline string value', () => {
-    // tbl-2 from newline.toml: inline table whose value is a multiline string
-    const existing = dedent`
-      tbl-2 = {
-              k = """Hello"""
-      }
-      ` + '\n';
+    // Verifies that preserveFormatting preserves the structural suffix of a multiline string:
+    // the line-continuation backslash and the closing indent must be preserved.
+    //
+    // Note: dedent eats `\<LF>` sequences (its raw-string cleanup regex), so these
+    // strings are written with explicit concatenation to control every character exactly.
+    //
+    // The TOML `        Hello \<LF>        ` encodes value `        Hello `
+    // (8 spaces + "Hello " — the `\<LF><spaces>` is trimmed as a line continuation).
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Hello \\\n' +
+      '        """\n' +
+      '}\n';
 
     const value = parse(existing);
-    value['tbl-2'].k = 'Goodbye';
+    // Sanity-check: line continuation trims backslash+newline+indent, leaving the trailing space.
+    expect(value['tbl-2'].k).toEqual('Hello ');
+
+    value['tbl-2'].k = 'Goodbye \n';
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-      tbl-2 = {
-              k = """Goodbye"""
-      }
-      ` + '\n');
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Goodbye \\\n' +
+      '        """\n' +
+      '}\n'
+    );
   });
 
   test('should preserve no-trailing-newline-before-brace format when editing', () => {
