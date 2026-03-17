@@ -26,7 +26,8 @@ import {
   InlineItem,
   isInlineItem,
   Block,
-  isBlock
+  isBlock,
+  WithItems
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
@@ -176,7 +177,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   // leaves them at their original position.
   if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
     const insertionLine = child.loc.start.line;
-    const rootItems = (root as any).items as TreeNode[];
+    const rootItems = (root as WithItems).items;
     for (let i = 0; i < rootItems.length; i++) {
       const item = rootItems[i];
       if (!isComment(item)) continue;
@@ -571,7 +572,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   // Comments on the deleted line are removed from root.items entirely.
   if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
     const removedLine = node.loc.start.line;
-    const rootItems = (root as any).items as TreeNode[];
+    const rootItems = (root as WithItems).items;
     const toRemove: number[] = [];
 
     for (let i = 0; i < rootItems.length; i++) {
