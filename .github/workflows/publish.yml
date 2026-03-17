@@ -47,7 +47,7 @@ jobs:
 
       - name: Publish to npm
         id: pnpm-publish
-        run: pnpm publish --provenance
+        run: pnpm publish --provenance --no-git-checks
 
       - name: Check git status
         run: git status && git diff
