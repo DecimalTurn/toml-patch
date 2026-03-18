@@ -3,9 +3,6 @@ on:
   push:
     branches:
       - latest
-      - master
-      - dev
-      - dev-*
   pull_request:
   workflow_dispatch:
 
