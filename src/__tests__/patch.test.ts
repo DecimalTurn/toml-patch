@@ -2949,13 +2949,40 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     // Sanity-check: line continuation trims backslash+newline+indent, leaving the trailing space.
     expect(value['tbl-2'].k).toEqual('Hello ');
 
-    value['tbl-2'].k = 'Goodbye \n';
+    value['tbl-2'].k = 'Goodbye ';
     const patched = patch(existing, value);
 
     expect(patched).toEqual(
       'tbl-2 = {\n' +
       '        k = """\\\n' +
       '        Goodbye \\\n' +
+      '        """\n' +
+      '}\n'
+    );
+  });
+
+    test('should edit a value in an inline table that contains a multiline string value 2', () => {
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Hello \\\n' +
+      '        World.\\\n' +
+      '        """\n' +
+      '}\n';
+
+    const value = parse(existing);
+    // The `\<LF><indent>` sequences are line continuations: they trim the backslash,
+    // newline and following whitespace, joining everything into one value.
+    expect(value['tbl-2'].k).toEqual('Hello World.');
+
+    value['tbl-2'].k = 'Bonjour World.';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Bonjour \\\n' +
+      '        World.\\\n' +
       '        """\n' +
       '}\n'
     );
