@@ -169,24 +169,10 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     getExitOffsets(root).delete(previous!);
   }
 
-  // Handle orphaned comments for multiline inline table inserts (analogous to the
-  // remove case below). When a new item is added on a new line inside a multiline
-  // inline table, the exit offset on the inserted child bleeds to Document-level
-  // comments that were extracted from inside the inline table by the parser.
-  // Pre-compensate comments that appear before the insertion line so the bleedthrough
-  // leaves them at their original position.
-  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
-    const insertionLine = child.loc.start.line;
-    const rootItems = (root as WithItems).items;
-    for (let i = 0; i < rootItems.length; i++) {
-      const item = rootItems[i];
-      if (!isComment(item)) continue;
-      const commentLine = (item as Comment).loc.start.line;
-      if (commentLine < insertionLine) {
-        (item as Comment).loc.start.line -= offset.lines;
-        (item as Comment).loc.end.line -= offset.lines;
-      }
-    }
+  // Pre-compensate orphaned comments when inserting into a multiline inline table
+  // (only applies during patch operations where root !== parent).
+  if (root !== parent) {
+    compensateCommentsForInsert(root, parent, child, offset);
   }
 
   const offsets = getExitOffsets(root);
@@ -558,42 +544,66 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   target_offsets.set(target, offset);
   dirty_roots.add(root);
 
-  // Handle orphaned comments for multiline inline tables.
-  //
-  // When a TOML 1.1 multiline inline table is parsed, comments inside it are emitted into
-  // root.items (the Document/Table level) rather than into InlineTable.items. The line-count
-  // offset placed above (on `target`) bleeds through the rest of the Document traversal in
-  // applyWrites, shifting every subsequent root-level item by `offset.lines`. That is correct
-  // for comments AFTER the deleted line (they should shift up), but wrong for comments BEFORE
-  // the deleted line (they must stay put), and comments ON the deleted line must be removed.
-  //
-  // Fix: for root-level comments that sit before the removed line, pre-shift them in the
-  // opposite direction so that the bleedthrough restores them to their original position.
-  // Comments on the deleted line are removed from root.items entirely.
-  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
-    const removedLine = node.loc.start.line;
-    const rootItems = (root as WithItems).items;
-    const toRemove: number[] = [];
+  // Pre-compensate orphaned comments when removing from a multiline inline table
+  // (only applies during patch operations where root !== parent).
+  if (root !== parent) {
+    compensateCommentsForRemove(root, parent, node, offset);
+  }
+}
 
-    for (let i = 0; i < rootItems.length; i++) {
-      const item = rootItems[i];
-      if (!isComment(item)) continue;
-      const commentLine = (item as Comment).loc.start.line;
-      if (commentLine === removedLine) {
+/**
+ * Compensate orphaned comments when inserting into a multiline inline table.
+ * Extracted from insert() to keep that function's bytecode size small for V8 inlining.
+ */
+function compensateCommentsForInsert(
+  root: Root, parent: TreeNode, child: TreeNode, offset: Span
+) {
+  if (!isInlineTable(parent) || offset.lines === 0 || !hasItems(root)) return;
+
+  const insertionLine = child.loc.start.line;
+  const rootItems = (root as WithItems).items;
+  for (let i = 0; i < rootItems.length; i++) {
+    const item = rootItems[i];
+    if (!isComment(item)) continue;
+    const commentLine = (item as Comment).loc.start.line;
+    if (commentLine < insertionLine) {
+      (item as Comment).loc.start.line -= offset.lines;
+      (item as Comment).loc.end.line -= offset.lines;
+    }
+  }
+}
+
+/**
+ * Compensate orphaned comments when removing from a multiline inline table.
+ * Extracted from remove() to keep that function's bytecode size small for V8 inlining.
+ */
+function compensateCommentsForRemove(
+  root: Root, parent: TreeNode, node: TreeNode, offset: Span
+) {
+  if (!isInlineTable(parent) || offset.lines === 0 || !hasItems(root)) return;
+
+  const removedLine = node.loc.start.line;
+  const rootItems = (root as WithItems).items;
+  const toRemove: number[] = [];
+
+  for (let i = 0; i < rootItems.length; i++) {
+    const item = rootItems[i];
+    if (!isComment(item)) continue;
+    const commentLine = (item as Comment).loc.start.line;
+    if (commentLine === removedLine) {
         // Comment was on the same line as the removed item — drop it.
-        toRemove.push(i);
-      } else if (commentLine < removedLine) {
+      toRemove.push(i);
+    } else if (commentLine < removedLine) {
         // Comment is before the removed line: pre-compensate so the bleedthrough
         // offset applied during applyWrites leaves it at its original position.
-        (item as Comment).loc.start.line -= offset.lines;
-        (item as Comment).loc.end.line -= offset.lines;
-      }
+      (item as Comment).loc.start.line -= offset.lines;
+      (item as Comment).loc.end.line -= offset.lines;
+    }
       // Comments after removedLine: bleedthrough is already the correct shift.
-    }
+  }
 
-    for (let i = toRemove.length - 1; i >= 0; i--) {
-      rootItems.splice(toRemove[i], 1);
-    }
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    rootItems.splice(toRemove[i], 1);
   }
 }
 
@@ -910,8 +920,9 @@ export function shiftNode(
 function perLine(array: InlineArray | InlineTable): boolean {
   if (!array.items.length) return false;
 
-  const span = getSpan(array.loc);
-  return span.lines > array.items.length;
+  // Inline the line-count computation to avoid allocating a Span object on every call.
+  const lines = array.loc.end.line - array.loc.start.line + 1;
+  return lines > array.items.length;
 }
 
 function addOffset(offset: Span, offsets: Offsets, node: TreeNode, from?: TreeNode) {
