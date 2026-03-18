@@ -15,7 +15,7 @@ jobs:
         include:
           - node-version: 22.x
           - node-version: 24.x
-            benchmark: true
+            islatest: true
 
     steps:
     - name: Checkout
@@ -44,6 +44,10 @@ jobs:
       env:
         CI: true
 
+    - name: Use current node @types/node version
+      if: ${{ !matrix.islatest }}
+      run: pnpm add -D @types/node@$(echo "${{ matrix.node-version }}" | cut -d. -f1)
+
     - name: Typecheck
       run: pnpm run typecheck
 
@@ -60,15 +64,15 @@ jobs:
       run: pnpm run specs
 
     - name: Benchmark (CI samples)
-      if: matrix.benchmark
+      #if: matrix.islatest
       run: pnpm run benchmark:ci
 
     - name: Check Performance
-      if: matrix.benchmark
+      #if: matrix.islatest
       run: node benchmark/check-performance.mjs
 
     - name: Write Benchmark Summary
-      if: always() && matrix.benchmark
+      #if: always() && matrix.islatest
       run: |
         if [ -f benchmark-parse.md ]; then
           echo "## Parse Benchmark" >> $GITHUB_STEP_SUMMARY
