@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - latest
+      - dev-ci*
   pull_request:
   workflow_dispatch:
 
