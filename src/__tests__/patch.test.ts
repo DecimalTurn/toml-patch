@@ -935,6 +935,129 @@ test('should patch example of modification of an inline-table element', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+// Regression guard for the cast `existing.item as KeyValue` inside the
+// `isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)` branch
+// of applyChanges (condition 3).
+//
+// Condition 3 fires when:
+//   - `existing` (from the original AST) is an InlineItem<KeyValue>  — i.e. a named key
+//     inside a root-level inline table such as `target = { type = "xlsm", path = "…" }`
+//   - `replacement` (from parseJS on the updated object) is a bare KeyValue  — because
+//     `formatTopLevel` in parseJS promotes root-level objects to block [table] sections.
+//
+// NOTE: Inline *array* items (e.g. arr = [1, 2, 3]) do NOT hit this branch.
+// For those, `findByPath` returns InlineItem<Integer>, but `replacement` is also
+// InlineItem<Integer> (parseJS keeps arrays inline), so `isKeyValue(replacement)` is
+// false and the code falls through to the `else` branch instead.  A separate test
+// below covers that path.
+test('should edit a value inside a root-level inline table (exercises InlineItem→KeyValue cast)', () => {
+  const existing = dedent`
+    target = { type = "xlsm", path = "targets/xlsm" }
+    ` + '\n';
+
+  const value = parse(existing);
+  value.target.path = 'out/xlsm';
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    target = { type = "xlsm", path = "out/xlsm" }
+    ` + '\n');
+});
+
+// Verifies that editing an element of an inline array is handled by the `else`
+// branch of applyChanges (not by the InlineItem→KeyValue cast branch above).
+// Both `existing` and `replacement` are InlineItem<Integer>, so no KeyValue cast occurs.
+test('should edit an element of a root-level inline array', () => {
+  const existing = dedent`
+    arr = [1, 2, 3]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[0] = 99;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [99, 2, 3]
+    ` + '\n');
+});
+
+// Verifies that an array written across multiple lines is edited correctly
+// and that the per-line spacing and indentation are preserved.
+test('should edit an element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      1,
+      2,
+      3,
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[0] = 99;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      99,
+      2,
+      3,
+    ]
+    ` + '\n');
+});
+
+// Verifies that editing a key inside an inline table that is an element of an
+// array written on separate lines works correctly.
+// Previously this threw "Node not found at arr.2.a" because findByPath could
+// not traverse into InlineItem<InlineTable> — it only handled InlineItem<KeyValue>.
+test('should edit a key inside an inline table element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 3 },
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[2]['a'] = 4;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 4 },
+    ]
+    ` + '\n');
+});
+
+test('should replace an inline table element of an array written on separate lines', () => {
+  const existing = dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      {a = 3 },
+    ]
+    ` + '\n';
+
+  const value = parse(existing);
+  value.arr[2] = 4;
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    arr = [
+      {a = 1 },
+      {a = 2 },
+      4,
+    ]
+    ` + '\n');
+});
+
 // This complex example includes a replacement from Inline-Table to single string
 test('should patch complex vba-block example', () => {
   const existing = dedent`
@@ -2673,4 +2796,509 @@ test('should remove everything leaving empty document', () => {
   const patched = patch(existing, {});
   // Should be empty or just whitespace
   expect(patched.trim()).toBe('');
+});
+
+// ==========================================
+// TOML v1.1 Multiline Inline Table Tests
+// Based on toml-test spec:
+//   tests/valid/inline-table/newline.toml
+//   tests/valid/inline-table/newline-comment.toml
+//   src/__fixtures__/multiline-inline-table.toml
+// ==========================================
+
+describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec)', () => {
+
+  test('should edit a value in a simple trailing-comma multiline inline table', () => {
+    const existing = dedent`
+      trailing-comma-1 = {
+              c = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value['trailing-comma-1'].c = 42;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      trailing-comma-1 = {
+              c = 42,
+      }
+      ` + '\n');
+  });
+
+  test('should add a key to a trailing-comma multiline inline table', () => {
+    const existing = dedent`
+      trailing-comma-1 = {
+              c = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value['trailing-comma-1'].d = 2;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      trailing-comma-1 = {
+              c = 1,
+              d = 2,
+      }
+      ` + '\n');
+  });
+
+  test('should delete a key from a two-key multiline inline table', () => {
+    const existing = dedent`
+      tbl-1 = {
+              hello = "world",
+              b = 2,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].hello;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+              b = 2,
+      }
+      ` + '\n');
+  });
+
+  test('should edit a nested value inside a multiline inline table', () => {
+    const existing = dedent`
+      tbl-1 = {
+              tbl = {
+                       k = 1,
+              }
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value['tbl-1'].tbl.k = 99;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+              tbl = {
+                       k = 99,
+              }
+      }
+      ` + '\n');
+  });
+
+  test('should delete a nested inline table key leaving empty nested table', () => {
+    const existing = dedent`
+      tbl-1 = {
+              tbl = {
+                       k = 1,
+              }
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].tbl.k;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+              tbl = {
+
+              }
+      }
+      ` + '\n');
+  });
+
+  test('should delete an entire nested inline table entry', () => {
+    const existing = dedent`
+      tbl-1 = {
+              hello = "world",
+              tbl = {
+                       k = 1,
+              }
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].tbl;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+              hello = "world"
+      }
+      ` + '\n');
+  });
+
+  test('should edit a value in an inline table that contains a multiline string value', () => {
+    // tbl-2 from newline.toml: inline table whose value is a multiline string
+    const existing = dedent`
+      tbl-2 = {
+              k = """Hello"""
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value['tbl-2'].k = 'Goodbye';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-2 = {
+              k = """Goodbye"""
+      }
+      ` + '\n');
+  });
+
+  test('should preserve no-trailing-newline-before-brace format when editing', () => {
+    // no-newline-before-brace from newline.toml: last key on same line as }
+    const existing = dedent`
+      no-newline-before-brace = {
+      a = 1,
+      b = 2}
+      ` + '\n';
+
+    const value = parse(existing);
+    value['no-newline-before-brace'].a = 10;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      no-newline-before-brace = {
+      a = 10,
+      b = 2}
+      ` + '\n');
+  });
+
+  test('should preserve no-trailing-newline-before-brace-with-comma format when editing', () => {
+    // no-newline-before-brace-with-comma from newline.toml
+    const existing = dedent`
+      no-newline-before-brace-with-comma = {
+      a = 1,
+      b = 2,}
+      ` + '\n';
+
+    const value = parse(existing);
+    value['no-newline-before-brace-with-comma'].b = 20;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      no-newline-before-brace-with-comma = {
+      a = 1,
+      b = 20,}
+      ` + '\n');
+  });
+});
+
+describe('TOML v1.1 multiline inline tables - trailing comma preservation', () => {
+
+  test('should preserve trailing comma on last item when editing last item', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.t.b = 99;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          a = 1,
+          b = 99,
+      }
+      ` + '\n');
+  });
+
+  test('should preserve trailing comma when adding a new key to multiline inline table', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.t.c = 3;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          a = 1,
+          b = 2,
+          c = 3,
+      }
+      ` + '\n');
+  });
+
+  test('should preserve trailing comma when deleting non-last key from multiline inline table', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value.t.a;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          b = 2,
+      }
+      ` + '\n');
+  });
+
+  test('should NOT add trailing comma when original format has no trailing comma', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.t.b = 99;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      t = {
+          a = 1,
+          b = 99
+      }
+      ` + '\n');
+  });
+});
+
+describe('TOML v1.1 multiline inline tables with comments (newline-comment.toml spec)', () => {
+
+  test('should edit value and preserve inline comments in multiline inline table', () => {
+    const existing = dedent`
+      trailing-comma-1 = {#comment
+              # comment
+              c = 1,#comment
+              #comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    value['trailing-comma-1'].c = 100;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      trailing-comma-1 = {#comment
+              # comment
+              c = 100,#comment
+              #comment
+      }#comment
+      ` + '\n');
+  });
+
+  test('should delete a key from a commented multiline inline table preserving remaining comments', () => {
+    const existing = dedent`
+      tbl-1 = {#comment
+              hello = "world",#comment
+              b = 2,#comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].hello;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {#comment
+              b = 2,#comment
+      }#comment
+      ` + '\n');
+  });
+
+  test('should add a key to a commented multiline inline table', () => {
+    const existing = dedent`
+      trailing-comma-1 = {#comment
+              # comment
+              c = 1,#comment
+              #comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    value['trailing-comma-1'].d = 99;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      trailing-comma-1 = {#comment
+              # comment
+              c = 1,#comment
+              d = 99,
+              #comment
+      }#comment
+      ` + '\n');
+  });
+
+  test('should edit nested table value preserving all inline comments', () => {
+    const existing = dedent`
+      tbl-1 = {#comment
+              tbl = {#comment
+                       k = 1,#comment
+              }#comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    value['tbl-1'].tbl.k = 7;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {#comment
+              tbl = {#comment
+                       k = 7,#comment
+              }#comment
+      }#comment
+      ` + '\n');
+  });
+});
+
+describe('TOML v1.1 multiline inline tables - fixture (multiline-inline-table.toml)', () => {
+
+  test('should edit the top-level key in a deeply nested multiline inline table', () => {
+    const existing = dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.tbl.key = 'updated string';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl = {
+          key      = "updated string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n');
+  });
+
+  test('should edit the nested key in a deeply nested multiline inline table', () => {
+    const existing = dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.tbl['moar-tbl'].key = 42;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 42,
+          },
+      }
+      ` + '\n');
+  });
+
+  test('should delete the nested table entry entirely', () => {
+    const existing = dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value.tbl['moar-tbl'];
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl = {
+          key      = "a string",
+      }
+      ` + '\n');
+  });
+
+  test('should add a sibling key to the outer multiline inline table', () => {
+    const existing = dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.tbl['new-key'] = 'added';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+          new-key = "added",
+      }
+      ` + '\n');
+  });
+
+  test('should add a key inside the nested multiline inline table', () => {
+    const existing = dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+          },
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    value.tbl['moar-tbl']['extra'] = 2;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl = {
+          key      = "a string",
+          moar-tbl =  {
+              key = 1,
+              extra = 2,
+          },
+      }
+      ` + '\n');
+  });
+
+  test('should edit value in inline table with comment using fixture format', () => {
+    const existing = dedent`
+      trailing-comma-1 = {#comment
+          # comment
+          c = 1,#comment
+          #comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    value['trailing-comma-1'].c = 55;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      trailing-comma-1 = {#comment
+          # comment
+          c = 55,#comment
+          #comment
+      }#comment
+      ` + '\n');
+  });
 });

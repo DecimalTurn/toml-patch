@@ -351,11 +351,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
-      } else if (isInlineItem(existing) && isKeyValue(replacement)) {
-        // Editing inline table item: existing is InlineItem, replacement is KeyValue
-        // We need to replace the KeyValue inside the InlineItem, preserving the InlineItem wrapper
-        parent = existing;
-        existing = existing.item;
+      } else if (isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)) {
+        // Editing inline table item: existing is InlineItem, replacement is a block-style KeyValue.
+        // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
+        // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
+        const existingKeyValue = existing.item;
+        preserveFormatting(existingKeyValue.value, replacement.value);
+        parent = existingKeyValue;
+        existing = existingKeyValue.value;
+        replacement = replacement.value;
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
         // Both are InlineItems wrapping KeyValues (nested inline table edits)
         // Preserve formatting and edit the value within
@@ -396,8 +400,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       } else {
         let parent = findParent(original, change.path);
-        if (isKeyValue(parent)) parent = parent.value;
-
+        if (isKeyValue(parent)) {
+          parent = parent.value;
+        }
+        // When the parent is an InlineItem wrapping a KeyValue (nested inline table), unwrap to the
+        // inner InlineTable so `remove` receives a node type that `hasItems` accepts.
+        if (isInlineItem(parent) && isKeyValue((parent as InlineItem).item)) {
+          parent = ((parent as InlineItem).item as KeyValue).value;
+        }
         // The logical (JS-object) parent may differ from the AST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
         // Fall back to the document root when the parent doesn't contain the node.

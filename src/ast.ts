@@ -250,14 +250,41 @@ export function isInlineArray(node: TreeNode): node is InlineArray {
   return node.type === NodeType.InlineArray;
 }
 
+// InlineItem  (internal AST wrapper — not a TOML spec concept)
 //
-// InlineArrayItem
+// InlineItem is a container node that wraps each element inside an inline
+// container (InlineArray or InlineTable).  It carries two responsibilities:
 //
-// loc for InlineArrayItem is from start of value to before comma
-// or end-of-value if no comma
+//   1. Tracking the comma that follows the element (comma: boolean).
+//      When the element is the last one in the container, `comma` may be
+//      false (no trailing comma) or true (trailing comma, TOML 1.1+).
 //
-// [ "a"  ,"b", "c"  ]
-//   ^---^ ^-^  ^-^
+//   2. Providing a stable "slot" node in the parent's .items array so that
+//      the writer can apply positional offsets independently of the wrapped
+//      value node itself.
+//
+// It is generic over TItem so that the two concrete subtypes can constrain
+// what they wrap:
+//
+//   InlineArrayItem<TItem>  — wraps any Value (scalar, array, inline table)
+//   InlineTableItem         — always wraps a KeyValue
+//
+// Location:
+//   loc spans from the start of the wrapped value to the character just
+//   before the comma (or the end of the value when there is no comma).
+//
+//   [ "a"  ,"b", "c"  ]
+//     ^---^ ^-^  ^-^
+//
+//   { a = 1 , b = 2 }
+//     ^---^   ^---^
+//
+// Note on findByPath traversal:
+//   When navigating a path into an InlineArray, findByPath matches numeric
+//   indices to InlineArrayItem positions.  When the wrapped item is an
+//   InlineTable and the path has further segments to resolve, traversal
+//   continues into item.item (the InlineTable), not into the InlineItem
+//   wrapper itself (which has no .items of its own).
 //
 export interface InlineItem<TItem = TreeNode> extends TreeNode {
   type: NodeType.InlineItem;
@@ -268,6 +295,18 @@ export function isInlineItem(node: TreeNode): node is InlineItem {
   return node.type === NodeType.InlineItem;
 }
 
+// InlineArrayItem — semantic alias for InlineItem used as the element type of
+// InlineArray.items.  It adds no fields; its existence is purely documentary:
+// naming the subtype makes the array-vs-table distinction visible in type
+// annotations without requiring an extra runtime check.
+//
+// TItem can be any Value: a scalar (String, Integer, …), a nested InlineArray,
+// or an InlineTable.  The generic parameter is propagated so that typed arrays
+// such as InlineArray<String> carry their element type through to the items.
+//
+// [ "a"  ,"b", "c"  ]
+//   ^---^ ^-^  ^-^   ← each element is an InlineArrayItem
+//
 export interface InlineArrayItem<TItem = TreeNode> extends InlineItem<TItem> {}
 
 //
@@ -281,13 +320,17 @@ export function isInlineTable(node: TreeNode): node is InlineTable {
   return node.type === NodeType.InlineTable;
 }
 
+// InlineTableItem — semantic alias for InlineItem<KeyValue> used as the element type
+// of InlineTable.items.  It adds no fields; its existence is purely documentary:
+// naming the subtype makes the array-vs-table distinction visible in type
+// annotations without requiring an extra runtime check.
 //
-// InlineTableItem
-//
-// loc for InlineTableItem follows InlineArrayItem
+// The type parameter is fixed to KeyValue, which means the unsafe cast
+// `existing.item as KeyValue` that previously appeared in patch.ts is
+// unnecessary — the type system already guarantees it.
 //
 // { a="b"   ,    c =    "d"   }
-//   ^------^     ^--------^
+//   ^------^     ^--------^   ← each element is an InlineTableItem
 //
 export interface InlineTableItem extends InlineItem<KeyValue> {}
 

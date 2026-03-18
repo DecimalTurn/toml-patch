@@ -26,7 +26,8 @@ import {
   InlineItem,
   isInlineItem,
   Block,
-  isBlock
+  isBlock,
+  WithItems
 } from './ast';
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
@@ -166,6 +167,26 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     offset.columns += previous_offset.columns;
 
     getExitOffsets(root).delete(previous!);
+  }
+
+  // Handle orphaned comments for multiline inline table inserts (analogous to the
+  // remove case below). When a new item is added on a new line inside a multiline
+  // inline table, the exit offset on the inserted child bleeds to Document-level
+  // comments that were extracted from inside the inline table by the parser.
+  // Pre-compensate comments that appear before the insertion line so the bleedthrough
+  // leaves them at their original position.
+  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
+    const insertionLine = child.loc.start.line;
+    const rootItems = (root as WithItems).items;
+    for (let i = 0; i < rootItems.length; i++) {
+      const item = rootItems[i];
+      if (!isComment(item)) continue;
+      const commentLine = (item as Comment).loc.start.line;
+      if (commentLine < insertionLine) {
+        (item as Comment).loc.start.line -= offset.lines;
+        (item as Comment).loc.end.line -= offset.lines;
+      }
+    }
   }
 
   const offsets = getExitOffsets(root);
@@ -362,8 +383,8 @@ function insertInline(
     child.comma = true;
   }
 
-  // Use new line for inline arrays that span multiple lines
-  const use_new_line = isInlineArray(parent) && perLine(parent);
+  // Use new line for arrays/tables that span multiple lines (one item per line)
+  const use_new_line = perLine(parent);
   const has_trailing_comma = is_last && child.comma === true;
 
   return calculateInlinePositioning(parent, child, index, {
@@ -479,9 +500,15 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     offset.columns -= 2;
   }
 
-  // If first element in array/inline-table, remove space for comma and space after element
+  // If first element in array/inline-table, remove space for comma and space after element.
+  // For single-line inline containers the next item shifts left to fill the gap.
+  // For multiline (perLine) containers items live on their own lines, so no column
+  // adjustment is needed — and applying one would corrupt the column tracking for
+  // any root-level node (e.g. an extracted comment) that lands on the opening-brace line.
   if (is_inline && !previous && next) {
-    offset.columns -= 2;
+    if (!perLine(parent as InlineArray)) {
+      offset.columns -= 2;
+    }
   }
 
   if (is_inline && previous && !next) {
@@ -530,6 +557,44 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
 
   target_offsets.set(target, offset);
   dirty_roots.add(root);
+
+  // Handle orphaned comments for multiline inline tables.
+  //
+  // When a TOML 1.1 multiline inline table is parsed, comments inside it are emitted into
+  // root.items (the Document/Table level) rather than into InlineTable.items. The line-count
+  // offset placed above (on `target`) bleeds through the rest of the Document traversal in
+  // applyWrites, shifting every subsequent root-level item by `offset.lines`. That is correct
+  // for comments AFTER the deleted line (they should shift up), but wrong for comments BEFORE
+  // the deleted line (they must stay put), and comments ON the deleted line must be removed.
+  //
+  // Fix: for root-level comments that sit before the removed line, pre-shift them in the
+  // opposite direction so that the bleedthrough restores them to their original position.
+  // Comments on the deleted line are removed from root.items entirely.
+  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
+    const removedLine = node.loc.start.line;
+    const rootItems = (root as WithItems).items;
+    const toRemove: number[] = [];
+
+    for (let i = 0; i < rootItems.length; i++) {
+      const item = rootItems[i];
+      if (!isComment(item)) continue;
+      const commentLine = (item as Comment).loc.start.line;
+      if (commentLine === removedLine) {
+        // Comment was on the same line as the removed item — drop it.
+        toRemove.push(i);
+      } else if (commentLine < removedLine) {
+        // Comment is before the removed line: pre-compensate so the bleedthrough
+        // offset applied during applyWrites leaves it at its original position.
+        (item as Comment).loc.start.line -= offset.lines;
+        (item as Comment).loc.end.line -= offset.lines;
+      }
+      // Comments after removedLine: bleedthrough is already the correct shift.
+    }
+
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      rootItems.splice(toRemove[i], 1);
+    }
+  }
 }
 
 export function applyBracketSpacing(
@@ -842,7 +907,7 @@ export function shiftNode(
   return node;
 }
 
-function perLine(array: InlineArray): boolean {
+function perLine(array: InlineArray | InlineTable): boolean {
   if (!array.items.length) return false;
 
   const span = getSpan(array.loc);
