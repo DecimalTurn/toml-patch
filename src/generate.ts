@@ -230,7 +230,6 @@ function rebuildLineContinuation(
 
   const splitWords = (s: string): string[] => s.match(/\S+/g) || [];
 
-  const originalWords = splitWords(contentSegments.map(s => s.content).join(''));
   const newWords = splitWords(decodedValue);
 
   // Map content segments to word ranges: segmentWordRanges[i] = [startWordIdx, endWordIdx)
