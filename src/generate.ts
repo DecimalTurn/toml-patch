@@ -139,6 +139,149 @@ export function generateKey(value: string[]): Key {
     value
   };
 }
+
+/**
+ * Rebuilds a multiline string that uses line ending backslash (line-continuation) formatting.
+ *
+ * Given an existing raw TOML string like:
+ *   """\
+ *           Hello \
+ *           World.\
+ *           """
+ *
+ * and a new decoded value like "Bonjour World.", this function:
+ *   1. Parses the existing raw into per-line segments, extracting each segment's indent
+ *      and trailing whitespace.
+ *   2. Splits both the original decoded value and the new value into words.
+ *   3. Redistributes the new words across the original line structure by mapping words
+ *      at each segment boundary.
+ *   4. Reassembles with `\<LF><indent>` between segments and `\<LF><closingIndent>"""` at the end.
+ *
+ * @param existingRaw - The full raw TOML string including delimiters.
+ * @param escaped - The new value after escaping (for basic multiline strings).
+ * @param decodedValue - The new decoded (unescaped) string value.
+ * @param delimiter - The multiline delimiter ('"""' or "'''").
+ * @param newlineChar - The newline character to use ('\n' or '\r\n').
+ * @returns The reconstructed raw TOML string.
+ */
+function rebuildLineContinuation(
+  existingRaw: string,
+  escaped: string,
+  decodedValue: string,
+  delimiter: string,
+  newlineChar: string
+): string {
+  // Parse the body: everything between `"""\<LF>` and `"""`
+  const bodyStart = delimiter.length + 1 /* \ */ + newlineChar.length;
+  const bodyEnd = existingRaw.length - delimiter.length;
+  const body = existingRaw.slice(bodyStart, bodyEnd);
+
+  // Split the body into raw lines
+  const rawLines = body.split(newlineChar);
+
+  // The last raw line is the closing indent (whitespace before the closing """)
+  const closingIndent = rawLines[rawLines.length - 1];
+
+  // Content lines are all lines except the last one (the closing indent line).
+  // Each content line has the format: <indent><content><trailing-ws>\
+  const contentLines = rawLines.slice(0, -1);
+
+  // Parse each content line into { indent, content, trailingWs }
+  interface Segment {
+    indent: string;
+    content: string;
+    trailingWs: string;
+  }
+
+  const segments: Segment[] = contentLines.map(line => {
+    // Strip the trailing backslash (the line-continuation character)
+    let stripped = line;
+    if (stripped.endsWith('\\')) {
+      stripped = stripped.slice(0, -1);
+    }
+
+    // Extract leading whitespace (indent)
+    const indentMatch = stripped.match(/^([\t ]*)/);
+    const indent = indentMatch ? indentMatch[1] : '';
+
+    // Extract trailing whitespace
+    const trailingMatch = stripped.match(/([\t ]+)$/);
+    const trailingWs = trailingMatch ? trailingMatch[1] : '';
+
+    // The content is what's between the indent and the trailing whitespace
+    const content = stripped.slice(indent.length, stripped.length - trailingWs.length);
+
+    return { indent, content, trailingWs };
+  });
+
+  // Split into "words" (non-whitespace tokens) for mapping between old and new values.
+  const splitWords = (s: string): string[] => {
+    const matches = s.match(/\S+/g);
+    return matches || [];
+  };
+
+  const originalWords = splitWords(segments.map(s => s.content).join(''));
+  const newWords = splitWords(decodedValue);
+
+  // If there's only one segment or no words to match, use a simple single-line rebuild
+  if (segments.length <= 1 || originalWords.length === 0) {
+    let escapedInline = escaped;
+    if (escapedInline.endsWith('\r\n')) escapedInline = escapedInline.slice(0, -2);
+    else if (escapedInline.endsWith('\n')) escapedInline = escapedInline.slice(0, -1);
+
+    const seg = segments[0] || { indent: '', trailingWs: ' ' };
+    return `${delimiter}\\${newlineChar}${seg.indent}${escapedInline}\\${newlineChar}${closingIndent}${delimiter}`;
+  }
+
+  // For each segment, determine which original words it contains.
+  // segmentWordRanges[i] = [startWordIdx, endWordIdx)
+  const segmentWordRanges: [number, number][] = [];
+  let wordIdx = 0;
+  for (const seg of segments) {
+    const segWords = splitWords(seg.content);
+    const start = wordIdx;
+    wordIdx += segWords.length;
+    segmentWordRanges.push([start, wordIdx]);
+  }
+
+  // Redistribute the new words across segments using the same ranges.
+  const newSegments: string[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const [origStart, origEnd] = segmentWordRanges[i];
+    const origCount = origEnd - origStart;
+
+    let segNewWords: string[];
+    if (i === segments.length - 1) {
+      // Last content segment gets all remaining words
+      segNewWords = newWords.slice(origStart);
+    } else {
+      segNewWords = newWords.slice(origStart, origStart + origCount);
+    }
+
+    newSegments.push(segNewWords.join(' '));
+  }
+
+  // Remove trailing empty segments (in case the new value has fewer words)
+  while (newSegments.length > 1 && newSegments[newSegments.length - 1] === '') {
+    newSegments.pop();
+  }
+
+  // Reassemble the raw string
+  const rebuiltLines: string[] = [];
+  for (let i = 0; i < newSegments.length; i++) {
+    const seg = i < segments.length ? segments[i] : segments[segments.length - 1];
+    // Preserve trailing whitespace from the original segment, but don't double up
+    // if the new content already ends with whitespace.
+    let trailing = seg.trailingWs;
+    if (newSegments[i].length > 0 && /\s$/.test(newSegments[i])) {
+      trailing = '';
+    }
+    rebuiltLines.push(`${seg.indent}${newSegments[i]}${trailing}\\`);
+  }
+
+  return `${delimiter}\\${newlineChar}${rebuiltLines.join(newlineChar)}${newlineChar}${closingIndent}${delimiter}`;
+}
+
 /**
  * Generates a new String node, preserving multiline format if existingRaw is provided.
  *
@@ -147,7 +290,7 @@ export function generateKey(value: string[]): Key {
  * @returns A new String node.
  */
 export function generateString(value: string, existingRaw?: string): String {
-  let raw: string;
+  let raw = '';
   
   if (existingRaw && isMultilineString(existingRaw)) {
     // Preserve multiline format
@@ -164,6 +307,10 @@ export function generateString(value: string, existingRaw?: string): String {
     const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
     const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
                                ((existingRaw.startsWith("'''\n") || existingRaw.startsWith("'''\r\n")) && !isLiteral);
+    // Detect the """\<LF> opening: delimiter immediately followed by a line-continuation backslash.
+    // This is distinct from hasLeadingNewline (delimiter immediately followed by a bare newline).
+    const hasLeadingLineContinuation =
+      !hasLeadingNewline && existingRaw.startsWith(`${delimiter}\\${newlineChar}`);
     
     let escaped: string;
     if (isLiteral) {
@@ -185,12 +332,21 @@ export function generateString(value: string, existingRaw?: string): String {
         .replace(/"""/g, '""\\\"');
     }
     
-    // Format with or without leading newline based on original.
-    // For the common case, wrap escaped content between the delimiter+newline and closing delimiter.
-    // Special case: if the existing body has a single content line ending with an odd number of
-    // trailing backslashes (a TOML line-continuation), and the new value is also single-line,
-    // preserve the structural suffix: the line-continuation backslash and the closing indent.
-    if (hasLeadingNewline) {
+    // Generate the replacement raw string, preserving the structural format of the existing raw.
+    if (hasLeadingLineContinuation) {
+      // Format: """\<LF>INDENT CONTENT \<LF>INDENT CONTENT \<LF>INDENT"""
+      // Each `\<LF><whitespace>` is a line continuation: it trims the backslash, newline,
+      // and all following whitespace, joining content segments into a single decoded value.
+      //
+      // Strategy:
+      //   1. Parse the existing raw body into segments (one per continuation line).
+      //   2. Extract each segment's indent and trailing whitespace.
+      //   3. Split both the original decoded value and the new value into words.
+      //   4. Redistribute the new words across the same number of segments by matching
+      //      word positions from the original, preserving per-segment whitespace.
+      //   5. Reassemble with `\<LF>` between segments.
+      raw = rebuildLineContinuation(existingRaw, escaped, value, delimiter, newlineChar);
+    } else if (hasLeadingNewline) {
       const bodyStart = delimiter.length + newlineChar.length;
       const bodyEnd = existingRaw.length - delimiter.length;
       const existingBody = existingRaw.slice(bodyStart, bodyEnd);
