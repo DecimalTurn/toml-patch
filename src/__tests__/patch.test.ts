@@ -2988,6 +2988,39 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     );
   });
 
+      test('should edit a value in an inline table that contains a multiline string value 3', () => {
+    // Uses """\n (leading newline) format — NOT """\\ (leading line-continuation).
+    // The body contains line-continuation backslashes with blank lines and mixed indentation.
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\n' +
+      'The quick brown \\\n' +
+      '\n' +
+      '\n' +
+      '  fox jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n';
+
+    const value = parse(existing);
+    // Line-continuation trims `\`, newline(s) and following whitespace:
+    //   "The quick brown " + "fox jumps over " + "the lazy dog."
+    expect(value['tbl-2'].k).toEqual('The quick brown fox jumps over the lazy dog.');
+
+    value['tbl-2'].k = 'The quick brown cat jumps over the lazy dog.';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\n' +
+      'The quick brown \\\n' +
+      '\n' +
+      '\n' +
+      '  cat jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n'
+    );
+  });
+
   test('should preserve no-trailing-newline-before-brace format when editing', () => {
     // no-newline-before-brace from newline.toml: last key on same line as }
     const existing = dedent`

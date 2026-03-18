@@ -283,6 +283,122 @@ function rebuildLineContinuation(
 }
 
 /**
+ * Rebuilds a multiline string that uses the `"""<NL>` (leading newline) format and contains
+ * line-continuation backslashes within the body.
+ *
+ * Given an existing raw TOML string like:
+ *   """
+ *   The quick brown \
+ *
+ *
+ *     fox jumps over \
+ *       the lazy dog."""
+ *
+ * and a new decoded value like "The quick brown cat jumps over the lazy dog.", this function
+ * preserves the line structure (including blank lines) while redistributing new words across
+ * the same content-line positions.
+ */
+function rebuildLeadingNewlineContinuation(
+  existingRaw: string,
+  escaped: string,
+  decodedValue: string,
+  delimiter: string,
+  newlineChar: string
+): string {
+  const bodyStart = delimiter.length + newlineChar.length;
+  const bodyEnd = existingRaw.length - delimiter.length;
+  const body = existingRaw.slice(bodyStart, bodyEnd);
+
+  const rawLines = body.split(newlineChar);
+
+  // Check if the last line is a closing indent (pure whitespace) vs content.
+  const lastLine = rawLines[rawLines.length - 1];
+  const hasClosingIndent = /^[\t ]*$/.test(lastLine);
+  const closingIndent = hasClosingIndent ? lastLine : '';
+  const bodyLines = hasClosingIndent ? rawLines.slice(0, -1) : rawLines;
+
+  interface Segment {
+    indent: string;
+    content: string;
+    trailingWs: string;
+    hasBackslash: boolean;
+    isBlank: boolean;
+  }
+
+  const segments: Segment[] = bodyLines.map(line => {
+    if (line.trim() === '') {
+      return { indent: '', content: '', trailingWs: '', hasBackslash: false, isBlank: true };
+    }
+
+    let stripped = line;
+    const hasBackslash = stripped.endsWith('\\');
+    if (hasBackslash) {
+      stripped = stripped.slice(0, -1);
+    }
+
+    const indentMatch = stripped.match(/^([\t ]*)/);
+    const indent = indentMatch ? indentMatch[1] : '';
+    const trailingMatch = stripped.match(/([\t ]+)$/);
+    const trailingWs = trailingMatch ? trailingMatch[1] : '';
+    const content = stripped.slice(indent.length, stripped.length - trailingWs.length);
+
+    return { indent, content, trailingWs, hasBackslash, isBlank: false };
+  });
+
+  const contentSegments = segments.filter(s => !s.isBlank);
+
+  const splitWords = (s: string): string[] => s.match(/\S+/g) || [];
+
+  const originalWords = splitWords(contentSegments.map(s => s.content).join(''));
+  const newWords = splitWords(decodedValue);
+
+  // Map content segments to word ranges.
+  const segmentWordRanges: [number, number][] = [];
+  let wordIdx = 0;
+  for (const seg of contentSegments) {
+    const segWords = splitWords(seg.content);
+    const start = wordIdx;
+    wordIdx += segWords.length;
+    segmentWordRanges.push([start, wordIdx]);
+  }
+
+  // Redistribute new words across content segments.
+  const newContents: string[] = [];
+  for (let i = 0; i < contentSegments.length; i++) {
+    const [origStart, origEnd] = segmentWordRanges[i];
+    const origCount = origEnd - origStart;
+    const segNewWords =
+      i === contentSegments.length - 1
+        ? newWords.slice(origStart)
+        : newWords.slice(origStart, origStart + origCount);
+    newContents.push(segNewWords.join(' '));
+  }
+
+  // Reassemble: walk all segments (including blanks), replacing content in non-blank ones.
+  let contentIdx = 0;
+  const rebuiltLines: string[] = [];
+  for (const seg of segments) {
+    if (seg.isBlank) {
+      rebuiltLines.push('');
+    } else {
+      const newContent = newContents[contentIdx];
+      let trailing = seg.trailingWs;
+      if (newContent.length > 0 && /\s$/.test(newContent)) {
+        trailing = '';
+      }
+      const backslash = seg.hasBackslash ? '\\' : '';
+      rebuiltLines.push(`${seg.indent}${newContent}${trailing}${backslash}`);
+      contentIdx++;
+    }
+  }
+
+  if (hasClosingIndent) {
+    return `${delimiter}${newlineChar}${rebuiltLines.join(newlineChar)}${newlineChar}${closingIndent}${delimiter}`;
+  }
+  return `${delimiter}${newlineChar}${rebuiltLines.join(newlineChar)}${delimiter}`;
+}
+
+/**
  * Generates a new String node, preserving multiline format if existingRaw is provided.
  *
  * @param value - The string value.
@@ -350,24 +466,19 @@ export function generateString(value: string, existingRaw?: string): String {
       const bodyStart = delimiter.length + newlineChar.length;
       const bodyEnd = existingRaw.length - delimiter.length;
       const existingBody = existingRaw.slice(bodyStart, bodyEnd);
-      const lastNewlineIdx = existingBody.lastIndexOf(newlineChar);
 
-      let preserved = false;
-      if (lastNewlineIdx >= 0 && !escaped.includes(newlineChar)) {
-        const closingIndent = existingBody.slice(lastNewlineIdx + newlineChar.length);
-        const contentArea = existingBody.slice(0, lastNewlineIdx);
+      // Detect line-continuation backslashes in the body: any line ending with an odd
+      // number of backslashes is a continuation line.
+      const bodyLines = existingBody.split(newlineChar);
+      const hasContinuationLines = !escaped.includes(newlineChar) &&
+        bodyLines.some(line => {
+          const m = line.match(/(\\+)$/);
+          return m !== null && m[1].length % 2 === 1;
+        });
 
-        if (!contentArea.includes(newlineChar)) {
-          const trailingBackslashes = contentArea.match(/(\\+)$/);
-          if (trailingBackslashes && trailingBackslashes[1].length % 2 === 1) {
-            // Odd trailing backslashes = line-continuation; preserve the closing structure.
-            raw = `${delimiter}${newlineChar}${escaped}\\${newlineChar}${closingIndent}${delimiter}`;
-            preserved = true;
-          }
-        }
-      }
-
-      if (!preserved) {
+      if (hasContinuationLines) {
+        raw = rebuildLeadingNewlineContinuation(existingRaw, escaped, value, delimiter, newlineChar);
+      } else {
         raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
       }
     } else {
