@@ -15,7 +15,10 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [22.x, 24.x]
+        include:
+          - node-version: 22.x
+          - node-version: 24.x
+            benchmark: true
 
     steps:
     - name: Checkout
@@ -60,13 +63,15 @@ jobs:
       run: pnpm run specs
 
     - name: Benchmark (CI samples)
+      if: matrix.benchmark
       run: pnpm run benchmark:ci
 
     - name: Check Performance
+      if: matrix.benchmark
       run: node benchmark/check-performance.mjs
 
     - name: Write Benchmark Summary
-      if: always()
+      if: always() && matrix.benchmark
       run: |
         if [ -f benchmark-parse.md ]; then
           echo "## Parse Benchmark" >> $GITHUB_STEP_SUMMARY
