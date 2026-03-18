@@ -1,6 +1,6 @@
 {
   "name": "@decimalturn/toml-patch",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "contributors": [
     "Tim Hall <tim.hall.engr@gmail.com>",
     "Martin Leduc <31558169+DecimalTurn@users.noreply.github.com>"
@@ -58,7 +58,7 @@
     "@types/dedent": "^0.7.2",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "benchmark": "^2",
     "dedent": "^1.5.3",
     "glob": "^13.0.0",
@@ -69,7 +69,7 @@
     "npm-run-all2": "^8.0.0",
     "oxlint": "^1.55.0",
     "rimraf": "^6.0.0",
-    "rollup": ">=4.0.0 <4.53.0 || >4.53.0",
+    "rollup": "^4.59.0",
     "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-filesize": "^10",
     "ts-jest": "^29",
@@ -80,7 +80,7 @@
     "overrides": {
       "tar": "^7.5.10",
       "@tootallnate/once": "^3.0.1",
-      "brace-expansion": "^2.0.2"
+      "brace-expansion": "^5.0.0"
     }
   },
   "prettier": {
