@@ -32,6 +32,15 @@ export function tableHadTrailingCommas(node: TreeNode): boolean {
   return lastItem.comma === true;
 }
 
+function allInlineTables(array: InlineArray): boolean {
+  const items = array.items;
+  if (items.length === 0) return false;
+  for (let i = 0; i < items.length; i++) {
+    if (!isInlineTable(items[i].item)) return false;
+  }
+  return true;
+}
+
 export function formatTopLevel(document: Document, format: TomlFormat): Document {
 
   // If inlineTableStart is 0, convert all top-level tables to inline tables
@@ -43,10 +52,7 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     if (!isKeyValue(item)) return false;
 
     const is_inline_table = isInlineTable(item.value);
-    const is_inline_array =
-      isInlineArray(item.value) &&
-      item.value.items.length > 0 &&
-      item.value.items.every(i => isInlineTable(i.item));
+    const is_inline_array = isInlineArray(item.value) && allInlineTables(item.value);
 
     // Only move to top level if the depth is less than inlineTableStart
     if (is_inline_table || is_inline_array) {
