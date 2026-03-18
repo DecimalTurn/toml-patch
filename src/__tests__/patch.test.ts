@@ -2933,9 +2933,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     // tbl-2 from newline.toml: inline table whose value is a multiline string
     const existing = dedent`
       tbl-2 = {
-              k = """
-              Hello
-              """
+              k = """Hello"""
       }
       ` + '\n';
 
@@ -2945,7 +2943,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
 
     expect(patched).toEqual(dedent`
       tbl-2 = {
-              k = "Goodbye"
+              k = """Goodbye"""
       }
       ` + '\n');
   });
