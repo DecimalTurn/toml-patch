@@ -82,6 +82,19 @@ jobs:
           today=$(date +%Y-%m-%d)
           sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${{ steps.next_version.outputs.version }}] - $today/" CHANGELOG.md
 
+      - name: Extract release notes from CHANGELOG
+        id: release_notes
+        run: |
+          version="${{ steps.next_version.outputs.version }}"
+          # Extract lines between the version header and the next ## header
+          # Trim surrounding blank lines and normalize changelog issue refs from ([#123]) to (#123).
+          awk "/^## \\[$version\\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \
+            | sed '/./,$!d' | sed -e :a -e '/^\s*$/{$d;N;ba}' \
+            | sed 's/(\[#\([0-9]\+\)\])/(#\1)/g' > release-notes.md
+          if [[ ! -s release-notes.md ]]; then
+            echo "(No changelog entries found for $version)" > release-notes.md
+          fi
+
       - name: Commit changes
         id: commit
         run: |
@@ -98,7 +111,7 @@ jobs:
         with:
           tag_name: ${{ steps.next_version.outputs.tag }}
           target_commitish: ${{ steps.commit.outputs.sha }}
-          generate_release_notes: true
+          body_path: release-notes.md
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
