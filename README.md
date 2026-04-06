@@ -65,7 +65,7 @@ toml-patch provides both a [functional API]((#functional-api)) for one-time oper
 
 For simple one-time operations, you can use the functional API:
 
-#### patch(*existing*, *updated*, *format?*)
+#### <a id="patch"></a>patch(*existing*, *updated*, *format?*)
 
 ```typescript
 function patch(
@@ -145,7 +145,7 @@ owner.name = "Tim"
 );
 ```
 
-#### parse(*value*)
+#### <a id="parse"></a>parse(*value*)
 
 ```typescript
 function parse(value: string): any
@@ -179,7 +179,7 @@ assert.deepStrictEqual(parsed, {
 });
 ```
 
-#### stringify(*value*, *format?*)
+#### <a id="stringify"></a>stringify(*value*, *format?*)
 
 ```typescript
 function stringify(
