@@ -3,6 +3,7 @@
 node_modules
 .DS_store
 toml-patch.code-workspace
+.vscode/settings.json
 
 *.tgz
 
@@ -12,3 +13,4 @@ toml-patch.code-workspace
 # Profile outputs
 *.cpuprofile
 benchmark-*.md
+
