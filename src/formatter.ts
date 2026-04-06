@@ -7,6 +7,7 @@ import {
   isInlineTable,
   isInlineArray,
   isKeyValue,
+  isTableArray,
   Document,
   TreeNode
 } from './ast';
@@ -107,7 +108,7 @@ function formatTableArray(key_value: KeyValue): TableArray[] {
  * 
  * @param table - The table whose end position should be updated
  */
-export function postInlineItemRemovalAdjustment(table: Table): void {
+export function postInlineItemRemovalAdjustment(table: Table | TableArray): void {
   if (table.items.length > 0) {
     const lastItem = table.items[table.items.length - 1];
     table.loc.end.line = lastItem.loc.end.line;
@@ -153,19 +154,15 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
       if (depth < format.inlineTableStart) {
         // Convert to a separate table
         const table = formatTable(item);
-        
-        // Remove the original inline table item
         remove(document, document, item);
-        
-        // Add the new table
         insert(document, document, table);
         
-        // Process this table for further nested inlines
         processTableForNestedInlines(table, additionalTables, format);
       }
     } else if (item.type === 'Table') {
-      // Process existing table for nested inline tables
       processTableForNestedInlines(item as Table, additionalTables, format);
+    } else if (isTableArray(item)) {
+      processTableForNestedInlines(item, additionalTables, format);
     }
   }
   
@@ -182,7 +179,7 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
  * Recursively processes a table for nested inline tables and extracts them as separate tables
  * when they are at a depth less than the inlineTableStart threshold.
  */
-function processTableForNestedInlines(table: Table, additionalTables: Table[], format: TomlFormat): void {
+function processTableForNestedInlines(table: Table | TableArray, additionalTables: Table[], format: TomlFormat): void {
   // Process from end to beginning to avoid index issues when removing items
   for (let i = table.items.length - 1; i >= 0; i--) {
     const item = table.items[i];
@@ -193,24 +190,17 @@ function processTableForNestedInlines(table: Table, additionalTables: Table[], f
       
       // Only convert to separate table if depth is less than inlineTableStart
       if (depth < (format.inlineTableStart ?? 1)) {
-        // Convert this inline table to a separate table section
         const separateTable = generateTable(nestedTableKey);
         
-        // Move all items from the inline table to the separate table
         for (const inlineItem of item.value.items) {
           insert(separateTable, separateTable, inlineItem.item);
         }
         
-        // Remove this item from the original table
         remove(table, table, item);
-        
-        // Update the parent table's end position after removal
         postInlineItemRemovalAdjustment(table);
         
-        // Add this table to be inserted into the document
         additionalTables.push(separateTable);
         
-        // Recursively process the new table for further nested inlines
         processTableForNestedInlines(separateTable, additionalTables, format);
       }
     }

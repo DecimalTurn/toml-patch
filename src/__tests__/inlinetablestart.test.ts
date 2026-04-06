@@ -3,7 +3,8 @@
  * tables should start being formatted as inline tables versus separate sections.
  */
 
-import { stringify } from '../index';
+import { stringify, parse } from '../index';
+import dedent from 'dedent';
 import patch from '../patch';
 import { calculateTableDepth } from '../formatter';
 
@@ -188,6 +189,100 @@ name = "test"
       expect(result).toContain('[root.level1.level2]');
       expect(result).toContain('[root.level1.level2.level3]');
       expect(result).toContain('value = "deep"');
+    });
+  });
+
+  describe('inline tables inside [[table_array]] sections', () => {
+    it('should expand inline table inside [[slides]] section with inlineTableStart = 2', () => {
+      const jsObject = {
+        slides: [
+          {
+            MultipleChoice: {
+              title: "What is this bird species?",
+              time_limit: 30000,
+              points_awarded: 1000
+            }
+          }
+        ]
+      };
+
+      const result = stringify(jsObject, { inlineTableStart: 2 });
+
+      expect(result).toEqual(dedent`
+        [[slides]]
+
+        [slides.MultipleChoice]
+        title = "What is this bird species?"
+        time_limit = 30000
+        points_awarded = 1000
+        ` + '\n'
+      );
+    });
+
+    it('should demonstrate different behavior with inlineTableStart = 0, 1, 2, and 3 for the reported issue', () => {
+      const input = dedent`
+        title = "Birds and Boba for CPW 2026"
+
+        [[slides]]
+        MultipleChoice = { title = "What is this bird species?", media = { Image = { Url = { alt = "", url = "21617416afc593a8e621c30d152b1b0b0486201a.jpg" } } }, introduce_question = 5000, time_limit = 30000, points_awarded = 1000, answers = [ { content = { Text = "Common Grackle" }, correct = true }, { content = { Text = "American Crow" }, correct = false }, { content = { Text = "Common Raven" }, correct = false }, { content = { Text = "Cooper's Hawk" }, correct = false } ] }
+        `;
+
+      const parsed = parse(input);
+
+      // inlineTableStart = 0: Everything inline, [[slides]] collapses to an inline array
+      const result0 = stringify(parsed, { inlineTableStart: 0 });
+      expect(result0).toEqual(dedent`
+        title = "Birds and Boba for CPW 2026"
+        slides = [ { MultipleChoice = { title = "What is this bird species?", media = { Image = { Url = { alt = "", url = "21617416afc593a8e621c30d152b1b0b0486201a.jpg" } } }, introduce_question = 5000, time_limit = 30000, points_awarded = 1000, answers = [ { content = { Text = "Common Grackle" }, correct = true }, { content = { Text = "American Crow" }, correct = false }, { content = { Text = "Common Raven" }, correct = false }, { content = { Text = "Cooper's Hawk" }, correct = false } ] } } ]
+        ` + '\n'
+      );
+
+      // inlineTableStart = 1: [[slides]] as table array section, MultipleChoice stays inline
+      const result1 = stringify(parsed, { inlineTableStart: 1 });
+      expect(result1).toEqual(dedent`
+        title = "Birds and Boba for CPW 2026"
+
+        [[slides]]
+        MultipleChoice = { title = "What is this bird species?", media = { Image = { Url = { alt = "", url = "21617416afc593a8e621c30d152b1b0b0486201a.jpg" } } }, introduce_question = 5000, time_limit = 30000, points_awarded = 1000, answers = [ { content = { Text = "Common Grackle" }, correct = true }, { content = { Text = "American Crow" }, correct = false }, { content = { Text = "Common Raven" }, correct = false }, { content = { Text = "Cooper's Hawk" }, correct = false } ] }
+        ` + '\n'
+      );
+
+      // inlineTableStart = 2: [[slides]] and [slides.MultipleChoice] as sections, deeper nesting stays inline
+      const result2 = stringify(parsed, { inlineTableStart: 2 });
+      expect(result2).toEqual(dedent`
+        title = "Birds and Boba for CPW 2026"
+
+        [[slides]]
+
+        [slides.MultipleChoice]
+        title = "What is this bird species?"
+        media = { Image = { Url = { alt = "", url = "21617416afc593a8e621c30d152b1b0b0486201a.jpg" } } }
+        introduce_question = 5000
+        time_limit = 30000
+        points_awarded = 1000
+        answers = [ { content = { Text = "Common Grackle" }, correct = true }, { content = { Text = "American Crow" }, correct = false }, { content = { Text = "Common Raven" }, correct = false }, { content = { Text = "Cooper's Hawk" }, correct = false } ]
+        ` + '\n'
+      );
+
+      // inlineTableStart = 3: [[slides]], [slides.MultipleChoice] and [slides.MultipleChoice.media] as sections
+      const result3 = stringify(parsed, { inlineTableStart: 3 });
+      expect(result3).toEqual(dedent`
+        title = "Birds and Boba for CPW 2026"
+
+        [[slides]]
+
+        [slides.MultipleChoice]
+        title = "What is this bird species?"
+
+        introduce_question = 5000
+        time_limit = 30000
+        points_awarded = 1000
+        answers = [ { content = { Text = "Common Grackle" }, correct = true }, { content = { Text = "American Crow" }, correct = false }, { content = { Text = "Common Raven" }, correct = false }, { content = { Text = "Cooper's Hawk" }, correct = false } ]
+
+        [slides.MultipleChoice.media]
+        Image = { Url = { alt = "", url = "21617416afc593a8e621c30d152b1b0b0486201a.jpg" } }
+        ` + '\n'
+      );
     });
   });
 });
