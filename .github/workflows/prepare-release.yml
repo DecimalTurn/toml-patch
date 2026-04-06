@@ -19,6 +19,10 @@ permissions:
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next_version.outputs.tag }}
+      sha: ${{ steps.commit.outputs.sha }}
+      release_url: ${{ steps.create_draft_release.outputs.url }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -89,6 +93,7 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Create Draft Release
+        id: create_draft_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.next_version.outputs.tag }}
@@ -97,3 +102,17 @@ jobs:
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  report:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add release link to summary
+        run: |
+          release_url="${{ needs.prepare-release.outputs.release_url }}"
+          {
+            echo "## Release prepared"
+            echo ""
+            echo "- Tag: \`${{ needs.prepare-release.outputs.tag }}\`"
+            echo "- Draft release: [$release_url]($release_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
