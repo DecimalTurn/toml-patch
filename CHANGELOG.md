@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-04-06
+
 ### Fixed
 - Patching: Support patching multiline inline tables.
 - Respect `inlineTableStart` inside Table Arrays (ie. Array of Tables)
