@@ -3338,6 +3338,56 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
+  test('should remove a key from an inline table when its value is set to undefined', () => {
+    const existing = dedent`
+      count = { a = 1, b = 2, c = 3 }
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.count.b = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      count = { a = 1, c = 3 }
+      ` + '\n');
+  });
+
+  test('should remove an entire table section when set to undefined', () => {
+    const existing = dedent`
+      [owner]
+      name = "Tom"
+      org = "GitHub"
+
+      [database]
+      server = "localhost"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner = undefined;
+
+    expect(patch(existing, obj)).toEqual('\n' + dedent`
+      [database]
+      server = "localhost"
+      ` + '\n');
+  });
+
+  test('should leave an empty table header when its only key is set to undefined', () => {
+    const existing = dedent`
+      title = "hello"
+
+      [owner]
+      name = "Tom"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner.name = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "hello"
+
+      [owner]
+      ` + '\n');
+  });
+
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
       ports = [ 8001, 8002, 8003 ]
