@@ -43,8 +43,9 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
 
 function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue> {
   for (const key of Object.keys(object)) {
-    if (object[key] === undefined) continue;
-    const value = toJSON(object[key]);
+    const rawValue = object[key];
+    if (rawValue === undefined) continue;
+    const value = toJSON(rawValue);
     if (value === undefined) continue;
     yield generateKeyValue([key], walkValue(value, format));
   }
