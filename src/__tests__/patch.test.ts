@@ -3302,3 +3302,315 @@ describe('TOML v1.1 multiline inline tables - fixture (multiline-inline-table.to
       ` + '\n');
   });
 });
+
+describe('undefined handling in patch', () => {
+  test('should remove a key from a table when its value is set to undefined', () => {
+    const existing = dedent`
+      [owner]
+      name = "Tom Preston-Werner"
+      organization = "GitHub"
+      bio = "Developer"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner.organization = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [owner]
+      name = "Tom Preston-Werner"
+      bio = "Developer"
+      ` + '\n');
+  });
+
+  test('should remove a top-level key when its value is set to undefined', () => {
+    const existing = dedent`
+      title = "TOML Example"
+      debug = true
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.debug = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "TOML Example"
+      version = "1.0.0"
+      ` + '\n');
+  });
+
+  test('should remove a key from an inline table when its value is set to undefined', () => {
+    const existing = dedent`
+      count = { a = 1, b = 2, c = 3 }
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.count.b = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      count = { a = 1, c = 3 }
+      ` + '\n');
+  });
+
+  test('should remove an entire table section when set to undefined', () => {
+    const existing = dedent`
+      [owner]
+      name = "Tom"
+      org = "GitHub"
+
+      [database]
+      server = "localhost"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner = undefined;
+
+    expect(patch(existing, obj)).toEqual('\n' + dedent`
+      [database]
+      server = "localhost"
+      ` + '\n');
+  });
+
+  test('should leave an empty table header when its only key is set to undefined', () => {
+    const existing = dedent`
+      title = "hello"
+
+      [owner]
+      name = "Tom"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner.name = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "hello"
+
+      [owner]
+      ` + '\n');
+  });
+
+  test('should throw when patching with undefined inside an array', () => {
+    const existing = dedent`
+      ports = [ 8001, 8002, 8003 ]
+      ` + '\n';
+
+    expect(() => patch(existing, { ports: [8001, undefined, 8003] })).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should not throw when an array contains objects with undefined keys', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      color = "red"
+
+      [[products]]
+      name = "Nail"
+      color = "gray"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products[0].color = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [[products]]
+      name = "Hammer"
+
+      [[products]]
+      name = "Nail"
+      color = "gray"
+      ` + '\n');
+  });
+
+  // Removing a key from an inline table (object) inside an inline array (e.g. deleting a property
+  // directly without undefined). This is the minimal repro for the bug that was
+  // previously triggered via undefined: the parent at path ["items", 0] was an
+  // InlineItem wrapping an InlineTable, and patch.ts wasn't unwrapping that case.
+  test('should remove a key from an object inside an inline array', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", color = "red" }, { name = "Nail", color = "gray" } ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.items[0].color;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [ { name = "Hammer" }, { name = "Nail", color = "gray" } ]
+      ` + '\n');
+  });
+
+  // Deeper nesting: inline array → inline tables → inline array → inline tables.
+  // Removing a key from an inline table at depth 4.
+  test('should remove a key from a deeply nested inline table (array → objects → array → objects)', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", tags = [ { key = "material", value = "steel" }, { key = "color", value = "red" } ] }, { name = "Nail", tags = [ { key = "color", value = "gray" } ] } ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.items[0].tags[0].value;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [ { name = "Hammer", tags = [ { key = "material" }, { key = "color", value = "red" } ] }, { name = "Nail", tags = [ { key = "color", value = "gray" } ] } ]
+      ` + '\n');
+  });
+
+  // Same deep nesting but with TOML v1.1 multiline inline arrays and tables.
+  test('should remove a key from a deeply nested inline table with multiline formatting (TOML v1.1)', () => {
+    const existing = dedent`
+      items = [
+        {
+          name = "Hammer",
+          tags = [
+            { key = "material", value = "steel" },
+            { key = "color", value = "red" }
+          ]
+        },
+        {
+          name = "Nail",
+          tags = [
+            { key = "color", value = "gray" }
+          ]
+        }
+      ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.items[0].tags[0].value;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [
+        {
+          name = "Hammer",
+          tags = [
+            { key = "material" },
+            { key = "color", value = "red" }
+          ]
+        },
+        {
+          name = "Nail",
+          tags = [
+            { key = "color", value = "gray" }
+          ]
+        }
+      ]
+      ` + '\n');
+  });
+
+  // An inline array of objects where one object has an undefined key should now
+  // work correctly after the InlineItem-wrapping-InlineTable fix.
+  test('should silently drop an undefined key from an object inside an inline array', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", color = "red" }, { name = "Nail", color = "gray" } ]
+      ` + '\n';
+
+    expect(patch(existing, { items: [{ name: 'Hammer', color: undefined }, { name: 'Nail', color: 'gray' }] })).toEqual(dedent`
+      items = [ { name = "Hammer" }, { name = "Nail", color = "gray" } ]
+      ` + '\n');
+  });
+
+  test('should throw when patching with undefined inside an array in an inline table', () => {
+    const existing = dedent`
+      config = { ports = [ 8001, 8002, 8003 ] }
+      ` + '\n';
+
+    expect(() => patch(existing, { config: { ports: [8001, undefined, 8003] } })).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should throw when patching with undefined inside an array in a regular table', () => {
+    const existing = dedent`
+      [database]
+      ports = [ 8001, 8002, 8003 ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.database.ports = [8001, undefined, 8003];
+
+    expect(() => patch(existing, obj)).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should handle move-like scenario: remove key from one table, add to another', () => {
+    const existing = dedent`
+      [alpha]
+      color = "red"
+      name = "Alpha"
+
+      [beta]
+      name = "Beta"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.alpha.color = undefined;
+    obj.beta.color = 'red';
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [alpha]
+      name = "Alpha"
+
+      [beta]
+      name = "Beta"
+      color = "red"
+      ` + '\n');
+  });
+
+  // A table array element is technically "inside a JS array", but it
+  // represents a TOML [[table-array]] entry rather than an inline array element.
+  // The library currently throws in this case (same as inline arrays). The
+  // The current way to remove a table array element is via splice().
+  test('should throw when a table array element is set to undefined (use splice to remove instead)', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products[1] = undefined;
+
+    expect(() => patch(existing, obj)).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  // This is just to illustrate the intended way to remove a table array element, 
+  // since setting to undefined is not supported. 
+  test('should remove a table array element via splice', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products.splice(1, 1);
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n');
+  });
+});

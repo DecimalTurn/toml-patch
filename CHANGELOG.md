@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Stringifying: `undefined` values in objects are now silently ignored, matching `JSON.stringify` behavior ([#148](https://github.com/DecimalTurn/toml-patch/pull/148)).
+- Patching: Setting a key to `undefined` now correctly removes it, including in nested tables and inline tables ([#148](https://github.com/DecimalTurn/toml-patch/pull/148)).
+- Patching: Deleting a key from an inline table nested inside an inline array (e.g. `items = [{ name = "x", color = "y" }]`) now works correctly ([#148](https://github.com/DecimalTurn/toml-patch/pull/148)).
+
 ## [1.0.6] - 2026-04-06
 
 ### Fixed
-- Patching: Support patching multiline inline tables.
-- Respect `inlineTableStart` inside Table Arrays (ie. Array of Tables)
+- Patching: Support patching multiline inline tables ([#127](https://github.com/DecimalTurn/toml-patch/pull/127)).
+- Styling: Respect `inlineTableStart` inside Table Arrays (ie. Array of Tables) ([#144](https://github.com/DecimalTurn/toml-patch/pull/144)).
 
 ## [1.0.5] - 2026-03-17
 

@@ -87,8 +87,12 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
   // Therefore, we create a modified format for generating the updated document used for diffing.
   const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
   const updated_document = parseJS(updated, diffing_fmt);
-  
-  const changes = reorder(diff(existing_js, updated));
+
+  // Diff against the JS representation rather than
+  // the raw `updated` value, so that any undefined keys (which parseJS already
+  // stripped) are consistently absent from both sides of the diff. 
+  const updated_js = toJS(updated_document.items);
+  const changes = reorder(diff(existing_js, updated_js));
 
   if (changes.length === 0) {
     return {
@@ -407,6 +411,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // inner InlineTable so `remove` receives a node type that `hasItems` accepts.
         if (isInlineItem(parent) && isKeyValue((parent as InlineItem).item)) {
           parent = ((parent as InlineItem).item as KeyValue).value;
+        }
+        // When the parent is an InlineItem wrapping an InlineTable (an object inside an inline
+        // array, e.g. `items = [{ name = "x", color = "y" }]`), unwrap to the InlineTable so
+        // `remove` receives a node type that `hasItems` accepts.
+        if (isInlineItem(parent) && isInlineTable((parent as InlineItem).item)) {
+          parent = (parent as InlineItem).item;
         }
         // The logical (JS-object) parent may differ from the AST parent.
         // For example, [server.tls] lives in document.items, not [server].items.

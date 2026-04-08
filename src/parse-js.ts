@@ -43,13 +43,20 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
 
 function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue> {
   for (const key of Object.keys(object)) {
-    yield generateKeyValue([key], walkValue(object[key], format));
+    const rawValue = object[key];
+    if (rawValue === undefined) continue;
+    const value = toJSON(rawValue);
+    if (value === undefined) continue;
+    yield generateKeyValue([key], walkValue(value, format));
   }
 }
 
 function walkValue(value: any, format: TomlFormat): Value {
-  if (value == null) {
-    throw new Error('"null" and "undefined" values are not supported');
+  if (value === null) {
+    throw new Error('"null" values are not supported');
+  }
+  if (value === undefined) {
+    throw new Error('"undefined" values are not supported inside arrays');
   }
 
   if (isString(value)) {
