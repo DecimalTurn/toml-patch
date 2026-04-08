@@ -3302,3 +3302,73 @@ describe('TOML v1.1 multiline inline tables - fixture (multiline-inline-table.to
       ` + '\n');
   });
 });
+
+describe('undefined handling in patch', () => {
+  test('should remove a key from a table when its value is set to undefined', () => {
+    const existing = dedent`
+      [owner]
+      name = "Tom Preston-Werner"
+      organization = "GitHub"
+      bio = "Developer"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner.organization = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [owner]
+      name = "Tom Preston-Werner"
+      bio = "Developer"
+      ` + '\n');
+  });
+
+  test('should remove a top-level key when its value is set to undefined', () => {
+    const existing = dedent`
+      title = "TOML Example"
+      debug = true
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.debug = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "TOML Example"
+      version = "1.0.0"
+      ` + '\n');
+  });
+
+  test('should throw when patching with undefined inside an array', () => {
+    const existing = dedent`
+      ports = [ 8001, 8002, 8003 ]
+      ` + '\n';
+
+    expect(() => patch(existing, { ports: [8001, undefined, 8003] })).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should handle move-like scenario: remove key from one table, add to another', () => {
+    const existing = dedent`
+      [alpha]
+      color = "red"
+      name = "Alpha"
+
+      [beta]
+      name = "Beta"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.alpha.color = undefined;
+    obj.beta.color = 'red';
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [alpha]
+      name = "Alpha"
+
+      [beta]
+      name = "Beta"
+      color = "red"
+      ` + '\n');
+  });
+});
