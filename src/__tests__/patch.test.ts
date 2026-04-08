@@ -3398,6 +3398,30 @@ describe('undefined handling in patch', () => {
     );
   });
 
+  test('should throw when patching with undefined inside an array in an inline table', () => {
+    const existing = dedent`
+      config = { ports = [ 8001, 8002, 8003 ] }
+      ` + '\n';
+
+    expect(() => patch(existing, { config: { ports: [8001, undefined, 8003] } })).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should throw when patching with undefined inside an array in a regular table', () => {
+    const existing = dedent`
+      [database]
+      ports = [ 8001, 8002, 8003 ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.database.ports = [8001, undefined, 8003];
+
+    expect(() => patch(existing, obj)).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
   test('should handle move-like scenario: remove key from one table, add to another', () => {
     const existing = dedent`
       [alpha]
