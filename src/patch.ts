@@ -88,11 +88,9 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
   const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
   const updated_document = parseJS(updated, diffing_fmt);
 
-  // Diff against the JS representation of the generated document rather than
+  // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
-  // stripped) are consistently absent from both sides of the diff. Using the
-  // raw object would cause undefined-valued keys to produce spurious Edit ops
-  // that the patch engine cannot resolve.
+  // stripped) are consistently absent from both sides of the diff. 
   const updated_js = toJS(updated_document.items);
   const changes = reorder(diff(existing_js, updated_js));
 

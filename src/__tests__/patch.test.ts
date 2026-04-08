@@ -3422,10 +3422,10 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
-  // A table array element is technically "undefined inside a JS array", but it
+  // A table array element is technically "inside a JS array", but it
   // represents a TOML [[table-array]] entry rather than an inline array element.
   // The library currently throws in this case (same as inline arrays). The
-  // idiomatic way to remove a table array element is via splice().
+  // The current way to remove a table array element is via splice().
   test('should throw when a table array element is set to undefined (use splice to remove instead)', () => {
     const existing = dedent`
       [[products]]
@@ -3449,6 +3449,8 @@ describe('undefined handling in patch', () => {
     );
   });
 
+  // This is just to illustrate the intended way to remove a table array element, 
+  // since setting to undefined is not supported. 
   test('should remove a table array element via splice', () => {
     const existing = dedent`
       [[products]]
