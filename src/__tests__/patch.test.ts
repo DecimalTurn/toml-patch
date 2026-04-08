@@ -3439,6 +3439,63 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
+  // Deeper nesting: inline array → inline tables → inline array → inline tables.
+  // Removing a key from an inline table at depth 4.
+  test('should remove a key from a deeply nested inline table (array → objects → array → objects)', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", tags = [ { key = "material", value = "steel" }, { key = "color", value = "red" } ] }, { name = "Nail", tags = [ { key = "color", value = "gray" } ] } ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.items[0].tags[0].value;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [ { name = "Hammer", tags = [ { key = "material" }, { key = "color", value = "red" } ] }, { name = "Nail", tags = [ { key = "color", value = "gray" } ] } ]
+      ` + '\n');
+  });
+
+  // Same deep nesting but with TOML v1.1 multiline inline arrays and tables.
+  test('should remove a key from a deeply nested inline table with multiline formatting (TOML v1.1)', () => {
+    const existing = dedent`
+      items = [
+        {
+          name = "Hammer",
+          tags = [
+            { key = "material", value = "steel" },
+            { key = "color", value = "red" }
+          ]
+        },
+        {
+          name = "Nail",
+          tags = [
+            { key = "color", value = "gray" }
+          ]
+        }
+      ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.items[0].tags[0].value;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [
+        {
+          name = "Hammer",
+          tags = [
+            { key = "material" },
+            { key = "color", value = "red" }
+          ]
+        },
+        {
+          name = "Nail",
+          tags = [
+            { key = "color", value = "gray" }
+          ]
+        }
+      ]
+      ` + '\n');
+  });
+
   // An inline array of objects where one object has an undefined key should now
   // work correctly after the InlineItem-wrapping-InlineTable fix.
   test('should silently drop an undefined key from an object inside an inline array', () => {
