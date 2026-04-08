@@ -3398,6 +3398,41 @@ describe('undefined handling in patch', () => {
     );
   });
 
+  test('should not throw when an array contains objects with undefined keys', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      color = "red"
+
+      [[products]]
+      name = "Nail"
+      color = "gray"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products[0].color = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [[products]]
+      name = "Hammer"
+
+      [[products]]
+      name = "Nail"
+      color = "gray"
+      ` + '\n');
+  });
+
+  // An inline array of objects where one object has an undefined key currently
+  // throws in patch() due to a pre-existing bug in the patch engine when
+  // removing keys from objects nested inside inline arrays.
+  test('should throw when patching an inline array of objects where one has an undefined key (known limitation)', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", color = "red" }, { name = "Nail", color = "gray" } ]
+      ` + '\n';
+
+    expect(() => patch(existing, { items: [{ name: 'Hammer', color: undefined }, { name: 'Nail', color: 'gray' }] })).toThrow();
+  });
+
   test('should throw when patching with undefined inside an array in an inline table', () => {
     const existing = dedent`
       config = { ports = [ 8001, 8002, 8003 ] }
