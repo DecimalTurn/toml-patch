@@ -300,6 +300,14 @@ describe('undefined handling', () => {
       ` + '\n');
   });
 
+  test('should ignore a key whose toJSON() returns undefined', () => {
+    const result = toTOML(parseJS({ a: 'hello', b: { toJSON: () => undefined }, c: 42 }).items, TomlFormat.default());
+    expect(result).toEqual(dedent`
+      a = "hello"
+      c = 42
+      ` + '\n');
+  });
+
   test('should still throw for null values in top-level object', () => {
     expect(() => parseJS({ a: null })).toThrow('"null" values are not supported');
   });
