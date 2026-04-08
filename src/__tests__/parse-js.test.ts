@@ -275,3 +275,40 @@ test('simple JS Parsing with table', () => {
 
   expect(serialized).toEqual(expectedOutput);
 });
+
+describe('undefined handling', () => {
+  test('should ignore undefined values in top-level object', () => {
+    const result = toTOML(parseJS({ a: 'hello', b: undefined, c: 42 }).items, TomlFormat.default());
+    expect(result).toEqual(dedent`
+      a = "hello"
+      c = 42
+      ` + '\n');
+  });
+
+  test('should ignore undefined values in table', () => {
+    const result = toTOML(parseJS({ owner: { name: 'Alice', nickname: undefined } }).items, TomlFormat.default());
+    expect(result).toEqual(dedent`
+      [owner]
+      name = "Alice"
+      ` + '\n');
+  });
+
+  test('should treat object with only undefined values as empty table', () => {
+    const result = toTOML(parseJS({ a: { b: undefined } }).items, TomlFormat.default());
+    expect(result).toEqual(dedent`
+      [a]
+      ` + '\n');
+  });
+
+  test('should still throw for null values in top-level object', () => {
+    expect(() => parseJS({ a: null })).toThrow('"null" values are not supported');
+  });
+
+  test('should still throw for undefined values inside an array', () => {
+    expect(() => parseJS({ a: [1, undefined, 3] })).toThrow('"undefined" values are not supported inside arrays');
+  });
+
+  test('should still throw for null values inside an array', () => {
+    expect(() => parseJS({ a: [1, null, 3] })).toThrow('"null" values are not supported');
+  });
+});
