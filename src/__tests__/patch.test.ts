@@ -3421,4 +3421,60 @@ describe('undefined handling in patch', () => {
       color = "red"
       ` + '\n');
   });
+
+  // A table array element is technically "undefined inside a JS array", but it
+  // represents a TOML [[table-array]] entry rather than an inline array element.
+  // The library currently throws in this case (same as inline arrays). The
+  // idiomatic way to remove a table array element is via splice().
+  test('should throw when a table array element is set to undefined (use splice to remove instead)', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products[1] = undefined;
+
+    expect(() => patch(existing, obj)).toThrow(
+      '"undefined" values are not supported inside arrays'
+    );
+  });
+
+  test('should remove a table array element via splice', () => {
+    const existing = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.products.splice(1, 1);
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Screwdriver"
+      sku = 123456
+      ` + '\n');
+  });
 });
