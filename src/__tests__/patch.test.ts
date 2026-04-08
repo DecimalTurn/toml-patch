@@ -3422,15 +3422,33 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
-  // An inline array of objects where one object has an undefined key currently
-  // throws in patch() due to a pre-existing bug in the patch engine when
-  // removing keys from objects nested inside inline arrays.
-  test('should throw when patching an inline array of objects where one has an undefined key (known limitation)', () => {
+  // Removing a key from an inline table (object) inside an inline array (e.g. deleting a property
+  // directly without undefined). This is the minimal repro for the bug that was
+  // previously triggered via undefined: the parent at path ["items", 0] was an
+  // InlineItem wrapping an InlineTable, and patch.ts wasn't unwrapping that case.
+  test('should remove a key from an object inside an inline array', () => {
     const existing = dedent`
       items = [ { name = "Hammer", color = "red" }, { name = "Nail", color = "gray" } ]
       ` + '\n';
 
-    expect(() => patch(existing, { items: [{ name: 'Hammer', color: undefined }, { name: 'Nail', color: 'gray' }] })).toThrow();
+    const obj = parse(existing);
+    delete obj.items[0].color;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [ { name = "Hammer" }, { name = "Nail", color = "gray" } ]
+      ` + '\n');
+  });
+
+  // An inline array of objects where one object has an undefined key should now
+  // work correctly after the InlineItem-wrapping-InlineTable fix.
+  test('should silently drop an undefined key from an object inside an inline array', () => {
+    const existing = dedent`
+      items = [ { name = "Hammer", color = "red" }, { name = "Nail", color = "gray" } ]
+      ` + '\n';
+
+    expect(patch(existing, { items: [{ name: 'Hammer', color: undefined }, { name: 'Nail', color: 'gray' }] })).toEqual(dedent`
+      items = [ { name = "Hammer" }, { name = "Nail", color = "gray" } ]
+      ` + '\n');
   });
 
   test('should throw when patching with undefined inside an array in an inline table', () => {
