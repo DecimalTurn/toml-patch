@@ -3,30 +3,25 @@ import parseJS from './parse-js';
 import toTOML from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
-import { validateUtf8 } from './validate-utf8';
 
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
  *
- * When raw bytes (Uint8Array / Buffer) are provided, a single-pass UTF-8
- * validation is performed before decoding, so invalid byte sequences such
- * as truncated multi-byte characters or surrogate code points are rejected
- * with a clear error instead of being silently replaced.
+ * When raw bytes (Uint8Array / Buffer) are provided, they are decoded with
+ * the WHATWG TextDecoder in fatal mode, which rejects any invalid UTF-8
+ * byte sequences before parsing begins. This matches the TOML spec requirement
+ * that "A TOML file must be a valid UTF-8 encoded Unicode document."
  *
- * The function converts TOML syntax to its JavaScript equivalent in two
- * steps: parse the TOML into an AST, then convert the AST to JS.
+ * The string path has zero overhead — the bytes path incurs one TextDecoder
+ * decode (which also produces the string needed for parsing).
  *
  * @param value - TOML source as a string or raw UTF-8 bytes
  * @returns The parsed JavaScript object
  */
 export function parse(value: string | Uint8Array): any {
-  let str: string;
-  if (typeof value === 'string') {
-    str = value;
-  } else {
-    validateUtf8(value);
-    str = new TextDecoder().decode(value);
-  }
+  const str = typeof value === 'string'
+    ? value
+    : new TextDecoder('utf-8', { fatal: true }).decode(value);
   return toJS(parseTOML(str), str);
 }
 
