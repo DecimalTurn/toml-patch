@@ -94,6 +94,25 @@ jobs:
           if [[ ! -s release-notes.md ]]; then
             echo "(No changelog entries found for $version)" > release-notes.md
           fi
+          tag="v$version"
+          prev_tag=$(git tag --sort=-version:refname | head -1)
+          if [[ -n "$prev_tag" ]]; then
+            echo "" >> release-notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${prev_tag}...${tag}" >> release-notes.md
+          fi
+          npm_url="https://www.npmjs.com/package/@decimalturn/toml-patch/v/${version}"
+          jsr_url="https://jsr.io/@decimalturn/toml-patch@${version}"
+          npm_badge="![npm](https://img.shields.io/badge/npm-${tag}-blue?logo=npm&logoColor=white&labelColor=red)"
+          jsr_badge="![jsr](https://img.shields.io/badge/jsr-${tag}-blue?logo=jsr)"
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "| Registry | Link |"
+            echo "|----------|------|"
+            echo "| [${npm_badge}](${npm_url}) | ${npm_url} |"
+            echo "| [${jsr_badge}](${jsr_url}) | ${jsr_url} |"
+          } >> release-notes.md
 
       - name: Commit changes
         id: commit
@@ -123,9 +142,10 @@ jobs:
       - name: Add release link to summary
         run: |
           release_url="${{ needs.prepare-release.outputs.release_url }}"
+          tag="${{ needs.prepare-release.outputs.tag }}"
           {
             echo "## Release prepared"
             echo ""
-            echo "- Tag: \`${{ needs.prepare-release.outputs.tag }}\`"
-            echo "- Draft release: [$release_url]($release_url)"
+            echo "- Tag: \`${tag}\`"
+            echo "- Draft release: [${release_url}](${release_url})"
           } >> "$GITHUB_STEP_SUMMARY"
