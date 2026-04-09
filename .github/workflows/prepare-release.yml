@@ -12,6 +12,7 @@ on:
           - major
           - minor
           - patch
+          - no-bump
 
 permissions:
   contents: write
@@ -49,21 +50,27 @@ jobs:
       - name: Calculate next version
         id: next_version
         run: |
-          IFS='.' read -r major minor patch <<< "${{ steps.current_version.outputs.version }}"
-          case "${{ github.event.inputs.version_bump }}" in
-            major)
-              ((major+=1)); minor=0; patch=0;;
-            minor)
-              ((minor+=1)); patch=0;;
-            patch)
-              ((patch+=1));;
-          esac
-          new_version="$major.$minor.$patch"
-          echo "Next version: $new_version"
+          if [[ "${{ github.event.inputs.version_bump }}" == "no-bump" ]]; then
+            new_version="${{ steps.current_version.outputs.version }}"
+            echo "No version bump selected."
+          else
+            IFS='.' read -r major minor patch <<< "${{ steps.current_version.outputs.version }}"
+            case "${{ github.event.inputs.version_bump }}" in
+              major)
+                ((major+=1)); minor=0; patch=0;;
+              minor)
+                ((minor+=1)); patch=0;;
+              patch)
+                ((patch+=1));;
+            esac
+            new_version="$major.$minor.$patch"
+            echo "Next version: $new_version"
+          fi
           echo "version=$new_version" >> $GITHUB_OUTPUT
           echo "tag=v$new_version" >> $GITHUB_OUTPUT
 
       - name: Update package.json and jsr.jsonc
+        if: github.event.inputs.version_bump != 'no-bump'
         run: |
           NEW_VERSION="${{ steps.next_version.outputs.version }}"
           
@@ -75,9 +82,11 @@ jobs:
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" jsr.jsonc
 
       - name: Update pnpm-lock.yaml
+        if: github.event.inputs.version_bump != 'no-bump'
         run: pnpm install --lockfile-only
 
       - name: Update CHANGELOG.md
+        if: github.event.inputs.version_bump != 'no-bump'
         run: |
           today=$(date +%Y-%m-%d)
           sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${{ steps.next_version.outputs.version }}] - $today/" CHANGELOG.md
@@ -117,11 +126,15 @@ jobs:
       - name: Commit changes
         id: commit
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add package.json jsr.jsonc pnpm-lock.yaml CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.next_version.outputs.version }}"
-          git push origin ${{ github.ref_name }}
+          if [[ "${{ github.event.inputs.version_bump }}" != "no-bump" ]]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git add package.json jsr.jsonc pnpm-lock.yaml CHANGELOG.md
+            git commit -m "chore: bump version to ${{ steps.next_version.outputs.version }}"
+            git push origin ${{ github.ref_name }}
+          else
+            echo "Skipping commit (no-bump selected)"
+          fi
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Create Draft Release
