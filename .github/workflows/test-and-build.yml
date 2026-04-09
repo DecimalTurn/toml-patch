@@ -59,6 +59,12 @@ jobs:
     - name: Test (browser)
       run: pnpm run test:browser
 
+    - name: Install Playwright browsers
+      run: pnpm run playwright:install
+
+    - name: Test (Playwright)
+      run: pnpm run test:playwright
+
     - name: Specs
       run: pnpm run specs
 
