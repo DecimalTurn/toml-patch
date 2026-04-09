@@ -14,3 +14,6 @@ toml-patch.code-workspace
 *.cpuprofile
 benchmark-*.md
 
+
+test-results/
+playwright-report/

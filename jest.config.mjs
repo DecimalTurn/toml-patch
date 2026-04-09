@@ -3,7 +3,7 @@
  */
 export default {
   testEnvironment: 'node',
-  testRegex: '/__tests__/.*\.mjs$',
+  testRegex: '/__tests__/.*\\.mjs$',
   testPathIgnorePatterns: ['<rootDir>/worktrees/'],
   transform: {},
   moduleNameMapper: {

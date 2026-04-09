@@ -38,7 +38,9 @@
     "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "jest --config jest.config.json",
     "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
-    "test:all": "pnpm run test && pnpm run test:js",
+    "test:playwright": "playwright test",
+    "playwright:install": "playwright install --with-deps chromium",
+    "test:all": "pnpm run test && pnpm run test:js && pnpm run test:playwright",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
@@ -53,6 +55,7 @@
   },
   "devDependencies": {
     "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.0.7",
+    "@playwright/test": "^1.59.1",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/dedent": "^0.7.2",
