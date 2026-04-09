@@ -2,6 +2,7 @@
   "testEnvironment": "node",
   "preset": "ts-jest",
   "testRegex": "/__tests__/(?!__js__).*\\.[jt]sx?$",
+  "testPathIgnorePatterns": ["<rootDir>/worktrees/"],
   "snapshotFormat": {
     "escapeString": true,
     "printBasicPrototype": true

@@ -35,9 +35,10 @@
     }
   },
   "scripts": {
-    "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
+    "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all test:browser specs",
     "test": "jest --config jest.config.json",
     "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
+    "test:browser": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.browser.mjs",
     "test:all": "pnpm run test && pnpm run test:js",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.cjs",
@@ -63,6 +64,7 @@
     "dedent": "^1.5.3",
     "glob": "^13.0.0",
     "jest": "^30.0.0",
+    "jest-environment-jsdom": "^30.3.0",
     "js-yaml": "^4.0.0",
     "mri": "^1",
     "nano-staged": "^1.0.0",
