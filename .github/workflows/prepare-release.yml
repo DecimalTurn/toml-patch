@@ -117,6 +117,8 @@ jobs:
             echo ""
             echo "---"
             echo ""
+            echo "### Version specific links"
+            echo ""
             echo "| Registry | Link |"
             echo "|----------|------|"
             echo "| [${npm_badge}](${npm_url}) | ${npm_url} |"
