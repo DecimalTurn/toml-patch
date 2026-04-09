@@ -13,14 +13,6 @@ const TOML_VERSION = '1.1.0';
 // Tests to skip temporarily - remove items from this list as they get fixed
 // Format: 'test-type/test-name' (e.g., 'table/redefine-03', 'key/newline-01')
 const SKIPPED_TESTS = [
-  // Encoding validation (UTF-8 - 7 tests)
-  'encoding/ideographic-space',
-  'encoding/bad-utf8-in-string',
-  'encoding/bad-utf8-in-string-literal',
-  'encoding/bad-utf8-in-multiline',
-  'encoding/bad-utf8-in-multiline-literal',
-  'encoding/bad-utf8-in-comment',
-  'encoding/bad-codepoint',
   
   // TOML 1.1.0 exclusions (features that became valid in 1.1.0)
   // See https://github.com/toml-lang/toml-test/blob/main/version.go
@@ -162,12 +154,30 @@ spec_test.forEach(([name, input_file, expected_file]) => {
   });
 });
 
+// Encoding tests that contain raw invalid UTF-8 bytes must be read as a Buffer
+// so the byte-level validator in parse() can reject them before JS decodes them.
+const ENCODING_TESTS = new Set([
+  'encoding/bad-utf8-in-string',
+  'encoding/bad-utf8-in-string-literal',
+  'encoding/bad-utf8-in-multiline',
+  'encoding/bad-utf8-in-multiline-literal',
+  'encoding/bad-utf8-in-comment',
+  'encoding/bad-codepoint',
+]);
+
 // Generate tests for toml-test invalid
 toml_invalid.forEach(([name, input_file]) => {
   const testFn = SKIPPED_TESTS.includes(name as string) ? test.skip : test;
   testFn(`toml-test invalid - ${name}`, async () => {
-    const input = await readFile(input_file, 'utf8');
-    expect(() => parse(input)).toThrow();
+    if (ENCODING_TESTS.has(name as string)) {
+      // Read as raw bytes so the UTF-8 validator can inspect the byte sequences
+      // before they are replaced by the JS string decoder.
+      const input = await readFile(input_file);
+      expect(() => parse(input)).toThrow();
+    } else {
+      const input = await readFile(input_file, 'utf8');
+      expect(() => parse(input)).toThrow();
+    }
   });
 });
 
