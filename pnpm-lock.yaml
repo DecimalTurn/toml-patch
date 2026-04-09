@@ -14,8 +14,8 @@ importers:
   .:
     devDependencies:
       '@decimalturn/toml-patch':
-        specifier: npm:@decimalturn/toml-patch@1.0.6
-        version: 1.0.6
+        specifier: npm:@decimalturn/toml-patch@1.0.7
+        version: 1.0.7
       '@rollup/plugin-terser':
         specifier: ^1.0.0
         version: 1.0.0(rollup@4.60.0)
@@ -254,8 +254,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@decimalturn/toml-patch@1.0.6':
-    resolution: {integrity: sha512-86uvMPEXYXVFo7ntyrmHr2gf5AGxkUH4qabWd1YiCthXI2kg9lzOPVSVBtpLQYK8vAts8uwNKT8kgVcH+woUTQ==}
+  '@decimalturn/toml-patch@1.0.7':
+    resolution: {integrity: sha512-a3xMyfNE+83XswWYXYrWvPcY3cCRxg0iSMzM87lJtPdQsQxKmowts9TxQL7FxvozpUy2oPAaobUsfbeKPQkv8g==}
 
   '@emnapi/core@1.9.0':
     resolution: {integrity: sha512-0DQ98G9ZQZOxfUcQn1waV2yS8aWdZ6kJMbYCJB3oUBecjWYO1fqJ+a1DRfPF3O5JEkwqwP1A9QEN/9mYm2Yd0w==}
@@ -2557,7 +2557,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@decimalturn/toml-patch@1.0.6': {}
+  '@decimalturn/toml-patch@1.0.7': {}
 
   '@emnapi/core@1.9.0':
     dependencies:
