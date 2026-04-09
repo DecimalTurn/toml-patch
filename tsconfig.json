@@ -2,7 +2,8 @@
   "compilerOptions": {
     "strict": true,
     "target": "es2015",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
+    "types": ["jest", "node"],
     "lib": ["es2019"],
     "esModuleInterop": true,
     "noEmit": true,
