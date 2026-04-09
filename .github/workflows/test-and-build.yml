@@ -53,14 +53,11 @@ jobs:
     - name: Build
       run: pnpm run build
 
-    - name: Test
-      run: pnpm run test:all
-
     - name: Install Playwright browsers
       run: pnpm run playwright:install
 
-    - name: Test (Playwright)
-      run: pnpm run test:playwright
+    - name: Test
+      run: pnpm run test:all
 
     - name: Specs
       run: pnpm run specs

@@ -40,7 +40,7 @@
     "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.mjs",
     "test:playwright": "playwright test",
     "playwright:install": "playwright install --with-deps chromium",
-    "test:all": "pnpm run test && pnpm run test:js",
+    "test:all": "pnpm run test && pnpm run test:js && pnpm run test:playwright",
     "typecheck": "tsc",
     "specs": "jest --config specs.config.cjs",
     "benchmark": "npm-run-all2 bench:*",
