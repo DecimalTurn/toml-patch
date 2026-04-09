@@ -6,7 +6,7 @@
 
 Patch, parse, and stringify [TOML](https://toml.io/en/) (v1.1.0) while preserving comments and formatting.
 
-This project started as a fork of the [original toml-patch](https://github.com/timhall/toml-patch) but has since evolved into a standalone project with significant improvements in reliability and features. We've added TOML v1.1 support, introduced new APIs like `TomlDocument` and `TomlFormat` classes, fixed numerous bugs through comprehensive testing with toml-test, and continue to actively maintain and improve the package.
+This project started as a fork of the [original toml-patch](https://github.com/timhall/toml-patch) but has since evolved into a standalone project with significant improvements in reliability and features. We've added TOML v1.1 support, introduced new APIs like `TomlDocument` and `TomlFormat` classes, fixed numerous bugs through increase in testing namely with [toml-test](https://github.com/toml-lang/toml-test).
 
 We hope that these improvements can be incorporated upstream one day if the original author returns, but until then, this project is the actively maintained version.
 
@@ -264,7 +264,7 @@ get toTomlString(): string
 ```
 
 - `toJsObject: any` - Returns the JavaScript object representation of the TOML document
-- `toTomlString: string` - Returns the TOML string representation (cached for performance)
+- `toTomlString: string` - Returns the current TOML string representation
 
 #### Methods
 
@@ -373,7 +373,7 @@ console.log(doc.toJsObject.server.port); // 3000
 
 ## Formatting
 
-The `TomlFormat` class provides comprehensive control over how TOML documents are formatted during stringification and patching operations. This class encapsulates all formatting preferences, making it easy to maintain consistent styling across your TOML documents.
+The `TomlFormat` class provides decent control over how TOML documents are formatted during stringification and patching operations. This class encapsulates all formatting preferences, making it easy to maintain consistent styling across your TOML documents.
 
 ### TomlFormat Class
 
