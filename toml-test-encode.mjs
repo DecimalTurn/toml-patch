@@ -76,5 +76,5 @@ process.stdin.on('data', (j) => json += j)
 process.stdin.on('end', () => {
 	const tagged = JSON.parse(json)
 	const obj = untagObject(tagged)
-	console.log(stringify(obj))
+	console.log(stringify(obj, { minimumDecimals: 1 }))
 })
