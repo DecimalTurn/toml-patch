@@ -2,6 +2,23 @@ import { Value, NodeType, TreeNode, AST, InlineTable, Table, TableArray, KeyValu
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
 
+function integerFromRaw(raw: string): number | bigint {
+  const compact = raw.replace(/_/g, '');
+  let normalized = compact;
+
+  if (/^[+-]?0x/i.test(compact) || /^[+-]?0o/i.test(compact) || /^[+-]?0b/i.test(compact)) {
+    const sign = compact[0] === '+' || compact[0] === '-' ? compact[0] : '';
+    const body = compact.slice(sign ? 1 : 0);
+    normalized = sign + body.toLowerCase();
+  }
+
+  const big = BigInt(normalized);
+  if (big >= BigInt(Number.MIN_SAFE_INTEGER) && big <= BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number(big);
+  }
+  return big;
+}
+
 /**
  * Recursively tracks all nested inline tables within an inline table.
  * This ensures that nested inline tables like { nest = {} } are also tracked as immutable.
@@ -204,7 +221,11 @@ export function toValue(node: Value): any {
       return node.value;
 
     case NodeType.String:
+      return node.value;
+
     case NodeType.Integer:
+      return integerFromRaw(node.raw);
+
     case NodeType.Float:
     case NodeType.Boolean:
       return node.value;

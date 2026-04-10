@@ -308,7 +308,7 @@ function endlocation (raw: string): Position {
  * @param value - The integer value.
  * @returns A new Integer node.
  */
-export function generateInteger(value: number): Integer {
+export function generateInteger(value: number | bigint): Integer {
   const raw = value.toString();
   return {
     type: NodeType.Integer,

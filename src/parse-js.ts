@@ -13,7 +13,7 @@ import {
 } from './generate';
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
-import { isObject, isString, isInteger, isFloat, isBoolean, isDate } from './utils';
+import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 /**
@@ -61,6 +61,8 @@ function walkValue(value: any, format: TomlFormat): Value {
 
   if (isString(value)) {
     return generateString(value);
+  } else if (isBigInt(value)) {
+    return generateInteger(value);
   } else if (isInteger(value)) {
     return generateInteger(value);
   } else if (isFloat(value)) {
