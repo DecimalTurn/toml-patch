@@ -44,6 +44,9 @@ function tagObject (obj) {
 		if (isNaN(obj)) obj = 'nan'
 		if (obj === Infinity) obj = 'inf'
 		if (obj === -Infinity) obj = '-inf'
+		if (typeof obj === 'number' && Number.isInteger(obj)) {
+			return { type: 'integer', value: obj.toString() }
+		}
 		return { type: 'float', value: obj.toString() }
 	}
 
