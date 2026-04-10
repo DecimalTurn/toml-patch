@@ -87,7 +87,7 @@ const chunks = []
 process.stdin.on('data', (chunk) => chunks.push(chunk))
 process.stdin.on('end', () => {
 	const bytes = Buffer.concat(chunks)
-	const parsed = parse(bytes, { integersAsBigInt: true })
+	const parsed = parse(bytes)
 	const tagged = tagObject(parsed)
 	console.log(JSON.stringify(tagged, null ,2))
 })

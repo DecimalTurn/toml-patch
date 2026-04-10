@@ -40,6 +40,7 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
 }
 
 export { default as patch } from './patch';
+export { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './parse-toml';
 
 /**
  * TomlFormat class for configuring TOML formatting options.
