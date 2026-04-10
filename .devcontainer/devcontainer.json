@@ -1,10 +1,14 @@
 {
   "name": "toml-patch",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "features": {
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "24"
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "postCreateCommand": "git submodule update --init --recursive && pnpm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
     }
   },
-  "postCreateCommand": "npm install -g pnpm && pnpm install"
+  "remoteUser": "node"
 }
