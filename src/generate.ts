@@ -132,8 +132,13 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   };
 }
 
+function quoteTomlString(value: string): string {
+  // JSON.stringify leaves U+007F as a raw character, but TOML requires it escaped.
+  return JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+}
+
 function keyValueToRaw(value: string[]): string {
-  return value.map(part => (IS_BARE_KEY.test(part) ? part : JSON.stringify(part))).join('.');
+  return value.map(part => (IS_BARE_KEY.test(part) ? part : quoteTomlString(part))).join('.');
 }
 
 export function generateKey(value: string[]): Key {
@@ -347,13 +352,13 @@ export function generateFloat(value: number, minimumDecimals: number = 1): Float
           : `${mantissa}${exponent}`;
       }
     } else {
-    const dotIndex = raw.indexOf('.');
-    if (dotIndex === -1) {
-      raw += '.' + '0'.repeat(Math.max(minimumDecimals, 1));
-    } else {
-      const currentDecimals = raw.length - dotIndex - 1;
-      if (currentDecimals < minimumDecimals) {
-        raw += '0'.repeat(minimumDecimals - currentDecimals);
+      const dotIndex = raw.indexOf('.');
+      if (dotIndex === -1) {
+        raw += '.' + '0'.repeat(Math.max(minimumDecimals, 1));
+      } else {
+        const currentDecimals = raw.length - dotIndex - 1;
+        if (currentDecimals < minimumDecimals) {
+          raw += '0'.repeat(minimumDecimals - currentDecimals);
         }
       }
     }
