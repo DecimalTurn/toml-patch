@@ -161,14 +161,16 @@ export function generateKey(value: string[]): Key {
  *   5. Reassemble with the original opening format, per-line whitespace, and backslash placement.
  *
  * @param existingRaw - The full raw TOML string including delimiters.
- * @param decodedValue - The new decoded (unescaped) string value.
+ * @param escaped - The new value already escaped for a basic multiline string (backslashes
+ *   doubled, control characters replaced with escape sequences). This is the content that
+ *   will be placed verbatim inside the rebuilt raw string.
  * @param delimiter - The multiline delimiter (must be `"""`).
  * @param newlineChar - The newline character to use ('\n' or '\r\n').
  * @returns The reconstructed raw TOML string.
  */
 function rebuildLineContinuation(
   existingRaw: string,
-  decodedValue: string,
+  escaped: string,
   delimiter: string,
   newlineChar: string
 ): string {
@@ -214,7 +216,13 @@ function rebuildLineContinuation(
     }
 
     let stripped = line;
-    const hasBackslash = stripped.endsWith('\\');
+    // Count trailing backslashes: an odd count means the last one is a line-continuation
+    // marker; an even count means they are all literal escaped backslashes.
+    let backslashCount = 0;
+    for (let i = stripped.length - 1; i >= 0 && stripped[i] === '\\'; i--) {
+      backslashCount++;
+    }
+    const hasBackslash = backslashCount % 2 === 1;
     if (hasBackslash) {
       stripped = stripped.slice(0, -1);
     }
@@ -265,7 +273,9 @@ function rebuildLineContinuation(
   // Greedily pack words into new content lines.
   // Always emit at least one word per line (even if it alone exceeds maxLength).
   // Add as many lines as needed — no longer constrained to the original line count.
-  const words = decodedValue.match(/\S+/g) ?? [];
+  // Use the escaped value so backslashes and special chars are already encoded and
+  // word lengths match the raw byte widths in the TOML file.
+  const words = escaped.match(/\S+/g) ?? [];
   const newContentLines: string[] = [];
   let wi = 0;
   while (wi < words.length) {
@@ -370,7 +380,7 @@ export function generateString(value: string, existingRaw?: string): String {
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      raw = rebuildLineContinuation(existingRaw, value, delimiter, newlineChar);
+      raw = rebuildLineContinuation(existingRaw, escaped, delimiter, newlineChar);
     } else if (hasLeadingNewline) {
       raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
     } else {

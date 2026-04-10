@@ -661,6 +661,33 @@ test('should preserve line-continuation in multiline basic strings - even bigger
 
 });
 
+test('should not treat even number of trailing backslashes as line-continuation', () => {
+  // A line ending with \\ is two literal backslashes, not a continuation.
+  // The segment parser must count trailing backslashes and only flag odd counts.
+  const existing =
+    '[cfg]\n' +
+    'path = """\\\n' +
+    '  C:\\\\Users\\\\Alice \\\n' +
+    '  is cool."""\n';
+
+  const value = parse(existing);
+  // \\ in raw TOML basic string = one literal backslash, so the decoded value is:
+  // "C:\Users\Alice is cool."
+  expect(value.cfg.path).toEqual('C:\\Users\\Alice is cool.');
+
+  value.cfg.path = 'C:\\Users\\Bob is cool.';
+  const patched = patch(existing, value);
+
+  // The double-backslash lines are literal backslashes (even count = not continuation),
+  // so the structure must be preserved with re-escaped backslashes.
+  expect(patched).toEqual(
+    '[cfg]\n' +
+    'path = """\\\n' +
+    '  C:\\\\Users\\\\Bob is \\\n' +
+    '  cool."""\n'
+  );
+});
+
 // Parameterized tests for both basic (""") and literal (''') multiline strings
 describe('multiline strings - both basic and literal', () => {
   test.each([
