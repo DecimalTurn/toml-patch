@@ -29,7 +29,7 @@
 
 // Script for https://github.com/toml-lang/toml-test
 
-import { TomlDate, parse } from './dist/index.js'
+import { parse, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
 
 function tagObject (obj) {
 	if (typeof obj === 'string') {
@@ -51,11 +51,24 @@ function tagObject (obj) {
 		return { type: 'integer', value: obj.toString() }
 	}
 
-	if (obj instanceof TomlDate) {
-		let type = obj.isDateTime() ? 'datetime' : obj.isDate() ? 'date' : 'time'
-		if (obj.isLocal()) type += '-local'
+	if (obj instanceof OffsetDateTime) {
+		return { type: 'datetime', value: obj.toISOString().replace(' ', 'T') }
+	}
 
-		return { type: type, value: obj.toISOString() }
+	if (obj instanceof LocalDateTime) {
+		return { type: 'datetime-local', value: obj.toISOString().replace(' ', 'T') }
+	}
+
+	if (obj instanceof LocalDate) {
+		return { type: 'date-local', value: obj.toISOString() }
+	}
+
+	if (obj instanceof LocalTime) {
+		return { type: 'time-local', value: obj.toISOString() }
+	}
+
+	if (obj instanceof Date) {
+		return { type: 'datetime', value: obj.toISOString() }
 	}
 
 	if (Array.isArray(obj)) {

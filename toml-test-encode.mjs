@@ -29,7 +29,7 @@
 
 // Script for https://github.com/toml-lang/toml-test
 
-import { TomlDate, stringify } from './dist/index.js'
+import { stringify, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
 
 function untagObject (obj) {
 	if (Array.isArray(obj)) return obj.map((o) => untagObject(o))
@@ -52,10 +52,13 @@ function untagObject (obj) {
 				if (obj.value === '-inf') return -Infinity
 				return Number(obj.value)
 			case 'datetime':
+				return new OffsetDateTime(obj.value)
 			case 'datetime-local':
+				return new LocalDateTime(obj.value, obj.value.includes(' '), obj.value)
 			case 'date-local':
+				return new LocalDate(obj.value)
 			case 'time-local':
-				return new TomlDate(obj.value)
+				return new LocalTime(obj.value, obj.value)
 		}
 
 		throw new Error('cannot untag object')
