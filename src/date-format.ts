@@ -11,7 +11,7 @@
 /** Extract UTC date/time parts as zero-padded strings. */
 function fmtParts(d: Date) {
   return {
-    year: String(d.getUTCFullYear()),
+    year: String(d.getUTCFullYear()).padStart(4, '0'),
     month: String(d.getUTCMonth() + 1).padStart(2, '0'),
     day: String(d.getUTCDate()).padStart(2, '0'),
     hours: String(d.getUTCHours()).padStart(2, '0'),
