@@ -8,6 +8,7 @@ export const DEFAULT_BRACKET_SPACING = true;
 export const DEFAULT_INLINE_TABLE_START = 1;
 export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
+export const DEFAULT_MINIMUM_DECIMALS = 0;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -258,6 +259,8 @@ export function validateFormatObject(format: any): any {
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     truncateZeroTimeInDates: isBool,
     useTabsForIndentation: isBool,
+    minimumDecimals: v => typeof v === 'number' && Number.isInteger(v) && v >= 0
+      ? null : `expected non-negative integer, got ${typeof v}`,
   };
 
   const validatedFormat: any = {};
@@ -315,6 +318,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
         validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
         validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
+        validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
       );
     }
   } else {
@@ -400,6 +404,19 @@ export class TomlFormat {
    */
   useTabsForIndentation?: boolean;
 
+  /**
+   * The minimum number of decimal places to use when serializing JS numbers as TOML floats.
+   * When greater than 0, plain JS integer values are serialized as TOML floats padded with
+   * zeros to reach the specified decimal count. BigInt values are always serialized as integers
+   * regardless of this setting.
+   *
+   * @example
+   * - 0: stringify({ x: 1, y: 1.5 })  →  x = 1 / y = 1.5   (default)
+   * - 1: stringify({ x: 1, y: 1.5 })  →  x = 1.0 / y = 1.5
+   * - 2: stringify({ x: 1, y: 1.5 })  →  x = 1.00 / y = 1.50
+   */
+  minimumDecimals?: number;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
@@ -411,7 +428,8 @@ export class TomlFormat {
     bracketSpacing?: boolean,
     inlineTableStart?: number,
     truncateZeroTimeInDates?: boolean,
-    useTabsForIndentation?: boolean
+    useTabsForIndentation?: boolean,
+    minimumDecimals?: number
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
@@ -421,6 +439,7 @@ export class TomlFormat {
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
+    this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
   }
 
   /**
@@ -499,6 +518,9 @@ export class TomlFormat {
     // That would imply checking if all dates have no time component in the TOML.
     // However, it's not because all dates have no time component that a new key-value can't be introduced where the time component corresponds to midnight.
     format.truncateZeroTimeInDates = DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
+
+    // minimumDecimals uses default value (0) — caller must set explicitly
+    format.minimumDecimals = DEFAULT_MINIMUM_DECIMALS;
     
     return format;
   }

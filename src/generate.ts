@@ -318,7 +318,7 @@ export function generateInteger(value: number | bigint): Integer {
   };
 }
 
-export function generateFloat(value: number): Float {
+export function generateFloat(value: number, minimumDecimals: number = 1): Float {
   let raw: string;
   
   if (value === Infinity) {
@@ -328,9 +328,35 @@ export function generateFloat(value: number): Float {
   } else if (Number.isNaN(value)) {
     raw = 'nan';
   } else if (Object.is(value, -0)) {
-    raw = '-0.0';
+    raw = '-0.' + '0'.repeat(Math.max(minimumDecimals, 1));
   } else {
     raw = value.toString();
+    const exponentIndex = raw.search(/[eE]/);
+
+    if (exponentIndex !== -1) {
+      const mantissa = raw.slice(0, exponentIndex);
+      const exponent = raw.slice(exponentIndex);
+      const dotIndex = mantissa.indexOf('.');
+
+      if (dotIndex === -1) {
+        raw = `${mantissa}.${'0'.repeat(Math.max(minimumDecimals, 1))}${exponent}`;
+      } else {
+        const currentDecimals = mantissa.length - dotIndex - 1;
+        raw = currentDecimals < minimumDecimals
+          ? `${mantissa}${'0'.repeat(minimumDecimals - currentDecimals)}${exponent}`
+          : `${mantissa}${exponent}`;
+      }
+    } else {
+    const dotIndex = raw.indexOf('.');
+    if (dotIndex === -1) {
+      raw += '.' + '0'.repeat(Math.max(minimumDecimals, 1));
+    } else {
+      const currentDecimals = raw.length - dotIndex - 1;
+      if (currentDecimals < minimumDecimals) {
+        raw += '0'.repeat(minimumDecimals - currentDecimals);
+        }
+      }
+    }
   }
 
   return {
