@@ -15,6 +15,12 @@ describe('TomlDocument', () => {
     expect(doc.toJsObject).toEqual(simpleObj);
   });
 
+  it('parses raw UTF-8 bytes to JS object', () => {
+    const bytes = new TextEncoder().encode(simpleToml);
+    const doc = new TomlDocument(bytes);
+    expect(doc.toJsObject).toEqual(simpleObj);
+  });
+
   it('returns the original TOML string', () => {
     const doc = new TomlDocument(simpleToml);
     expect(doc.toTomlString).toBe(simpleToml);
