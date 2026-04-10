@@ -1,8 +1,9 @@
 import { Value, NodeType, TreeNode, AST, InlineTable, Table, TableArray, KeyValue } from './ast';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
+import { IntegersAsBigInt } from './parse-options';
 
-function integerFromRaw(raw: string): number | bigint {
+function integerFromRaw(raw: string, mode: IntegersAsBigInt = 'asNeeded'): number | bigint {
   const compact = raw.replace(/_/g, '');
   let normalized = compact;
 
@@ -13,6 +14,13 @@ function integerFromRaw(raw: string): number | bigint {
   }
 
   const big = BigInt(normalized);
+  if (mode === true) {
+    return big;
+  }
+  if (mode === false) {
+    return Number(big);
+  }
+  // 'asNeeded': return number when safe, bigint otherwise
   if (big >= BigInt(Number.MIN_SAFE_INTEGER) && big <= BigInt(Number.MAX_SAFE_INTEGER)) {
     return Number(big);
   }
@@ -44,7 +52,7 @@ function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], i
  * @param input The original input string (used for error reporting).
  * @returns The JavaScript object representation of the AST.
  */
-export default function toJS(ast: AST, input: string = ''): any {
+export default function toJS(ast: AST, input: string = '', integersAsBigInt: IntegersAsBigInt = 'asNeeded'): any {
   const result = blank();
   const tables: Set<string> = new Set();
   const table_arrays: Set<string> = new Set();
@@ -141,7 +149,7 @@ export default function toJS(ast: AST, input: string = ''): any {
 
     let value;
     try {
-      value = toValue(node.value);
+      value = toValue(node.value, integersAsBigInt);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.value.loc.start, e.message);
@@ -160,7 +168,12 @@ export default function toJS(ast: AST, input: string = ''): any {
   }
 }
 
-export function toValue(node: Value): any {
+/**
+ * Converts a TOML AST value node to a JavaScript value.
+ * @param node The TOML AST value node.
+ * @returns The corresponding JavaScript value.
+ */
+export function toValue(node: Value, integersAsBigInt: IntegersAsBigInt = 'asNeeded'): any {
   switch (node.type) {
     case NodeType.InlineTable:
       const result = blank();
@@ -169,7 +182,7 @@ export function toValue(node: Value): any {
 
       node.items.forEach(({ item }) => {
         const key = item.key.value;
-        const value = toValue(item.value);
+        const value = toValue(item.value, integersAsBigInt);
 
         // Check for duplicate keys and conflicting key paths
         const full_key = joinKey(key);
@@ -212,7 +225,7 @@ export function toValue(node: Value): any {
       return result;
 
     case NodeType.InlineArray:
-      return node.items.map(item => toValue(item.item as Value));
+      return node.items.map(item => toValue(item.item as Value, integersAsBigInt));
 
     case NodeType.DateTime:
       // Preserve TOML date/time custom classes so format is retained when
@@ -224,7 +237,7 @@ export function toValue(node: Value): any {
       return node.value;
 
     case NodeType.Integer:
-      return integerFromRaw(node.raw);
+      return integerFromRaw(node.raw, integersAsBigInt);
 
     case NodeType.Float:
     case NodeType.Boolean:

@@ -3,6 +3,9 @@ import parseJS from './parse-js';
 import toTOML from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
+import type { ParseOptions } from './parse-options';
+
+export type { IntegersAsBigInt, ParseOptions } from './parse-options';
 
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
@@ -16,13 +19,14 @@ import { TomlFormat, resolveTomlFormat } from './toml-format';
  * decode (which also produces the string needed for parsing).
  *
  * @param value - TOML source as a string or raw UTF-8 bytes
+ * @param options - Optional parse options
  * @returns The parsed JavaScript object
  */
-export function parse(value: string | Uint8Array): any {
+export function parse(value: string | Uint8Array, options?: ParseOptions): any {
   const str = typeof value === 'string'
     ? value
     : new TextDecoder('utf-8', { fatal: true }).decode(value);
-  return toJS(parseTOML(str), str);
+  return toJS(parseTOML(str), str, options?.integersAsBigInt ?? 'asNeeded');
 }
 
 /**
