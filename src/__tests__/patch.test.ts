@@ -575,6 +575,92 @@ test('should preserve multiline string with only newlines', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should preserve line-continuation in multiline basic strings - Same length', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The swift brown fox \\\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+});
+
+test('should preserve line-continuation in multiline basic strings - Slightly smaller length causing small underflow', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The slow brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The slow brown fox jumps \\\n' +
+    '  over the lazy dog."""\n'
+  );
+});
+
+test('should preserve line-continuation in multiline basic strings - bigger length causing small overflow', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The superfast brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The superfast brown fox \\\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+});
+
+test('should preserve line-continuation in multiline basic strings - even bigger length causing big overflow', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' + // 19 chars
+    '  jumps over the lazy dog."""\n'; // 24 chars
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The superduperultrafast brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The superduperultrafast \\\n' +
+    '  brown fox jumps over the \\\n' +
+    '  lazy dog."""\n'
+  );
+
+});
+
 // Parameterized tests for both basic (""") and literal (''') multiline strings
 describe('multiline strings - both basic and literal', () => {
   test.each([

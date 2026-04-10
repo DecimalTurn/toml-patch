@@ -141,7 +141,9 @@ export function generateKey(value: string[]): Key {
 }
 
 /**
- * Rebuilds a multiline string that uses line ending backslash (line-continuation) formatting.
+ * Rebuilds a basic multiline string (`"""`) that uses line ending backslash (line-continuation)
+ * formatting. Literal multiline strings (`'''`) do not support line-continuation — backslashes
+ * there are always literal characters — so this function must only be called for `"""` strings.
  *
  * Handles all three opening formats:
  *   - `"""\<NL>content\<NL>indent"""`  (leading line-continuation)
@@ -152,20 +154,20 @@ export function generateKey(value: string[]): Key {
  *   1. Detect the opening format and where the body starts.
  *   2. Parse body lines into segments (indent, content, trailing whitespace, backslash flag),
  *      preserving blank lines.
- *   3. Split both the original decoded value and the new value into words.
- *   4. Redistribute new words across the same segment structure by mapping word positions.
+ *   3. Measure the max content length from continuation lines (those ending with \).
+ *      The final non-continuation tail line is excluded — it can naturally be longer.
+ *   4. Greedily distribute new words across content segments using that max as the line-width
+ *      limit. The last segment always receives all remaining words.
  *   5. Reassemble with the original opening format, per-line whitespace, and backslash placement.
  *
  * @param existingRaw - The full raw TOML string including delimiters.
- * @param escaped - The new value after escaping (for basic multiline strings).
  * @param decodedValue - The new decoded (unescaped) string value.
- * @param delimiter - The multiline delimiter ('"""' or "'''").
+ * @param delimiter - The multiline delimiter (must be `"""`).
  * @param newlineChar - The newline character to use ('\n' or '\r\n').
  * @returns The reconstructed raw TOML string.
  */
 function rebuildLineContinuation(
   existingRaw: string,
-  escaped: string,
   decodedValue: string,
   delimiter: string,
   newlineChar: string
@@ -228,54 +230,78 @@ function rebuildLineContinuation(
 
   const contentSegments = segments.filter(s => !s.isBlank);
 
-  const splitWords = (s: string): string[] => s.match(/\S+/g) || [];
+  // Measure max content width across all content lines (including the tail).
+  // Width = content + trailing whitespace, because the trailing space is part of the
+  // visible line before the line-continuation backslash.
+  const maxLength = Math.max(...contentSegments.map(s => s.content.length + s.trailingWs.length), 1);
 
-  const newWords = splitWords(decodedValue);
+  // Determine which segment prototype to use for extra lines beyond the original count.
+  const continuationSegs = contentSegments.filter(s => s.hasBackslash);
 
-  // Map content segments to word ranges: segmentWordRanges[i] = [startWordIdx, endWordIdx)
-  const segmentWordRanges: [number, number][] = [];
-  let wordIdx = 0;
-  for (const seg of contentSegments) {
-    const segWords = splitWords(seg.content);
-    const start = wordIdx;
-    wordIdx += segWords.length;
-    segmentWordRanges.push([start, wordIdx]);
-  }
+  // Prototypes for lines beyond the original segment count.
+  const defaultProto = { indent: '', trailingWs: '', hasBackslash: false, content: '', isBlank: false };
+  const contProto = continuationSegs[continuationSegs.length - 1]
+    ?? contentSegments[contentSegments.length - 1]
+    ?? defaultProto;
+  const tailProto = contentSegments[contentSegments.length - 1] ?? contProto;
 
-  // Redistribute new words across content segments using the same ranges.
-  const newContents: string[] = [];
-  for (let i = 0; i < contentSegments.length; i++) {
-    const [origStart, origEnd] = segmentWordRanges[i];
-    const origCount = origEnd - origStart;
-    const segNewWords =
-      i === contentSegments.length - 1
-        ? newWords.slice(origStart)
-        : newWords.slice(origStart, origStart + origCount);
-    newContents.push(segNewWords.join(' '));
-  }
-
-  // Trim trailing empty content entries (when new value has fewer words)
-  while (newContents.length > 1 && newContents[newContents.length - 1] === '') {
-    newContents.pop();
-  }
-
-  // Reassemble: walk segments, emitting up to the remaining content count.
-  const numContentToEmit = newContents.length;
-  let contentIdx = 0;
-  const rebuiltLines: string[] = [];
-  for (const seg of segments) {
-    if (contentIdx >= numContentToEmit) break;
-    if (seg.isBlank) {
-      rebuiltLines.push('');
-    } else {
-      const newContent = newContents[contentIdx];
-      let trailing = seg.trailingWs;
-      if (newContent.length > 0 && /\s$/.test(newContent)) {
-        trailing = '';
+  // Record blank groups between consecutive content segments.
+  // blankGroups[i] = number of blank lines between contentSegments[i] and [i+1].
+  const blankGroups: number[] = [];
+  {
+    let blanks = 0;
+    let ci = 0;
+    for (const seg of segments) {
+      if (seg.isBlank) {
+        blanks++;
+      } else {
+        if (ci > 0) blankGroups.push(blanks);
+        blanks = 0;
+        ci++;
       }
-      const backslash = seg.hasBackslash ? '\\' : '';
-      rebuiltLines.push(`${seg.indent}${newContent}${trailing}${backslash}`);
-      contentIdx++;
+    }
+  }
+
+  // Greedily pack words into new content lines.
+  // Always emit at least one word per line (even if it alone exceeds maxLength).
+  // Add as many lines as needed — no longer constrained to the original line count.
+  const words = decodedValue.match(/\S+/g) ?? [];
+  const newContentLines: string[] = [];
+  let wi = 0;
+  while (wi < words.length) {
+    let line = words[wi++]; // always take at least one word
+    while (wi < words.length && line.length + 1 + words[wi].length <= maxLength) {
+      line += ' ' + words[wi++];
+    }
+    newContentLines.push(line);
+  }
+  if (newContentLines.length === 0) newContentLines.push('');
+
+  // Reassemble lines, preserving per-line indentation from original segments where available,
+  // and inserting blank groups at their original inter-segment positions.
+  const rebuiltLines: string[] = [];
+  for (let i = 0; i < newContentLines.length; i++) {
+    const isLast = i === newContentLines.length - 1;
+    const origSeg = i < contentSegments.length ? contentSegments[i] : null;
+    const indent = origSeg ? origSeg.indent : (isLast ? tailProto.indent : contProto.indent);
+    const newContent = newContentLines[i];
+
+    let trailing: string;
+    if (isLast) {
+      // Tail: preserve original trailing whitespace (usually empty), unless content ends with ws
+      trailing = (origSeg ?? tailProto).trailingWs;
+      if (newContent.length > 0 && /\s$/.test(newContent)) trailing = '';
+    } else {
+      // Continuation: always a trailing space as word separator, unless content ends with ws
+      trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
+    }
+
+    const backslash = isLast ? ((origSeg ?? tailProto).hasBackslash ? '\\' : '') : '\\';
+    rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
+
+    // Emit blank lines that originally appeared after this content line index.
+    if (!isLast && i < blankGroups.length && blankGroups[i] > 0) {
+      for (let b = 0; b < blankGroups[i]; b++) rebuiltLines.push('');
     }
   }
 
@@ -333,7 +359,8 @@ export function generateString(value: string, existingRaw?: string): String {
     
     // Detect line-continuation backslashes anywhere in the multiline string body.
     // A line ending with an odd number of backslashes is a continuation line.
-    // Line-continuation is only meaningful in basic (""") strings, not literal (''').
+    // Literal (''') strings do not support line-continuation — backslashes are always literal
+    // characters there and never act as escape sequences.
     const innerContent = existingRaw.slice(delimiter.length, existingRaw.length - delimiter.length);
     const hasLineContinuation = !isLiteral && !escaped.includes(newlineChar) &&
       innerContent.split(newlineChar).some(line => {
@@ -343,7 +370,7 @@ export function generateString(value: string, existingRaw?: string): String {
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      raw = rebuildLineContinuation(existingRaw, escaped, value, delimiter, newlineChar);
+      raw = rebuildLineContinuation(existingRaw, value, delimiter, newlineChar);
     } else if (hasLeadingNewline) {
       raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
     } else {
