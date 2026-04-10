@@ -80,11 +80,11 @@ function tagObject (obj) {
 	return tagged
 }
 
-let toml = ''
-process.stdin.setEncoding('utf8')
-process.stdin.on('data', (t) => toml += t)
+const chunks = []
+process.stdin.on('data', (chunk) => chunks.push(chunk))
 process.stdin.on('end', () => {
-	const parsed = parse(toml, { integersAsBigInt: true })
+	const bytes = Buffer.concat(chunks)
+	const parsed = parse(bytes, { integersAsBigInt: true })
 	const tagged = tagObject(parsed)
 	console.log(JSON.stringify(tagged, null ,2))
 })
