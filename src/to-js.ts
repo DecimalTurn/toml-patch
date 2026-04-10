@@ -13,7 +13,16 @@ function integerFromRaw(raw: string, mode: IntegersAsBigInt = 'asNeeded'): numbe
     normalized = sign + body.toLowerCase();
   }
 
-  const big = BigInt(normalized);
+  let big: bigint | undefined;
+  try {
+    big = BigInt(normalized);
+  } catch {
+    // Some integer-valued JS numbers can be stringified in scientific notation
+    // (e.g. "5e+22"). BigInt cannot parse that syntax, so preserve behavior
+    // by coercing back to Number instead of throwing.
+    return Number(compact);
+  }
+
   if (mode === true) {
     return big;
   }
