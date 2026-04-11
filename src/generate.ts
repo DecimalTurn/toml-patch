@@ -211,8 +211,9 @@ function rebuildLineContinuation(
   }
 
   const segments: Segment[] = bodyLines.map(line => {
-    if (line.trim() === '') {
-      return { indent: '', content: '', trailingWs: '', hasBackslash: false, isBlank: true };
+    if (/^[\t ]*$/.test(line)) {
+      // Preserve the original whitespace-only line so it round-trips faithfully
+      return { indent: line, content: '', trailingWs: '', hasBackslash: false, isBlank: true };
     }
 
     let stripped = line;
@@ -254,17 +255,18 @@ function rebuildLineContinuation(
   const tailProto = contentSegments[contentSegments.length - 1] ?? contProto;
 
   // Record blank groups between consecutive content segments.
-  // blankGroups[i] = number of blank lines between contentSegments[i] and [i+1].
-  const blankGroups: number[] = [];
+  // blankGroups[i] = the original blank lines (preserving their content) between
+  // contentSegments[i] and [i+1].
+  const blankGroups: string[][] = [];
   {
-    let blanks = 0;
+    let blanks: string[] = [];
     let ci = 0;
     for (const seg of segments) {
       if (seg.isBlank) {
-        blanks++;
+        blanks.push(seg.indent);
       } else {
         if (ci > 0) blankGroups.push(blanks);
-        blanks = 0;
+        blanks = [];
         ci++;
       }
     }
@@ -334,8 +336,8 @@ function rebuildLineContinuation(
     rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
 
     // Emit blank lines that originally appeared after this content line index.
-    if (!isLast && i < blankGroups.length && blankGroups[i] > 0) {
-      for (let b = 0; b < blankGroups[i]; b++) rebuiltLines.push('');
+    if (!isLast && i < blankGroups.length && blankGroups[i].length > 0) {
+      for (const blankLine of blankGroups[i]) rebuiltLines.push(blankLine);
     }
   }
 

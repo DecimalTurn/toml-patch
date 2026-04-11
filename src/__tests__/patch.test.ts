@@ -688,6 +688,58 @@ test('should not treat even number of trailing backslashes as line-continuation'
   );
 });
 
+test('should preserve empty line between content lines in line-continuation multiline basic strings', () => {
+  // A blank line between continuation segments is consumed by TOML's line-continuation
+  // whitespace trimming, but the raw format should be preserved after patching.
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // Blank line is whitespace consumed by line-continuation, so decoded value has no gap
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // The empty line between the two content segments is preserved
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The swift brown fox \\\n' +
+    '\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+});
+
+test('should preserve whitespace-only blank line between content lines in line-continuation multiline basic strings', () => {
+  // A whitespace-only (e.g. "  ") line should also round-trip with its original spaces.
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  \n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // The whitespace-only blank line is preserved with its original spaces
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The swift brown fox \\\n' +
+    '  \n' +
+    '  jumps over the lazy dog."""\n'
+  );
+});
+
 test('should preserve multiple consecutive spaces between words in line-continuation multiline strings', () => {
   // Multiple spaces between words are preserved because the tokenizer splits on
   // space runs (/\S+| +/g) and appends the run as trailing WS before the backslash
