@@ -230,9 +230,10 @@ function rebuildLineContinuation(
 
     const indentMatch = stripped.match(/^([\t ]*)/);
     const indent = indentMatch ? indentMatch[1] : '';
-    const trailingMatch = stripped.match(/([\t ]+)$/);
+    const afterIndent = stripped.slice(indent.length);
+    const trailingMatch = afterIndent.match(/([\t ]+)$/);
     const trailingWs = trailingMatch ? trailingMatch[1] : '';
-    const content = stripped.slice(indent.length, stripped.length - trailingWs.length);
+    const content = afterIndent.slice(0, afterIndent.length - trailingWs.length);
 
     return { indent, content, trailingWs, hasBackslash, isBlank: false };
   });
@@ -324,15 +325,17 @@ function rebuildLineContinuation(
 
     let trailing: string;
     if (isLast) {
-      // Tail: preserve original trailing whitespace (usually empty), unless content ends with ws
-      trailing = (origSeg ?? tailProto).trailingWs;
+      // Tail: always use the tail prototype's trailing whitespace and backslash —
+      // when the value shrinks, origSeg may be a continuation segment whose properties
+      // (hasBackslash, trailingWs) are wrong for the closing line.
+      trailing = tailProto.trailingWs;
       if (newContent.length > 0 && /\s$/.test(newContent)) trailing = '';
     } else {
       // Continuation: always a trailing space as word separator, unless content ends with ws
       trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
     }
 
-    const backslash = isLast ? ((origSeg ?? tailProto).hasBackslash ? '\\' : '') : '\\';
+    const backslash = isLast ? (tailProto.hasBackslash ? '\\' : '') : '\\';
     rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
 
     // Emit blank lines that originally appeared after this content line index.
