@@ -335,7 +335,7 @@ function rebuildLineContinuation(
       trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
     }
 
-    const backslash = isLast ? (tailProto.hasBackslash ? '\\' : '') : '\\';
+    const backslash = isLast ? (tailProto.hasBackslash && tailProto.content !== '' ? '\\' : '') : '\\';
     rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
 
     // Emit blank lines that originally appeared after this content line index.
@@ -344,7 +344,12 @@ function rebuildLineContinuation(
     }
   }
 
-  if (hasClosingIndent) {
+  // When the tail prototype had no content, its backslash was purely structural (it only
+  // skipped whitespace before the closing delimiter). In that case close inline instead
+  // of preserving the closing-indent format.
+  const useClosingIndent = hasClosingIndent && !(tailProto.hasBackslash && tailProto.content === '');
+
+  if (useClosingIndent) {
     return `${openingPrefix}${rebuiltLines.join(newlineChar)}${newlineChar}${closingIndent}${delimiter}`;
   }
   return `${openingPrefix}${rebuiltLines.join(newlineChar)}${delimiter}`;
