@@ -166,14 +166,19 @@ export function generateString(value: string, existingRaw?: string): String {
     const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
     const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
                                ((existingRaw.startsWith("'''\n") || existingRaw.startsWith("'''\r\n")) && !isLiteral);
-    
+
+    // Normalize the new value's newlines to the document's line ending.
+    // Without this, supplying a value with bare '\n' into a CRLF document would
+    // produce mixed line endings in the output.
+    const normalizedValue = value.replace(/\r?\n/g, newlineChar);
+
     let escaped: string;
     if (isLiteral) {
       // Literal strings: no escaping needed (we already checked for ''' above)
-      escaped = value;
+      escaped = normalizedValue;
     } else {
       // Basic multiline strings: escape backslashes, control characters, and triple quotes
-      escaped = value
+      escaped = normalizedValue
         .replace(/\\/g, '\\\\')  // Escape backslashes first
         .replace(/\x08/g, '\\b') // Backspace (U+0008)
         .replace(/\f/g, '\\f')   // Form feed (U+000C)
@@ -189,11 +194,21 @@ export function generateString(value: string, existingRaw?: string): String {
     
     // Detect line-continuation backslashes anywhere in the multiline string body.
     // Line-continuation is only meaningful in basic (""") strings, not literal (''').
-    const hasLineContinuation = detectLineContinuation(existingRaw, escaped, newlineChar);
+    //
+    // When the new value contains literal newlines, they would normally block LC
+    // detection (LC can only represent a single logical line). However, in a basic
+    // multiline string `\n` is a valid escape sequence for a newline character, so
+    // we can encode the newlines as `\n` escapes and still preserve the LC layout.
+    // We try that variant first; if LC rebuilding succeeds, those `\n` escapes are
+    // baked into the raw output and the round-trip decodes them back to real newlines.
+    const lcEscaped = !isLiteral
+      ? escaped.replace(new RegExp(newlineChar.replace(/\r/g, '\\r'), 'g'), '\\n')
+      : escaped;
+    const hasLineContinuation = detectLineContinuation(existingRaw, lcEscaped, newlineChar);
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      const rebuilt = rebuildLineContinuation(existingRaw, escaped, newlineChar);
+      const rebuilt = rebuildLineContinuation(existingRaw, lcEscaped, newlineChar);
       if (rebuilt !== null) {
         raw = rebuilt;
       }

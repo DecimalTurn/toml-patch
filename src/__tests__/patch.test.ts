@@ -949,6 +949,144 @@ test('should handle patching line-continuation multiline string to all whitespac
   expect(parse(patched)).toEqual({ description: { text: '     ' } });
 });
 
+// Mixed line ending backslash + literal newline tests.
+// A multiline basic string may have some lines with a line ending backslash and other
+// lines without one. The lines that lack a backslash contribute a literal newline to
+// the decoded value. Since the decoded value therefore contains a '\n',
+// detectLineContinuation correctly returns false and the formatter falls back to a
+// regular multiline string — preserving content even though the structural formatting
+// is not preserved.
+
+test('should preserve line ending backslash by encoding newline as \\n for mixed LC/literal-newline source', () => {
+  // """\<NL> opening, middle line has backslash, last content line does NOT.
+  // The decoded value therefore contains a literal newline.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog\n' +
+    '  and this was just white space."""\n';
+
+  const value = parse(existing);
+  // Line ending backslash joins first two lines; third line starts after literal \n
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog\n  and this was just white space.');
+
+  value.description.text = 'Hello world\nand goodbye world';
+  const patched = patch(existing, value);
+
+  // Preserve the LC layout by encoding the newline as a \n escape in basic string content.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  Hello world\\nand goodbye world"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world');
+});
+
+test('should preserve line ending backslash when only opening line has continuation marker', () => {
+  // """\<NL> is immediately followed by content lines WITHOUT backslashes.
+  // Only the opening backslash trims the first newline; the rest are literal newlines.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // Opening backslash trims to first content line, then literal newline appears
+  expect(value.description.text).toEqual('The quick brown fox\n  jumps over the lazy dog.');
+
+  value.description.text = 'A swift brown fox\njumps high.';
+  const patched = patch(existing, value);
+
+  // Preserve the opening LC marker and encode the newline as \n in content.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  A swift brown fox\\njumps \\\n' +
+    '  high."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('A swift brown fox\njumps high.');
+});
+
+test('should preserve line ending backslash for """<NL> format regardless of leading whitespace in new value', () => {
+  // The opening is """<NL> (no backslash), so first content line's indent is part of the
+  // decoded value. newFirstIndent is derived from the new value's own leading whitespace,
+  // stripped before packing and reattached by reassembly — so any leading whitespace is
+  // supported without falling back.
+  const existing =
+    '[description]\n' +
+    'text = """\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('  The quick brown fox jumps over the lazy dog.');
+
+  // Same 2-space indent — LC format preserved
+  value.description.text = '  The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    '  The swift brown fox \\\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('  The swift brown fox jumps over the lazy dog.');
+});
+
+test('should preserve line ending backslash for """<NL> format when new value has different leading whitespace', () => {
+  // newFirstIndent is derived from the new value itself, so the first line's structural
+  // indent adapts to match the new value's leading whitespace.
+  const existing =
+    '[description]\n' +
+    'text = """\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('  The quick brown fox jumps over the lazy dog.');
+
+  // New value has no leading spaces — newFirstIndent = "", first line gets no indent
+  value.description.text = 'The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // LC format preserved, first indent removed to match the new value
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    'The swift brown fox \\\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
+});
+
+test('should preserve line ending backslash for """<NL> format when first segment has no indent', () => {
+  // Same structure as above, but the new value does NOT start with spaces AND the
+  // original first segment has no indent. rebuildLineContinuation preserves LC.
+  const existing =
+    '[description]\n' +
+    'text = """\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // LC format preserved — first segment has no indent, no leading-space issue
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    'The swift brown fox \\\n' +
+    'jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
+});
+
 test('should handle massive underflow from many segments to one word', () => {
   const existing =
     '[description]\n' +
@@ -2241,6 +2379,74 @@ test('should handle mixed line endings consistently', () => {
   }
   
   expect(countTrailingCRLF(patched)).toBe(2);
+});
+
+test('should normalize bare LF in new value to CRLF when document uses CRLF', () => {
+  // A CRLF document patched with a multiline value that uses bare '\n' must not
+  // produce mixed line endings in the output — the '\n' must be upgraded to '\r\n'.
+  const existing = '[description]\r\ntext = """\r\nFirst line\r\nSecond line\r\n"""\r\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('First line\r\nSecond line\r\n');
+
+  // New value supplied with bare LF (as a JS developer would naturally write)
+  value.description.text = 'Hello world\nand goodbye world\n';
+  const patched = patch(existing, value);
+
+  // Output must use CRLF throughout — no bare LF in the patched document
+  expect(patched).not.toContain('\r\r\n'); // no double-CR
+  expect(patched.split('\r\n').join('').includes('\n')).toBe(false); // no leftover bare LF
+  expect(patched).toEqual('[description]\r\ntext = """\r\nHello world\r\nand goodbye world\r\n"""\r\n');
+  expect(parse(patched).description.text).toEqual('Hello world\r\nand goodbye world\r\n');
+});
+
+test('should normalize CRLF in new value to LF when document uses LF', () => {
+  // A LF document patched with a value containing '\r\n' must normalize to bare '\n'.
+  const existing = '[description]\ntext = """\nFirst line\nSecond line\n"""\n';
+
+  const value = parse(existing);
+  value.description.text = 'Hello world\r\nand goodbye world\r\n';
+  const patched = patch(existing, value);
+
+  expect(patched).not.toContain('\r\n');
+  expect(patched).toEqual('[description]\ntext = """\nHello world\nand goodbye world\n"""\n');
+  expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world\n');
+});
+
+test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to CRLF', () => {
+  const existing = '[description]\r\ntext = """\r\nFirst line\r\n"""\r\n';
+
+  const value = parse(existing);
+  value.description.text = 'literal \\n and literal \\r\\n plus real\nline\r\nend';
+  const patched = patch(existing, value);
+
+  expect(patched).toContain('literal \\\\n and literal \\\\r\\\\n plus real');
+  expect(patched).toEqual(
+    '[description]\r\n' +
+    'text = """\r\n' +
+    'literal \\\\n and literal \\\\r\\\\n plus real\r\n' +
+    'line\r\n' +
+    'end"""\r\n'
+  );
+  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\r\nline\r\nend');
+});
+
+test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to LF', () => {
+  const existing = '[description]\ntext = """\nFirst line\n"""\n';
+
+  const value = parse(existing);
+  value.description.text = 'literal \\n and literal \\r\\n plus real\r\nline\nend';
+  const patched = patch(existing, value);
+
+  expect(patched).toContain('literal \\\\n and literal \\\\r\\\\n plus real');
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    'literal \\\\n and literal \\\\r\\\\n plus real\n' +
+    'line\n' +
+    'end"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\nline\nend');
 });
 
 test('should respect quoted keys when parsing', () => {

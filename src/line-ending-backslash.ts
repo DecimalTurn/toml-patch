@@ -167,18 +167,33 @@ export function rebuildLineContinuation(
   // Guard: line-continuation cannot faithfully represent values with leading or
   // mismatched trailing whitespace.
   //
-  // Leading spaces: after the opening `"""\`, a continuation trims all whitespace
-  // on the first content line — indent and content spaces are indistinguishable,
-  // so any leading spaces in the value would be silently consumed.
+  // Leading spaces in `"""\<NL>` format: each content line's indent is consumed by
+  // the previous line ending backslash, so indent and value-leading-spaces are
+  // indistinguishable — any leading space in the new value would be silently consumed.
   //
-  // Trailing spaces: the reassembly inherits `tailProto.trailingWs` from the
-  // original segment and places it between content and the closing `\` or `"""`.
-  // This whitespace becomes part of the decoded value, so if the new value's
-  // trailing space count differs from the original tail prototype, the content
-  // would be silently altered.
-  if (escaped.length > 0) {
-    if (escaped[0] === ' ') return null;
-    const trailingSpaces = escaped.length - escaped.trimEnd().length;
+  // First-segment indent in `"""<NL>` format: when the opening is `"""<NL>` (no
+  // backslash), the first content line's indent is NOT consumed by any line ending
+  // backslash — it is literally part of the decoded value. The reassembly emits
+  // `${newFirstIndent}${packedContent}` for the first line, where `newFirstIndent`
+  // is derived from the new value's own leading whitespace (not the original indent).
+  // This allows the value's leading whitespace to change freely while preserving
+  // the line ending backslash structure.
+  //
+  // Trailing spaces: the reassembly inherits `tailProto.trailingWs` from the original
+  // segment and places it between content and the closing `\` or `"""`. This whitespace
+  // becomes part of the decoded value, so if the pack-input's trailing space count
+  // differs, the content would be silently altered.
+  const isLeadingNewlineOpening = openingPrefix === `${delimiter}${newlineChar}`;
+  // In `"""<NL>` mode, derive the first-line indent from the value's own leading
+  // whitespace so packing sees only "content". In `"""\<NL>` mode there is no
+  // structural indent, so any leading space in the value must be rejected.
+  const newFirstIndent = isLeadingNewlineOpening && contentSegments.length > 0
+    ? escaped.match(/^[\t ]*/)?.[0] ?? ''
+    : '';
+  const packInput = escaped.slice(newFirstIndent.length);
+  if (packInput.length > 0) {
+    if (packInput[0] === ' ') return null;
+    const trailingSpaces = packInput.length - packInput.trimEnd().length;
     if (trailingSpaces !== tailProto.trailingWs.length) return null;
   }
 
@@ -207,9 +222,9 @@ export function rebuildLineContinuation(
   // line-continuation backslash (TOML preserves trailing WS before \).
   // Always emit at least one word per line (even if it alone exceeds maxLength).
   // Add as many lines as needed — no longer constrained to the original line count.
-  // Use the escaped value so backslashes and special chars are already encoded and
-  // token lengths match the raw byte widths in the TOML file.
-  const tokens = escaped.match(/\S+| +/g) ?? [];
+  // Use packInput (escaped value minus any structural indent prefix) so backslashes
+  // and special chars are already encoded and token lengths match the raw byte widths.
+  const tokens = packInput.match(/\S+| +/g) ?? [];
   const newContentLines: string[] = [];
   let ti = 0;
   while (ti < tokens.length) {
@@ -243,7 +258,12 @@ export function rebuildLineContinuation(
   for (let i = 0; i < newContentLines.length; i++) {
     const isLast = i === newContentLines.length - 1;
     const origSeg = i < contentSegments.length ? contentSegments[i] : null;
-    const indent = origSeg ? origSeg.indent : (isLast ? tailProto.indent : contProto.indent);
+    // In `"""<NL>` mode the first segment's indent is part of the decoded value, so
+    // we use the new value's own leading whitespace (newFirstIndent) for i === 0,
+    // letting the value's leading whitespace differ from the original freely.
+    const indent = origSeg
+      ? (isLeadingNewlineOpening && i === 0 ? newFirstIndent : origSeg.indent)
+      : (isLast ? tailProto.indent : contProto.indent);
     const newContent = newContentLines[i];
 
     let trailing: string;
