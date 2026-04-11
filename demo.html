@@ -194,6 +194,80 @@
     }
     .btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
 
+    /* ── Eval button ─────────────────────────── */
+    .eval-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      line-height: 1.4;
+    }
+    .eval-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ── Eval modal ───────────────────────────── */
+    .eval-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .eval-overlay.open { display: flex; }
+    .eval-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      width: min(640px, 90vw);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .eval-modal-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+    .eval-modal-hint {
+      color: var(--text-dim);
+      font-size: 0.82rem;
+    }
+    .eval-textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.55;
+      padding: 0.65rem 0.85rem;
+      resize: vertical;
+      min-height: 120px;
+      width: 100%;
+      outline: none;
+    }
+    .eval-textarea:focus { border-color: var(--accent); }
+    .eval-error {
+      color: var(--red);
+      font-size: 0.82rem;
+      font-family: var(--mono);
+      min-height: 1.2em;
+    }
+    .eval-modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+
     /* ── Error / Status ──────────────────────── */
     .status {
       margin-top: 0.75rem;
@@ -271,11 +345,11 @@
   <div class="tab-panel active" id="tab-parse">
     <div class="panel-grid">
       <div class="panel">
-        <div class="panel-header">Input <span class="lang">TOML</span></div>
+        <div class="panel-header"><span>Input <span class="lang">TOML</span></span><button class="eval-btn" onclick="openEvalModal('parse-input')" title="Set value from JS expression">{ }</button></div>
         <div id="parse-input" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header">Output <span class="lang">JSON</span></div>
+        <div class="panel-header"><span>Output <span class="lang">JSON</span></span><button class="eval-btn" onclick="copyEditor('parse-output', this)" title="Copy output">Copy</button></div>
         <div id="parse-output" class="cm-host"></div>
       </div>
     </div>
@@ -290,11 +364,11 @@
   <div class="tab-panel" id="tab-stringify">
     <div class="panel-grid">
       <div class="panel">
-        <div class="panel-header">Input <span class="lang">JSON</span></div>
+        <div class="panel-header"><span>Input <span class="lang">JSON</span></span><button class="eval-btn" onclick="openEvalModal('stringify-input')" title="Set value from JS expression">{ }</button></div>
         <div id="stringify-input" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header">Output <span class="lang">TOML</span></div>
+        <div class="panel-header"><span>Output <span class="lang">TOML</span></span><button class="eval-btn" onclick="copyEditor('stringify-output', this)" title="Copy output">Copy</button></div>
         <div id="stringify-output" class="cm-host"></div>
       </div>
     </div>
@@ -309,15 +383,15 @@
   <div class="tab-panel" id="tab-patch">
     <div class="panel-grid triple">
       <div class="panel">
-        <div class="panel-header">Existing Document <span class="lang">TOML</span></div>
+        <div class="panel-header"><span>Existing Document <span class="lang">TOML</span></span><button class="eval-btn" onclick="openEvalModal('patch-existing')" title="Set value from JS expression">{ }</button></div>
         <div id="patch-existing" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header">Updated Data <span class="lang">JSON</span></div>
+        <div class="panel-header"><span>Updated Data <span class="lang">JSON</span></span><button class="eval-btn" onclick="openEvalModal('patch-updated')" title="Set value from JS expression">{ }</button></div>
         <div id="patch-updated" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header">Patched Result <span class="lang">TOML</span></div>
+        <div class="panel-header"><span>Patched Result <span class="lang">TOML</span></span><button class="eval-btn" onclick="copyEditor('patch-output', this)" title="Copy output">Copy</button></div>
         <div id="patch-output" class="cm-host"></div>
       </div>
     </div>
@@ -352,12 +426,15 @@
 
 <footer>
   Built with <a href="https://github.com/DecimalTurn/toml-patch">@decimalturn/toml-patch</a>
-  · Loaded via <a href="https://unpkg.com/@decimalturn/toml-patch">unpkg</a>
+  · <!--Loaded via <a href="https://unpkg.com/@decimalturn/toml-patch">unpkg</a>-->
+  · Loaded from <a href="./dist/toml-patch.js">local build</a>
 </footer>
 
 <script type="module">
   // ── Load dependencies ────────────────────────────────
-  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';
+  // import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';
+  import * as TOML from './dist/toml-patch.js';
+
   import { EditorView, basicSetup } from 'https://esm.sh/codemirror';
   import { EditorState } from 'https://esm.sh/@codemirror/state';
   import { json } from 'https://esm.sh/@codemirror/lang-json';
@@ -594,8 +671,73 @@ text = """\\
     clearStatus('patch-status');
   };
 
+  // ── Eval Modal ────────────────────────────────────────
+  let _evalTargetId = null;
+
+  window.openEvalModal = function (editorId) {
+    _evalTargetId = editorId;
+    document.getElementById('eval-error').textContent = '';
+    document.getElementById('eval-overlay').classList.add('open');
+    document.getElementById('eval-textarea').focus();
+  };
+
+  window.closeEvalModal = function () {
+    document.getElementById('eval-overlay').classList.remove('open');
+    _evalTargetId = null;
+  };
+
+  window.applyEval = function () {
+    const expr = document.getElementById('eval-textarea').value;
+    const errEl = document.getElementById('eval-error');
+    errEl.textContent = '';
+    try {
+      // intentional eval: user-controlled expression in a local demo page
+      // eslint-disable-next-line no-eval
+      const result = eval(expr);
+      if (typeof result !== 'string') {
+        errEl.textContent = `Expected a string, got ${typeof result}`;
+        return;
+      }
+      setEditorValue(_evalTargetId, result);
+      closeEvalModal();
+    } catch (e) {
+      errEl.textContent = `Error: ${e.message}`;
+    }
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeEvalModal();
+  });
+
+  // ── Copy output ──────────────────────────────────────
+  window.copyEditor = function (editorId, btn) {
+    const text = getEditorValue(editorId);
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }).catch(() => {});
+  };
 
 </script>
+
+<!-- ── Eval Modal ─────────────────────────────────────── -->
+<div class="eval-overlay" id="eval-overlay" onclick="if(event.target===this)closeEvalModal()">
+  <div class="eval-modal">
+    <div class="eval-modal-title">JS Expression → Editor</div>
+    <p class="eval-modal-hint">Enter a JS expression that returns a string. Press <kbd>Ctrl+Enter</kbd> to apply.</p>
+    <textarea class="eval-textarea" id="eval-textarea"
+      placeholder="'[section]\nkey = &quot;value&quot;\n'"
+      spellcheck="false"
+      onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();applyEval();}"
+    ></textarea>
+    <div class="eval-error" id="eval-error"></div>
+    <div class="eval-modal-actions">
+      <button class="btn secondary" onclick="closeEvalModal()">Cancel</button>
+      <button class="btn" onclick="applyEval()">Apply</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
