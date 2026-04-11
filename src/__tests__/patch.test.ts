@@ -921,16 +921,18 @@ test('should handle patching line-continuation multiline string to all whitespac
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
-  // New value is only spaces — no word tokens
+  // New value is only spaces — cannot be represented in line-continuation format
+  // because line-continuation trims all whitespace. Falls back to regular multiline.
   value.description.text = '     ';
   const patched = patch(existing, value);
 
-  // No words to pack — results in empty content on the tail line
+  // Falls back to regular multiline format to preserve the whitespace value
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\' + '\n' +
-    '  """\n'
+    'text = """     """\n'
   );
+  // Verify round-trip: parsing the patched output should recover the whitespace value
+  expect(parse(patched)).toEqual({ description: { text: '     ' } });
 });
 
 test('should handle massive underflow from many segments to one word', () => {

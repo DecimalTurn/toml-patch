@@ -165,13 +165,15 @@ export function generateKey(value: string[]): Key {
  *   doubled, control characters replaced with escape sequences). This is the content that
  *   will be placed verbatim inside the rebuilt raw string.
  * @param newlineChar - The newline character to use ('\n' or '\r\n').
- * @returns The reconstructed raw TOML string.
+ * @returns The reconstructed raw TOML string, or `null` if the value cannot be represented
+ *   in line-continuation format (e.g. whitespace-only values that would be erased by
+ *   line-continuation trimming).
  */
 function rebuildLineContinuation(
   existingRaw: string,
   escaped: string,
   newlineChar: string
-): string {
+): string | null {
   // Line-continuation is only valid in basic multiline strings.
   const delimiter = '"""';
   // Determine the opening format and where the body starts
@@ -314,6 +316,12 @@ function rebuildLineContinuation(
   }
   if (newContentLines.length === 0) newContentLines.push('');
 
+  // If the escaped value had no word tokens (whitespace-only), line-continuation would
+  // erase it entirely. Signal the caller to fall back to a regular multiline format.
+  if (newContentLines.length === 1 && newContentLines[0] === '' && escaped.length > 0) {
+    return null;
+  }
+
   // Reassemble lines, preserving per-line indentation from original segments where available,
   // and inserting blank groups at their original inter-segment positions.
   const rebuiltLines: string[] = [];
@@ -419,10 +427,14 @@ export function generateString(value: string, existingRaw?: string): String {
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      raw = rebuildLineContinuation(existingRaw, escaped, newlineChar);
-    } else if (hasLeadingNewline) {
+      const rebuilt = rebuildLineContinuation(existingRaw, escaped, newlineChar);
+      if (rebuilt !== null) {
+        raw = rebuilt;
+      }
+    }
+    if (!raw && hasLeadingNewline) {
       raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
-    } else {
+    } else if (!raw) {
       raw = `${delimiter}${escaped}${delimiter}`;
     }
   } else {
