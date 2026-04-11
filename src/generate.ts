@@ -160,20 +160,20 @@ export function generateKey(value: string[]): Key {
  *      limit. The last segment always receives all remaining words.
  *   5. Reassemble with the original opening format, per-line whitespace, and backslash placement.
  *
- * @param existingRaw - The full raw TOML string including delimiters.
+ * @param existingRaw - The full raw TOML string including delimiters (`"""`).
  * @param escaped - The new value already escaped for a basic multiline string (backslashes
  *   doubled, control characters replaced with escape sequences). This is the content that
  *   will be placed verbatim inside the rebuilt raw string.
- * @param delimiter - The multiline delimiter (must be `"""`).
  * @param newlineChar - The newline character to use ('\n' or '\r\n').
  * @returns The reconstructed raw TOML string.
  */
 function rebuildLineContinuation(
   existingRaw: string,
   escaped: string,
-  delimiter: string,
   newlineChar: string
 ): string {
+  // Line-continuation is only valid in basic multiline strings.
+  const delimiter = '"""';
   // Determine the opening format and where the body starts
   let bodyStart: number;
   let openingPrefix: string;
@@ -419,7 +419,7 @@ export function generateString(value: string, existingRaw?: string): String {
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      raw = rebuildLineContinuation(existingRaw, escaped, delimiter, newlineChar);
+      raw = rebuildLineContinuation(existingRaw, escaped, newlineChar);
     } else if (hasLeadingNewline) {
       raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
     } else {
