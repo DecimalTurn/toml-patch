@@ -33,29 +33,25 @@ interface Segment {
  * never be treated as line-continuation markers — even when converting to a
  * basic string because the new value contains `'''`.
  *
- * The function also rejects cases where the new escaped value already contains
- * the newline character, because line-continuation is only meaningful when the
- * value is a single logical line split across multiple raw lines.
+ * The function only inspects `existingRaw` — it does not check the new value.
+ * Compatibility with the new value (e.g. newline handling) is determined inside
+ * `rebuildLineContinuation`.
  *
  * @param existingRaw - The full raw TOML string including delimiters.
- * @param escaped - The new value already escaped for a basic multiline string.
  * @param newlineChar - The newline character used in the document (`'\n'` or `'\r\n'`).
- * @returns `true` if the existing raw string uses line-continuation formatting
- *   and the new value is compatible with it.
+ * @returns `true` if the existing raw string uses line-continuation formatting.
  */
 export function detectLineContinuation(
   existingRaw: string,
-  escaped: string,
   newlineChar: string
 ): boolean {
   if (!existingRaw.startsWith('"""')) return false;
 
   const innerContent = existingRaw.slice(3, existingRaw.length - 3);
-  return !escaped.includes('\n') &&
-    innerContent.split(newlineChar).some(line => {
-      const m = line.match(/(\\+)$/);
-      return m !== null && m[1].length % 2 === 1;
-    });
+  return innerContent.split(newlineChar).some(line => {
+    const m = line.match(/(\\+)$/);
+    return m !== null && m[1].length % 2 === 1;
+  });
 }
 
 /**
@@ -72,14 +68,18 @@ export function detectLineContinuation(
  *   2. Parse body lines into segments (indent, content, trailing whitespace,
  *      backslash flag), preserving blank lines.
  *   3. Measure the max content length from content lines.
- *   4. Greedily distribute new words across content segments using that max as
- *      the line-width limit.
- *   5. Reassemble with the original opening format, per-line whitespace and
+ *   4. Detect "blank-line paragraph style": if the original uses blank lines to
+ *      separate paragraphs (non-backslash content line followed by a blank line),
+ *      split the new value on double-newlines and pack each paragraph separately,
+ *      rejoined by blank lines.
+ *   5. Otherwise, encode newlines as `\n` escape sequences and pack as a single group.
+ *   6. Reassemble with the original opening format, per-line whitespace and
  *      backslash placement.
  *
  * @param existingRaw - The full raw TOML string including delimiters (`"""`).
  * @param escaped - The new value already escaped for a basic multiline string
  *   (backslashes doubled, control characters replaced with escape sequences).
+ *   May contain real newline characters; this function handles their encoding.
  * @param newlineChar - The newline character to use (`'\n'` or `'\r\n'`).
  * @returns The reconstructed raw TOML string, or `null` if the value cannot be
  *   represented in line-continuation format (e.g. values with leading spaces or
@@ -164,39 +164,6 @@ export function rebuildLineContinuation(
     ?? defaultProto;
   const tailProto = contentSegments[contentSegments.length - 1] ?? contProto;
 
-  // Guard: line-continuation cannot faithfully represent values with leading or
-  // mismatched trailing whitespace.
-  //
-  // Leading spaces in `"""\<NL>` format: each content line's indent is consumed by
-  // the previous line ending backslash, so indent and value-leading-spaces are
-  // indistinguishable — any leading space in the new value would be silently consumed.
-  //
-  // First-segment indent in `"""<NL>` format: when the opening is `"""<NL>` (no
-  // backslash), the first content line's indent is NOT consumed by any line ending
-  // backslash — it is literally part of the decoded value. The reassembly emits
-  // `${newFirstIndent}${packedContent}` for the first line, where `newFirstIndent`
-  // is derived from the new value's own leading whitespace (not the original indent).
-  // This allows the value's leading whitespace to change freely while preserving
-  // the line ending backslash structure.
-  //
-  // Trailing spaces: the reassembly inherits `tailProto.trailingWs` from the original
-  // segment and places it between content and the closing `\` or `"""`. This whitespace
-  // becomes part of the decoded value, so if the pack-input's trailing space count
-  // differs, the content would be silently altered.
-  const isLeadingNewlineOpening = openingPrefix === `${delimiter}${newlineChar}`;
-  // In `"""<NL>` mode, derive the first-line indent from the value's own leading
-  // whitespace so packing sees only "content". In `"""\<NL>` mode there is no
-  // structural indent, so any leading space in the value must be rejected.
-  const newFirstIndent = isLeadingNewlineOpening && contentSegments.length > 0
-    ? escaped.match(/^[\t ]*/)?.[0] ?? ''
-    : '';
-  const packInput = escaped.slice(newFirstIndent.length);
-  if (packInput.length > 0) {
-    if (packInput[0] === ' ') return null;
-    const trailingSpaces = packInput.length - packInput.trimEnd().length;
-    if (trailingSpaces !== tailProto.trailingWs.length) return null;
-  }
-
   // Record blank groups between consecutive content segments.
   // blankGroups[i] = the original blank lines (preserving their content) between
   // contentSegments[i] and [i+1].
@@ -215,74 +182,168 @@ export function rebuildLineContinuation(
     }
   }
 
-  // Greedily pack content into new lines, preserving inter-word whitespace.
-  // Tokenize into alternating word and space-run chunks so multiple consecutive spaces
-  // are kept intact. Breaks can only occur at space-run boundaries; the space run at a
-  // break point is appended to the current line as trailing whitespace before the
-  // line-continuation backslash (TOML preserves trailing WS before \).
-  // Always emit at least one word per line (even if it alone exceeds maxLength).
-  // Add as many lines as needed — no longer constrained to the original line count.
-  // Use packInput (escaped value minus any structural indent prefix) so backslashes
-  // and special chars are already encoded and token lengths match the raw byte widths.
-  const tokens = packInput.match(/\S+| +/g) ?? [];
-  const newContentLines: string[] = [];
-  let ti = 0;
-  while (ti < tokens.length) {
-    let line = tokens[ti++]; // always take at least one word token
-    while (ti < tokens.length && tokens[ti][0] === ' ') {
-      const spaceTok = tokens[ti];
-      const nextWord = tokens[ti + 1];
-      if (!nextWord) {
-        // Trailing space with no following word — drop it
-        ti++;
-        break;
+  // Detect "blank-line paragraph style": at least one non-tail content segment without a
+  // backslash is followed by a blank line group. When the original uses this style, double
+  // newlines in the new value (\n\n) are reproduced as actual blank lines in the TOML source
+  // so the visual paragraph structure is preserved.
+  const isBlanklienParagraphStyle = contentSegments.some((seg, i) =>
+    !seg.hasBackslash &&
+    i < contentSegments.length - 1 &&
+    (blankGroups[i]?.length ?? 0) > 0
+  );
+
+  // Regex to match the document's newline character for replace calls.
+  const newlineRe = new RegExp(newlineChar.replace(/\r/g, '\\r'), 'g');
+
+  const isLeadingNewlineOpening = openingPrefix === `${delimiter}${newlineChar}`;
+  // In `"""<NL>` mode, derive the first-line indent from the value's own leading
+  // whitespace so packing sees only "content". In `"""\<NL>` mode there is no
+  // structural indent, so any leading space in the value must be rejected.
+  const newFirstIndent = isLeadingNewlineOpening && contentSegments.length > 0
+    ? escaped.match(/^[\t ]*/)?.[0] ?? ''
+    : '';
+
+  // Helper: greedy word-packer. Splits content at whitespace boundaries to honour
+  // maxLength, appending the whitespace run as trailing ws before the line-continuation.
+  const packContent = (input: string): string[] => {
+    const tokens = input.match(/\S+| +/g) ?? [];
+    const lines: string[] = [];
+    let ti = 0;
+    while (ti < tokens.length) {
+      let line = tokens[ti++]; // always take at least one word token
+      while (ti < tokens.length && tokens[ti][0] === ' ') {
+        const spaceTok = tokens[ti];
+        const nextWord = tokens[ti + 1];
+        if (!nextWord) {
+          // Trailing space with no following word — drop it
+          ti++;
+          break;
+        }
+        if (line.length + spaceTok.length + nextWord.length <= maxLength) {
+          line += spaceTok + nextWord;
+          ti += 2;
+        } else {
+          // Next word doesn't fit; append the space run so it becomes trailing
+          // whitespace before the line-continuation backslash (preserved by TOML).
+          line += spaceTok;
+          ti++;
+          break;
+        }
       }
-      if (line.length + spaceTok.length + nextWord.length <= maxLength) {
-        line += spaceTok + nextWord;
-        ti += 2;
-      } else {
-        // Next word doesn't fit; append the space run so it becomes trailing
-        // whitespace before the line-continuation backslash (preserved by TOML).
-        line += spaceTok;
-        ti++;
-        break;
+      lines.push(line);
+    }
+    if (lines.length === 0) lines.push('');
+    return lines;
+  };
+
+  // Flat list of packed content strings and a set tracking which indices are paragraph ends
+  // (last line of a non-last paragraph — no backslash, blank line follows).
+  const newContentLines: string[] = [];
+  const paraEndIndices = new Set<number>();
+  let isParagraphPath = false;
+
+  const paragraphSep = newlineChar + newlineChar;
+
+  if (isBlanklienParagraphStyle && escaped.includes(paragraphSep)) {
+    // ── Paragraph path ──────────────────────────────────────────────────────────
+    // Split on double-newlines; encode remaining single newlines as \n escapes;
+    // pack each paragraph independently; join with blank lines.
+    isParagraphPath = true;
+    const paragraphTexts = escaped.split(paragraphSep);
+
+    // Guard: first paragraph's content must not start with a space after stripping
+    // the structural first-line indent.
+    const firstParaInput = paragraphTexts[0].replace(newlineRe, '\\n').slice(newFirstIndent.length);
+    if (firstParaInput.length > 0 && firstParaInput[0] === ' ') return null;
+
+    // Guard: last paragraph's trailing space count must match tailProto.
+    const lastParaInput = paragraphTexts[paragraphTexts.length - 1].replace(newlineRe, '\\n');
+    if (lastParaInput.length > 0) {
+      const trailingSpaces = lastParaInput.length - lastParaInput.trimEnd().length;
+      if (trailingSpaces !== tailProto.trailingWs.length) return null;
+    }
+
+    for (let p = 0; p < paragraphTexts.length; p++) {
+      const rawPara = paragraphTexts[p];
+      // Apply newFirstIndent stripping only to the first paragraph.
+      const encoded = p === 0
+        ? rawPara.replace(newlineRe, '\\n').slice(newFirstIndent.length)
+        : rawPara.replace(newlineRe, '\\n');
+      const paraLines = packContent(encoded);
+      const startIdx = newContentLines.length;
+      for (const l of paraLines) newContentLines.push(l);
+      if (p < paragraphTexts.length - 1) {
+        // Mark the last line of this non-last paragraph as a paragraph end.
+        paraEndIndices.add(startIdx + paraLines.length - 1);
       }
     }
-    newContentLines.push(line);
-  }
-  if (newContentLines.length === 0) newContentLines.push('');
+  } else {
+    // ── Single-group path ────────────────────────────────────────────────────────
+    // Encode all newlines as \n escape sequences and pack into one continuous group.
+    const packInput = escaped.replace(newlineRe, '\\n').slice(newFirstIndent.length);
 
-  // Reassemble lines, preserving per-line indentation from original segments where available,
-  // and inserting blank groups at their original inter-segment positions.
+    // Guard: leading space would be silently consumed by LC indent mechanics.
+    if (packInput.length > 0) {
+      if (packInput[0] === ' ') return null;
+      const trailingSpaces = packInput.length - packInput.trimEnd().length;
+      if (trailingSpaces !== tailProto.trailingWs.length) return null;
+    }
+
+    const packed = packContent(packInput);
+    for (const l of packed) newContentLines.push(l);
+  }
+
+  // Template blank lines used when inserting blank lines between paragraphs.
+  // Use the first non-empty blank group from the original; fall back to one empty line.
+  const blankProto = blankGroups.find(g => g.length > 0) ?? [''];
+
+  // Reassemble lines with correct indentation, trailing whitespace and backslash placement.
   const rebuiltLines: string[] = [];
   for (let i = 0; i < newContentLines.length; i++) {
-    const isLast = i === newContentLines.length - 1;
+    const isGlobalLast = i === newContentLines.length - 1;
+    const isParaEnd = paraEndIndices.has(i);
+    // Paragraph-end lines and the global last line both use tail-like properties:
+    // no backslash, tailProto trailing whitespace.
+    const isTailLike = isGlobalLast || isParaEnd;
+
     const origSeg = i < contentSegments.length ? contentSegments[i] : null;
     // In `"""<NL>` mode the first segment's indent is part of the decoded value, so
     // we use the new value's own leading whitespace (newFirstIndent) for i === 0,
     // letting the value's leading whitespace differ from the original freely.
     const indent = origSeg
       ? (isLeadingNewlineOpening && i === 0 ? newFirstIndent : origSeg.indent)
-      : (isLast ? tailProto.indent : contProto.indent);
+      : (isTailLike ? tailProto.indent : contProto.indent);
     const newContent = newContentLines[i];
 
     let trailing: string;
-    if (isLast) {
-      // Tail: always use the tail prototype's trailing whitespace and backslash —
-      // when the value shrinks, origSeg may be a continuation segment whose properties
-      // (hasBackslash, trailingWs) are wrong for the closing line.
+    let backslash: string;
+    if (isTailLike && isGlobalLast) {
       trailing = tailProto.trailingWs;
+      backslash = tailProto.hasBackslash && tailProto.content !== '' ? '\\' : '';
+    } else if (isTailLike) {
+      // Paragraph-end line: no backslash so the following newline is literal,
+      // creating a blank-line paragraph separator in the TOML source.
+      trailing = tailProto.trailingWs;
+      backslash = '';
     } else {
-      // Continuation: always a trailing space as word separator, unless content ends with ws
+      // Continuation line within a paragraph.
       trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
+      backslash = '\\';
     }
-
-    const backslash = isLast ? (tailProto.hasBackslash && tailProto.content !== '' ? '\\' : '') : '\\';
     rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
 
-    // Emit blank lines that originally appeared after this content line index.
-    if (!isLast && i < blankGroups.length && blankGroups[i].length > 0) {
-      for (const blankLine of blankGroups[i]) rebuiltLines.push(blankLine);
+    // Insert blank lines after paragraph-end lines (paragraph path).
+    if (isParaEnd) {
+      for (const blankLine of blankProto) rebuiltLines.push(blankLine);
+    } else if (!isGlobalLast && !isParaEnd && !isParagraphPath) {
+      // Single-group path: insert original blank groups, but only when the packed content
+      // contains no encoded newline escape sequences (those already represent paragraph
+      // breaks inline, so blank-line placement from original positions would be misleading).
+      const singleInput = newContentLines.join('');
+      const hasEncodedNewlines = /(?<!\\)\\n/.test(singleInput);
+      if (!hasEncodedNewlines && i < blankGroups.length && blankGroups[i].length > 0) {
+        for (const blankLine of blankGroups[i]) rebuiltLines.push(blankLine);
+      }
     }
   }
 

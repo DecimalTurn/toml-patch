@@ -1087,6 +1087,96 @@ test('should preserve line ending backslash for """<NL> format when first segmen
   expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
 });
 
+test('should preserve line ending backslash for multi-paragraph string with blank line between paragraphs', () => {
+  // Each paragraph's text lines use LC to join them — no real newline within a paragraph.
+  // A blank line (no backslash) between the two blocks is a literal \n\n in the decoded value.
+  // Note: uses `"""\<NL>` (backslash opening), not `"""<NL>`, so no leading-indent issue.
+  const existing =
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\n' +
+    '\n' +
+    'The second paragraph \\\n' +
+    'also has some content."""\n';
+
+  const decoded = parse(existing).doc.text;
+  expect(decoded).toEqual('The quick brown fox jumps over the lazy dog.\n\nThe second paragraph also has some content.');
+
+  const value = parse(existing);
+  value.doc.text = 'A swift brown fox jumps over the lazy dog.\n\nThe second paragraph is different now.';
+  const patched = patch(existing, value);
+
+  // Paragraph style detected from original — paragraph breaks become actual blank TOML lines.
+  // Each paragraph is word-packed independently, keeping "dog." on the correct paragraph.
+  expect(patched).toEqual(
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'A swift brown fox jumps \\\n' +
+    'over the lazy dog.\n' +
+    '\n' +
+    'The second paragraph is \\\n' +
+    'different now."""\n'
+  );
+  expect(parse(patched).doc.text).toEqual('A swift brown fox jumps over the lazy dog.\n\nThe second paragraph is different now.');
+});
+
+test('should collapse multi-paragraph LC string to one paragraph when new value has no newlines', () => {
+  const existing =
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\n' +
+    '\n' +
+    'The second paragraph \\\n' +
+    'also has some content."""\n';
+
+  const value = parse(existing);
+  value.doc.text = 'A swift brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // No \n\n in new value — blank-line paragraph style not triggered; single-group pack.
+  // The blank line from the original is dropped since it has no corresponding paragraph break.
+  expect(patched).toEqual(
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'A swift brown fox jumps \\\n' +
+    'over the lazy dog."""\n'
+  );
+  expect(parse(patched).doc.text).toEqual('A swift brown fox jumps over the lazy dog.');
+});
+
+test('should expand multi-paragraph LC string to three paragraphs when new value has two newlines', () => {
+  const existing =
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\n' +
+    '\n' +
+    'The second paragraph \\\n' +
+    'also has some content."""\n';
+
+  const value = parse(existing);
+  value.doc.text = 'First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph content.';
+  const patched = patch(existing, value);
+
+  // Three paragraphs separated by blank lines. Each paragraph is packed independently.
+  // "First paragraph content." fits on one line so it has no backslash (paragraph end).
+  // "Second paragraph content." splits into two LC lines then a blank.
+  // "Third paragraph content." fits on one line as the global tail.
+  expect(patched).toEqual(
+    '[doc]\n' +
+    'text = """\\' + '\n' +
+    'First paragraph content.\n' +
+    '\n' +
+    'Second paragraph \\\n' +
+    'content.\n' +
+    '\n' +
+    'Third paragraph content."""\n'
+  );
+  expect(parse(patched).doc.text).toEqual('First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph content.');
+});
+
 test('should handle massive underflow from many segments to one word', () => {
   const existing =
     '[description]\n' +

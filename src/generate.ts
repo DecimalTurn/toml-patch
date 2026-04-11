@@ -194,21 +194,13 @@ export function generateString(value: string, existingRaw?: string): String {
     
     // Detect line-continuation backslashes anywhere in the multiline string body.
     // Line-continuation is only meaningful in basic (""") strings, not literal (''').
-    //
-    // When the new value contains literal newlines, they would normally block LC
-    // detection (LC can only represent a single logical line). However, in a basic
-    // multiline string `\n` is a valid escape sequence for a newline character, so
-    // we can encode the newlines as `\n` escapes and still preserve the LC layout.
-    // We try that variant first; if LC rebuilding succeeds, those `\n` escapes are
-    // baked into the raw output and the round-trip decodes them back to real newlines.
-    const lcEscaped = !isLiteral
-      ? escaped.replace(new RegExp(newlineChar.replace(/\r/g, '\\r'), 'g'), '\\n')
-      : escaped;
-    const hasLineContinuation = detectLineContinuation(existingRaw, lcEscaped, newlineChar);
+    // `rebuildLineContinuation` handles newlines in `escaped` internally: it either
+    // splits on double-newlines (paragraph style) or encodes them as \n escape sequences.
+    const hasLineContinuation = detectLineContinuation(existingRaw, newlineChar);
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      const rebuilt = rebuildLineContinuation(existingRaw, lcEscaped, newlineChar);
+      const rebuilt = rebuildLineContinuation(existingRaw, escaped, newlineChar);
       if (rebuilt !== null) {
         raw = rebuilt;
       }
