@@ -796,6 +796,188 @@ test('should preserve multiple consecutive spaces between words in line-continua
   );
 });
 
+test('should handle patching line-continuation multiline string to empty string', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = '';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  """\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string to a single character', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = 'x';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  x"""\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string to a single word', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = 'Hello';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  Hello"""\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string with no whitespace in new value', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // A long string with no spaces — cannot break at word boundaries, so it stays on one line
+  value.description.text = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  abcdefghijklmnopqrstuvwxyz0123456789"""\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string with a single very long word exceeding maxLength', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  Hello \\\n' +
+    '  world."""\n';
+
+  const value = parse(existing);
+  // "Supercalifragilisticexpialidocious" is 34 chars — far exceeds maxLength of 5
+  value.description.text = 'Supercalifragilisticexpialidocious rest';
+  const patched = patch(existing, value);
+
+  // The word overflows maxLength but must still be emitted (at least one word per line)
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  Supercalifragilisticexpialidocious \\\n' +
+    '  rest"""\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string where original value is all whitespace', () => {
+  // The original decoded value is just spaces (consumed by line-continuation trimming)
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '       \\\n' +
+    '       """\n';
+
+  const value = parse(existing);
+  // Line-continuation trims all whitespace, so the decoded value is empty
+  expect(value.description.text).toEqual('');
+
+  value.description.text = 'Hello world';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '       Hello \\\n' +
+    '       world"""\n'
+  );
+});
+
+test('should handle patching line-continuation multiline string to all whitespace', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // New value is only spaces — no word tokens
+  value.description.text = '     ';
+  const patched = patch(existing, value);
+
+  // No words to pack — results in empty content on the tail line
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  """\n'
+  );
+});
+
+test('should handle massive underflow from many segments to one word', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  one \\\n' +
+    '  two \\\n' +
+    '  three \\\n' +
+    '  four \\\n' +
+    '  five."""\n';
+
+  const value = parse(existing);
+  value.description.text = 'hi.';
+  const patched = patch(existing, value);
+
+  // Collapses to a single content line
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  hi."""\n'
+  );
+});
+
+test('should handle massive overflow from one segment to many words', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  hi."""\n';
+
+  const value = parse(existing);
+  // maxLength is 2 ("hi" = 2 chars), so each word gets its own line
+  value.description.text = 'aa bb cc dd ee ff';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  aa \\\n' +
+    '  bb \\\n' +
+    '  cc \\\n' +
+    '  dd \\\n' +
+    '  ee \\\n' +
+    '  ff"""\n'
+  );
+});
+
 // Parameterized tests for both basic (""") and literal (''') multiline strings
 describe('multiline strings - both basic and literal', () => {
   test.each([
