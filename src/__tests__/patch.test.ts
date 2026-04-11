@@ -1128,6 +1128,145 @@ test('should fall back when removing trailing space from value that originally h
   expect(parse(patched).tbl.val).toEqual('Goodbye');
 });
 
+// Edge cases that exercise boundary conditions in the packing and reassembly logic.
+// These specifically guard against regressions if assumptions about dead code paths
+// inside rebuildLineContinuation are ever invalidated.
+
+test('should handle value starting with a tab character in line-continuation format', () => {
+  // Tabs are escaped to \\t before reaching the packing loop, so the escaped value
+  // starts with a backslash (\\), not a space. This tests that the indent regex
+  // handles non-tab/space first characters correctly and that the leading-space
+  // guard doesn't misfire on escaped whitespace characters.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = '\thello world';
+  const patched = patch(existing, value);
+
+  // Tab is escaped to \t in basic strings, so it stays in line-continuation format
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  \\thello world"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('\thello world');
+});
+
+test('should handle value with escaped backslash at the very start in line-continuation format', () => {
+  // The escaped value starts with "\\\\" (doubled backslash), not whitespace.
+  // Tests that the indent regex correctly parses lines starting with non-indent chars.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = '\\start and end\\';
+  const patched = patch(existing, value);
+
+  // Backslashes are doubled in basic strings; no leading space so stays in line-continuation
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  \\\\start and end\\\\"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('\\start and end\\');
+});
+
+test('should repack many words across multiple lines without corrupting spaces', () => {
+  // Tests the packing loop boundary: after each inner-loop break, the next
+  // outer iteration must land on a word token (not a space). With many words
+  // being repacked across many lines, this exercises the token pointer advancement
+  // across multiple break-and-resume cycles.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  abcdef \\' + '\n' +
+    '  ghijkl."""\n';
+
+  const value = parse(existing);
+  // maxLength is 6, so each word pair gets its own line
+  value.description.text = 'aa bb cc dd ee ff gg hh ii jj';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  aa bb \\' + '\n' +
+    '  cc dd \\' + '\n' +
+    '  ee ff \\' + '\n' +
+    '  gg hh \\' + '\n' +
+    '  ii jj"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('aa bb cc dd ee ff gg hh ii jj');
+});
+
+test('should preserve trailing space in value when tail prototype has matching trailing space', () => {
+  // The Original tail segment has trailingWs = ' ' (1 space before \).
+  // New value also ends with exactly 1 space — must survive round-trip.
+  // This directly tests that the tail trailing-WS assignment path works correctly
+  // after the removal of the redundant /\s$/ suppression check.
+  const existing =
+    '[cfg]\n' +
+    'val = """\\' + '\n' +
+    '  word1 \\' + '\n' +
+    '  word2 \\' + '\n' +
+    '  word3 \\' + '\n' +
+    '  """\n';
+
+  const value = parse(existing);
+  // Decoded: "word1 word2 word3 " (trailing space from last segment's trailingWs)
+  expect(value.cfg.val).toEqual('word1 word2 word3 ');
+
+  value.cfg.val = 'aaa bbb ccc ddd ';
+  const patched = patch(existing, value);
+
+  // Must stay in line-continuation format AND preserve the trailing space.
+  // maxLength is 5 (from "word1"), so each word gets its own line.
+  expect(patched).toEqual(
+    '[cfg]\n' +
+    'val = """\\' + '\n' +
+    '  aaa \\' + '\n' +
+    '  bbb \\' + '\n' +
+    '  ccc \\' + '\n' +
+    '  ddd \\' + '\n' +
+    '  """\n'
+  );
+  expect(parse(patched).cfg.val).toEqual('aaa bbb ccc ddd ');
+});
+
+test('should handle double spaces at line boundaries during repacking', () => {
+  // Double-space runs at a break point become trailing whitespace before the
+  // backslash. Tests that the packing loop handles space-run tokens at the exact
+  // boundary where a break occurs, and that the reassembly doesn't double-add
+  // whitespace or corrupt the content.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  abcd \\' + '\n' +
+    '  efgh."""\n';
+
+  const value = parse(existing);
+  // maxLength is 4, double spaces between each word
+  value.description.text = 'aa  bb  cc  dd';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  aa  \\' + '\n' +
+    '  bb  \\' + '\n' +
+    '  cc  \\' + '\n' +
+    '  dd"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('aa  bb  cc  dd');
+});
+
 // Content integrity invariant: for ANY value, patching and then parsing must
 // recover exactly the value that was set. This catches silent data corruption
 // regardless of which internal format (line-continuation vs regular multiline)

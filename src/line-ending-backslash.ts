@@ -138,8 +138,7 @@ export function rebuildLineContinuation(
       stripped = stripped.slice(0, -1);
     }
 
-    const indentMatch = stripped.match(/^([\t ]*)/);
-    const indent = indentMatch ? indentMatch[1] : '';
+    const indent = stripped.match(/^[\t ]*/)?.[0] ?? '';
     const afterIndent = stripped.slice(indent.length);
     const trailingMatch = afterIndent.match(/([\t ]+)$/);
     const trailingWs = trailingMatch ? trailingMatch[1] : '';
@@ -156,9 +155,9 @@ export function rebuildLineContinuation(
   const maxLength = Math.max(...contentSegments.map(s => s.content.length + s.trailingWs.length), 1);
 
   // Determine which segment prototype to use for extra lines beyond the original count.
+  // When the opening is `"""\<NL>`, the continuation backslash is part of the opening
+  // prefix (not the body), so continuationSegs and even contentSegments can be empty.
   const continuationSegs = contentSegments.filter(s => s.hasBackslash);
-
-  // Prototypes for lines beyond the original segment count.
   const defaultProto: Segment = { indent: '', trailingWs: '', hasBackslash: false, content: '', isBlank: false };
   const contProto = continuationSegs[continuationSegs.length - 1]
     ?? contentSegments[contentSegments.length - 1]
@@ -214,10 +213,6 @@ export function rebuildLineContinuation(
   const newContentLines: string[] = [];
   let ti = 0;
   while (ti < tokens.length) {
-    // Skip leading space tokens — TOML line-continuation trims leading whitespace
-    while (ti < tokens.length && tokens[ti][0] === ' ') ti++;
-    if (ti >= tokens.length) break;
-
     let line = tokens[ti++]; // always take at least one word token
     while (ti < tokens.length && tokens[ti][0] === ' ') {
       const spaceTok = tokens[ti];
@@ -257,7 +252,6 @@ export function rebuildLineContinuation(
       // when the value shrinks, origSeg may be a continuation segment whose properties
       // (hasBackslash, trailingWs) are wrong for the closing line.
       trailing = tailProto.trailingWs;
-      if (newContent.length > 0 && /\s$/.test(newContent)) trailing = '';
     } else {
       // Continuation: always a trailing space as word separator, unless content ends with ws
       trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
