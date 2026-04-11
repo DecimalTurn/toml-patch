@@ -740,6 +740,34 @@ test('should preserve whitespace-only blank line between content lines in line-c
   );
 });
 
+test('should not treat backslash in literal multiline string as line-continuation when converting to basic', () => {
+  // If the new value contains ''' the string is converted from literal (''') to basic (""").
+  // Backslashes in the original literal body were literal characters — line-continuation
+  // detection must be gated on the original delimiter, not the post-conversion isLiteral flag.
+  const existing =
+    '[cfg]\n' +
+    "path = '''\n" +
+    "C:\\Users\\Alice\n" +
+    "'''\n";
+
+  const value = parse(existing);
+  // In a literal string backslashes are verbatim, not escape sequences
+  expect(value.cfg.path).toEqual('C:\\Users\\Alice\n');
+
+  // New value contains ''' so conversion to basic multiline """ is required
+  value.cfg.path = "uses '''triple''' quotes\n";
+  const patched = patch(existing, value);
+
+  // Converts to basic string; single quotes need no escaping in basic strings;
+  // no line-continuation logic is applied (original was literal, not basic)
+  expect(patched).toEqual(
+    '[cfg]\n' +
+    "path = \"\"\"\n" +
+    "uses '''triple''' quotes\n" +
+    "\"\"\"\n"
+  );
+});
+
 test('should preserve multiple consecutive spaces between words in line-continuation multiline strings', () => {
   // Multiple spaces between words are preserved because the tokenizer splits on
   // space runs (/\S+| +/g) and appends the run as trailing WS before the backslash

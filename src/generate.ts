@@ -395,14 +395,19 @@ export function generateString(value: string, existingRaw?: string): String {
     
     // Detect line-continuation backslashes anywhere in the multiline string body.
     // A line ending with an odd number of backslashes is a continuation line.
-    // Literal (''') strings do not support line-continuation — backslashes are always literal
-    // characters there and never act as escape sequences.
-    const innerContent = existingRaw.slice(delimiter.length, existingRaw.length - delimiter.length);
-    const hasLineContinuation = !isLiteral && !escaped.includes(newlineChar) &&
-      innerContent.split(newlineChar).some(line => {
-        const m = line.match(/(\\+)$/);
-        return m !== null && m[1].length % 2 === 1;
-      });
+    // Line-continuation is only meaningful in basic (""") strings, not literal (''').
+    // Gate on the original raw delimiter — if the existing raw was literal ('''), backslashes
+    // were literal characters that must never be treated as line-continuation markers, even if
+    // we are converting this string to a basic string because the new value contains '''.
+    let hasLineContinuation = false;
+    if (existingRaw.startsWith('"""')) {
+      const innerContent = existingRaw.slice(3, existingRaw.length - 3);
+      hasLineContinuation = !escaped.includes(newlineChar) &&
+        innerContent.split(newlineChar).some(line => {
+          const m = line.match(/(\\+)$/);
+          return m !== null && m[1].length % 2 === 1;
+        });
+    }
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
