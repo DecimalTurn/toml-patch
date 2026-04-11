@@ -51,7 +51,7 @@ export function detectLineContinuation(
   if (!existingRaw.startsWith('"""')) return false;
 
   const innerContent = existingRaw.slice(3, existingRaw.length - 3);
-  return !escaped.includes(newlineChar) &&
+  return !escaped.includes('\n') &&
     innerContent.split(newlineChar).some(line => {
       const m = line.match(/(\\+)$/);
       return m !== null && m[1].length % 2 === 1;
