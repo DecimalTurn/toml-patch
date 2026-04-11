@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>toml-patch — Interactive Demo</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2360a5fa'/%3E%3Ctext x='16' y='16' font-family='Georgia,serif' font-size='16' font-weight='700' text-anchor='middle' dominant-baseline='middle' fill='%23fff'%3E%5BT%5D%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --bg: #0f1117;
@@ -345,11 +346,11 @@
   <div class="tab-panel active" id="tab-parse">
     <div class="panel-grid">
       <div class="panel">
-        <div class="panel-header"><span>Input <span class="lang">TOML</span></span><button class="eval-btn" onclick="openEvalModal('parse-input')" title="Set value from JS expression">{ }</button></div>
+        <div class="panel-header"><span>Input <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="openEvalModal('parse-input')" title="Set value from JS expression" aria-label="Set TOML input from JS expression">{ }</button></div>
         <div id="parse-input" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Output <span class="lang">JSON</span></span><button class="eval-btn" onclick="copyEditor('parse-output', this)" title="Copy output">Copy</button></div>
+        <div class="panel-header"><span>Output <span class="lang">JSON</span></span><button type="button" class="eval-btn" onclick="copyEditor('parse-output', this)" title="Copy output" aria-label="Copy JSON output">Copy</button></div>
         <div id="parse-output" class="cm-host"></div>
       </div>
     </div>
@@ -364,11 +365,11 @@
   <div class="tab-panel" id="tab-stringify">
     <div class="panel-grid">
       <div class="panel">
-        <div class="panel-header"><span>Input <span class="lang">JSON</span></span><button class="eval-btn" onclick="openEvalModal('stringify-input')" title="Set value from JS expression">{ }</button></div>
+        <div class="panel-header"><span>Input <span class="lang">JSON</span></span><button type="button" class="eval-btn" onclick="openEvalModal('stringify-input')" title="Set value from JS expression" aria-label="Set JSON input from JS expression">{ }</button></div>
         <div id="stringify-input" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Output <span class="lang">TOML</span></span><button class="eval-btn" onclick="copyEditor('stringify-output', this)" title="Copy output">Copy</button></div>
+        <div class="panel-header"><span>Output <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="copyEditor('stringify-output', this)" title="Copy output" aria-label="Copy TOML output">Copy</button></div>
         <div id="stringify-output" class="cm-host"></div>
       </div>
     </div>
@@ -383,15 +384,15 @@
   <div class="tab-panel" id="tab-patch">
     <div class="panel-grid triple">
       <div class="panel">
-        <div class="panel-header"><span>Existing Document <span class="lang">TOML</span></span><button class="eval-btn" onclick="openEvalModal('patch-existing')" title="Set value from JS expression">{ }</button></div>
+        <div class="panel-header"><span>Existing Document <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="openEvalModal('patch-existing')" title="Set value from JS expression" aria-label="Set existing TOML document from JS expression">{ }</button></div>
         <div id="patch-existing" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Updated Data <span class="lang">JSON</span></span><button class="eval-btn" onclick="openEvalModal('patch-updated')" title="Set value from JS expression">{ }</button></div>
+        <div class="panel-header"><span>Updated Data <span class="lang">JSON</span></span><button type="button" class="eval-btn" onclick="openEvalModal('patch-updated')" title="Set value from JS expression" aria-label="Set updated JSON data from JS expression">{ }</button></div>
         <div id="patch-updated" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Patched Result <span class="lang">TOML</span></span><button class="eval-btn" onclick="copyEditor('patch-output', this)" title="Copy output">Copy</button></div>
+        <div class="panel-header"><span>Patched Result <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="copyEditor('patch-output', this)" title="Copy output" aria-label="Copy patched TOML result">Copy</button></div>
         <div id="patch-output" class="cm-host"></div>
       </div>
     </div>
@@ -691,9 +692,10 @@ text = """\\
     const errEl = document.getElementById('eval-error');
     errEl.textContent = '';
     try {
-      // intentional eval: user-controlled expression in a local demo page
-      // eslint-disable-next-line no-eval
-      const result = eval(expr);
+      // Use Function constructor instead of eval to avoid access to local scope.
+      // This is intentional: the modal is a developer tool for building TOML strings.
+      // eslint-disable-next-line no-new-func
+      const result = new Function('return (' + expr + ')')();
       if (typeof result !== 'string') {
         errEl.textContent = `Expected a string, got ${typeof result}`;
         return;
@@ -725,7 +727,7 @@ text = """\\
 <div class="eval-overlay" id="eval-overlay" onclick="if(event.target===this)closeEvalModal()">
   <div class="eval-modal">
     <div class="eval-modal-title">JS Expression → Editor</div>
-    <p class="eval-modal-hint">Enter a JS expression that returns a string. Press <kbd>Ctrl+Enter</kbd> to apply.</p>
+    <p class="eval-modal-hint">Enter a JS expression that returns a string. Press <kbd>Ctrl+Enter</kbd> to apply. <strong style="color:var(--red)">Executes JS — use only with trusted input.</strong></p>
     <textarea class="eval-textarea" id="eval-textarea"
       placeholder="'[section]\nkey = &quot;value&quot;\n'"
       spellcheck="false"
@@ -733,8 +735,8 @@ text = """\\
     ></textarea>
     <div class="eval-error" id="eval-error"></div>
     <div class="eval-modal-actions">
-      <button class="btn secondary" onclick="closeEvalModal()">Cancel</button>
-      <button class="btn" onclick="applyEval()">Apply</button>
+      <button type="button" class="btn secondary" onclick="closeEvalModal()">Cancel</button>
+      <button type="button" class="btn" onclick="applyEval()">Apply</button>
     </div>
   </div>
 </div>
