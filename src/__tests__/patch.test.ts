@@ -594,6 +594,7 @@ test('should preserve line-continuation in multiline basic strings - Same length
     '  The swift brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
 });
 
 test('should preserve line-continuation in multiline basic strings - Slightly smaller length causing small underflow', () => {
@@ -615,6 +616,7 @@ test('should preserve line-continuation in multiline basic strings - Slightly sm
     '  The slow brown fox jumps \\' + '\n' +
     '  over the lazy dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
 });
 
 test('should preserve line-continuation in multiline basic strings - bigger length causing small overflow', () => {
@@ -636,6 +638,7 @@ test('should preserve line-continuation in multiline basic strings - bigger leng
     '  The superfast brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The superfast brown fox jumps over the lazy dog.');
 });
 
 test('should preserve line-continuation in multiline basic strings - even bigger length causing big overflow', () => {
@@ -658,7 +661,7 @@ test('should preserve line-continuation in multiline basic strings - even bigger
     '  brown fox jumps over the \\' + '\n' +
     '  lazy dog."""\n'
   );
-
+  expect(parse(patched).description.text).toEqual('The superduperultrafast brown fox jumps over the lazy dog.');
 });
 
 test('should not treat even number of trailing backslashes as line-continuation', () => {
@@ -686,6 +689,7 @@ test('should not treat even number of trailing backslashes as line-continuation'
     '  C:\\\\Users\\\\Bob is \\' + '\n' +
     '  cool."""\n'
   );
+  expect(parse(patched).cfg.path).toEqual('C:\\Users\\Bob is cool.');
 });
 
 test('should preserve empty line between content lines in line-continuation multiline basic strings', () => {
@@ -713,6 +717,7 @@ test('should preserve empty line between content lines in line-continuation mult
     '\n' +
     '  jumps over the lazy dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
 });
 
 test('should preserve whitespace-only blank line between content lines in line-continuation multiline basic strings', () => {
@@ -738,6 +743,7 @@ test('should preserve whitespace-only blank line between content lines in line-c
     '  \n' +
     '  jumps over the lazy dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
 });
 
 test('should not treat backslash in literal multiline string as line-continuation when converting to basic', () => {
@@ -766,6 +772,7 @@ test('should not treat backslash in literal multiline string as line-continuatio
     "uses '''triple''' quotes\n" +
     "\"\"\"\n"
   );
+  expect(parse(patched).cfg.path).toEqual("uses '''triple''' quotes\n");
 });
 
 test('should preserve multiple consecutive spaces between words in line-continuation multiline strings', () => {
@@ -794,6 +801,7 @@ test('should preserve multiple consecutive spaces between words in line-continua
     '  jumps  over  the  lazy  \\' + '\n' +
     '  dog."""\n'
   );
+  expect(parse(patched).description.text).toEqual('The  quick  brown  fox  jumps  over  the  lazy  dog.');
 });
 
 test('should handle patching line-continuation multiline string to empty string', () => {
@@ -812,6 +820,7 @@ test('should handle patching line-continuation multiline string to empty string'
     'text = """\\' + '\n' +
     '  """\n'
   );
+  expect(parse(patched).description.text).toEqual('');
 });
 
 test('should handle patching line-continuation multiline string to a single character', () => {
@@ -830,6 +839,7 @@ test('should handle patching line-continuation multiline string to a single char
     'text = """\\' + '\n' +
     '  x"""\n'
   );
+  expect(parse(patched).description.text).toEqual('x');
 });
 
 test('should handle patching line-continuation multiline string to a single word', () => {
@@ -848,6 +858,7 @@ test('should handle patching line-continuation multiline string to a single word
     'text = """\\' + '\n' +
     '  Hello"""\n'
   );
+  expect(parse(patched).description.text).toEqual('Hello');
 });
 
 test('should handle patching line-continuation multiline string with no whitespace in new value', () => {
@@ -867,6 +878,7 @@ test('should handle patching line-continuation multiline string with no whitespa
     'text = """\\' + '\n' +
     '  abcdefghijklmnopqrstuvwxyz0123456789"""\n'
   );
+  expect(parse(patched).description.text).toEqual('abcdefghijklmnopqrstuvwxyz0123456789');
 });
 
 test('should handle patching line-continuation multiline string with a single very long word exceeding maxLength', () => {
@@ -888,6 +900,7 @@ test('should handle patching line-continuation multiline string with a single ve
     '  Supercalifragilisticexpialidocious \\' + '\n' +
     '  rest"""\n'
   );
+  expect(parse(patched).description.text).toEqual('Supercalifragilisticexpialidocious rest');
 });
 
 test('should handle patching line-continuation multiline string where original value is all whitespace', () => {
@@ -911,6 +924,7 @@ test('should handle patching line-continuation multiline string where original v
     '       Hello \\' + '\n' +
     '       world"""\n'
   );
+  expect(parse(patched).description.text).toEqual('Hello world');
 });
 
 test('should handle patching line-continuation multiline string to all whitespace', () => {
@@ -955,6 +969,7 @@ test('should handle massive underflow from many segments to one word', () => {
     'text = """\\' + '\n' +
     '  hi."""\n'
   );
+  expect(parse(patched).description.text).toEqual('hi.');
 });
 
 test('should handle massive overflow from one segment to many words', () => {
@@ -978,6 +993,178 @@ test('should handle massive overflow from one segment to many words', () => {
     '  ee \\' + '\n' +
     '  ff"""\n'
   );
+  expect(parse(patched).description.text).toEqual('aa bb cc dd ee ff');
+});
+
+test('should fall back to regular multiline when patching line-continuation string with leading whitespace', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // Leading spaces cannot survive line-continuation format because the `"""\`
+  // continuation trims all whitespace (indent + content) on the first content line.
+  value.description.text = '  hello world';
+  const patched = patch(existing, value);
+
+  // Falls back to regular multiline to preserve the leading spaces
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """  hello world"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('  hello world');
+});
+
+test('should fall back to regular multiline when patching line-continuation string with trailing whitespace mismatch', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  // Original tail has trailingWs = '' (no trailing space before """).
+  // Adding trailing spaces to the new value would be lost because the reassembly
+  // inherits the original tail's trailingWs, silently dropping the trailing spaces.
+  value.description.text = 'hello world  ';
+  const patched = patch(existing, value);
+
+  // Falls back to regular multiline to preserve the trailing spaces
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """hello world  """\n'
+  );
+  expect(parse(patched).description.text).toEqual('hello world  ');
+});
+
+test('should fall back to regular multiline when patching line-continuation string with both leading and trailing whitespace', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = '  hello world  ';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """  hello world  """\n'
+  );
+  expect(parse(patched).description.text).toEqual('  hello world  ');
+});
+
+test('should fall back to regular multiline when patching line-continuation string with a single space', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  value.description.text = ' ';
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """ """\n'
+  );
+  expect(parse(patched).description.text).toEqual(' ');
+});
+
+test('should preserve line-continuation when trailing space count matches original tail', () => {
+  // The original tail segment has trailingWs = ' ' (one space before \).
+  // A new value that also ends with exactly one space should stay in
+  // line-continuation format because the tail's trailingWs matches.
+  const existing =
+    'tbl = {\n' +
+    '       val = """\\' + '\n' +
+    '       Hello \\' + '\n' +
+    '       """\n' +
+    '}\n';
+
+  const value = parse(existing);
+  expect(value.tbl.val).toEqual('Hello ');
+
+  value.tbl.val = 'Goodbye ';
+  const patched = patch(existing, value);
+
+  // Stays in line-continuation format
+  expect(patched).toEqual(
+    'tbl = {\n' +
+    '       val = """\\' + '\n' +
+    '       Goodbye \\' + '\n' +
+    '       """\n' +
+    '}\n'
+  );
+  expect(parse(patched).tbl.val).toEqual('Goodbye ');
+});
+
+test('should fall back when removing trailing space from value that originally had one', () => {
+  // Original value has a trailing space ("Hello "). Patching to a value without
+  // trailing space would still inject the original tail's trailingWs, corrupting the value.
+  const existing =
+    'tbl = {\n' +
+    '       val = """\\' + '\n' +
+    '       Hello \\' + '\n' +
+    '       """\n' +
+    '}\n';
+
+  const value = parse(existing);
+  expect(value.tbl.val).toEqual('Hello ');
+
+  value.tbl.val = 'Goodbye';
+  const patched = patch(existing, value);
+
+  // Falls back to regular multiline — otherwise tail trailingWs would add a space
+  expect(patched).toEqual(
+    'tbl = {\n' +
+    '       val = """Goodbye"""\n' +
+    '}\n'
+  );
+  expect(parse(patched).tbl.val).toEqual('Goodbye');
+});
+
+// Content integrity invariant: for ANY value, patching and then parsing must
+// recover exactly the value that was set. This catches silent data corruption
+// regardless of which internal format (line-continuation vs regular multiline)
+// is chosen by the formatter.
+describe('line-continuation content integrity', () => {
+  const lineContinuationDoc =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  test.each([
+    ['simple words', 'hello world'],
+    ['leading space', ' hello world'],
+    ['trailing space', 'hello world '],
+    ['leading and trailing spaces', ' hello world '],
+    ['multiple leading spaces', '   hello world'],
+    ['multiple trailing spaces', 'hello world   '],
+    ['all spaces', '     '],
+    ['single space', ' '],
+    ['empty string', ''],
+    ['single character', 'x'],
+    ['tab character', '\thello'],
+    ['escaped backslash', 'C:\\Users\\Alice'],
+    ['triple quotes', 'uses """triple""" quotes'],
+    ['very long value', 'a '.repeat(100).trim()],
+    ['no spaces at all', 'abcdefghijklmnopqrstuvwxyz'],
+    ['double spaces between words', 'hello  world  foo'],
+    ['only non-breaking content', '!!@@##$$%%'],
+  ])('round-trips correctly: %s', (_label, newValue) => {
+    const value = parse(lineContinuationDoc);
+    value.description.text = newValue;
+    const patched = patch(lineContinuationDoc, value);
+
+    // THE INVARIANT: parsed content must exactly match what was set
+    expect(parse(patched).description.text).toEqual(newValue);
+  });
 });
 
 // Parameterized tests for both basic (""") and literal (''') multiline strings
@@ -3364,6 +3551,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       '        """\n' +
       '}\n'
     );
+    expect(parse(patched)['tbl-2'].k).toEqual('Goodbye ');
   });
 
     test('should edit a value in an inline table that contains a multiline string value 2', () => {
@@ -3391,6 +3579,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       '        """\n' +
       '}\n'
     );
+    expect(parse(patched)['tbl-2'].k).toEqual('Bonjour World.');
   });
 
       test('should edit a value in an inline table that contains a multiline string value 3', () => {
@@ -3424,6 +3613,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       '    the lazy dog."""\n' +
       '}\n'
     );
+    expect(parse(patched)['tbl-2'].k).toEqual('The quick brown cat jumps over the lazy dog.');
   });
 
       test('should edit a value in an inline table that contains a multiline string value 4', () => {
@@ -3448,6 +3638,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       '    the lazy dog."""\n' +
       '}\n'
     );
+    expect(parse(patched)['tbl-2'].k).toEqual('The quick brown cat jumps over the lazy dog.');
   });
 
   test('should preserve no-trailing-newline-before-brace format when editing', () => {

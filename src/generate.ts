@@ -257,6 +257,24 @@ function rebuildLineContinuation(
     ?? defaultProto;
   const tailProto = contentSegments[contentSegments.length - 1] ?? contProto;
 
+  // Guard: line-continuation cannot faithfully represent values with leading or
+  // mismatched trailing whitespace.
+  //
+  // Leading spaces: after the opening `"""\`, a continuation trims all whitespace
+  // on the first content line — indent and content spaces are indistinguishable,
+  // so any leading spaces in the value would be silently consumed.
+  //
+  // Trailing spaces: the reassembly inherits `tailProto.trailingWs` from the
+  // original segment and places it between content and the closing `\` or `"""`.
+  // This whitespace becomes part of the decoded value, so if the new value's
+  // trailing space count differs from the original tail prototype, the content
+  // would be silently altered.
+  if (escaped.length > 0) {
+    if (escaped[0] === ' ') return null;
+    const trailingSpaces = escaped.length - escaped.trimEnd().length;
+    if (trailingSpaces !== tailProto.trailingWs.length) return null;
+  }
+
   // Record blank groups between consecutive content segments.
   // blankGroups[i] = the original blank lines (preserving their content) between
   // contentSegments[i] and [i+1].
@@ -315,12 +333,6 @@ function rebuildLineContinuation(
     newContentLines.push(line);
   }
   if (newContentLines.length === 0) newContentLines.push('');
-
-  // If the escaped value had no word tokens (whitespace-only), line-continuation would
-  // erase it entirely. Signal the caller to fall back to a regular multiline format.
-  if (newContentLines.length === 1 && newContentLines[0] === '' && escaped.length > 0) {
-    return null;
-  }
 
   // Reassemble lines, preserving per-line indentation from original segments where available,
   // and inserting blank groups at their original inter-segment positions.
