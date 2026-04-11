@@ -49,6 +49,7 @@
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && rollup -c",
+    "build:demo": "node scripts/build-demo.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
