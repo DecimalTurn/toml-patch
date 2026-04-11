@@ -688,6 +688,34 @@ test('should not treat even number of trailing backslashes as line-continuation'
   );
 });
 
+test('should preserve multiple consecutive spaces between words in line-continuation multiline strings', () => {
+  // Multiple spaces between words are preserved because the tokenizer splits on
+  // space runs (/\S+| +/g) and appends the run as trailing WS before the backslash
+  // when the next word doesn't fit. TOML preserves trailing WS before line-continuation.
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  // New value contains double spaces between words
+  value.description.text = 'The  quick  brown  fox  jumps  over  the  lazy  dog.';
+  const patched = patch(existing, value);
+
+  // Double spaces are preserved: the space run at each line-break point becomes
+  // trailing whitespace before the backslash. Decoded: "The  quick  brown  fox  jumps  over  the  lazy  dog."
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The  quick  brown  fox  \\\n' +
+    '  jumps  over  the  lazy  \\\n' +
+    '  dog."""\n'
+  );
+});
+
 // Parameterized tests for both basic (""") and literal (''') multiline strings
 describe('multiline strings - both basic and literal', () => {
   test.each([

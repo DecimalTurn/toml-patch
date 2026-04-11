@@ -270,18 +270,42 @@ function rebuildLineContinuation(
     }
   }
 
-  // Greedily pack words into new content lines.
+  // Greedily pack content into new lines, preserving inter-word whitespace.
+  // Tokenize into alternating word and space-run chunks so multiple consecutive spaces
+  // are kept intact. Breaks can only occur at space-run boundaries; the space run at a
+  // break point is appended to the current line as trailing whitespace before the
+  // line-continuation backslash (TOML preserves trailing WS before \).
   // Always emit at least one word per line (even if it alone exceeds maxLength).
   // Add as many lines as needed — no longer constrained to the original line count.
   // Use the escaped value so backslashes and special chars are already encoded and
-  // word lengths match the raw byte widths in the TOML file.
-  const words = escaped.match(/\S+/g) ?? [];
+  // token lengths match the raw byte widths in the TOML file.
+  const tokens = escaped.match(/\S+| +/g) ?? [];
   const newContentLines: string[] = [];
-  let wi = 0;
-  while (wi < words.length) {
-    let line = words[wi++]; // always take at least one word
-    while (wi < words.length && line.length + 1 + words[wi].length <= maxLength) {
-      line += ' ' + words[wi++];
+  let ti = 0;
+  while (ti < tokens.length) {
+    // Skip leading space tokens — TOML line-continuation trims leading whitespace
+    while (ti < tokens.length && tokens[ti][0] === ' ') ti++;
+    if (ti >= tokens.length) break;
+
+    let line = tokens[ti++]; // always take at least one word token
+    while (ti < tokens.length && tokens[ti][0] === ' ') {
+      const spaceTok = tokens[ti];
+      const nextWord = tokens[ti + 1];
+      if (!nextWord) {
+        // Trailing space with no following word — drop it
+        ti++;
+        break;
+      }
+      if (line.length + spaceTok.length + nextWord.length <= maxLength) {
+        line += spaceTok + nextWord;
+        ti += 2;
+      } else {
+        // Next word doesn't fit; append the space run so it becomes trailing
+        // whitespace before the line-continuation backslash (preserved by TOML).
+        line += spaceTok;
+        ti++;
+        break;
+      }
     }
     newContentLines.push(line);
   }
