@@ -578,8 +578,8 @@ test('should preserve multiline string with only newlines', () => {
 test('should preserve line-continuation in multiline basic strings - Same length', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -590,8 +590,8 @@ test('should preserve line-continuation in multiline basic strings - Same length
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The swift brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The swift brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n'
   );
 });
@@ -599,8 +599,8 @@ test('should preserve line-continuation in multiline basic strings - Same length
 test('should preserve line-continuation in multiline basic strings - Slightly smaller length causing small underflow', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -611,8 +611,8 @@ test('should preserve line-continuation in multiline basic strings - Slightly sm
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The slow brown fox jumps \\\n' +
+    'text = """\\' + '\n' +
+    '  The slow brown fox jumps \\' + '\n' +
     '  over the lazy dog."""\n'
   );
 });
@@ -620,8 +620,8 @@ test('should preserve line-continuation in multiline basic strings - Slightly sm
 test('should preserve line-continuation in multiline basic strings - bigger length causing small overflow', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -632,8 +632,8 @@ test('should preserve line-continuation in multiline basic strings - bigger leng
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The superfast brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The superfast brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n'
   );
 });
@@ -641,8 +641,8 @@ test('should preserve line-continuation in multiline basic strings - bigger leng
 test('should preserve line-continuation in multiline basic strings - even bigger length causing big overflow', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' + // 19 chars
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' + // 19 chars
     '  jumps over the lazy dog."""\n'; // 24 chars
 
   const value = parse(existing);
@@ -653,9 +653,9 @@ test('should preserve line-continuation in multiline basic strings - even bigger
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The superduperultrafast \\\n' +
-    '  brown fox jumps over the \\\n' +
+    'text = """\\' + '\n' +
+    '  The superduperultrafast \\' + '\n' +
+    '  brown fox jumps over the \\' + '\n' +
     '  lazy dog."""\n'
   );
 
@@ -666,8 +666,8 @@ test('should not treat even number of trailing backslashes as line-continuation'
   // The segment parser must count trailing backslashes and only flag odd counts.
   const existing =
     '[cfg]\n' +
-    'path = """\\\n' +
-    '  C:\\\\Users\\\\Alice \\\n' +
+    'path = """\\' + '\n' +
+    '  C:\\\\Users\\\\Alice \\' + '\n' +
     '  is cool."""\n';
 
   const value = parse(existing);
@@ -682,8 +682,8 @@ test('should not treat even number of trailing backslashes as line-continuation'
   // so the structure must be preserved with re-escaped backslashes.
   expect(patched).toEqual(
     '[cfg]\n' +
-    'path = """\\\n' +
-    '  C:\\\\Users\\\\Bob is \\\n' +
+    'path = """\\' + '\n' +
+    '  C:\\\\Users\\\\Bob is \\' + '\n' +
     '  cool."""\n'
   );
 });
@@ -693,8 +693,8 @@ test('should preserve empty line between content lines in line-continuation mult
   // whitespace trimming, but the raw format should be preserved after patching.
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '\n' +
     '  jumps over the lazy dog."""\n';
 
@@ -708,8 +708,8 @@ test('should preserve empty line between content lines in line-continuation mult
   // The empty line between the two content segments is preserved
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The swift brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The swift brown fox \\' + '\n' +
     '\n' +
     '  jumps over the lazy dog."""\n'
   );
@@ -719,8 +719,8 @@ test('should preserve whitespace-only blank line between content lines in line-c
   // A whitespace-only (e.g. "  ") line should also round-trip with its original spaces.
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  \n' +
     '  jumps over the lazy dog."""\n';
 
@@ -733,8 +733,8 @@ test('should preserve whitespace-only blank line between content lines in line-c
   // The whitespace-only blank line is preserved with its original spaces
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The swift brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The swift brown fox \\' + '\n' +
     '  \n' +
     '  jumps over the lazy dog."""\n'
   );
@@ -774,8 +774,8 @@ test('should preserve multiple consecutive spaces between words in line-continua
   // when the next word doesn't fit. TOML preserves trailing WS before line-continuation.
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -789,9 +789,9 @@ test('should preserve multiple consecutive spaces between words in line-continua
   // trailing whitespace before the backslash. Decoded: "The  quick  brown  fox  jumps  over  the  lazy  dog."
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  The  quick  brown  fox  \\\n' +
-    '  jumps  over  the  lazy  \\\n' +
+    'text = """\\' + '\n' +
+    '  The  quick  brown  fox  \\' + '\n' +
+    '  jumps  over  the  lazy  \\' + '\n' +
     '  dog."""\n'
   );
 });
@@ -799,8 +799,8 @@ test('should preserve multiple consecutive spaces between words in line-continua
 test('should handle patching line-continuation multiline string to empty string', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -809,7 +809,7 @@ test('should handle patching line-continuation multiline string to empty string'
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  """\n'
   );
 });
@@ -817,8 +817,8 @@ test('should handle patching line-continuation multiline string to empty string'
 test('should handle patching line-continuation multiline string to a single character', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -827,7 +827,7 @@ test('should handle patching line-continuation multiline string to a single char
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  x"""\n'
   );
 });
@@ -835,8 +835,8 @@ test('should handle patching line-continuation multiline string to a single char
 test('should handle patching line-continuation multiline string to a single word', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -845,7 +845,7 @@ test('should handle patching line-continuation multiline string to a single word
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  Hello"""\n'
   );
 });
@@ -853,8 +853,8 @@ test('should handle patching line-continuation multiline string to a single word
 test('should handle patching line-continuation multiline string with no whitespace in new value', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -864,7 +864,7 @@ test('should handle patching line-continuation multiline string with no whitespa
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  abcdefghijklmnopqrstuvwxyz0123456789"""\n'
   );
 });
@@ -872,8 +872,8 @@ test('should handle patching line-continuation multiline string with no whitespa
 test('should handle patching line-continuation multiline string with a single very long word exceeding maxLength', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  Hello \\\n' +
+    'text = """\\' + '\n' +
+    '  Hello \\' + '\n' +
     '  world."""\n';
 
   const value = parse(existing);
@@ -884,8 +884,8 @@ test('should handle patching line-continuation multiline string with a single ve
   // The word overflows maxLength but must still be emitted (at least one word per line)
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  Supercalifragilisticexpialidocious \\\n' +
+    'text = """\\' + '\n' +
+    '  Supercalifragilisticexpialidocious \\' + '\n' +
     '  rest"""\n'
   );
 });
@@ -894,8 +894,8 @@ test('should handle patching line-continuation multiline string where original v
   // The original decoded value is just spaces (consumed by line-continuation trimming)
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '       \\\n' +
+    'text = """\\' + '\n' +
+    '       \\' + '\n' +
     '       """\n';
 
   const value = parse(existing);
@@ -907,8 +907,8 @@ test('should handle patching line-continuation multiline string where original v
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '       Hello \\\n' +
+    'text = """\\' + '\n' +
+    '       Hello \\' + '\n' +
     '       world"""\n'
   );
 });
@@ -916,8 +916,8 @@ test('should handle patching line-continuation multiline string where original v
 test('should handle patching line-continuation multiline string to all whitespace', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  The quick brown fox \\\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\' + '\n' +
     '  jumps over the lazy dog."""\n';
 
   const value = parse(existing);
@@ -928,7 +928,7 @@ test('should handle patching line-continuation multiline string to all whitespac
   // No words to pack — results in empty content on the tail line
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  """\n'
   );
 });
@@ -936,11 +936,11 @@ test('should handle patching line-continuation multiline string to all whitespac
 test('should handle massive underflow from many segments to one word', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
-    '  one \\\n' +
-    '  two \\\n' +
-    '  three \\\n' +
-    '  four \\\n' +
+    'text = """\\' + '\n' +
+    '  one \\' + '\n' +
+    '  two \\' + '\n' +
+    '  three \\' + '\n' +
+    '  four \\' + '\n' +
     '  five."""\n';
 
   const value = parse(existing);
@@ -950,7 +950,7 @@ test('should handle massive underflow from many segments to one word', () => {
   // Collapses to a single content line
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  hi."""\n'
   );
 });
@@ -958,7 +958,7 @@ test('should handle massive underflow from many segments to one word', () => {
 test('should handle massive overflow from one segment to many words', () => {
   const existing =
     '[description]\n' +
-    'text = """\\\n' +
+    'text = """\\' + '\n' +
     '  hi."""\n';
 
   const value = parse(existing);
@@ -968,12 +968,12 @@ test('should handle massive overflow from one segment to many words', () => {
 
   expect(patched).toEqual(
     '[description]\n' +
-    'text = """\\\n' +
-    '  aa \\\n' +
-    '  bb \\\n' +
-    '  cc \\\n' +
-    '  dd \\\n' +
-    '  ee \\\n' +
+    'text = """\\' + '\n' +
+    '  aa \\' + '\n' +
+    '  bb \\' + '\n' +
+    '  cc \\' + '\n' +
+    '  dd \\' + '\n' +
+    '  ee \\' + '\n' +
     '  ff"""\n'
   );
 });
