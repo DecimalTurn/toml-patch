@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Patching: Editing a multiline basic string that uses a line ending backslash now preserves the original line-break structure and indentation ([#131](https://github.com/DecimalTurn/toml-patch/pull/131)).
+- Patching: When the new value cannot be faithfully represented with a line ending backslash (e.g., values with leading or trailing whitespace), the format falls back to a regular multiline basic string to preserve content integrity ([#131](https://github.com/DecimalTurn/toml-patch/pull/131)).
+
 ## [1.0.7] - 2026-04-08
 
 ### Fixed
