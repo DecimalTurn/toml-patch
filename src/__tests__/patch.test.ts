@@ -5085,3 +5085,136 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 });
+
+// Source: https://github.com/eth-easl/mixtera/blob/c861dd886065a9161e20654cd61998c713f7d5c7/black.toml
+describe('Regex value built inside MLBS with LEB', () => {
+  
+  const existing =
+    'regexValue = """\\'      + '\n' +
+    '    .*/*\\\\.pyi|\\'         + '\n' +
+    '    .*/*\\\\_grpc.py|\\'     + '\n' +
+    '    .*/*\\\\_pb2.py|\\'      + '\n' +
+    '    .*/benchmark/.*|\\'      + '\n' +
+    '    .*/build/.*\\'           + '\n' +
+    '"""'                         + '\n';
+
+  test('should allow small edits and preserve style', () => {
+    const obj = parse(existing);
+    obj['regexValue'] = obj['regexValue'].replace("benchmark", "benchmarks");
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'regexValue = """\\'        + '\n' +
+      '    .*/*\\\\.pyi|\\'       + '\n' +
+      '    .*/*\\\\_grpc.py|\\'   + '\n' +
+      '    .*/*\\\\_pb2.py|\\'    + '\n' +
+      '    .*/benchmarks/.*|\\'   + '\n' +
+      '    .*/build/.*\\'         + '\n' +
+      '"""'                       + '\n'
+    );
+    expect(parse(patched)['regexValue']).toEqual(obj['regexValue']);
+  });
+
+  test('should allow row deletion and preserve style', () => {
+    const obj = parse(existing);
+    // Reminder: you don't need to worry about '\\' in the string content when doing replacements.
+    // these are LEB (line ending backslash) and will be removed during TOML parsing as well as all the whitepsace after it.
+    obj['regexValue'] = obj['regexValue'].replace('.*/benchmark/.*|' , "");
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'regexValue = """\\'        + '\n' +
+      '    .*/*\\\\.pyi|\\'       + '\n' +
+      '    .*/*\\\\_grpc.py|\\'   + '\n' +
+      '    .*/*\\\\_pb2.py|\\'    + '\n' +
+      '    .*/build/.*\\'         + '\n' +
+      '"""'                       + '\n'
+    );
+    expect(parse(patched)['regexValue']).toEqual(obj['regexValue']);
+  });
+
+  test('should allow row insertion and preserve style', () => {
+    const obj = parse(existing);
+    obj['regexValue'] = obj['regexValue'].replace('.*/benchmark/.*|' , ".*/benchmark/.*|.*/subdir/.*|");
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'regexValue = """\\'        + '\n' +
+      '    .*/*\\\\.pyi|\\'       + '\n' +
+      '    .*/*\\\\_grpc.py|\\'   + '\n' +
+      '    .*/*\\\\_pb2.py|\\'    + '\n' +
+      '    .*/benchmark/.*|\\'   + '\n' +
+      '    .*/subdir/.*|\\'       + '\n' +
+      '    .*/build/.*\\'         + '\n' +
+      '"""'                       + '\n'
+    );
+    expect(parse(patched)['regexValue']).toEqual(obj['regexValue']);
+  });
+ 
+});
+
+describe('List of items built inside MLBS with LEB', () => {
+  
+  const existing =
+    'myList = """\\'        + '\n' +
+    '    I like \\'         + '\n' +
+    '    cats, \\'          + '\n' +
+    '    dogs, \\'          + '\n' +
+    '    and birds.\\'      + '\n' +
+    '"""'                   + '\n';
+
+  test('should allow small edits and preserve style', () => {
+    const obj = parse(existing);
+    obj['myList'] = obj['myList'].replace("cats", "turtles");
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'myList = """\\'        + '\n' +
+      '    I like \\'         + '\n' +
+      '    turtles, \\'       + '\n' +
+      '    dogs, \\'          + '\n' +
+      '    and birds.\\'      + '\n' +
+      '"""'                   + '\n'
+    );
+    expect(parse(patched)['myList']).toEqual(obj['myList']);
+  });
+
+  test('should allow row deletion and preserve style', () => {
+    const obj = parse(existing);
+    obj['myList'] = obj['myList'].replace('dogs, ' , "");
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'myList = """\\'        + '\n' +
+      '    I like \\'         + '\n' +
+      '    cats, \\'          + '\n' +
+      '    and birds.\\'      + '\n' +
+      '"""'                   + '\n'
+    );
+    expect(parse(patched)['myList']).toEqual(obj['myList']);
+  });
+
+  test('should allow row insertion and preserve style', () => {
+    const obj = parse(existing);
+    obj['myList'] = obj['myList'].replace('dogs, ' , 'dogs, turtles, ');
+
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'myList = """\\'        + '\n' +
+      '    I like \\'         + '\n' +
+      '    cats, \\'          + '\n' +
+      '    dogs, \\'          + '\n' +
+      '    turtles, \\'       + '\n' +
+      '    and birds.\\'      + '\n' +
+      '"""'                   + '\n'
+    );
+    expect(parse(patched)['myList']).toEqual(obj['myList']);
+  });
+
+});
