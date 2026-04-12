@@ -362,6 +362,95 @@ test('should preserve multiline string with actual multiple lines', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should collapse mlbs with leading newline and multiple content lines to single-line value', () => {
+  // Original has leading newline ("""\n) and three lines of content.
+  // New value has no newlines at all, so the generated raw has ONE embedded newline
+  // (the preserved leading newline) and the else-branch of endLocation is NOT reached —
+  // the multiline branch fires with lineCount=1, endLocation={ line:2, column:3 }.
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    First line
+    Second line
+    Third line"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "single line value";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(dedent`
+    [package]
+    name = "example"
+    description = """
+    single line value"""
+    version = "1.0.0"
+    ` + '\n');
+
+  expect(parse(patched).package.description).toEqual("single line value");
+});
+
+test('should collapse mlbs without leading newline and multiple content lines to single-line value', () => {
+  // Original has NO leading newline ("""content) and multiple lines via embedded literal newlines.
+  // New value has no newlines, so raw becomes """single line value""" with NO \n at all.
+  // This hits the else-branch: endLocation = { line: 1, column: raw.length }.
+  // column: raw.length is correct here — the closing """ is part of the same line,
+  // not on its own line, so column: 3 would be wrong.
+  const existing =
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """First line\n' +
+    'Second line\n' +
+    'Third line"""\n' +
+    'version = "1.0.0"\n';
+
+  const obj = parse(existing);
+  expect(obj.package.description).toEqual("First line\nSecond line\nThird line");
+
+  obj.package.description = "single line value";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """single line value"""\n' +
+    'version = "1.0.0"\n'
+  );
+
+  expect(parse(patched).package.description).toEqual("single line value");
+});
+
+test('should patch mlbs without leading newline to another multi-line value (end-column correctness)', () => {
+  // Original has content on the same line as the opening """ (no leading newline).
+  // New value also has a newline, so raw = """Hello\nWorld""". The closing """ shares
+  // the last line with "World", so loc.end.column must be len("World\"\"\"") = 8,
+  // not 3. A wrong column would shift the following key-value to the wrong position.
+  const existing =
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """First line\n' +
+    'Second line"""\n' +
+    'version = "1.0.0"\n';
+
+  const obj = parse(existing);
+  expect(obj.package.description).toEqual("First line\nSecond line");
+
+  obj.package.description = "Hello\nWorld";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """Hello\n' +
+    'World"""\n' +
+    'version = "1.0.0"\n'
+  );
+
+  expect(parse(patched).package.description).toEqual("Hello\nWorld");
+});
+
 test('should preserve multiline string with trailing newline in content', () => {
   const existing = dedent`
     [package]
@@ -4177,6 +4266,41 @@ test('should remove everything leaving empty document', () => {
 // ==========================================
 
 describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec)', () => {
+
+  test('should correctly shift a sibling key when patching a no-leading-newline MLBS in a multiline inline table', () => {
+    // Regression test for the generateString endLocation column bug.
+    //
+    // When a MLBS has NO leading newline, its closing """ shares a line with content
+    // (e.g. `a = """line1\nlonger text""", b = "x"`). The old code always stored
+    // column: 3 (the delimiter length) as the end column for any MLBS with newlines.
+    // The correct value is the actual last-line length.
+    //
+    // A wrong column means the writer computes the wrong shift delta for `b = "x"`,
+    // which is on the same line as the closing """. Here the MLBS last line shortens
+    // from len('longer text"""') = 14 to len('b"""') = 4 — a delta of -10. With the
+    // bug, the delta was 3 - 14 = -11 (off by one), shifting `b` one column too far
+    // to the left and corrupting the output.
+    const existing =
+      'tbl = {'                 + '\n' +
+      '    a = """short'        + '\n' +
+      'longer text""", b = "x"' + '\n' +
+      '}'                       + '\n';
+
+    const obj = parse(existing);
+    expect(obj.tbl.a).toEqual('short\nlonger text');
+    expect(obj.tbl.b).toEqual('x');
+
+    obj.tbl.a = 'a\nb';
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'tbl = {'                 + '\n' +
+      '    a = """a'            + '\n' +
+      'b""", b = "x"'           + '\n' +
+      '}'                       + '\n'
+    );
+    expect(parse(patched).tbl.b).toEqual('x');
+  });
 
   test('should edit a value in a simple trailing-comma multiline inline table', () => {
     const existing = dedent`

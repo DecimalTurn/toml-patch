@@ -21,7 +21,7 @@ import {
 import { zero, cloneLocation, clonePosition } from './location';
 import { LocalDate } from './parse-toml';
 import { shiftNode } from './writer';
-import { isMultilineString } from './utils';
+import { isBasicString, isLiteralString, isMultilineString } from './utils';
 import { detectLineContinuation, rebuildLineContinuation } from './line-ending-backslash';
 
 /**
@@ -150,7 +150,19 @@ export function generateKey(value: string[]): Key {
  */
 export function generateString(value: string, existingRaw?: string): String {
   let raw = '';
-  
+
+
+
+// To think of : // After (with preferMultilineString = true and value contains triple double quotes):
+
+  if (existingRaw && isBasicString(existingRaw)) {
+    return generateBasicString(value);
+  }
+
+  if (existingRaw && isLiteralString(existingRaw)) {
+    return generateLiteralString(value);
+  }
+
   if (existingRaw && isMultilineString(existingRaw)) {
     // Preserve multiline format
     let isLiteral = existingRaw.startsWith("'''");
@@ -234,20 +246,48 @@ export function generateString(value: string, existingRaw?: string): String {
   let endLocation;
   if (raw.includes('\n')) {
     const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
-    const lineCount = (raw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
-    
+    const lines = raw.split(newlineChar);
+    const lastLine = lines[lines.length - 1];
     endLocation = {
-      line: 1 + lineCount,
-      column: 3 // length of delimiter (""" or ''')
+      line: lines.length,
+      // Use the actual last line length: when """ closes on its own line this
+      // equals 3 (the delimiter), but when content precedes the closing """
+      // (no-leading-newline format, e.g. """Hello\nWorld""") it's larger.
+      column: lastLine.length
     };
 
   } else {
+    // Covers both regular basic strings (e.g. "hello") and mlbs whose generated raw
+    // contains no newline — e.g. """single line value""" produced when the original
+    // had no leading newline and the new value itself has no newlines. In that case
+    // the entire raw string sits on one line, so column = raw.length is correct.
+    // (column: 3 would be wrong here — that only applies when """ closes on its own line.)
     endLocation = { line: 1, column: raw.length };
   }
 
   return {
     type: NodeType.String,
     loc: { start: zero(), end: endLocation },
+    raw,
+    value
+  };
+}
+
+function generateBasicString(value: string): String {
+  const raw = JSON.stringify(value);
+  return {
+    type: NodeType.String,
+    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    raw,
+    value
+  };
+}
+
+function generateLiteralString(value: string): String {
+  const raw = `'${value}'`;
+  return {
+    type: NodeType.String,
+    loc: { start: zero(), end: { line: 1, column: raw.length } },
     raw,
     value
   };
@@ -261,7 +301,6 @@ export function generateString(value: string, existingRaw?: string): String {
  */
 export function generateInteger(value: number): Integer {
   const raw = value.toString();
-
   return {
     type: NodeType.Integer,
     loc: { start: zero(), end: { line: 1, column: raw.length } },

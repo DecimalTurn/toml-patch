@@ -214,7 +214,7 @@ describe('formatMultilineStringReplacement', () => {
       // generateString returns base location (not adjusted to existing position - that's done by shiftNode in replace)
       expect(result.loc.start).toEqual({ line: 1, column: 0 });
       expect(result.loc.end.line).toBe(4); // base line (1) + 3 newlines
-      expect(result.loc.end.column).toBe(3); // length of delimiter
+      expect(result.loc.end.column).toBe(8); // last line: 'value"""' (length 8)
     });
 
     test('should handle location tracking when value changes from short to long', () => {
@@ -253,7 +253,7 @@ describe('formatMultilineStringReplacement', () => {
       // generateString returns base location and counts CRLF as line breaks
       expect(result.loc.start).toEqual({ line: 1, column: 0 });
       expect(result.loc.end.line).toBe(3); // base line (1) + 2 CRLF
-      expect(result.loc.end.column).toBe(3);
+      expect(result.loc.end.column).toBe(8); // last line: 'value"""' (length 8)
     });
   });
 });

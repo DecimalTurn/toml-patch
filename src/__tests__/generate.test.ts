@@ -116,4 +116,36 @@ describe('generateString', () => {
       expect(result.value).toBe('Triple """quotes"""');
     });
   });
+
+  describe('endLocation for multiline strings', () => {
+    // The end column matters when something follows the closing """ on the same line
+    // (e.g. inside a TOML v1.1 multiline inline table: `a = """…\nfoo""", b = "x"`).
+    // A wrong column causes subsequent nodes on that line to be shifted by the wrong
+    // amount in the writer, corrupting the patched output.
+
+    test('should set end column to last line length for no-leading-newline MLBS', () => {
+      // existingRaw: """short\nlonger text""" — closing """ is NOT on its own line.
+      // Old code always used column: 3 (delimiter length). Correct value is
+      // len("longer text\"\"\"") = 14, so when patched to a shorter value the
+      // column delta would be off by (14 - 3) = 11.
+      const existingRaw = '"""short\n' + 'longer text"""';
+      const node = generateString('a\nb', existingRaw);
+      // New raw: """a\nb"""  →  last line is 'b"""', length = 4
+      expect(node.raw).toEqual('"""a\nb"""');
+      expect(node.loc.end.line).toEqual(2);
+      expect(node.loc.end.column).toEqual(4); // 'b"""'.length = 4, NOT 3
+    });
+
+    test('should set end column to delimiter length when """ closes on its own line', () => {
+      // existingRaw: """\ncontent\n""" — closing """ IS on its own line.
+      // Here column: 3 IS correct (the last line is just '"""').
+      // The value must end with \n so the generated raw also ends \n""" (closing on its own line).
+      const existingRaw = '"""\n' + 'content\n' + '"""';
+      const node = generateString('new content\n', existingRaw);
+      // New raw: """\nnew content\n"""  →  last line is '"""', length = 3
+      expect(node.raw).toEqual('"""\nnew content\n"""');
+      expect(node.loc.end.line).toEqual(3);
+      expect(node.loc.end.column).toEqual(3); // '"""'.length = 3
+    });
+  });
 });

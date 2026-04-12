@@ -12,6 +12,23 @@ export function isString(value: any): value is string {
   return typeof value === 'string';
 }
 
+export function isBasicString(raw: string): boolean {
+  return raw.startsWith('"') && !raw.startsWith('"""');
+}
+
+/**
+ * Checks if a string is a multiline string (starts with """ or ''')
+ * @param raw The raw string value including quotes
+ * @returns true if the string is multiline, false otherwise
+ */
+export function isMultilineString(raw: string): boolean {
+  return raw.startsWith('"""') || raw.startsWith("'''");
+}
+
+export function isLiteralString(raw: string): boolean {
+  return raw.startsWith("'") && !raw.startsWith("'''");
+}
+
 export function isInteger(value: any): value is number {
   return typeof value === 'number' && value % 1 === 0 && isFinite(value) && !Object.is(value, -0);
 }
@@ -83,11 +100,4 @@ export function merge<TValue>(target: TValue[], values: TValue[]) {
   }
 }
 
-/**
- * Checks if a string is a multiline string (starts with """ or ''')
- * @param raw The raw string value including quotes
- * @returns true if the string is multiline, false otherwise
- */
-export function isMultilineString(raw: string): boolean {
-  return raw.startsWith('"""') || raw.startsWith("'''");
-}
+
