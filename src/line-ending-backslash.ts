@@ -390,7 +390,7 @@ export function rebuildLineContinuation(
               const indent = origSeg
                 ? (isLeadingNewlineOpening && origIdx === 0 ? newFirstIndent : origSeg.indent)
                 : contProto.indent;
-              const trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
+              const trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : (middleInput.endsWith(' ') ? ' ' : '');
               rebuiltLines.push(`${indent}${newContent}${trailing}\\`);
               if (j < midLines.length - 1 && !hasEncodedNewlines) {
                 const bgIdx = preservedCount + j;
