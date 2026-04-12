@@ -597,7 +597,8 @@ test('should preserve line-continuation in multiline basic strings - Same length
   expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.');
 });
 
-test('should preserve line-continuation in multiline basic strings - Slightly smaller length causing small underflow', () => {
+test('should preserve line-continuation in multiline basic strings - Slightly smaller length, second line preserved intact', () => {
+  // "quick" → "slow" frees 2 chars on line 1 but the second line must not change.
   const existing =
     '[description]\n' +
     'text = """\\' + '\n' +
@@ -610,11 +611,12 @@ test('should preserve line-continuation in multiline basic strings - Slightly sm
   value.description.text = 'The slow brown fox jumps over the lazy dog.';
   const patched = patch(existing, value);
 
+  // Line 2 "jumps over the lazy dog." is unchanged and must stay verbatim.
   expect(patched).toEqual(
     '[description]\n' +
     'text = """\\' + '\n' +
-    '  The slow brown fox jumps \\' + '\n' +
-    '  over the lazy dog."""\n'
+    '  The slow brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n'
   );
   expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
 });
@@ -654,12 +656,13 @@ test('should preserve line-continuation in multiline basic strings - even bigger
   value.description.text = 'The superduperultrafast brown fox jumps over the lazy dog.';
   const patched = patch(existing, value);
 
+  // "superduperultrafast" forces a mid-line split; the unchanged second line is preserved.
   expect(patched).toEqual(
     '[description]\n' +
     'text = """\\' + '\n' +
     '  The superduperultrafast \\' + '\n' +
-    '  brown fox jumps over the \\' + '\n' +
-    '  lazy dog."""\n'
+    '  brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n'
   );
   expect(parse(patched).description.text).toEqual('The superduperultrafast brown fox jumps over the lazy dog.');
 });
@@ -681,13 +684,13 @@ test('should not treat even number of trailing backslashes as line-continuation'
   value.cfg.path = 'C:\\Users\\Bob is cool.';
   const patched = patch(existing, value);
 
-  // The double-backslash lines are literal backslashes (even count = not continuation),
-  // so the structure must be preserved with re-escaped backslashes.
+  // The double-backslash lines are literal backslashes (even count = not continuation).
+  // "Alice" → "Bob" frees space on line 1; line 2 "is cool." must stay verbatim.
   expect(patched).toEqual(
     '[cfg]\n' +
     'path = """\\' + '\n' +
-    '  C:\\\\Users\\\\Bob is \\' + '\n' +
-    '  cool."""\n'
+    '  C:\\\\Users\\\\Bob \\' + '\n' +
+    '  is cool."""\n'
   );
   expect(parse(patched).cfg.path).toEqual('C:\\Users\\Bob is cool.');
 });
@@ -1470,6 +1473,120 @@ test('should preserve earlier lines when the last word of a continuation string 
     'End"""\n'
   );
   expect(parse(patched).description.text).toEqual('The quick brown fox jumps over the lazy dog.End');
+});
+
+// Underflow tests — guard against words from later (longer) lines being pulled up into
+// earlier (shorter) lines when a minimal change is made, caused by maxLength being
+// measured from the longest line in the original string.
+
+test('should not reflow later lines when replacing a same-length word on a short first line', () => {
+  // maxLength is determined by the long second line ("The quick brown fox." = 20).
+  // Line 1 is intentionally kept short by the original author.
+  // Swapping "Hi" for same-length "Yo" should only touch line 1.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'Hi \\' + '\n' +
+    'The quick brown fox."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('Hi The quick brown fox.');
+
+  value.description.text = 'Yo The quick brown fox.';
+  const patched = patch(existing, value);
+
+  // Only the first word changes — "The quick brown fox." must stay on line 2 unchanged.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'Yo \\' + '\n' +
+    'The quick brown fox."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('Yo The quick brown fox.');
+});
+
+test('should not reflow later lines when adding one character to a short first word', () => {
+  // maxLength is 22 (from the long second line "very long line indeed." = 22).
+  // Adding one char to "A" (→ "An") should only affect line 1 — not pull words
+  // from line 2 up to fill the now-slightly-larger available space on line 1.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'A \\' + '\n' +
+    'very long line indeed."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('A very long line indeed.');
+
+  value.description.text = 'An very long line indeed.';
+  const patched = patch(existing, value);
+
+  // Only the first word changes — the second line must remain untouched.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'An \\' + '\n' +
+    'very long line indeed."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('An very long line indeed.');
+});
+
+test('should not pull words from line 3 when shrinking a word on line 2', () => {
+  // maxLength is 24 (from the third line "jumps over the lazy dog." = 24).
+  // Prefix preservation keeps line 1 intact. The remainder ("red fox ...") would
+  // be repacked at maxLength=24, absorbing words from line 3 onto line 2.
+  // Replacing "brown" (5 chars) with "red" (3 chars) should only change line 2.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick \\' + '\n' +
+    'brown fox \\' + '\n' +
+    'jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The quick red fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // Line 1 preserved, only "brown" → "red" on line 2, line 3 untouched.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick \\' + '\n' +
+    'red fox \\' + '\n' +
+    'jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The quick red fox jumps over the lazy dog.');
+});
+
+test('should not absorb words from line 3 when swapping a same-length word on line 2', () => {
+  // maxLength is 15 (from the third line "fox jumps over." = 15).
+  // "green fox jumps" (15) fits exactly in maxLength, so the greedy packer would
+  // absorb "fox jumps" from line 3 onto line 2, leaving only "over." alone.
+  // "brown" → "green" is an exact same-length swap — no lines should reflow.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick \\' + '\n' +
+    'brown \\' + '\n' +
+    'fox jumps over."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over.');
+
+  value.description.text = 'The quick green fox jumps over.';
+  const patched = patch(existing, value);
+
+  // Line 1 preserved, only "brown" → "green" on line 2, line 3 untouched.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick \\' + '\n' +
+    'green \\' + '\n' +
+    'fox jumps over."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The quick green fox jumps over.');
 });
 
 // Edge cases that exercise boundary conditions in the packing and reassembly logic.

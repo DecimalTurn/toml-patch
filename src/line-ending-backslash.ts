@@ -295,13 +295,14 @@ export function rebuildLineContinuation(
       if (trailingSpaces !== tailProto.trailingWs.length) return null;
     }
 
-    // ── Prefix preservation ─────────────────────────────────────────────────────
-    // When only the end of the content changes (e.g. removing the last word),
-    // preserve original continuation lines that still match the new content verbatim.
-    // This prevents changes at the end of the string from re-flowing earlier lines.
-    // Only applicable when all inner segments are continuation lines (no literal
-    // line breaks in the original), which is the precondition for stable prefix matching.
+    // ── Prefix + suffix preservation ────────────────────────────────────────────
+    // Identify unchanged leading and trailing segments so only the genuinely changed
+    // middle slice needs to be repacked. This prevents a word swap in the middle (or
+    // even at the very start) from pulling words out of later unchanged lines due to
+    // the global maxLength being measured from the longest line in the string.
     if (!hasLiteralLineBreakStyle) {
+      // Prefix: count segments from the start whose content+trailingWs appears
+      // verbatim at the beginning of packInput.
       let preservedCount = 0;
       let consumedChars = 0;
       // Only consider segments up to (but not including) the tail segment.
@@ -317,9 +318,116 @@ export function rebuildLineContinuation(
         }
       }
 
+      // Suffix: working backwards from the tail, count segments whose content+trailingWs
+      // appears verbatim at the END of packInput (not overlapping the prefix).
+      // Structural segments with no content (e.g. a blank closing-indent segment) are
+      // not matchable — they would always match the empty string and corrupt the output.
+      let suffixCount = 0;
+      let suffixChars = 0;
+      for (let k = contentSegments.length - 1; k >= preservedCount; k--) {
+        const seg = contentSegments[k];
+        const contrib = seg.content + seg.trailingWs;
+        if (contrib.length === 0) break; // structural segment — stop
+        const start = packInput.length - suffixChars - contrib.length;
+        if (start >= consumedChars && packInput.slice(start, start + contrib.length) === contrib) {
+          suffixCount++;
+          suffixChars += contrib.length;
+        } else {
+          break;
+        }
+      }
+
+      // ── Prefix + middle + suffix early return ──────────────────────────────
+      // Used when the suffix is non-empty. Pack only the changed middle section
+      // using a local width budget derived from the original middle segments, so
+      // the middle lines cannot absorb words that belong to the unchanged suffix.
+      if (suffixCount > 0) {
+        const middleInput = packInput.slice(consumedChars, packInput.length - suffixChars);
+        // Guard: middle must not start with a space.
+        if (middleInput.length === 0 || middleInput[0] !== ' ') {
+          // 1. Emit preserved prefix lines verbatim (all have continuation backslash).
+          for (let i = 0; i < preservedCount; i++) {
+            const seg = contentSegments[i];
+            rebuiltLines.push(`${seg.indent}${seg.content}${seg.trailingWs}\\`);
+            if (i < preservedCount - 1 && i < blankGroups.length && blankGroups[i].length > 0) {
+              for (const bl of blankGroups[i]) rebuiltLines.push(bl);
+            }
+          }
+
+          // 2. Pack and emit the middle section (all lines need continuation backslash
+          //    because the suffix follows).
+          if (middleInput.length > 0) {
+            const midLines = packContent(middleInput);
+            const joinedMid = midLines.join('');
+            const hasEncodedNewlines = /(?<!\\)\\n/.test(joinedMid);
+            // Blank group bridging last prefix segment and first middle line.
+            if (preservedCount > 0 && !hasEncodedNewlines) {
+              const bridgeIdx = preservedCount - 1;
+              if (bridgeIdx < blankGroups.length && blankGroups[bridgeIdx].length > 0) {
+                for (const bl of blankGroups[bridgeIdx]) rebuiltLines.push(bl);
+              }
+            }
+            for (let j = 0; j < midLines.length; j++) {
+              const newContent = midLines[j];
+              const origIdx = preservedCount + j;
+              const origSeg = origIdx < contentSegments.length ? contentSegments[origIdx] : null;
+              const indent = origSeg
+                ? (isLeadingNewlineOpening && origIdx === 0 ? newFirstIndent : origSeg.indent)
+                : contProto.indent;
+              const trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
+              rebuiltLines.push(`${indent}${newContent}${trailing}\\`);
+              if (j < midLines.length - 1 && !hasEncodedNewlines) {
+                const bgIdx = preservedCount + j;
+                if (bgIdx < blankGroups.length && blankGroups[bgIdx].length > 0) {
+                  for (const bl of blankGroups[bgIdx]) rebuiltLines.push(bl);
+                }
+              }
+            }
+            // Blank group between the last middle line and the first suffix segment.
+            const midToSuffixBgIdx = contentSegments.length - suffixCount - 1;
+            if (!hasEncodedNewlines &&
+                midToSuffixBgIdx >= 0 && midToSuffixBgIdx < blankGroups.length &&
+                blankGroups[midToSuffixBgIdx].length > 0) {
+              for (const bl of blankGroups[midToSuffixBgIdx]) rebuiltLines.push(bl);
+            }
+          } else if (preservedCount > 0) {
+            // Empty middle: blank group bridging last prefix and first suffix.
+            const bridgeIdx = preservedCount - 1;
+            if (bridgeIdx < blankGroups.length && blankGroups[bridgeIdx].length > 0) {
+              for (const bl of blankGroups[bridgeIdx]) rebuiltLines.push(bl);
+            }
+          }
+
+          // 3. Emit preserved suffix lines verbatim.
+          const suffixStart = contentSegments.length - suffixCount;
+          for (let i = suffixStart; i < contentSegments.length; i++) {
+            const seg = contentSegments[i];
+            const isTail = i === contentSegments.length - 1;
+            // Blank group between consecutive suffix segments (not the middle-to-first-suffix
+            // bridge, which was handled above).
+            if (i > suffixStart) {
+              const bgIdx = i - 1;
+              if (bgIdx < blankGroups.length && blankGroups[bgIdx].length > 0) {
+                for (const bl of blankGroups[bgIdx]) rebuiltLines.push(bl);
+              }
+            }
+            rebuiltLines.push(isTail
+              ? `${seg.indent}${seg.content}${seg.trailingWs}${seg.hasBackslash && seg.content !== '' ? '\\' : ''}`
+              : `${seg.indent}${seg.content}${seg.trailingWs}\\`);
+          }
+
+          const useClosingIndentEarly = hasClosingIndent && !(tailProto.hasBackslash && tailProto.content === '');
+          if (useClosingIndentEarly) {
+            return `${openingPrefix}${rebuiltLines.join(newlineChar)}${newlineChar}${closingIndent}${delimiter}`;
+          }
+          return `${openingPrefix}${rebuiltLines.join(newlineChar)}${delimiter}`;
+        }
+      }
+
+      // ── Prefix-only early return ────────────────────────────────────────────
+      // Used when the suffix is empty but the prefix is non-empty. Packs the
+      // remaining (changed) tail portion at the global maxLength.
       const remainingInput = packInput.slice(consumedChars);
-      // Use prefix preservation when at least one segment matched and the remaining
-      // content is either empty or starts with a non-space (packable without issue).
       if (
         preservedCount > 0 &&
         (consumedChars === packInput.length ||
