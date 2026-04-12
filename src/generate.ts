@@ -167,9 +167,10 @@ export function generateString(value: string, existingRaw?: string): String {
     const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
                                ((existingRaw.startsWith("'''\n") || existingRaw.startsWith("'''\r\n")) && !isLiteral);
 
-    // Normalize the new value's newlines to the document's line ending.
-    // Without this, supplying a value with bare '\n' into a CRLF document would
-    // produce mixed line endings in the output.
+    // The value's newlines are preserved as-is when using the LC escape-sequence path
+    // (where newlines are encoded as TOML \n / \r\n escapes, not embedded literally).
+    // The fallback paths embed newlines as literal source text, so they must normalize
+    // to the document's line ending to keep the file structurally consistent.
     const normalizedValue = value.replace(/\r?\n/g, newlineChar);
 
     let escaped: string;
@@ -177,7 +178,9 @@ export function generateString(value: string, existingRaw?: string): String {
       // Literal strings: no escaping needed (we already checked for ''' above)
       escaped = normalizedValue;
     } else {
-      // Basic multiline strings: escape backslashes, control characters, and triple quotes
+      // Basic multiline strings: escape backslashes, control characters, and triple quotes.
+      // Build escapedRaw from normalizedValue (for fallback literal paths) and
+      // escapedOriginal from value (for the LC path which uses TOML escape sequences).
       escaped = normalizedValue
         .replace(/\\/g, '\\\\')  // Escape backslashes first
         .replace(/\x08/g, '\\b') // Backspace (U+0008)
@@ -191,6 +194,19 @@ export function generateString(value: string, existingRaw?: string): String {
         // Escape triple quotes safely: two literal quotes + escaped quote
         .replace(/"""/g, '""\\\"');
     }
+
+    // For the LC path, escape value without newline normalization so the LC function
+    // can encode them as TOML escape sequences (\n, \r\n) and preserve the exact value.
+    const escapedOriginal = isLiteral ? value : value
+      .replace(/\\/g, '\\\\')
+      .replace(/\x08/g, '\\b')
+      .replace(/\f/g, '\\f')
+      .replace(/\t/g, '\\t')
+      .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
+        const code = char.charCodeAt(0);
+        return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+      })
+      .replace(/"""/g, '""\\\"');
     
     // Detect line-continuation backslashes anywhere in the multiline string body.
     // Line-continuation is only meaningful in basic (""") strings, not literal (''').
@@ -200,7 +216,7 @@ export function generateString(value: string, existingRaw?: string): String {
 
     // Generate the replacement raw string, preserving the structural format of the existing raw.
     if (hasLineContinuation) {
-      const rebuilt = rebuildLineContinuation(existingRaw, escaped, newlineChar);
+      const rebuilt = rebuildLineContinuation(existingRaw, escapedOriginal, newlineChar);
       if (rebuilt !== null) {
         raw = rebuilt;
       }

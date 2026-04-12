@@ -195,9 +195,6 @@ export function rebuildLineContinuation(
     !seg.hasBackslash && i < contentSegments.length - 1
   );
 
-  // Regex to match the document's newline character for replace calls.
-  const newlineRe = new RegExp(newlineChar.replace(/\r/g, '\\r'), 'g');
-
   const isLeadingNewlineOpening = openingPrefix === `${delimiter}${newlineChar}`;
   // In `"""<NL>` mode, derive the first-line indent from the value's own leading
   // whitespace so packing sees only "content". In `"""\<NL>` mode there is no
@@ -250,10 +247,19 @@ export function rebuildLineContinuation(
   const logicalLineStartIndentByIndex = new Map<number, string>();
   let isLiteralLineBreakPath = false;
 
-  if (hasLiteralLineBreakStyle && escaped.includes(newlineChar)) {
+  // Guard: only use the literal-break path when the value's newlines are exactly
+  // newlineChar. A CRLF value in an LF doc would have `escaped.includes('\n')` true
+  // (since \r\n contains \n), but splitting on bare '\n' would leave stray \r at
+  // the end of lines. So for LF docs, require the value has no \r\n sequences.
+  const canUseLiteralBreak = hasLiteralLineBreakStyle && escaped.includes(newlineChar) &&
+    (newlineChar === '\r\n' || !escaped.includes('\r\n'));
+
+  if (canUseLiteralBreak) {
     // ── Literal line-break path ────────────────────────────────────────────────
     // Keep actual source newlines from the new value. Each logical line is packed
     // independently and boundaries are emitted as real line breaks (no backslash).
+    // Since value newlines are not normalized, the decoded value preserves whatever
+    // newline sequence was in the original JS value.
     isLiteralLineBreakPath = true;
     const logicalLines = escaped.split(newlineChar);
 
@@ -290,8 +296,13 @@ export function rebuildLineContinuation(
     }
   } else {
     // ── Single-group path ────────────────────────────────────────────────────────
-    // Encode all newlines as \n escape sequences and pack into one continuous group.
-    const packInput = escaped.replace(newlineRe, '\\n').slice(newFirstIndent.length);
+    // Encode newlines as TOML escape sequences so the decoded value exactly preserves
+    // whatever newline sequence was in the original JS value. Encode \r\n first so
+    // that the subsequent bare-\n pass doesn't double-encode the \n half of CRLF.
+    const packInput = escaped
+      .replace(/\r\n/g, '\\r\\n')
+      .replace(/\n/g, '\\n')
+      .slice(newFirstIndent.length);
 
     // Guard: leading space would be silently consumed by LC indent mechanics.
     if (packInput.length > 0) {

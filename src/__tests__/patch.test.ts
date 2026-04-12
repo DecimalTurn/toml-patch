@@ -1589,11 +1589,11 @@ test('should not absorb words from line 3 when swapping a same-length word on li
   expect(parse(patched).description.text).toEqual('The quick green fox jumps over.');
 });
 
-test('should normalize mixed line endings in new value to the document line ending (CRLF doc, LF value)', () => {
-  // The document uses CRLF. The caller supplies a value whose newlines are bare LF.
-  // generate.ts normalises value newlines to the document's line ending before
-  // passing to rebuildLineContinuation, so the output must use CRLF throughout.
-  const crlf = '\r\n';
+test('should preserve bare LF in value when patching a CRLF document', () => {
+  // The document uses CRLF. The caller supplies a value with bare LF newlines.
+  // The value is preserved as-is: \n in the value is encoded as the TOML \n
+  // escape sequence, which always decodes back to \n regardless of the file's
+  // structural line ending. The TOML structure itself stays CRLF.
   const existing =
     '[description]\r\n' +
     'text = """\\\r\n' +
@@ -1603,24 +1603,25 @@ test('should normalize mixed line endings in new value to the document line endi
   const value = parse(existing);
   expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
 
-  // New value contains bare LF newlines (simulating a value received from a
-  // cross-platform source that doesn't match the document's CRLF endings).
   value.description.text = 'Hello\nworld';
   const patched = patch(existing, value);
 
-  // The patched output must not contain any bare LF — every newline is CRLF.
+  // Structural newlines are CRLF; the \n in the value becomes the TOML \n escape.
   expect(patched).not.toMatch(/(?<!\r)\n/);
   expect(patched).toEqual(
     '[description]\r\n' +
     'text = """\\\r\n' +
     '  Hello\\nworld"""\r\n'
   );
+  // Decoded value preserves the original \n.
   expect(parse(patched).description.text).toEqual('Hello\nworld');
 });
 
-test('should normalize mixed line endings in new value to the document line ending (LF doc, CRLF value)', () => {
-  // The document uses LF. The caller supplies a value whose newlines are CRLF.
-  // The output must use LF throughout.
+test('should preserve CRLF in value when patching an LF document', () => {
+  // The document uses LF. The caller supplies a value with CRLF newlines.
+  // The value is preserved as-is: \r\n in the value is encoded as the TOML
+  // \r\n escape sequence pair, which always decodes back to \r\n. The TOML
+  // structure itself stays LF.
   const existing =
     '[description]\n' +
     'text = """\\\n' +
@@ -1630,18 +1631,18 @@ test('should normalize mixed line endings in new value to the document line endi
   const value = parse(existing);
   expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
 
-  // New value contains CRLF newlines.
   value.description.text = 'Hello\r\nworld';
   const patched = patch(existing, value);
 
-  // The patched output must not contain any CRLF — every newline is bare LF.
+  // Structural newlines are LF; the \r\n in the value becomes the \r\n TOML escapes.
   expect(patched).not.toContain('\r\n');
   expect(patched).toEqual(
     '[description]\n' +
     'text = """\\\n' +
-    '  Hello\\nworld"""\n'
+    '  Hello\\r\\nworld"""\n'
   );
-  expect(parse(patched).description.text).toEqual('Hello\nworld');
+  // Decoded value preserves the original \r\n.
+  expect(parse(patched).description.text).toEqual('Hello\r\nworld');
 });
 
 test('should normalize mixed line endings in the document itself (CRLF doc, bare LF inside LC string body)', () => {
