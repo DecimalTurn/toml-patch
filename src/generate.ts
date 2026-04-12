@@ -232,18 +232,15 @@ export function generateString(value: string, existingRaw?: string): String {
 
   // Calculate proper end location for multiline strings
   let endLocation;
-  if (raw.includes('\r\n') || (raw.includes('\n') && !raw.includes('\r\n'))) {
+  if (raw.includes('\n')) {
     const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
     const lineCount = (raw.match(new RegExp(newlineChar === '\r\n' ? '\\r\\n' : '\\n', 'g')) || []).length;
     
-    if (lineCount > 0) {
-      endLocation = {
-        line: 1 + lineCount,
-        column: 3 // length of delimiter (""" or ''')
-      };
-    } else {
-      endLocation = { line: 1, column: raw.length };
-    }
+    endLocation = {
+      line: 1 + lineCount,
+      column: 3 // length of delimiter (""" or ''')
+    };
+
   } else {
     endLocation = { line: 1, column: raw.length };
   }
