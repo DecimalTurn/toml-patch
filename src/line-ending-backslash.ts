@@ -90,6 +90,11 @@ export function rebuildLineContinuation(
   escaped: string,
   newlineChar: string
 ): string | null {
+  // Normalize existingRaw to the document's line ending so mixed-ending source
+  // files are handled consistently. Replace all CRLF first, then any remaining
+  // bare LF, then re-introduce the correct sequence.
+  existingRaw = existingRaw.replace(/\r\n/g, '\n').replace(/\n/g, newlineChar);
+
   // Line-continuation is only valid in basic multiline strings.
   const delimiter = '"""';
   // Determine the opening format and where the body starts

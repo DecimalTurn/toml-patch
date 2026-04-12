@@ -1589,6 +1589,115 @@ test('should not absorb words from line 3 when swapping a same-length word on li
   expect(parse(patched).description.text).toEqual('The quick green fox jumps over.');
 });
 
+test('should normalize mixed line endings in new value to the document line ending (CRLF doc, LF value)', () => {
+  // The document uses CRLF. The caller supplies a value whose newlines are bare LF.
+  // generate.ts normalises value newlines to the document's line ending before
+  // passing to rebuildLineContinuation, so the output must use CRLF throughout.
+  const crlf = '\r\n';
+  const existing =
+    '[description]\r\n' +
+    'text = """\\\r\n' +
+    '  The quick brown fox \\\r\n' +
+    '  jumps over the lazy dog."""\r\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  // New value contains bare LF newlines (simulating a value received from a
+  // cross-platform source that doesn't match the document's CRLF endings).
+  value.description.text = 'Hello\nworld';
+  const patched = patch(existing, value);
+
+  // The patched output must not contain any bare LF — every newline is CRLF.
+  expect(patched).not.toMatch(/(?<!\r)\n/);
+  expect(patched).toEqual(
+    '[description]\r\n' +
+    'text = """\\\r\n' +
+    '  Hello\\nworld"""\r\n'
+  );
+  expect(parse(patched).description.text).toEqual('Hello\nworld');
+});
+
+test('should normalize mixed line endings in new value to the document line ending (LF doc, CRLF value)', () => {
+  // The document uses LF. The caller supplies a value whose newlines are CRLF.
+  // The output must use LF throughout.
+  const existing =
+    '[description]\n' +
+    'text = """\\\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  // New value contains CRLF newlines.
+  value.description.text = 'Hello\r\nworld';
+  const patched = patch(existing, value);
+
+  // The patched output must not contain any CRLF — every newline is bare LF.
+  expect(patched).not.toContain('\r\n');
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\\n' +
+    '  Hello\\nworld"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('Hello\nworld');
+});
+
+test('should normalize mixed line endings in the document itself (CRLF doc, bare LF inside LC string body)', () => {
+  // A TOML file with mixed line endings: the document is CRLF but the LC string
+  // body contains bare LF lines. The patcher normalises existingRaw to the
+  // detected document newline before parsing segments, so the patched output
+  // uses CRLF consistently and the LC structure is preserved.
+  const existing =
+    '[description]\r\n' +
+    'text = """\\' + '\r\n' +
+    '  The quick brown fox \\' + '\n' + // bare LF — mixed!
+    '  jumps over the lazy dog."""\r\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The slow brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // Output is fully CRLF and the second line is preserved verbatim.
+  expect(patched).not.toMatch(/(?<!\r)\n/);
+  expect(patched).toEqual(
+    '[description]\r\n' +
+    'text = """\\' + '\r\n' +
+    '  The slow brown fox \\' + '\r\n' +
+    '  jumps over the lazy dog."""\r\n'
+  );
+  expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
+});
+
+test('should normalize mixed line endings in the document itself (LF doc, CRLF opening line in LC string)', () => {
+  // A TOML file where the LC opening line uses CRLF but the rest of the document
+  // uses bare LF. After normalization the output is fully LF.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\r\n' + // CRLF after opening — mixed!
+    '  The quick brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+  value.description.text = 'The slow brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // Output is fully LF and the second line is preserved verbatim.
+  expect(patched).not.toContain('\r\n');
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The slow brown fox \\' + '\n' +
+    '  jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
+});
+
 // Edge cases that exercise boundary conditions in the packing and reassembly logic.
 // These specifically guard against regressions if assumptions about dead code paths
 // inside rebuildLineContinuation are ever invalidated.
