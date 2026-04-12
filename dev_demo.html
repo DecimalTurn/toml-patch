@@ -139,6 +139,11 @@
       padding: 0.15rem 0.5rem;
       border-radius: 4px;
     }
+    .panel-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
 
     .cm-host {
       flex: 1;
@@ -173,6 +178,10 @@
       margin-top: 1rem;
       justify-content: center;
       flex-wrap: wrap;
+    }
+    .top-actions {
+      margin-top: 0;
+      margin-bottom: 1rem;
     }
     .btn {
       background: var(--accent);
@@ -344,7 +353,11 @@
 
   <!-- ── Parse Tab ──────────────────────────── -->
   <div class="tab-panel active" id="tab-parse">
-    <div class="panel-grid">
+      <div class="actions top-actions">
+        <button class="btn" onclick="runParse()">Parse →</button>
+        <button class="btn secondary" onclick="resetParse()">Reset</button>
+      </div>
+      <div class="panel-grid">
       <div class="panel">
         <div class="panel-header"><span>Input <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="openEvalModal('parse-input')" title="Set value from JS expression" aria-label="Set TOML input from JS expression">{ }</button></div>
         <div id="parse-input" class="cm-host"></div>
@@ -363,7 +376,11 @@
 
   <!-- ── Stringify Tab ──────────────────────── -->
   <div class="tab-panel" id="tab-stringify">
-    <div class="panel-grid">
+      <div class="actions top-actions">
+        <button class="btn" onclick="runStringify()">Stringify →</button>
+        <button class="btn secondary" onclick="resetStringify()">Reset</button>
+      </div>
+      <div class="panel-grid">
       <div class="panel">
         <div class="panel-header"><span>Input <span class="lang">JSON</span></span><button type="button" class="eval-btn" onclick="openEvalModal('stringify-input')" title="Set value from JS expression" aria-label="Set JSON input from JS expression">{ }</button></div>
         <div id="stringify-input" class="cm-host"></div>
@@ -382,17 +399,21 @@
 
   <!-- ── Patch Tab ──────────────────────────── -->
   <div class="tab-panel" id="tab-patch">
-    <div class="panel-grid triple">
+      <div class="actions top-actions">
+        <button class="btn" onclick="runPatch()">Patch →</button>
+        <button class="btn secondary" onclick="resetPatch()">Reset</button>
+      </div>
+      <div class="panel-grid triple">
       <div class="panel">
         <div class="panel-header"><span>Existing Document <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="openEvalModal('patch-existing')" title="Set value from JS expression" aria-label="Set existing TOML document from JS expression">{ }</button></div>
         <div id="patch-existing" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Updated Data <span class="lang">JSON</span></span><button type="button" class="eval-btn" onclick="openEvalModal('patch-updated')" title="Set value from JS expression" aria-label="Set updated JSON data from JS expression">{ }</button></div>
+        <div class="panel-header"><span>Updated Data <span class="lang">JSON</span></span><span class="panel-header-actions"><button type="button" class="eval-btn" onclick="populatePatchUpdatedFromExisting()" title="Parse existing TOML into JSON" aria-label="Fill updated JSON from existing TOML">T -> J</button><button type="button" class="eval-btn" onclick="openEvalModal('patch-updated')" title="Set value from JS expression" aria-label="Set updated JSON data from JS expression">{ }</button></span></div>
         <div id="patch-updated" class="cm-host"></div>
       </div>
       <div class="panel">
-        <div class="panel-header"><span>Patched Result <span class="lang">TOML</span></span><button type="button" class="eval-btn" onclick="copyEditor('patch-output', this)" title="Copy output" aria-label="Copy patched TOML result">Copy</button></div>
+        <div class="panel-header"><span>Patched Result <span class="lang">TOML</span></span><span class="panel-header-actions"><button type="button" class="eval-btn" onclick="validatePatchOutput()" title="Validate patched output against updated JSON" aria-label="Validate patched output">Validate</button><button type="button" class="eval-btn" onclick="copyEditor('patch-output', this)" title="Copy output" aria-label="Copy patched TOML result">Copy</button></span></div>
         <div id="patch-output" class="cm-host"></div>
       </div>
     </div>
@@ -670,6 +691,55 @@ text = """\\
     setEditorValue('patch-updated', window._defaults['patch-updated']);
     setEditorValue('patch-output', '');
     clearStatus('patch-status');
+  };
+
+  window.populatePatchUpdatedFromExisting = function () {
+    clearStatus('patch-status');
+    try {
+      const existing = getEditorValue('patch-existing');
+      const { result, ms } = elapsed(() => TOML.parse(existing));
+      setEditorValue('patch-updated', JSON.stringify(result, null, 2));
+      setStatus('patch-status', `Loaded JSON from existing TOML in ${ms} ms`);
+    } catch (e) {
+      setStatus('patch-status', `Error: ${e.message}`, true);
+    }
+  };
+
+  function toCanonical(value) {
+    if (Array.isArray(value)) return value.map(toCanonical);
+    if (value && typeof value === 'object') {
+      const out = {};
+      for (const key of Object.keys(value).sort()) out[key] = toCanonical(value[key]);
+      return out;
+    }
+    return value;
+  }
+
+  window.validatePatchOutput = function () {
+    clearStatus('patch-status');
+    try {
+      const patchedToml = getEditorValue('patch-output');
+      if (!patchedToml.trim()) {
+        setStatus('patch-status', 'Error: patch output is empty. Run Patch first.', true);
+        return;
+      }
+
+      const updatedJson = getEditorValue('patch-updated');
+      const expected = JSON.parse(updatedJson);
+
+      const { result: actual, ms } = elapsed(() => TOML.parse(patchedToml));
+
+      const expectedCanonical = JSON.stringify(toCanonical(expected));
+      const actualCanonical = JSON.stringify(toCanonical(actual));
+
+      if (expectedCanonical === actualCanonical) {
+        setStatus('patch-status', `Validation passed in ${ms} ms — parsed output matches updated JSON.`);
+      } else {
+        setStatus('patch-status', 'Validation failed — parsed output does not match updated JSON.', true);
+      }
+    } catch (e) {
+      setStatus('patch-status', `Error: ${e.message}`, true);
+    }
   };
 
   // ── Eval Modal ────────────────────────────────────────
