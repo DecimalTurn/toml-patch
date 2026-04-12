@@ -1417,6 +1417,61 @@ test('should fall back when removing trailing space from value that originally h
   expect(parse(patched).tbl.val).toEqual('Goodbye');
 });
 
+test('should preserve earlier lines when only the end of a line-continuation string is removed', () => {
+  // Removing the last word "Sup" from a 3-line LC string should keep lines 1 and 2
+  // exactly as they were, not re-flow the whole string.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog. \\\n' +
+    'Sup"""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog. Sup');
+
+  value.description.text = 'The quick brown fox jumps over the lazy dog.';
+  const patched = patch(existing, value);
+
+  // Line 1 ("The quick brown fox \") must stay unchanged.
+  // Line 2 loses its trailing space and backslash, becoming the tail.
+  // "Sup" is removed entirely.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+});
+
+test('should preserve earlier lines when the last word of a continuation string is replaced', () => {
+  // Replacing just the last word keeps the unchanged leading lines intact.
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\\\n' +
+    'Sup"""\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.Sup');
+
+  value.description.text = 'The quick brown fox jumps over the lazy dog.End';
+  const patched = patch(existing, value);
+
+  // Line 1 ("The quick brown fox \") stays unchanged.
+  // "Sup" on line 3 is replaced with "End".
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\\\n' +
+    'End"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The quick brown fox jumps over the lazy dog.End');
+});
+
 // Edge cases that exercise boundary conditions in the packing and reassembly logic.
 // These specifically guard against regressions if assumptions about dead code paths
 // inside rebuildLineContinuation are ever invalidated.

@@ -237,6 +237,9 @@ export function rebuildLineContinuation(
   // Flat list of packed content strings and a set tracking logical line boundaries
   // (last packed line of a non-last logical line — no backslash).
   const newContentLines: string[] = [];
+  // Reassembly buffer — populated either by the prefix-preservation early path or
+  // by the main reassembly loop below.
+  const rebuiltLines: string[] = [];
   const paraEndIndices = new Set<number>();
   const logicalLineStartIndices = new Set<number>();
   const logicalLineStartIndentByIndex = new Map<number, string>();
@@ -292,12 +295,104 @@ export function rebuildLineContinuation(
       if (trailingSpaces !== tailProto.trailingWs.length) return null;
     }
 
+    // ── Prefix preservation ─────────────────────────────────────────────────────
+    // When only the end of the content changes (e.g. removing the last word),
+    // preserve original continuation lines that still match the new content verbatim.
+    // This prevents changes at the end of the string from re-flowing earlier lines.
+    // Only applicable when all inner segments are continuation lines (no literal
+    // line breaks in the original), which is the precondition for stable prefix matching.
+    if (!hasLiteralLineBreakStyle) {
+      let preservedCount = 0;
+      let consumedChars = 0;
+      // Only consider segments up to (but not including) the tail segment.
+      for (let k = 0; k < contentSegments.length - 1; k++) {
+        const seg = contentSegments[k];
+        if (!seg.hasBackslash) break; // non-continuation inner segment — stop
+        const contrib = seg.content + seg.trailingWs;
+        if (packInput.slice(consumedChars, consumedChars + contrib.length) === contrib) {
+          preservedCount++;
+          consumedChars += contrib.length;
+        } else {
+          break;
+        }
+      }
+
+      const remainingInput = packInput.slice(consumedChars);
+      // Use prefix preservation when at least one segment matched and the remaining
+      // content is either empty or starts with a non-space (packable without issue).
+      if (
+        preservedCount > 0 &&
+        (consumedChars === packInput.length ||
+          (remainingInput.length > 0 && remainingInput[0] !== ' '))
+      ) {
+        // Emit preserved original continuation lines verbatim.
+        for (let i = 0; i < preservedCount; i++) {
+          const seg = contentSegments[i];
+          rebuiltLines.push(`${seg.indent}${seg.content}${seg.trailingWs}\\`);
+          // Emit blank groups that fall between preserved segments.
+          if (i < preservedCount - 1 && i < blankGroups.length && blankGroups[i].length > 0) {
+            for (const bl of blankGroups[i]) rebuiltLines.push(bl);
+          }
+        }
+
+        if (consumedChars === packInput.length) {
+          // The new content ends exactly at the last preserved segment boundary.
+          // Convert the last preserved line from continuation to tail.
+          const lastSeg = contentSegments[preservedCount - 1];
+          const backslash = tailProto.hasBackslash && lastSeg.content !== '' ? '\\' : '';
+          rebuiltLines[rebuiltLines.length - 1] =
+            `${lastSeg.indent}${lastSeg.content}${tailProto.trailingWs}${backslash}`;
+        } else {
+          // Pack only the remaining (changed) portion of the content.
+          const newPackedLines = packContent(remainingInput);
+          const joinedNew = newPackedLines.join('');
+          const hasEncodedNewlines = /(?<!\\)\\n/.test(joinedNew);
+          // Emit blank group bridging the last preserved segment and the first new line.
+          const bridgeIdx = preservedCount - 1;
+          if (!hasEncodedNewlines && bridgeIdx < blankGroups.length && blankGroups[bridgeIdx].length > 0) {
+            for (const bl of blankGroups[bridgeIdx]) rebuiltLines.push(bl);
+          }
+          for (let j = 0; j < newPackedLines.length; j++) {
+            const isLastNew = j === newPackedLines.length - 1;
+            const newContent = newPackedLines[j];
+            const origIdx = preservedCount + j;
+            const origSeg = origIdx < contentSegments.length ? contentSegments[origIdx] : null;
+            const indent = origSeg
+              ? (isLeadingNewlineOpening && origIdx === 0 ? newFirstIndent : origSeg.indent)
+              : (isLastNew ? tailProto.indent : contProto.indent);
+            let trailing: string;
+            let backslash: string;
+            if (isLastNew) {
+              trailing = tailProto.trailingWs;
+              backslash = tailProto.hasBackslash && tailProto.content !== '' ? '\\' : '';
+            } else {
+              trailing = newContent.length > 0 && /\s$/.test(newContent) ? '' : ' ';
+              backslash = '\\';
+            }
+            rebuiltLines.push(`${indent}${newContent}${trailing}${backslash}`);
+            // Emit blank groups for the new lines (index offset by preservedCount).
+            if (!isLastNew) {
+              const bgIdx = preservedCount + j;
+              if (!hasEncodedNewlines && bgIdx < blankGroups.length && blankGroups[bgIdx].length > 0) {
+                for (const bl of blankGroups[bgIdx]) rebuiltLines.push(bl);
+              }
+            }
+          }
+        }
+
+        const useClosingIndentEarly = hasClosingIndent && !(tailProto.hasBackslash && tailProto.content === '');
+        if (useClosingIndentEarly) {
+          return `${openingPrefix}${rebuiltLines.join(newlineChar)}${newlineChar}${closingIndent}${delimiter}`;
+        }
+        return `${openingPrefix}${rebuiltLines.join(newlineChar)}${delimiter}`;
+      }
+    }
+
     const packed = packContent(packInput);
     for (const l of packed) newContentLines.push(l);
   }
 
   // Reassemble lines with correct indentation, trailing whitespace and backslash placement.
-  const rebuiltLines: string[] = [];
   for (let i = 0; i < newContentLines.length; i++) {
     const isGlobalLast = i === newContentLines.length - 1;
     const isParaEnd = paraEndIndices.has(i);
