@@ -957,7 +957,7 @@ test('should handle patching line-continuation multiline string to all whitespac
 // regular multiline string — preserving content even though the structural formatting
 // is not preserved.
 
-test('should preserve line ending backslash by encoding newline as \\n for mixed LC/literal-newline source', () => {
+test('should preserve line ending backslash with literal line break for mixed LC/literal-newline source', () => {
   // """\<NL> opening, middle line has backslash, last content line does NOT.
   // The decoded value therefore contains a literal newline.
   const existing =
@@ -974,16 +974,18 @@ test('should preserve line ending backslash by encoding newline as \\n for mixed
   value.description.text = 'Hello world\nand goodbye world';
   const patched = patch(existing, value);
 
-  // Preserve the LC layout by encoding the newline as a \n escape in basic string content.
+  // Original style contains a literal newline in source, so preserve it literally
+  // instead of encoding as a \n escape.
   expect(patched).toEqual(
     '[description]\n' +
     'text = """\\' + '\n' +
-    '  Hello world\\nand goodbye world"""\n'
+    '  Hello world\n' +
+    'and goodbye world"""\n'
   );
   expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world');
 });
 
-test('should preserve line ending backslash when only opening line has continuation marker', () => {
+test('should preserve literal line break when only opening line has continuation marker', () => {
   // """\<NL> is immediately followed by content lines WITHOUT backslashes.
   // Only the opening backslash trims the first newline; the rest are literal newlines.
   const existing =
@@ -999,12 +1001,13 @@ test('should preserve line ending backslash when only opening line has continuat
   value.description.text = 'A swift brown fox\njumps high.';
   const patched = patch(existing, value);
 
-  // Preserve the opening LC marker and encode the newline as \n in content.
+  // Preserve the opening LC marker and keep the semantic newline as a literal
+  // source line break instead of a \n escape.
   expect(patched).toEqual(
     '[description]\n' +
     'text = """\\' + '\n' +
-    '  A swift brown fox\\njumps \\\n' +
-    '  high."""\n'
+    '  A swift brown fox\n' +
+    'jumps high."""\n'
   );
   expect(parse(patched).description.text).toEqual('A swift brown fox\njumps high.');
 });
@@ -1175,6 +1178,64 @@ test('should expand multi-paragraph LC string to three paragraphs when new value
     'Third paragraph content."""\n'
   );
   expect(parse(patched).doc.text).toEqual('First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph content.');
+});
+
+test('should preserve literal single line break style when original uses real line breaks', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\n' +
+    '\n' +
+    'And then what?\n' +
+    'Nothing, really."""\n';
+
+  const value = parse(existing);
+  value.description.text = 'The quick brown fox jumps over the lazy dog.\n\nAnd then what?\nNothing, really, but you know.';
+  const patched = patch(existing, value);
+
+  // Original style uses real line breaks (including a single line break after '?').
+  // Preserve that style and avoid introducing \n escapes when a literal line break can
+  // represent the same value naturally.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    'The quick brown fox \\\n' +
+    'jumps over the lazy dog.\n' +
+    '\n' +
+    'And then what?\n' +
+    'Nothing, really, but you \\\n' +
+    'know."""\n'
+  );
+  expect(parse(patched).description.text).toEqual(
+    'The quick brown fox jumps over the lazy dog.\n\nAnd then what?\nNothing, really, but you know.'
+  );
+});
+
+test('should preserve spaced blank line and avoid orphan continuation line when patching quick to swift', () => {
+  const existing =
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The quick brown fox \\\n' +
+    '  jumps over the lazy dog.\n' +
+    '  \n' +
+    '  Then it jumped into the river."""\n';
+
+  const value = parse(existing);
+  value.description.text = value.description.text.replace('quick', 'swift');
+  const patched = patch(existing, value);
+
+  // Keep paragraph style and whitespace-only separator line from original. The second
+  // logical line should not create an orphan `  \\` continuation line.
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\\' + '\n' +
+    '  The swift brown fox jumps over \\\n' +
+    '  the lazy dog.\n' +
+    '  \n' +
+    '  Then it jumped into the river."""\n'
+  );
+  expect(parse(patched).description.text).toEqual('The swift brown fox jumps over the lazy dog.\n  \n  Then it jumped into the river.');
 });
 
 test('should handle massive underflow from many segments to one word', () => {
