@@ -29,40 +29,28 @@
 
 // Script for https://github.com/toml-lang/toml-test
 
-import { TomlDocument, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
+import { parse, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
 
-function blank () {
-	return {}
-}
+function tagObject (obj) {
+	if (typeof obj === 'string') {
+		return { type: 'string', value: obj }
+	}
 
-function last (arr) {
-	return arr[arr.length - 1]
-}
+	if (typeof obj === 'boolean') {
+		return { type: 'bool', value: obj.toString() }
+	}
 
-function ensure (object, keys) {
-	return keys.reduce((active, subkey) => {
-		if (!active[subkey]) active[subkey] = blank()
-		return Array.isArray(active[subkey]) ? last(active[subkey]) : active[subkey]
-	}, object)
-}
+	if (typeof obj === 'number') {
+		if (isNaN(obj)) obj = 'nan'
+		if (obj === Infinity) obj = 'inf'
+		if (obj === -Infinity) obj = '-inf'
+		return { type: 'float', value: obj.toString() }
+	}
 
-function ensureTable (object, key) {
-	const target = ensure(object, key.slice(0, -1))
-	const lastKey = last(key)
-	if (!target[lastKey]) target[lastKey] = blank()
-	return target[lastKey]
-}
+	if (typeof obj === 'bigint') {
+		return { type: 'integer', value: obj.toString() }
+	}
 
-function ensureTableArray (object, key) {
-	const target = ensure(object, key.slice(0, -1))
-	const lastKey = last(key)
-	if (!target[lastKey]) target[lastKey] = []
-	const next = blank()
-	target[lastKey].push(next)
-	return next
-}
-
-function tagDate (obj) {
 	if (obj instanceof OffsetDateTime) {
 		return { type: 'datetime', value: obj.toISOString().replace(' ', 'T') }
 	}
@@ -83,104 +71,12 @@ function tagDate (obj) {
 		return { type: 'datetime', value: obj.toISOString() }
 	}
 
-	throw new Error('Unrecognized date node value')
-}
-
-function tagFloatValue (value) {
-	if (Number.isNaN(value)) return { type: 'float', value: 'nan' }
-	if (value === Infinity) return { type: 'float', value: 'inf' }
-	if (value === -Infinity) return { type: 'float', value: '-inf' }
-	if (Object.is(value, -0)) return { type: 'float', value: '-0.0' }
-
-	let raw = value.toString()
-	if (!/[.eE]/.test(raw)) raw += '.0'
-	return { type: 'float', value: raw }
-}
-
-function integerStringFromRaw (raw) {
-	const compact = raw.replace(/_/g, '')
-	let normalized = compact
-
-	if (/^[+-]?0x/i.test(compact) || /^[+-]?0o/i.test(compact) || /^[+-]?0b/i.test(compact)) {
-		const sign = compact[0] === '+' || compact[0] === '-' ? compact[0] : ''
-		const body = compact.slice(sign ? 1 : 0)
-		normalized = sign + body.toLowerCase()
+	if (Array.isArray(obj)) {
+		return obj.map((e) => tagObject(e))
 	}
 
-	return BigInt(normalized).toString()
-}
-
-function setDottedKey (target, key, value) {
-	const container = key.length > 1 ? ensureTable(target, key.slice(0, -1)) : target
-	container[last(key)] = value
-}
-
-function tagAstValue (node) {
-	switch (node.type) {
-		case 'String':
-			return { type: 'string', value: node.value }
-
-		case 'Integer':
-			return { type: 'integer', value: integerStringFromRaw(node.raw) }
-
-		case 'Float':
-			return tagFloatValue(node.value)
-
-		case 'Boolean':
-			return { type: 'bool', value: node.value.toString() }
-
-		case 'DateTime':
-			return tagDate(node.value)
-
-		case 'InlineArray':
-			return node.items.map((item) => tagAstValue(item.item))
-
-		case 'InlineTable': {
-			const tagged = {}
-			for (const { item } of node.items) {
-				setDottedKey(tagged, item.key.value, tagAstValue(item.value))
-			}
-			return tagged
-		}
-
-		default:
-			throw new Error(`Unrecognized value type: ${node.type}`)
-	}
-}
-
-function tagDocument (ast) {
-	const tagged = {}
-	let active = tagged
-
-	for (const block of ast) {
-		switch (block.type) {
-			case 'Table':
-				active = ensureTable(tagged, block.key.item.value)
-				for (const item of block.items) {
-					if (item.type === 'KeyValue') {
-						setDottedKey(active, item.key.value, tagAstValue(item.value))
-					}
-				}
-				break
-
-			case 'TableArray':
-				active = ensureTableArray(tagged, block.key.item.value)
-				for (const item of block.items) {
-					if (item.type === 'KeyValue') {
-						setDottedKey(active, item.key.value, tagAstValue(item.value))
-					}
-				}
-				break
-
-			case 'KeyValue':
-				setDottedKey(active, block.key.value, tagAstValue(block.value))
-				break
-
-			default:
-				break
-		}
-	}
-
+	let tagged = {}
+	for (const k in obj) tagged[k] = tagObject(obj[k])
 	return tagged
 }
 
@@ -188,12 +84,7 @@ const chunks = []
 process.stdin.on('data', (chunk) => chunks.push(chunk))
 process.stdin.on('end', () => {
 	const bytes = Buffer.concat(chunks)
-	const document = new TomlDocument(bytes)
-
-	// Trigger semantic validation from the already parsed AST.
-	// This preserves invalid-fixture behavior without a second parse pass.
-	document.toJsObject
-
-	const tagged = tagDocument(document.ast)
+	const parsed = parse(bytes, { integersAsBigInt: true })
+	const tagged = tagObject(parsed)
 	console.log(JSON.stringify(tagged, null ,2))
 })
