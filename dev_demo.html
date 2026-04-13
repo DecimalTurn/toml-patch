@@ -468,6 +468,10 @@
 
   window.TOML = TOML;
 
+  // Load dedent for use in expressions
+  const dedentModule = await import('https://esm.sh/dedent');
+  window.dedent = dedentModule.default;
+
   // ── Default content ───────────────────────────────────
   window._defaults = {
     'parse-input': `# This is a TOML document
@@ -765,7 +769,7 @@ text = """\\
       // Use Function constructor instead of eval to avoid access to local scope.
       // This is intentional: the modal is a developer tool for building TOML strings.
       // eslint-disable-next-line no-new-func
-      const result = new Function('return (' + expr + ')')();
+      const result = new Function('dedent', 'return (' + expr + ')')(window.dedent);
       if (typeof result !== 'string') {
         errEl.textContent = `Expected a string, got ${typeof result}`;
         return;
