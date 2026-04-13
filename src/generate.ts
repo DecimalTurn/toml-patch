@@ -153,14 +153,23 @@ export function generateString(value: string, existingRaw?: string): String {
 
 
 
-// To think of : // After (with preferMultilineString = true and value contains triple double quotes):
+
 
   if (existingRaw && isBasicString(existingRaw)) {
     return generateBasicString(value);
   }
 
   if (existingRaw && isLiteralString(existingRaw)) {
-    return generateLiteralString(value);
+    if (!value.includes("'")) {
+      return generateLiteralString(value);
+    }
+    // Value contains a single quote — single-line literal strings cannot contain '.
+    // Fall back to MLLS ('''value''') unless the value also contains ''', in which
+    // case we must use a basic string.
+    if (!value.includes("'''")) {
+      return generateMultilineLiteralString(value);
+    }
+    return generateBasicString(value);
   }
 
   if (existingRaw && isMultilineString(existingRaw)) {
@@ -285,6 +294,36 @@ function generateBasicString(value: string): String {
 
 function generateLiteralString(value: string): String {
   const raw = `'${value}'`;
+  return {
+    type: NodeType.String,
+    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    raw,
+    value
+  };
+}
+
+function generateMultilineBasicString(value: string): String {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/\x08/g, '\\b')
+    .replace(/\f/g, '\\f')
+    .replace(/\t/g, '\\t')
+    .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
+      const code = char.charCodeAt(0);
+      return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+    })
+    .replace(/"""/g, '""\\\"');
+  const raw = `"""${escaped}"""`;
+  return {
+    type: NodeType.String,
+    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    raw,
+    value
+  };
+}
+
+function generateMultilineLiteralString(value: string): String {
+  const raw = `'''${value}'''`;
   return {
     type: NodeType.String,
     loc: { start: zero(), end: { line: 1, column: raw.length } },

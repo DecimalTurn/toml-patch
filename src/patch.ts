@@ -146,9 +146,8 @@ function reorder(changes: Change[]): Change[] {
  */
 function preserveFormatting(existing: Value, replacement: Value): void {
   
-  // Preserve multiline string format
-  if (isString(existing) && isString(replacement) && isMultilineString(existing.raw)) {
-    // Generate new string node with preserved multiline format
+  // Preserve string format (handles basic, literal, multiline in all variants)
+  if (isString(existing) && isString(replacement)) {
     const newString = generateString(replacement.value, existing.raw);
     replacement.raw = newString.raw;
     replacement.loc = newString.loc;
