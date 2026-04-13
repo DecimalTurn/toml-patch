@@ -29,6 +29,10 @@ export function isLiteralString(raw: string): boolean {
   return raw.startsWith("'") && !raw.startsWith("'''");
 }
 
+export function isMultilineLiteralString(raw: string): boolean {
+  return raw.startsWith("'''");
+}
+
 export function isInteger(value: any): value is number {
   return typeof value === 'number' && value % 1 === 0 && isFinite(value) && !Object.is(value, -0);
 }

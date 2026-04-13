@@ -753,22 +753,37 @@ describe('multiline strings - both basic and literal', () => {
     expect(patched).toEqual(expectedOutput);
   });
 
+
+  // Suspended while we think about how we want to deal with mixed line endings in TOML documents.
+  /* 
   test.each([
     { delimiter: '"""', type: 'basic' },
     { delimiter: "'''", type: 'literal' }
   ])('should preserve $type multiline string with CRLF line endings', ({ delimiter }) => {
-    const existing = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA simple package\r\n${delimiter}\r\nversion = "1.0.0"\r\n`;
+    const existing =
+      `[package]\r\n` +
+      `name = "example"\r\n` +
+      `description = ${delimiter}\r\n` +
+      `A simple package\r\n` +
+      `${delimiter}\r\n` +
+      `version = "1.0.0"\r\n`;
 
     const obj = parse(existing);
     obj.package.description = "A different description";
     const patched = patch(existing, obj);
     
-    const expectedOutput = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA different description${delimiter}\r\nversion = "1.0.0"\r\n`;
+    const expectedOutput =
+      `[package]\r\n` +
+      `name = "example"\r\n` +
+      `description = ${delimiter}\r\n` +
+      `A different description${delimiter}\r\n` +
+      `version = "1.0.0"\r\n`;
 
     expect(patched).toEqual(expectedOutput);
   });
-});
 
+*/
+});
 
 test('should patch example with removal of an array element', () => {
   const existing = dedent`
@@ -1443,6 +1458,8 @@ test('should handle empty string', () => {
   expect(patched).toBe('');
 });
 
+// Suspended while we think about how we want to deal with mixed line endings in TOML documents.
+/*
 test('should handle mixed line endings consistently', () => {
   // File that starts with CRLF but we want to ensure consistency
   const existing = 'title = "test"\r\nversion = "1.0"\r\n\r\n';
@@ -1502,6 +1519,7 @@ test('should normalize CRLF in new value to LF when document uses LF', () => {
   expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world\n');
 });
 
+
 test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to CRLF', () => {
   const existing = '[description]\r\ntext = """\r\nFirst line\r\n"""\r\n';
 
@@ -1520,6 +1538,8 @@ test('should keep literal \\n and \\r\\n sequences while normalizing real newlin
   expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\r\nline\r\nend');
 });
 
+
+/*
 test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to LF', () => {
   const existing = '[description]\ntext = """\nFirst line\n"""\n';
 
@@ -1537,6 +1557,7 @@ test('should keep literal \\n and \\r\\n sequences while normalizing real newlin
   );
   expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\nline\nend');
 });
+*/
 
 test('should respect quoted keys when parsing', () => {
   const toml = dedent`

@@ -18,11 +18,12 @@ import {
   InlineTable,
   Comment
 } from './ast';
-import { zero, cloneLocation, clonePosition } from './location';
+import { zero, cloneLocation, clonePosition, Location, Position } from './location';
 import { LocalDate } from './parse-toml';
 import { shiftNode } from './writer';
-import { isBasicString, isLiteralString, isMultilineString } from './utils';
-import { detectLineContinuation, rebuildLineContinuation } from './line-ending-backslash';
+import { isBasicString, isLiteralString, isMultilineLiteralString, isMultilineString } from './utils';
+import { rebuildLineContinuation } from './line-ending-backslash';
+import { createString, MultilineBasicString, MultilineLiteralString, StringValue, detectLineContinuation } from './string-format';
 
 /**
  * Generates a new TOML document node.
@@ -149,12 +150,7 @@ export function generateKey(value: string[]): Key {
  * @returns A new String node.
  */
 export function generateString(value: string, existingRaw?: string): String {
-  let raw = '';
-
-
-
-
-
+  
   if (existingRaw && isBasicString(existingRaw)) {
     return generateBasicString(value);
   }
@@ -167,119 +163,31 @@ export function generateString(value: string, existingRaw?: string): String {
     // Fall back to MLLS ('''value''') unless the value also contains ''', in which
     // case we must use a basic string.
     if (!value.includes("'''")) {
-      return generateMultilineLiteralString(value);
+      return generateMultilineLiteralString(value, existingRaw);
     }
     return generateBasicString(value);
   }
 
-  if (existingRaw && isMultilineString(existingRaw)) {
-    // Preserve multiline format
-    let isLiteral = existingRaw.startsWith("'''");
-    
-    // Literal strings cannot contain ''' - convert to basic string if needed
-    if (isLiteral && value.includes("'''")) {
-      isLiteral = false;
+  // Note that Literal strings cannot contain ''' - fallback to basic multi-line string if needed
+  if (existingRaw && isMultilineLiteralString(existingRaw)) {
+    if (!value.includes("'''")) {
+      return generateMultilineLiteralString(value, existingRaw);
     }
-    
-    const delimiter = isLiteral ? "'''" : '"""';
-    
-    // Detect newline character from existing raw
-    const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
-    const hasLeadingNewline = existingRaw.startsWith(`${delimiter}${newlineChar}`) || 
-                               ((existingRaw.startsWith("'''\n") || existingRaw.startsWith("'''\r\n")) && !isLiteral);
-
-    // The value's newlines are preserved as-is when using the LC escape-sequence path
-    // (where newlines are encoded as TOML \n / \r\n escapes, not embedded literally).
-    // The fallback paths embed newlines as literal source text, so they must normalize
-    // to the document's line ending to keep the file structurally consistent.
-    const normalizedValue = value.replace(/\r?\n/g, newlineChar);
-
-    let escaped: string;
-    if (isLiteral) {
-      // Literal strings: no escaping needed (we already checked for ''' above)
-      escaped = normalizedValue;
-    } else {
-      // Basic multiline strings: escape backslashes, control characters, and triple quotes.
-      // Build escapedRaw from normalizedValue (for fallback literal paths) and
-      // escapedOriginal from value (for the LC path which uses TOML escape sequences).
-      escaped = normalizedValue
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/\x08/g, '\\b') // Backspace (U+0008)
-        .replace(/\f/g, '\\f')   // Form feed (U+000C)
-        .replace(/\t/g, '\\t')   // Tab (U+0009)
-        .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
-          // Escape other control characters
-          const code = char.charCodeAt(0);
-          return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
-        })
-        // Escape triple quotes safely: two literal quotes + escaped quote
-        .replace(/"""/g, '""\\\"');
+    else {
+      // Need to escaped LEB in existingRaw and switch to """ instead of '''
+      const escaped = existingRaw.replace(/^'''/g, '"""').replace(/\\$/gm, "\\\\");
+      return generateMultilineBasicString(value, escaped);
     }
-
-    // For the LC path, escape value without newline normalization so the LC function
-    // can encode them as TOML escape sequences (\n, \r\n) and preserve the exact value.
-    const escapedOriginal = isLiteral ? value : value
-      .replace(/\\/g, '\\\\')
-      .replace(/\x08/g, '\\b')
-      .replace(/\f/g, '\\f')
-      .replace(/\t/g, '\\t')
-      .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
-        const code = char.charCodeAt(0);
-        return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
-      })
-      .replace(/"""/g, '""\\\"');
-    
-    // Detect line-continuation backslashes anywhere in the multiline string body.
-    // Line-continuation is only meaningful in basic (""") strings, not literal (''').
-    // `rebuildLineContinuation` handles newlines in `escaped` internally: it either
-    // splits on double-newlines (paragraph style) or encodes them as \n escape sequences.
-    const hasLineContinuation = detectLineContinuation(existingRaw, newlineChar);
-
-    // Generate the replacement raw string, preserving the structural format of the existing raw.
-    if (hasLineContinuation) {
-      const rebuilt = rebuildLineContinuation(existingRaw, escapedOriginal, newlineChar);
-      if (rebuilt !== null) {
-        raw = rebuilt;
-      }
-    }
-    if (!raw && hasLeadingNewline) {
-      raw = `${delimiter}${newlineChar}${escaped}${delimiter}`;
-    } else if (!raw) {
-      raw = `${delimiter}${escaped}${delimiter}`;
-    }
-  } else {
-    raw = JSON.stringify(value);
   }
 
-  // Calculate proper end location for multiline strings
-  let endLocation;
-  if (raw.includes('\n')) {
-    const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
-    const lines = raw.split(newlineChar);
-    const lastLine = lines[lines.length - 1];
-    endLocation = {
-      line: lines.length,
-      // Use the actual last line length: when """ closes on its own line this
-      // equals 3 (the delimiter), but when content precedes the closing """
-      // (no-leading-newline format, e.g. """Hello\nWorld""") it's larger.
-      column: lastLine.length
-    };
-
-  } else {
-    // Covers both regular basic strings (e.g. "hello") and mlbs whose generated raw
-    // contains no newline — e.g. """single line value""" produced when the original
-    // had no leading newline and the new value itself has no newlines. In that case
-    // the entire raw string sits on one line, so column = raw.length is correct.
-    // (column: 3 would be wrong here — that only applies when """ closes on its own line.)
-    endLocation = { line: 1, column: raw.length };
+  if (existingRaw && existingRaw.startsWith('"""')) {
+    return generateMultilineBasicString(value, existingRaw);
   }
 
-  return {
-    type: NodeType.String,
-    loc: { start: zero(), end: endLocation },
-    raw,
-    value
-  };
+  // Otherwise, we don't have a format to preserve since existingRaw is either 
+  // not provided or not a string, so we render as a simple basic string.
+  return generateBasicString(value);
+  
 }
 
 function generateBasicString(value: string): String {
@@ -294,15 +202,29 @@ function generateBasicString(value: string): String {
 
 function generateLiteralString(value: string): String {
   const raw = `'${value}'`;
+
+  let endLocation;
+  if (raw.includes('\n')) {
+    const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
+    const lines = raw.split(newlineChar);
+    const lastLine = lines[lines.length - 1];
+    endLocation = {
+      line: lines.length,
+      column: lastLine.length
+    };
+  } else {
+    endLocation = { line: 1, column: raw.length };
+  }
+
   return {
     type: NodeType.String,
-    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    loc: { start: zero(), end: endLocation },
     raw,
     value
   };
 }
 
-function generateMultilineBasicString(value: string): String {
+function generateMultilineBasicString(value: string, existingRaw: string): String {
   const escaped = value
     .replace(/\\/g, '\\\\')
     .replace(/\x08/g, '\\b')
@@ -313,24 +235,65 @@ function generateMultilineBasicString(value: string): String {
       return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
     })
     .replace(/"""/g, '""\\\"');
-  const raw = `"""${escaped}"""`;
+
+  const leadingNewLine = existingRaw.startsWith('"""\r\n')
+    ? '\r\n'
+    : existingRaw.startsWith('"""\n')
+    ? '\n'
+    : '';
+
+  let raw = '"""' + leadingNewLine + escaped + '"""';
+  
+  if (detectLineContinuation(new MultilineBasicString(existingRaw))) {
+    const rebuilt = rebuildLineContinuation(existingRaw, escaped);
+    if (rebuilt !== null) {
+      raw = rebuilt;
+    }
+  }
+
+  const endLocation = endlocation(new MultilineBasicString(raw));
+
   return {
     type: NodeType.String,
-    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    loc: { start: zero(), end: endLocation },
     raw,
     value
   };
 }
 
-function generateMultilineLiteralString(value: string): String {
-  const raw = `'''${value}'''`;
+function generateMultilineLiteralString(value: string, existingRaw: string): String {
+
+  const leadingNewLine = existingRaw.startsWith("'''\r\n")
+    ? '\r\n'
+    : existingRaw.startsWith("'''\n")
+    ? '\n'
+    : '';
+
+  const raw = "'''" + leadingNewLine + value + "'''";
+  const endLocation = endlocation(new MultilineLiteralString(raw));
   return {
     type: NodeType.String,
-    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    loc: { start: zero(), end: endLocation },
     raw,
     value
   };
 }
+
+function endlocation (stringValue: MultilineBasicString | MultilineLiteralString): Position {
+  const raw = stringValue.raw;
+  if (raw.includes('\n')) {
+    const newlineChar = raw.includes('\r\n') ? '\r\n' : '\n';
+    const lines = raw.split(newlineChar);
+    const lastLine = lines[lines.length - 1];
+    return {
+      line: lines.length,
+      column: lastLine.length
+    };
+  } else {
+    return { line: 1, column: raw.length };
+  }
+}
+
 
 /**
  * Generates a new Integer node.

@@ -24,35 +24,7 @@ interface Segment {
   isBlank: boolean;
 }
 
-/**
- * Detects whether an existing raw basic multiline string (`"""`) uses
- * line-continuation backslashes.
- *
- * Detection is gated on the original raw delimiter: if the existing raw was
- * a literal string (`'''`), backslashes were literal characters and must
- * never be treated as line-continuation markers — even when converting to a
- * basic string because the new value contains `'''`.
- *
- * The function only inspects `existingRaw` — it does not check the new value.
- * Compatibility with the new value (e.g. newline handling) is determined inside
- * `rebuildLineContinuation`.
- *
- * @param existingRaw - The full raw TOML string including delimiters.
- * @param newlineChar - The newline character used in the document (`'\n'` or `'\r\n'`).
- * @returns `true` if the existing raw string uses line-continuation formatting.
- */
-export function detectLineContinuation(
-  existingRaw: string,
-  newlineChar: string
-): boolean {
-  if (!existingRaw.startsWith('"""')) return false;
 
-  const innerContent = existingRaw.slice(3, existingRaw.length - 3);
-  return innerContent.split(newlineChar).some(line => {
-    const m = line.match(/(\\+)$/);
-    return m !== null && m[1].length % 2 === 1;
-  });
-}
 
 /**
  * Rebuilds a basic multiline string (`"""`) that uses line ending backslash
@@ -87,12 +59,12 @@ export function detectLineContinuation(
  */
 export function rebuildLineContinuation(
   existingRaw: string,
-  escaped: string,
-  newlineChar: string
+  escaped: string
 ): string | null {
   // Normalize existingRaw to the document's line ending so mixed-ending source
   // files are handled consistently. Replace all CRLF first, then any remaining
   // bare LF, then re-introduce the correct sequence.
+  const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
   existingRaw = existingRaw.replace(/\r\n/g, '\n').replace(/\n/g, newlineChar);
 
   // Line-continuation is only valid in basic multiline strings.
