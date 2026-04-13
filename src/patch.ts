@@ -28,7 +28,7 @@ import {
 } from './ast';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, isMultilineString } from './utils';
+import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateString } from './generate';
 import { resolveTomlFormat } from './toml-format';

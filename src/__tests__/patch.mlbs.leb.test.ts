@@ -1,8 +1,5 @@
 import patch from '../patch';
 import { parse } from '..';
-import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
-import { example } from '../__fixtures__';
-import dedent from 'dedent';
 
 /**
  * Tests for patching multiline basic strings (MLBS) with line ending backslashes (LEB))
