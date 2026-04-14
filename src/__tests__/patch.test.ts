@@ -3866,7 +3866,7 @@ describe('basic string escape preservation', () => {
 
     obj.message = obj.message + ' updated';
 
-    // Regression expectation: preserve the original escape lexeme instead of emitting raw emoji.
+    // Regression expectation: preserve the original escape sequence instead of emitting raw emoji.
     expect(patch(existing, obj)).toEqual('message = "hello ' + '\\u263A' + ' updated"\n');
   });
 

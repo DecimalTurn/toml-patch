@@ -1468,3 +1468,90 @@ describe('line-continuation content integrity', () => {
     expect(parse(patched).description.text).toEqual(newValue);
   });
 });
+
+describe('Escape preference preserved in LEB multiline basic strings', () => {
+  test('should preserve \\u263A escape in LEB multiline basic string after a word change', () => {
+    // C1: The \u263A escape sequence lives on a continuation line; patching a different
+    // word must not normalise it to the raw ☺ character.
+    const existing =
+      'text = """\\' + '\n' +
+      '  Hello \\u263A \\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('Hello ☺ world.');
+
+    obj.text = 'Bonjour ☺ world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  Bonjour \\' + '\n' +
+      '  \\u263A \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('Bonjour ☺ world.');
+  });
+
+  test('should preserve \\t escape in LEB multiline basic string after a word change', () => {
+    // C2: In an MLBS a tab is allowed as a literal character, so \t is a style choice.
+    // The LEB rebuilder must pass the escaped form (with \t token) to the word-packer
+    // unchanged and the preferred escape must survive the round-trip.
+    const existing =
+      'key = """\\' + '\n' +
+      '  col1\\tcol2 \\' + '\n' +
+      '  col3."""\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('col1\tcol2 col3.');
+
+    obj.key = 'col1\tcol2_updated col3.';
+
+    expect(patch(existing, obj)).toEqual(
+      'key = """\\' + '\n' +
+      '  col1\\tcol2_updated \\' + '\n' +
+      '  col3."""\n'
+    );
+    expect(parse(patch(existing, obj)).key).toEqual('col1\tcol2_updated col3.');
+  });
+
+  test('should preserve \\U0001F600 long-form escape in LEB multiline basic string after a word change', () => {
+    // C3: 8-digit \U form must survive the LEB round-trip.
+    const existing =
+      'text = """\\' + '\n' +
+      '  Hello \\U0001F600 \\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('Hello 😀 world.');
+
+    obj.text = 'Hi 😀 world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  Hi \\U0001F600 \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('Hi 😀 world.');
+  });
+
+  test('should preserve multiple distinct preferred escapes (\\u263A and \\t) in a single LEB string', () => {
+    // C4: Both \u263A and \t appear in the original raw; both preferences must be
+    // honoured independently after patching.
+    const existing =
+      'text = """\\' + '\n' +
+      '  \\u263A\\tcol \\' + '\n' +
+      '  end."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('☺\tcol end.');
+
+    obj.text = '☺\tcol2 end.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  \\u263A\\tcol2 \\' + '\n' +
+      '  end."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('☺\tcol2 end.');
+  });
+});
