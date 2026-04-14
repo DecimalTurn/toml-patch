@@ -3942,6 +3942,23 @@ describe('multi-line basic string escape preservation', () => {
 
     expect(patch(existing, obj)).toEqual('key = """col1' + '\\t' + 'updated"""\n');
   });
+
+  test('should escape embedded triple double quotes when patching a multiline basic string value', () => {
+    // TOML spec allows at most two consecutive unescaped double quotes inside a MLBS.
+    // A value containing """ must have at least one quote escaped: ""\" or "\""
+    const existing = dedent`
+      msg = """hello world"""
+    ` + '\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('hello world');
+
+    obj.msg = 'Three quotes: """';
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      msg = """Three quotes: ""\""""
+    ` + '\n');
+  });
 });
 
 describe('mandatory escape characters through patch', () => {
