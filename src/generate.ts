@@ -29,6 +29,8 @@ import { shiftNode } from './writer';
 import { isBasicString, isLiteralString, isMultilineLiteralString, isMultilineString } from './utils';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { createString, MultilineBasicString, MultilineLiteralString, StringValue, detectLineContinuation } from './string-format';
+import { IS_BARE_KEY } from './tokenizer';
+import { escapeStringContent } from './escape-preference';
 
 /**
  * Generates a new TOML document node.
@@ -131,7 +133,6 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   };
 }
 
-const IS_BARE_KEY = /^[\w-]+$/;
 function keyValueToRaw(value: string[]): string {
   return value.map(part => (IS_BARE_KEY.test(part) ? part : JSON.stringify(part))).join('.');
 }
@@ -157,7 +158,7 @@ export function generateKey(value: string[]): Key {
 export function generateString(value: string, existingRaw?: string): String {
   
   if (existingRaw && isBasicString(existingRaw)) {
-    return generateBasicString(value);
+    return generateBasicString(value, existingRaw);
   }
 
   if (existingRaw && isLiteralString(existingRaw)) {
@@ -195,8 +196,14 @@ export function generateString(value: string, existingRaw?: string): String {
   
 }
 
-function generateBasicString(value: string): String {
-  const raw = JSON.stringify(value);
+function generateBasicString(value: string, existingRaw?: string): String {
+  let raw = '';
+  if (!existingRaw) {
+    raw = JSON.stringify(value);
+  } else {
+    raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic')}"`;
+  }
+   
   return {
     type: NodeType.String,
     loc: { start: zero(), end: { line: 1, column: raw.length } },
@@ -230,16 +237,7 @@ function generateLiteralString(value: string): String {
 }
 
 function generateMultilineBasicString(value: string, existingRaw: string): String {
-  const escaped = value
-    .replace(/\\/g, '\\\\')
-    .replace(/\x08/g, '\\b')
-    .replace(/\f/g, '\\f')
-    .replace(/\t/g, '\\t')
-    .replace(/[\x00-\x07\x0B\x0E-\x1F\x7F]/g, (char) => {
-      const code = char.charCodeAt(0);
-      return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
-    })
-    .replace(/"""/g, '""\\\"');
+  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic');
 
   const leadingNewLine = existingRaw.startsWith('"""\r\n')
     ? '\r\n'

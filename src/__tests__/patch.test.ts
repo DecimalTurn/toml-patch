@@ -3834,46 +3834,73 @@ describe('quoted keys', () => {
 
   });
 
-  describe('quoted key with \\n', () => {
+  // Add entries here to automatically run all three tests for each escape sequence.
+  // - tomlEscape   : raw escape chars as they appear inside a TOML basic-string key,
+  //                  used for both TOML input and expected patch output (e.g. '\\n').
+  // - jsParsedChar : the JS character that TOML produces after decoding the escape.
+  const escapeSequenceCases = [
+    { tomlEscape: '\\n',     jsParsedChar: '\n' },
+    { tomlEscape: '\\u263A', jsParsedChar: '\u263A' },
+    { tomlEscape: '\\t',     jsParsedChar: '\t' },
+  ];
 
-    const existing = 
-      '"quoted' + '\\n' + 'key" = "value"' + '\n';
+  describe.each(escapeSequenceCases)(
+    'quoted key with $tomlEscape escape sequence',
+    ({ tomlEscape, jsParsedChar }) => {
+      const existing     = '"quoted' + tomlEscape + 'key" = "value"\n';
+      const jsKey        = 'quoted'  + jsParsedChar + 'key';
+      const renamedJsKey = 'renamed' + jsParsedChar + 'key';
 
-    test('existing value is parsed correctly', () => {
+      test('existing value is parsed correctly', () => {
+        expect(existing).toEqual('"quoted' + tomlEscape + 'key" = "value"\n');
+        const obj = parse(existing);
+        expect(obj[jsKey]).toEqual('value');
+      });
 
-      expect(existing).toEqual('"quoted\\nkey" = "value"\n');
+      test('should edit the value and preserve the escaped key', () => {
+        const obj = parse(existing);
+        obj[jsKey] = 'new value';
+        expect(patch(existing, obj)).toEqual('"quoted' + tomlEscape + 'key" = "new value"\n');
+      });
 
-      const obj = parse(existing);
-      expect(obj['quoted\nkey']).toEqual('value');
-    });
+      test('should rename the key and preserve the value', () => {
+        const obj = parse(existing);
+        obj[renamedJsKey] = obj[jsKey];
+        delete obj[jsKey];
+        const patched = patch(existing, obj);
+        expect(patched).toEqual('"renamed' + tomlEscape + 'key" = "value"\n');
+      });
+    }
+  );
 
-    test('should edit a quoted key and preserve the quotes', () => {
-
-      const obj = parse(existing);
-      obj['quoted\nkey'] = 'new value';
-
-      expect(patch(existing, obj)).toEqual(
-        '"quoted' + '\\n' + 'key" = "new value"' + '\n'
-      );
-    });
-
-    test('should rename a quoted key and preserve the value', () => {
-
-      const obj = parse(existing);
-      obj['renamed\nkey'] = obj['quoted\nkey'];
-      delete obj['quoted\nkey'];
-
-      expect(patch(existing, obj)).toEqual(
-        '"renamed' + '\\n' + 'key" = "value"' + '\n'
-      );
-    });
-
-  });
-
-
-  
-  
 });
 
+describe('basic string escape preservation', () => {
+  test('should preserve escaped emoji sequence when editing a basic string value', () => {
+    const existing = 'message = "hello ' + '\\u263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.message).toEqual('hello ☺');
+
+    obj.message = obj.message + ' updated';
+
+    // Regression expectation: preserve the original escape lexeme instead of emitting raw emoji.
+    expect(patch(existing, obj)).toEqual('message = "hello ' + '\\u263A' + ' updated"\n');
+  });
+});
+
+describe('multi-line basic string escape preservation', () => {
+  test('should preserve escaped emoji sequence when editing a multi-line basic string value', () => {
+    const existing = 'message = """hello ' + '\\u263A' + '"""\n';
+
+    const obj = parse(existing);
+    expect(obj.message).toEqual('hello ☺');
+
+    obj.message = obj.message + ' updated';
+
+    // Regression expectation: preserve the original escape sequence instead of emitting raw emoji.
+    expect(patch(existing, obj)).toEqual('message = """hello ' + '\\u263A' + ' updated"""\n');
+  });
+});
 
 // TODO: test detectLineContinuation

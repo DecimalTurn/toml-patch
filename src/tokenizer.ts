@@ -19,6 +19,7 @@ export interface Token {
 
 export const IS_WHITESPACE = /\s/;
 export const IS_NEW_LINE = /(\r\n|\n)/;
+export const IS_BARE_KEY = /^[\w-]+$/;
 export const DOUBLE_QUOTE = `"`;
 export const SINGLE_QUOTE = `'`;
 export const SPACE = ' ';

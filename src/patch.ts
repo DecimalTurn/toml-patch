@@ -31,6 +31,8 @@ import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateString } from './generate';
+import { IS_BARE_KEY } from './tokenizer';
+import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
 import { DateFormatHelper } from './date-format';
@@ -135,6 +137,12 @@ function reorder(changes: Change[]): Change[] {
   
   return changes;
 
+}
+
+function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[]): string {
+  return keyParts
+    .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic')}"`))
+    .join('.');
 }
 
 /**
@@ -461,6 +469,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       if (hasItem(parent)) parent = parent.item;
       if (hasItem(replacement)) replacement = replacement.item;
+
+      // Preserve key escape style from the original key raw when renaming.
+      // Example: if the original key used "\\u263A", keep that escape form
+      // instead of normalizing to the raw character (☺).
+      replacement.key.raw = preserveEscapedKeyRaw(parent.key.raw, replacement.key.value);
+      replacement.key.loc.end.column = replacement.key.loc.start.column + replacement.key.raw.length;
 
       replace(original, parent, parent.key, replacement.key);
     }

@@ -684,3 +684,19 @@ test('should handle strings with backslashes and quotes when stringifying JS obj
   const parsed = parse(result);
   expect(parsed.text).toBe('Backslash then quotes: \\"""');
 });
+
+test('should stringify emoji as raw character (not unicode escape) from fresh JS objects', () => {
+  const obj = {
+    text: 'hello ☺'
+  };
+
+  const result = stringify(obj);
+
+  // JSON/TOML basic-string escaping keeps this character raw by default.
+  expect(result).toContain('text = "hello ☺"');
+  expect(result).not.toContain('\\u263A');
+
+  const { parse } = require('../');
+  const parsed = parse(result);
+  expect(parsed.text).toBe('hello ☺');
+});
