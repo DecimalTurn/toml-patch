@@ -24,7 +24,10 @@ interface Segment {
   isBlank: boolean;
 }
 
-
+function detectFirstStructuralNewline(value: string): '\r\n' | '\n' {
+  const match = value.match(/\r\n|\n/);
+  return match?.[0] === '\r\n' ? '\r\n' : '\n';
+}
 
 /**
  * Rebuilds a basic multiline string (`"""`) that uses line ending backslash
@@ -61,10 +64,11 @@ export function rebuildLineContinuation(
   existingRaw: string,
   escaped: string
 ): string | null {
-  // Normalize existingRaw to the document's line ending so mixed-ending source
-  // files are handled consistently. Replace all CRLF first, then any remaining
-  // bare LF, then re-introduce the correct sequence.
-  const newlineChar = existingRaw.includes('\r\n') ? '\r\n' : '\n';
+  // Normalize existingRaw to the first structural line ending found in the
+  // received multiline string so mixed-ending inputs are rebuilt consistently.
+  // Replace all CRLF first, then any remaining bare LF, then re-introduce that
+  // detected sequence.
+  const newlineChar = detectFirstStructuralNewline(existingRaw);
   existingRaw = existingRaw.replace(/\r\n/g, '\n').replace(/\n/g, newlineChar);
 
   // Line-continuation is only valid in basic multiline strings.

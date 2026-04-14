@@ -8,12 +8,42 @@ import { NodeType } from "./ast";
 export type StringValue = {
   raw: string;
   value: string;
+  type: 'basic' | 'literal' | 'multiline-basic' | 'multiline-literal';
 };
+
+export function rawStringWrapper(raw: string): 
+  MultilineBasicString | 
+  MultilineLiteralString | 
+  LiteralString | 
+  BasicString | null 
+{
+  try {
+    return new MultilineLiteralString(raw);
+  } catch {
+    try {
+      return new MultilineBasicString(raw);
+    } catch {
+      try {
+        return new LiteralString(raw);
+      } catch {
+        try {
+          return new BasicString(raw);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+}
 
 export class BasicString implements StringValue {
   declare private readonly _nominal: void;
   value: string;
+  type: "basic" = "basic";
   constructor(public raw: string) {
+    if (!raw.startsWith('"') || !raw.endsWith('"')) {
+      throw new Error(`Invalid basic string raw value: ${raw}`);
+    }
     // Remove the surrounding quotes to get the value
     this.value = raw.slice(1, -1);
   }
@@ -22,18 +52,37 @@ export class BasicString implements StringValue {
 export class MultilineBasicString implements StringValue {
   declare private readonly _nominal: void;
   value: string;
+  type: "multiline-basic" = "multiline-basic";
   constructor(public raw: string) {
+    if (!raw.startsWith('"""') || !raw.endsWith('"""')) {
+      throw new Error(`Invalid multiline basic string raw value: ${raw}`);
+    }
     // Remove the surrounding triple quotes to get the value
     this.value = raw.slice(3, -3);
     this.hasLineEndingBackslash = detectLineContinuation(this);
   }
   hasLineEndingBackslash: boolean 
-}
+  static fromLiteralString(string: LiteralString): MultilineBasicString {
+    const escapedValue = string.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const raw = `"""${escapedValue}"""`;
+    return new MultilineBasicString(raw); 
+  }
 
+  static fromMultilineLiteralString(input: MultilineLiteralString): MultilineBasicString {
+    const escapedValue = input.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const raw = `"""${escapedValue}"""`;
+    return new MultilineBasicString(raw); 
+  }
+
+}
 export class LiteralString implements StringValue {
   declare private readonly _nominal: void;
   value: string;
+  type: "literal" = "literal";
   constructor(public raw: string) {
+    if (!raw.startsWith("'") || !raw.endsWith("'")) {
+      throw new Error(`Invalid literal string raw value: ${raw}`);
+    }
     // Remove the surrounding single quotes to get the value
     this.value = raw.slice(1, -1);
   }
@@ -42,11 +91,19 @@ export class LiteralString implements StringValue {
 export class MultilineLiteralString implements StringValue {
   declare private readonly _nominal: void;
   value: string;
+  type: "multiline-literal" = "multiline-literal";
   constructor(public raw: string) {
+    if (!raw.startsWith("'''") || !raw.endsWith("'''")) {
+      throw new Error(`Invalid multiline literal string raw value: ${raw}`);
+    }
     // Remove the surrounding triple single quotes to get the value
     this.value = raw.slice(3, -3);
   }
   
+  static fromLiteralString(string: LiteralString): MultilineLiteralString {
+    const raw = `'''${string.value}'''`;
+    return new MultilineLiteralString(raw);
+  }
 }
 
 export function detectLineContinuation(
@@ -54,18 +111,4 @@ export function detectLineContinuation(
 ): boolean {
   // Line continuation is indicated by an odd number of backslashes at the end of any line
   return /\\(?:\\\\)*$/m.test(stringValue.value);
-}
-
-export function createString(raw: string): StringValue {
-  if (raw.startsWith("'''")) {
-    return new MultilineLiteralString(raw);
-  } else if (raw.startsWith('"""')) {
-      return new MultilineBasicString(raw);
-  } else if (raw.startsWith("'")) {
-    return new LiteralString(raw);
-  } else if (raw.startsWith('"')) {
-      return new BasicString(raw);
-  } else {
-    throw new Error(`Invalid string raw value: ${raw}`);
-  }
 }

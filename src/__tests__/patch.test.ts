@@ -754,8 +754,6 @@ describe('multiline strings - both basic and literal', () => {
   });
 
 
-  // Suspended while we think about how we want to deal with mixed line endings in TOML documents.
-  /* 
   test.each([
     { delimiter: '"""', type: 'basic' },
     { delimiter: "'''", type: 'literal' }
@@ -781,8 +779,6 @@ describe('multiline strings - both basic and literal', () => {
 
     expect(patched).toEqual(expectedOutput);
   });
-
-*/
 });
 
 test('should patch example with removal of an array element', () => {
@@ -1458,10 +1454,7 @@ test('should handle empty string', () => {
   expect(patched).toBe('');
 });
 
-// Suspended while we think about how we want to deal with mixed line endings in TOML documents.
-/*
 test('should handle mixed line endings consistently', () => {
-  // File that starts with CRLF but we want to ensure consistency
   const existing = 'title = "test"\r\nversion = "1.0"\r\n\r\n';
 
   const value = parse(existing);
@@ -1469,11 +1462,9 @@ test('should handle mixed line endings consistently', () => {
 
   const patched = patch(existing, value);
 
-  // Should maintain CRLF throughout and preserve trailing count
   expect(patched).toContain('\r\n');
   expect(patched.endsWith('\r\n\r\n')).toBe(true);
   
-  // Count trailing CRLF sequences
   function countTrailingCRLF(str: string) {
     let count = 0;
     let pos = str.length;
@@ -1487,27 +1478,22 @@ test('should handle mixed line endings consistently', () => {
   expect(countTrailingCRLF(patched)).toBe(2);
 });
 
-test('should normalize bare LF in new value to CRLF when document uses CRLF', () => {
-  // A CRLF document patched with a multiline value that uses bare '\n' must not
-  // produce mixed line endings in the output — the '\n' must be upgraded to '\r\n'.
+test('should preserve bare LF in new value while keeping CRLF structure from the existing multiline string', () => {
   const existing = '[description]\r\ntext = """\r\nFirst line\r\nSecond line\r\n"""\r\n';
 
   const value = parse(existing);
   expect(value.description.text).toEqual('First line\r\nSecond line\r\n');
 
-  // New value supplied with bare LF (as a JS developer would naturally write)
   value.description.text = 'Hello world\nand goodbye world\n';
   const patched = patch(existing, value);
 
-  // Output must use CRLF throughout — no bare LF in the patched document
-  expect(patched).not.toContain('\r\r\n'); // no double-CR
-  expect(patched.split('\r\n').join('').includes('\n')).toBe(false); // no leftover bare LF
+  expect(patched).not.toContain('\r\r\n');
+  expect(patched.split('\r\n').join('').includes('\n')).toBe(false);
   expect(patched).toEqual('[description]\r\ntext = """\r\nHello world\r\nand goodbye world\r\n"""\r\n');
   expect(parse(patched).description.text).toEqual('Hello world\r\nand goodbye world\r\n');
 });
 
-test('should normalize CRLF in new value to LF when document uses LF', () => {
-  // A LF document patched with a value containing '\r\n' must normalize to bare '\n'.
+test('should preserve CRLF in new value while keeping LF structure from the existing multiline string', () => {
   const existing = '[description]\ntext = """\nFirst line\nSecond line\n"""\n';
 
   const value = parse(existing);
@@ -1519,8 +1505,7 @@ test('should normalize CRLF in new value to LF when document uses LF', () => {
   expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world\n');
 });
 
-
-test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to CRLF', () => {
+test('should keep literal \\n and \\r\\n sequences while preserving real newlines with CRLF structure', () => {
   const existing = '[description]\r\ntext = """\r\nFirst line\r\n"""\r\n';
 
   const value = parse(existing);
@@ -1538,9 +1523,7 @@ test('should keep literal \\n and \\r\\n sequences while normalizing real newlin
   expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\r\nline\r\nend');
 });
 
-
-/*
-test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to LF', () => {
+test('should keep literal \\n and \\r\\n sequences while preserving real newlines with LF structure', () => {
   const existing = '[description]\ntext = """\nFirst line\n"""\n';
 
   const value = parse(existing);
@@ -1557,7 +1540,6 @@ test('should keep literal \\n and \\r\\n sequences while normalizing real newlin
   );
   expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\nline\nend');
 });
-*/
 
 test('should respect quoted keys when parsing', () => {
   const toml = dedent`

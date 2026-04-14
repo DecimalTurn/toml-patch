@@ -1216,11 +1216,10 @@ describe('NL issues', () => {
     expect(parse(patched).description.text).toEqual('Hello\r\nworld');
   });
   
-  test('should normalize mixed line endings in the document itself (CRLF doc, bare LF inside LC string body)', () => {
-    // A TOML file with mixed line endings: the document is CRLF but the LC string
-    // body contains bare LF lines. The patcher normalises existingRaw to the
-    // detected document newline before parsing segments, so the patched output
-    // uses CRLF consistently and the LC structure is preserved.
+  test('should normalize mixed line endings inside the received LC string when it starts as CRLF', () => {
+    // The received LC string starts in CRLF form but later contains a bare LF.
+    // Rebuilding follows the string form it receives and keeps that structure
+    // consistent across the output.
     const existing =
       '[description]\r\n' +
       'text = """\\' + '\r\n' +
@@ -1244,12 +1243,12 @@ describe('NL issues', () => {
     expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
   });
   
-  test('should normalize mixed line endings in the document itself (LF doc, CRLF opening line in LC string)', () => {
-    // A TOML file where the LC opening line uses CRLF but the rest of the document
-    // uses bare LF. After normalization the output is fully LF.
+  test('should use the multiline string form it receives when endings are mixed', () => {
+    // The surrounding document is mixed, but rebuilding now follows the MLBS raw
+    // as received rather than trying to normalize the whole document.
     const existing =
       '[description]\n' +
-      'text = """\\' + '\r\n' + // CRLF after opening — mixed!
+      'text = """\\' + '\r\n' +
       '  The quick brown fox \\' + '\n' +
       '  jumps over the lazy dog."""\n';
   
@@ -1259,8 +1258,28 @@ describe('NL issues', () => {
     value.description.text = 'The slow brown fox jumps over the lazy dog.';
     const patched = patch(existing, value);
   
-    // Output is fully LF and the second line is preserved verbatim.
-    expect(patched).not.toContain('\r\n');
+    expect(patched).toEqual(
+      '[description]\n' +
+      'text = """\\' + '\n' +
+      '  The slow brown fox \\' + '\n' +
+      '  jumps over the lazy dog."""\n'
+    );
+    expect(parse(patched).description.text).toEqual('The slow brown fox jumps over the lazy dog.');
+  });
+
+  test('should keep LF when it is the first structural newline in the LC string', () => {
+    const existing =
+      '[description]\n' +
+      'text = """\\' + '\n' +
+      '  The quick brown fox \\' + '\r\n' +
+      '  jumps over the lazy dog."""\n';
+
+    const value = parse(existing);
+    expect(value.description.text).toEqual('The quick brown fox jumps over the lazy dog.');
+
+    value.description.text = 'The slow brown fox jumps over the lazy dog.';
+    const patched = patch(existing, value);
+
     expect(patched).toEqual(
       '[description]\n' +
       'text = """\\' + '\n' +
