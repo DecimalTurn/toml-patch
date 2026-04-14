@@ -180,7 +180,9 @@ export function escapeStringContent(value: string, existingRaw: string, mode: Es
   const preferred = collectPreferredEscapes(existingRaw);
 
   if (preferred.size === 0 && mode === 'singleline-basic') {
-    return JSON.stringify(value).slice(1, -1);
+    const escaped = JSON.stringify(value).slice(1, -1);
+    // JSON.stringify only escapes U+0000–U+001F, but TOML also forbids U+007F (DEL).
+    return escaped.replace(/\x7f/g, '\\u007F');
   }
 
   const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode);
