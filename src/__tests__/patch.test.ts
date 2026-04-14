@@ -3884,5 +3884,3 @@ describe('multi-line basic string escape preservation', () => {
     expect(patch(existing, obj)).toEqual('message = """hello ' + '\\u263A' + ' updated"""\n');
   });
 });
-
-// TODO: test detectLineContinuation

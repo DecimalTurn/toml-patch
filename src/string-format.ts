@@ -109,6 +109,8 @@ export class MultilineLiteralString implements StringValue {
 export function detectLineContinuation(
   stringValue: MultilineBasicString
 ): boolean {
-  // Line continuation is indicated by an odd number of backslashes at the end of any line
-  return /\\(?:\\\\)*$/m.test(stringValue.value);
+  // Line continuation is indicated by an odd number of backslashes at the end of any line.
+  // Match: (start-of-line or a non-backslash), then zero or more escaped-backslash pairs,
+  // then a single trailing backslash at end-of-line.
+  return /(^|[^\\])(\\\\)*\\$/m.test(stringValue.value);
 }
