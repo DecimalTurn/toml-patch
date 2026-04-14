@@ -1,3 +1,8 @@
+/**
+ * @file Helpers to generate and update TOML AST nodes.
+ * @module generate
+ */
+
 import {
   NodeType,
   Document,
