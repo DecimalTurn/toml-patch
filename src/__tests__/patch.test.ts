@@ -3798,3 +3798,82 @@ describe('undefined handling in patch', () => {
   });
 });
 
+describe('quoted keys', () => {
+
+  describe('simple quoted keys', () => {
+
+    const existing = dedent`
+      "quoted key" = "value"
+      ` + '\n';
+
+    test('existing value is parsed correctly', () => {
+      const obj = parse(existing);
+      expect(obj['quoted key']).toEqual('value');
+    });
+
+    test('should edit a quoted key and preserve the quotes', () => {
+
+      const obj = parse(existing);
+      obj['quoted key'] = 'new value';
+
+      expect(patch(existing, obj)).toEqual(dedent`
+        "quoted key" = "new value"
+        ` + '\n');
+    });
+
+    test('should rename a quoted key and preserve the value', () => {
+
+      const obj = parse(existing);
+      obj['renamed key'] = obj['quoted key'];
+      delete obj['quoted key'];
+
+      expect(patch(existing, obj)).toEqual(dedent`
+        "renamed key" = "value"
+        ` + '\n');
+    });
+
+  });
+
+  describe('quoted key with \\n', () => {
+
+    const existing = 
+      '"quoted' + '\\n' + 'key" = "value"' + '\n';
+
+    test('existing value is parsed correctly', () => {
+
+      expect(existing).toEqual('"quoted\\nkey" = "value"\n');
+
+      const obj = parse(existing);
+      expect(obj['quoted\nkey']).toEqual('value');
+    });
+
+    test('should edit a quoted key and preserve the quotes', () => {
+
+      const obj = parse(existing);
+      obj['quoted\nkey'] = 'new value';
+
+      expect(patch(existing, obj)).toEqual(
+        '"quoted' + '\\n' + 'key" = "new value"' + '\n'
+      );
+    });
+
+    test('should rename a quoted key and preserve the value', () => {
+
+      const obj = parse(existing);
+      obj['renamed\nkey'] = obj['quoted\nkey'];
+      delete obj['quoted\nkey'];
+
+      expect(patch(existing, obj)).toEqual(
+        '"renamed' + '\\n' + 'key" = "value"' + '\n'
+      );
+    });
+
+  });
+
+
+  
+  
+});
+
+
+// TODO: test detectLineContinuation
