@@ -3869,6 +3869,50 @@ describe('basic string escape preservation', () => {
     // Regression expectation: preserve the original escape lexeme instead of emitting raw emoji.
     expect(patch(existing, obj)).toEqual('message = "hello ' + '\\u263A' + ' updated"\n');
   });
+
+  test('should preserve \\U0001F600 long-form escape in basic string value after patching', () => {
+    // \U0001F600 is the long-form (8-digit) Unicode escape for 😀.
+    // After parse→patch the long form must survive, not be normalised to a raw emoji.
+    const existing = 'emoji = "Hello ' + '\\U0001F600' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.emoji).toEqual('Hello \u{1F600}');
+
+    obj.emoji = 'Bonjour \u{1F600}';
+
+    expect(patch(existing, obj)).toEqual('emoji = "Bonjour ' + '\\U0001F600' + '"\n');
+  });
+
+  test('should prefer first-seen escape form when same char has two escape representations', () => {
+    // The raw string has \u263A (4-digit form) before \U0000263A (8-digit form).
+    // collectPreferredEscapes records the first seen form per decoded character,
+    // so \u263A should be the preferred form for all ☺ occurrences in the output.
+    const existing = 'msg = "' + '\\u263A' + ' and ' + '\\U0000263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('☺ and ☺');
+
+    obj.msg = '☺ twice updated';
+
+    // \u263A was recorded first, so it is used for every ☺ in the new value.
+    expect(patch(existing, obj)).toEqual('msg = "' + '\\u263A' + ' twice updated"\n');
+  });
+
+  test('should apply escape preference even when the char also appears literally in the original', () => {
+    // The raw contains a literal ☺ first, then \u263A as an escape.
+    // collectPreferredEscapes only processes \-sequences, so it records \u263A.
+    // When the new value contains ☺, the preferred escape form (\u263A) wins.
+    const existing = 'msg = "☺ and ' + '\\u263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('☺ and ☺');
+
+    obj.msg = '☺ updated';
+
+    // The escaped form (\u263A) is preferred because it is the only escape
+    // recorded by collectPreferredEscapes; the leading literal ☺ has no effect.
+    expect(patch(existing, obj)).toEqual('msg = "' + '\\u263A' + ' updated"\n');
+  });
 });
 
 describe('multi-line basic string escape preservation', () => {
@@ -3882,5 +3926,103 @@ describe('multi-line basic string escape preservation', () => {
 
     // Regression expectation: preserve the original escape sequence instead of emitting raw emoji.
     expect(patch(existing, obj)).toEqual('message = """hello ' + '\\u263A' + ' updated"""\n');
+  });
+
+  test('should preserve \\t escape in multiline basic string value after patching', () => {
+    // In a multiline basic string, a tab character is allowed *literally* (not mandatory to escape).
+    // If the author chose to write \t as an explicit escape, that preference must be preserved.
+    // This is the meaningful coverage for \t escape-preference — unlike singleline basic strings
+    // where \t is a mandatory escape and would always be rendered as \t regardless.
+    const existing = 'key = """col1' + '\\t' + 'col2"""\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('col1\tcol2');
+
+    obj.key = 'col1\tupdated';
+
+    expect(patch(existing, obj)).toEqual('key = """col1' + '\\t' + 'updated"""\n');
+  });
+});
+
+describe('mandatory escape characters through patch', () => {
+  // These tests verify that control characters which are *forbidden* in raw TOML strings
+  // are always escaped in the output, regardless of escape-preference. Coverage is at the
+  // patch() integration level to ensure the full pipeline (parse → mutate → generate → write)
+  // produces valid TOML for these edge-case characters.
+
+  test('should escape backspace (\\b) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\x08end'; // \x08 = backspace
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\bend"\n');
+    expect(parse(patched).msg).toEqual('line\x08end');
+  });
+
+  test('should escape form feed (\\f) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'page\x0Cbreak'; // \x0C = form feed
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "page\\fbreak"\n');
+    expect(parse(patched).msg).toEqual('page\x0Cbreak');
+  });
+
+  test('should escape carriage return (\\r) when patching a singleline basic string value', () => {
+    // In a singleline basic string, \r is forbidden as a literal and must be escaped.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\rend';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\rend"\n');
+    expect(parse(patched).msg).toEqual('line\rend');
+  });
+
+  test('should escape an arbitrary disallowed control character (ESC, \\x1b) as \\uXXXX', () => {
+    // U+001B (ESC) is in the 0x00–0x1F range that is forbidden in basic strings.
+    // It has no named short escape, so it must be rendered as \u001b.
+    // Note: the fast path (no preferred escapes → JSON.stringify) emits lowercase hex.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'esc\x1Bchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "esc\\u001bchar"\n');
+    expect(parse(patched).msg).toEqual('esc\x1Bchar');
+  });
+
+  test('should escape DEL (\\x7f) as \\u007F when patching a basic string value', () => {
+    // U+007F is explicitly disallowed in TOML basic strings and has no named escape.
+    // Note: JSON.stringify does not escape U+007F (it only escapes U+0000-U+001F),
+    // so the fast path in escapeStringContent must handle it explicitly.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "del\\u007Fchar"\n');
+    expect(parse(patched).msg).toEqual('del\x7Fchar');
+  });
+
+  test('should escape disallowed control characters in a multiline basic string', () => {
+    // In MLBS mode, only a stricter set of controls are forbidden (0x00–0x07, 0x0B,
+    // 0x0E–0x1F, 0x7F). Tab (0x09), LF (0x0A) and CR (0x0D) are allowed literally.
+    // Backspace (0x08) is still forbidden and must be escaped.
+    const existing = 'msg = """hello"""\n';
+
+    const obj = parse(existing);
+    obj.msg = 'back\x08space';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = """back\\bspace"""\n');
+    expect(parse(patched).msg).toEqual('back\x08space');
   });
 });
