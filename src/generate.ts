@@ -207,7 +207,7 @@ function generateStringKeepFormatting(value: string, existingRaw: string): Strin
 function generateBasicString(value: string, existingRaw?: string): String {
   let raw = '';
   if (!existingRaw) {
-    raw = JSON.stringify(value);
+    raw = quoteTomlString(value);
   } else {
     raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic')}"`;
   }
