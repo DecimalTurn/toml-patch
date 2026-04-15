@@ -1,6 +1,6 @@
 {
   "name": "toml-patch",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24",
   "postCreateCommand": "git submodule update --init --recursive && pnpm install",
   "customizations": {
     "vscode": {
