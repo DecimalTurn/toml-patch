@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-15
+
 ### Added
 - Patching: Preserve preferred escape sequence representation in basic strings ([#131])
 - Parsing: Add support for raw UTF-8 bytes (`Uint8Array`/`Buffer`) as input for `parse()` and `TomlDocument` ([#153]).
