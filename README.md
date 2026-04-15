@@ -235,13 +235,18 @@ The `TomlDocument` class provides a stateful interface for working with TOML doc
 #### Constructor
 
 ```typescript
-new TomlDocument(tomlSource: string | Uint8Array)
+new TomlDocument(tomlSource: string | Uint8Array, options?: ParseOptions)
 ```
 
 Initializes the TomlDocument with TOML source, parsing it into an internal representation (AST). When bytes are provided they are decoded as UTF-8 in fatal mode, rejecting invalid sequences before parsing.
 
 **Parameters:**
 - `tomlSource: string | Uint8Array` - The TOML source to parse
+- `options?: ParseOptions` - Optional parse options
+  - `integersAsBigInt?: 'asNeeded' | true | false` — Controls how TOML integers are represented in `toJsObject`:
+    - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
+    - `true` — all integers are returned as `bigint`
+    - `false` — all integers are returned as `number` (large values lose precision)
 
 ##### Basic Usage Example
 
