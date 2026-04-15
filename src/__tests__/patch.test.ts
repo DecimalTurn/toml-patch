@@ -362,6 +362,95 @@ test('should preserve multiline string with actual multiple lines', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+test('should collapse mlbs with leading newline and multiple content lines to single-line value', () => {
+  // Original has leading newline ("""\n) and three lines of content.
+  // New value has no newlines at all, so the generated raw has ONE embedded newline
+  // (the preserved leading newline) and the else-branch of endLocation is NOT reached —
+  // the multiline branch fires with lineCount=1, endLocation={ line:2, column:3 }.
+  const existing = dedent`
+    [package]
+    name = "example"
+    description = """
+    First line
+    Second line
+    Third line"""
+    version = "1.0.0"
+    ` + '\n';
+
+  const obj = parse(existing);
+  obj.package.description = "single line value";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(dedent`
+    [package]
+    name = "example"
+    description = """
+    single line value"""
+    version = "1.0.0"
+    ` + '\n');
+
+  expect(parse(patched).package.description).toEqual("single line value");
+});
+
+test('should collapse mlbs without leading newline and multiple content lines to single-line value', () => {
+  // Original has NO leading newline ("""content) and multiple lines via embedded literal newlines.
+  // New value has no newlines, so raw becomes """single line value""" with NO \n at all.
+  // This hits the else-branch: endLocation = { line: 1, column: raw.length }.
+  // column: raw.length is correct here — the closing """ is part of the same line,
+  // not on its own line, so column: 3 would be wrong.
+  const existing =
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """First line\n' +
+    'Second line\n' +
+    'Third line"""\n' +
+    'version = "1.0.0"\n';
+
+  const obj = parse(existing);
+  expect(obj.package.description).toEqual("First line\nSecond line\nThird line");
+
+  obj.package.description = "single line value";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """single line value"""\n' +
+    'version = "1.0.0"\n'
+  );
+
+  expect(parse(patched).package.description).toEqual("single line value");
+});
+
+test('should patch mlbs without leading newline to another multi-line value (end-column correctness)', () => {
+  // Original has content on the same line as the opening """ (no leading newline).
+  // New value also has a newline, so raw = """Hello\nWorld""". The closing """ shares
+  // the last line with "World", so loc.end.column must be len("World\"\"\"") = 8,
+  // not 3. A wrong column would shift the following key-value to the wrong position.
+  const existing =
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """First line\n' +
+    'Second line"""\n' +
+    'version = "1.0.0"\n';
+
+  const obj = parse(existing);
+  expect(obj.package.description).toEqual("First line\nSecond line");
+
+  obj.package.description = "Hello\nWorld";
+  const patched = patch(existing, obj);
+
+  expect(patched).toEqual(
+    '[package]\n' +
+    'name = "example"\n' +
+    'description = """Hello\n' +
+    'World"""\n' +
+    'version = "1.0.0"\n'
+  );
+
+  expect(parse(patched).package.description).toEqual("Hello\nWorld");
+});
+
 test('should preserve multiline string with trailing newline in content', () => {
   const existing = dedent`
     [package]
@@ -575,6 +664,7 @@ test('should preserve multiline string with only newlines', () => {
   expect(patched).toEqual(expectedOutput);
 });
 
+
 // Parameterized tests for both basic (""") and literal (''') multiline strings
 describe('multiline strings - both basic and literal', () => {
   test.each([
@@ -663,154 +753,33 @@ describe('multiline strings - both basic and literal', () => {
     expect(patched).toEqual(expectedOutput);
   });
 
+
   test.each([
     { delimiter: '"""', type: 'basic' },
     { delimiter: "'''", type: 'literal' }
   ])('should preserve $type multiline string with CRLF line endings', ({ delimiter }) => {
-    const existing = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA simple package\r\n${delimiter}\r\nversion = "1.0.0"\r\n`;
+    const existing =
+      `[package]\r\n` +
+      `name = "example"\r\n` +
+      `description = ${delimiter}\r\n` +
+      `A simple package\r\n` +
+      `${delimiter}\r\n` +
+      `version = "1.0.0"\r\n`;
 
     const obj = parse(existing);
     obj.package.description = "A different description";
     const patched = patch(existing, obj);
     
-    const expectedOutput = `[package]\r\nname = "example"\r\ndescription = ${delimiter}\r\nA different description${delimiter}\r\nversion = "1.0.0"\r\n`;
+    const expectedOutput =
+      `[package]\r\n` +
+      `name = "example"\r\n` +
+      `description = ${delimiter}\r\n` +
+      `A different description${delimiter}\r\n` +
+      `version = "1.0.0"\r\n`;
 
     expect(patched).toEqual(expectedOutput);
   });
 });
-
-// Specific tests for literal multiline strings (''') - testing literal behavior
-describe('literal multiline strings - specific behavior', () => {
-  test('should preserve literal multiline string without escaping backslashes', () => {
-    const existing = dedent`
-      [package]
-      name = "example"
-      path = '''
-      C:\\Users\\Example\\Path
-      '''
-      version = "1.0.0"
-      ` + '\n';
-
-    const obj = parse(existing);
-    // When setting a JavaScript string with single backslashes
-    obj.package.path = "D:\\Data\\Files";
-    const patched = patch(existing, obj);
-    
-    // In literal strings, backslashes are NOT doubled - they remain as single backslashes
-    const expectedOutput = dedent`
-      [package]
-      name = "example"
-      path = '''
-      D:\Data\Files'''
-      version = "1.0.0"
-      ` + '\n';
-
-    expect(patched).toEqual(expectedOutput);
-  });
-
-  test('should handle literal multiline string with actual newlines vs escape sequences', () => {
-    const existing = dedent`
-      [package]
-      name = "example"
-      text = '''
-      Old text
-      '''
-      version = "1.0.0"
-      ` + '\n';
-
-    const obj = parse(existing);
-    // Setting a JavaScript string that contains the characters \ and n
-    obj.package.text = "Line with \\n literal backslash-n";
-    const patched = patch(existing, obj);
-    
-    // Literal strings show backslash-n as actual characters (not newline)
-    // In the template we need to escape the backslash as \\n
-    const expectedOutput = `[package]
-name = "example"
-text = '''
-Line with \\n literal backslash-n'''
-version = "1.0.0"
-`;
-
-    expect(patched).toEqual(expectedOutput);
-  });
-
-  test('should handle literal multiline string with triple quotes in content', () => {
-    const existing = dedent`
-      [package]
-      name = "example"
-      text = '''Old text'''
-      version = "1.0.0"
-      ` + '\n';
-
-    const obj = parse(existing);
-    // Literal strings cannot contain ''' so it should convert to basic string
-    obj.package.text = "Text with ''' quotes";
-    const patched = patch(existing, obj);
-    
-    // Should convert from literal (''') to basic (""")
-    // Note: ''' doesn't need escaping in basic strings, only """ needs escaping
-    const expectedOutput = `[package]
-name = "example"
-text = """Text with ''' quotes"""
-version = "1.0.0"
-`;
-
-    expect(patched).toEqual(expectedOutput);
-  });
-
-  test('should NOT add leading newline when converting literal string with newline in middle', () => {
-    const existing = dedent`
-      [package]
-      name = "example"
-      text = '''line one
-      line two'''
-      version = "1.0.0"
-      ` + '\n';
-
-    const obj = parse(existing);
-    // Change value to require conversion to basic string
-    obj.package.text = "has ''' quotes";
-    const patched = patch(existing, obj);
-    
-    // Should convert to basic string WITHOUT leading newline
-    // (the original literal string had newline in content, not at the start)
-    const expectedOutput = `[package]
-name = "example"
-text = """has ''' quotes"""
-version = "1.0.0"
-`;
-
-    expect(patched).toEqual(expectedOutput);
-  });
-
-  test('should preserve leading newline when converting literal string with leading newline', () => {
-    const existing = dedent`
-      [package]
-      name = "example"
-      text = '''
-      Old text
-      '''
-      version = "1.0.0"
-      ` + '\n';
-
-    const obj = parse(existing);
-    // Change value to require conversion to basic string
-    obj.package.text = "New with ''' quotes";
-    const patched = patch(existing, obj);
-    
-    // Should convert to basic string WITH leading newline
-    const expectedOutput = `[package]
-name = "example"
-text = """
-New with ''' quotes"""
-version = "1.0.0"
-`;
-
-    expect(patched).toEqual(expectedOutput);
-  });
-});
-
 
 test('should patch example with removal of an array element', () => {
   const existing = dedent`
@@ -1486,7 +1455,6 @@ test('should handle empty string', () => {
 });
 
 test('should handle mixed line endings consistently', () => {
-  // File that starts with CRLF but we want to ensure consistency
   const existing = 'title = "test"\r\nversion = "1.0"\r\n\r\n';
 
   const value = parse(existing);
@@ -1494,11 +1462,9 @@ test('should handle mixed line endings consistently', () => {
 
   const patched = patch(existing, value);
 
-  // Should maintain CRLF throughout and preserve trailing count
   expect(patched).toContain('\r\n');
   expect(patched.endsWith('\r\n\r\n')).toBe(true);
   
-  // Count trailing CRLF sequences
   function countTrailingCRLF(str: string) {
     let count = 0;
     let pos = str.length;
@@ -1510,6 +1476,79 @@ test('should handle mixed line endings consistently', () => {
   }
   
   expect(countTrailingCRLF(patched)).toBe(2);
+});
+
+test('should normalize bare LF in new value to CRLF to match the document line endings', () => {
+  const existing = '[description]\r\ntext = """\r\nFirst line\r\nSecond line\r\n"""\r\n';
+
+  const value = parse(existing);
+  expect(value.description.text).toEqual('First line\r\nSecond line\r\n');
+
+  value.description.text = 'Hello world\nand goodbye world\n';
+  const patched = patch(existing, value);
+
+  // The TOML structure uses CRLF. The bare \n in the value is normalized to \r\n
+  // so the output has no mixed line endings.
+  expect(patched).not.toContain('\r\r\n');
+  expect(patched.split('\r\n').join('').includes('\n')).toBe(false);
+  expect(patched).toEqual('[description]\r\ntext = """\r\nHello world\r\nand goodbye world\r\n"""\r\n');
+  expect(parse(patched).description.text).toEqual('Hello world\r\nand goodbye world\r\n');
+});
+
+test('should normalize CRLF in new value to LF to match the document line endings', () => {
+  const existing = '[description]\ntext = """\nFirst line\nSecond line\n"""\n';
+
+  const value = parse(existing);
+  value.description.text = 'Hello world\r\nand goodbye world\r\n';
+  const patched = patch(existing, value);
+
+  // The TOML structure uses LF. The \r\n in the value is normalized to \n
+  // so the output has no mixed line endings.
+  expect(patched).not.toContain('\r\n');
+  expect(patched).toEqual('[description]\ntext = """\nHello world\nand goodbye world\n"""\n');
+  expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world\n');
+});
+
+test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to CRLF', () => {
+  const existing = '[description]\r\ntext = """\r\nFirst line\r\n"""\r\n';
+
+  const value = parse(existing);
+  value.description.text = 'literal \\n and literal \\r\\n plus real\nline\r\nend';
+  const patched = patch(existing, value);
+
+  // The TOML structure uses CRLF. Literal backslash sequences (\n, \r\n) in the value
+  // are preserved as \\n / \\r\\n. The real \n and \r\n in the value are both
+  // normalized to structural \r\n so the output has no mixed line endings.
+  expect(patched).toContain('literal \\\\n and literal \\\\r\\\\n plus real');
+  expect(patched).toEqual(
+    '[description]\r\n' +
+    'text = """\r\n' +
+    'literal \\\\n and literal \\\\r\\\\n plus real\r\n' +
+    'line\r\n' +
+    'end"""\r\n'
+  );
+  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\r\nline\r\nend');
+});
+
+test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to LF', () => {
+  const existing = '[description]\ntext = """\nFirst line\n"""\n';
+
+  const value = parse(existing);
+  value.description.text = 'literal \\n and literal \\r\\n plus real\r\nline\nend';
+  const patched = patch(existing, value);
+
+  // The TOML structure uses LF. Literal backslash sequences (\n, \r\n) in the value
+  // are preserved as \\n / \\r\\n. The real \r\n and \n in the value are both
+  // normalized to structural \n so the output has no mixed line endings.
+  expect(patched).toContain('literal \\\\n and literal \\\\r\\\\n plus real');
+  expect(patched).toEqual(
+    '[description]\n' +
+    'text = """\n' +
+    'literal \\\\n and literal \\\\r\\\\n plus real\n' +
+    'line\n' +
+    'end"""\n'
+  );
+  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\nline\nend');
 });
 
 test('should respect quoted keys when parsing', () => {
@@ -2808,6 +2847,41 @@ test('should remove everything leaving empty document', () => {
 
 describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec)', () => {
 
+  test('should correctly shift a sibling key when patching a no-leading-newline MLBS in a multiline inline table', () => {
+    // Regression test for the generateString endLocation column bug.
+    //
+    // When a MLBS has NO leading newline, its closing """ shares a line with content
+    // (e.g. `a = """line1\nlonger text""", b = "x"`). The old code always stored
+    // column: 3 (the delimiter length) as the end column for any MLBS with newlines.
+    // The correct value is the actual last-line length.
+    //
+    // A wrong column means the writer computes the wrong shift delta for `b = "x"`,
+    // which is on the same line as the closing """. Here the MLBS last line shortens
+    // from len('longer text"""') = 14 to len('b"""') = 4 — a delta of -10. With the
+    // bug, the delta was 3 - 14 = -11 (off by one), shifting `b` one column too far
+    // to the left and corrupting the output.
+    const existing =
+      'tbl = {'                 + '\n' +
+      '    a = """short'        + '\n' +
+      'longer text""", b = "x"' + '\n' +
+      '}'                       + '\n';
+
+    const obj = parse(existing);
+    expect(obj.tbl.a).toEqual('short\nlonger text');
+    expect(obj.tbl.b).toEqual('x');
+
+    obj.tbl.a = 'a\nb';
+    const patched = patch(existing, obj);
+
+    expect(patched).toEqual(
+      'tbl = {'                 + '\n' +
+      '    a = """a'            + '\n' +
+      'b""", b = "x"'           + '\n' +
+      '}'                       + '\n'
+    );
+    expect(parse(patched).tbl.b).toEqual('x');
+  });
+
   test('should edit a value in a simple trailing-comma multiline inline table', () => {
     const existing = dedent`
       trailing-comma-1 = {
@@ -2930,22 +3004,123 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
   });
 
   test('should edit a value in an inline table that contains a multiline string value', () => {
-    // tbl-2 from newline.toml: inline table whose value is a multiline string
-    const existing = dedent`
-      tbl-2 = {
-              k = """Hello"""
-      }
-      ` + '\n';
+    // Verifies that preserveFormatting preserves the structural suffix of a multiline string:
+    // the line-continuation backslash and the closing indent must be preserved.
+    //
+    // Note: dedent eats `\<LF>` sequences (its raw-string cleanup regex), so these
+    // strings are written with explicit concatenation to control every character exactly.
+    //
+    // The TOML `        Hello \<LF>        ` encodes value `        Hello `
+    // (8 spaces + "Hello " — the `\<LF><spaces>` is trimmed as a line continuation).
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Hello \\\n' +
+      '        """\n' +
+      '}\n';
 
     const value = parse(existing);
-    value['tbl-2'].k = 'Goodbye';
+    // Sanity-check: line continuation trims backslash+newline+indent, leaving the trailing space.
+    expect(value['tbl-2'].k).toEqual('Hello ');
+
+    value['tbl-2'].k = 'Goodbye ';
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-      tbl-2 = {
-              k = """Goodbye"""
-      }
-      ` + '\n');
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Goodbye \\\n' +
+      '        """\n' +
+      '}\n'
+    );
+    expect(parse(patched)['tbl-2'].k).toEqual('Goodbye ');
+  });
+
+    test('should edit a value in an inline table that contains a multiline string value 2', () => {
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Hello \\\n' +
+      '        World.\\\n' +
+      '        """\n' +
+      '}\n';
+
+    const value = parse(existing);
+    // The `\<LF><indent>` sequences are line continuations: they trim the backslash,
+    // newline and following whitespace, joining everything into one value.
+    expect(value['tbl-2'].k).toEqual('Hello World.');
+
+    value['tbl-2'].k = 'Bonjour World.';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\\\n' +
+      '        Bonjour \\\n' +
+      '        World.\\\n' +
+      '        """\n' +
+      '}\n'
+    );
+    expect(parse(patched)['tbl-2'].k).toEqual('Bonjour World.');
+  });
+
+      test('should edit a value in an inline table that contains a multiline string value 3', () => {
+    // Uses """\n (leading newline) format — NOT """\\ (leading line-continuation).
+    // The body contains line-continuation backslashes with blank lines and mixed indentation.
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """\n' +
+      'The quick brown \\\n' +
+      '\n' +
+      '\n' +
+      '  fox jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n';
+
+    const value = parse(existing);
+    // Line-continuation trims `\`, newline(s) and following whitespace:
+    //   "The quick brown " + "fox jumps over " + "the lazy dog."
+    expect(value['tbl-2'].k).toEqual('The quick brown fox jumps over the lazy dog.');
+
+    value['tbl-2'].k = 'The quick brown cat jumps over the lazy dog.';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """\n' +
+      'The quick brown \\\n' +
+      '\n' +
+      '\n' +
+      '  cat jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n'
+    );
+    expect(parse(patched)['tbl-2'].k).toEqual('The quick brown cat jumps over the lazy dog.');
+  });
+
+      test('should edit a value in an inline table that contains a multiline string value 4', () => {
+    // Uses """content (no newline after delimiter) with line-continuation in the body.
+    const existing =
+      'tbl-2 = {\n' +
+      '        k = """The quick brown \\\n' +
+      '  fox jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n';
+
+    const value = parse(existing);
+    expect(value['tbl-2'].k).toEqual('The quick brown fox jumps over the lazy dog.');
+
+    value['tbl-2'].k = 'The quick brown cat jumps over the lazy dog.';
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(
+      'tbl-2 = {\n' +
+      '        k = """The quick brown \\\n' +
+      '  cat jumps over \\\n' +
+      '    the lazy dog."""\n' +
+      '}\n'
+    );
+    expect(parse(patched)['tbl-2'].k).toEqual('The quick brown cat jumps over the lazy dog.');
   });
 
   test('should preserve no-trailing-newline-before-brace format when editing', () => {
@@ -3612,5 +3787,320 @@ describe('undefined handling in patch', () => {
       name = "Screwdriver"
       sku = 123456
       ` + '\n');
+  });
+});
+
+describe('quoted keys', () => {
+
+  describe('simple quoted keys', () => {
+
+    const existing = dedent`
+      "quoted key" = "value"
+      ` + '\n';
+
+    test('existing value is parsed correctly', () => {
+      const obj = parse(existing);
+      expect(obj['quoted key']).toEqual('value');
+    });
+
+    test('should edit a quoted key and preserve the quotes', () => {
+
+      const obj = parse(existing);
+      obj['quoted key'] = 'new value';
+
+      expect(patch(existing, obj)).toEqual(dedent`
+        "quoted key" = "new value"
+        ` + '\n');
+    });
+
+    test('should rename a quoted key and preserve the value', () => {
+
+      const obj = parse(existing);
+      obj['renamed key'] = obj['quoted key'];
+      delete obj['quoted key'];
+
+      expect(patch(existing, obj)).toEqual(dedent`
+        "renamed key" = "value"
+        ` + '\n');
+    });
+
+  });
+
+  // Add entries here to automatically run all three tests for each escape sequence.
+  // - tomlEscape   : raw escape chars as they appear inside a TOML basic-string key,
+  //                  used for both TOML input and expected patch output (e.g. '\\n').
+  // - jsParsedChar : the JS character that TOML produces after decoding the escape.
+  const escapeSequenceCases = [
+    { tomlEscape: '\\n',     jsParsedChar: '\n' },
+    { tomlEscape: '\\u263A', jsParsedChar: '\u263A' },
+    { tomlEscape: '\\t',     jsParsedChar: '\t' },
+  ];
+
+  describe.each(escapeSequenceCases)(
+    'quoted key with $tomlEscape escape sequence',
+    ({ tomlEscape, jsParsedChar }) => {
+      const existing     = '"quoted' + tomlEscape + 'key" = "value"\n';
+      const jsKey        = 'quoted'  + jsParsedChar + 'key';
+      const renamedJsKey = 'renamed' + jsParsedChar + 'key';
+
+      test('existing value is parsed correctly', () => {
+        expect(existing).toEqual('"quoted' + tomlEscape + 'key" = "value"\n');
+        const obj = parse(existing);
+        expect(obj[jsKey]).toEqual('value');
+      });
+
+      test('should edit the value and preserve the escaped key', () => {
+        const obj = parse(existing);
+        obj[jsKey] = 'new value';
+        expect(patch(existing, obj)).toEqual('"quoted' + tomlEscape + 'key" = "new value"\n');
+      });
+
+      test('should rename the key and preserve the value', () => {
+        const obj = parse(existing);
+        obj[renamedJsKey] = obj[jsKey];
+        delete obj[jsKey];
+        const patched = patch(existing, obj);
+        expect(patched).toEqual('"renamed' + tomlEscape + 'key" = "value"\n');
+      });
+    }
+  );
+
+});
+
+describe('basic string escape preservation', () => {
+  test('should preserve escaped emoji sequence when editing a basic string value', () => {
+    const existing = 'message = "hello ' + '\\u263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.message).toEqual('hello ☺');
+
+    obj.message = obj.message + ' updated';
+
+    // Regression expectation: preserve the original escape sequence instead of emitting raw emoji.
+    expect(patch(existing, obj)).toEqual('message = "hello ' + '\\u263A' + ' updated"\n');
+  });
+
+  test('should preserve \\U0001F600 long-form escape in basic string value after patching', () => {
+    // \U0001F600 is the long-form (8-digit) Unicode escape for 😀.
+    // After parse→patch the long form must survive, not be normalised to a raw emoji.
+    const existing = 'emoji = "Hello ' + '\\U0001F600' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.emoji).toEqual('Hello \u{1F600}');
+
+    obj.emoji = 'Bonjour \u{1F600}';
+
+    expect(patch(existing, obj)).toEqual('emoji = "Bonjour ' + '\\U0001F600' + '"\n');
+  });
+
+  test('should prefer first-seen escape form when same char has two escape representations', () => {
+    // The raw string has \u263A (4-digit form) before \U0000263A (8-digit form).
+    // collectPreferredEscapes records the first seen form per decoded character,
+    // so \u263A should be the preferred form for all ☺ occurrences in the output.
+    const existing = 'msg = "' + '\\u263A' + ' and ' + '\\U0000263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('☺ and ☺');
+
+    obj.msg = '☺ twice updated';
+
+    // \u263A was recorded first, so it is used for every ☺ in the new value.
+    expect(patch(existing, obj)).toEqual('msg = "' + '\\u263A' + ' twice updated"\n');
+  });
+
+  test('should apply escape preference even when the char also appears literally in the original', () => {
+    // The raw contains a literal ☺ first, then \u263A as an escape.
+    // collectPreferredEscapes only processes \-sequences, so it records \u263A.
+    // When the new value contains ☺, the preferred escape form (\u263A) wins.
+    const existing = 'msg = "☺ and ' + '\\u263A' + '"\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('☺ and ☺');
+
+    obj.msg = '☺ updated';
+
+    // The escaped form (\u263A) is preferred because it is the only escape
+    // recorded by collectPreferredEscapes; the leading literal ☺ has no effect.
+    expect(patch(existing, obj)).toEqual('msg = "' + '\\u263A' + ' updated"\n');
+  });
+});
+
+describe('multi-line basic string escape preservation', () => {
+  test('should preserve escaped emoji sequence when editing a multi-line basic string value', () => {
+    const existing = 'message = """hello ' + '\\u263A' + '"""\n';
+
+    const obj = parse(existing);
+    expect(obj.message).toEqual('hello ☺');
+
+    obj.message = obj.message + ' updated';
+
+    // Regression expectation: preserve the original escape sequence instead of emitting raw emoji.
+    expect(patch(existing, obj)).toEqual('message = """hello ' + '\\u263A' + ' updated"""\n');
+  });
+
+  test('should preserve \\t escape in multiline basic string value after patching', () => {
+    // In a multiline basic string, a tab character is allowed *literally* (not mandatory to escape).
+    // If the author chose to write \t as an explicit escape, that preference must be preserved.
+    // This is the meaningful coverage for \t escape-preference — unlike singleline basic strings
+    // where \t is a mandatory escape and would always be rendered as \t regardless.
+    const existing = 'key = """col1' + '\\t' + 'col2"""\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('col1\tcol2');
+
+    obj.key = 'col1\tupdated';
+
+    expect(patch(existing, obj)).toEqual('key = """col1' + '\\t' + 'updated"""\n');
+  });
+
+  test('should escape embedded triple double quotes when patching a multiline basic string value', () => {
+    // TOML spec allows at most two consecutive unescaped double quotes inside a MLBS.
+    // A value containing """ must have at least one quote escaped: ""\" or "\""
+    const existing = dedent`
+      msg = """hello world"""
+    ` + '\n';
+
+    const obj = parse(existing);
+    expect(obj.msg).toEqual('hello world');
+
+    obj.msg = 'Three quotes: """';
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      msg = """Three quotes: ""\""""
+    ` + '\n');
+  });
+});
+
+describe('mandatory escape characters through patch', () => {
+  // These tests verify that control characters which are *forbidden* in raw TOML strings
+  // are always escaped in the output, regardless of escape-preference. Coverage is at the
+  // patch() integration level to ensure the full pipeline (parse → mutate → generate → write)
+  // produces valid TOML for these edge-case characters.
+
+  test('should escape backspace (\\b) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\x08end'; // \x08 = backspace
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\bend"\n');
+    expect(parse(patched).msg).toEqual('line\x08end');
+  });
+
+  test('should escape form feed (\\f) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'page\x0Cbreak'; // \x0C = form feed
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "page\\fbreak"\n');
+    expect(parse(patched).msg).toEqual('page\x0Cbreak');
+  });
+
+  test('should escape carriage return (\\r) when patching a singleline basic string value', () => {
+    // In a singleline basic string, \r is forbidden as a literal and must be escaped.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\rend';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\rend"\n');
+    expect(parse(patched).msg).toEqual('line\rend');
+  });
+
+  test('should escape an arbitrary disallowed control character (ESC, \\x1b) as \\uXXXX', () => {
+    // U+001B (ESC) is in the 0x00–0x1F range that is forbidden in basic strings.
+    // It has no named short escape, so it must be rendered as \u001b.
+    // Note: the fast path (no preferred escapes → JSON.stringify) emits lowercase hex.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'esc\x1Bchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "esc\\u001bchar"\n');
+    expect(parse(patched).msg).toEqual('esc\x1Bchar');
+  });
+
+  test('should escape DEL (\\x7f) as \\u007F when patching a basic string value', () => {
+    // U+007F is explicitly disallowed in TOML basic strings and has no named escape.
+    // Note: JSON.stringify does not escape U+007F (it only escapes U+0000-U+001F),
+    // so the fast path in escapeStringContent must handle it explicitly.
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "del\\u007Fchar"\n');
+    expect(parse(patched).msg).toEqual('del\x7Fchar');
+  });
+
+  test('should escape disallowed control characters in a multiline basic string', () => {
+    // In MLBS mode, only a stricter set of controls are forbidden (0x00–0x07, 0x0B,
+    // 0x0E–0x1F, 0x7F). Tab (0x09), LF (0x0A) and CR (0x0D) are allowed literally.
+    // Backspace (0x08) is still forbidden and must be escaped.
+    const existing = 'msg = """hello"""\n';
+
+    const obj = parse(existing);
+    obj.msg = 'back\x08space';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = """back\\bspace"""\n');
+    expect(parse(patched).msg).toEqual('back\x08space');
+  });
+});
+
+
+describe('Mixed line endings', () => {
+  test('should preserve mixed escaped line endings when editing a value', () => {
+    const existing = 
+      'key = "line1\\r\\nline2\\nline3\\rline4"' + '\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('line1\r\nline2\nline3\rline4');
+
+    obj.key = 'updated\r\nvalue';
+
+    expect(patch(existing, obj)).toEqual('key = "updated\\r\\nvalue"\n');
+  });
+
+  
+  test.each([
+    { updateValue: 'updated\r\nvalue', description: 'CRLF' },
+    { updateValue: 'updated\nvalue', description: 'LF' }
+  ])('should normalize line endings when editing a MLBS value. - CRLF document with $description update', ({ updateValue }) => {
+    const existing = 'key = """line1\r\nline2\nline3"""\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('line1\r\nline2\nline3');
+
+    obj.key = updateValue;
+
+    // detectNewline finds \r\n first (inside the MLBS value), so the document format
+    // is CRLF. The single trailing \n is counted as 1 trailing newline and output as \r\n.
+    expect(patch(existing, obj)).toEqual('key = """updated\r\nvalue"""\r\n');
+  });
+
+
+  test.each([
+    { updateValue: 'updated\r\nvalue', description: 'CRLF' },
+    { updateValue: 'updated\nvalue', description: 'LF' }
+  ])('should normalize line endings when editing a MLBS value. - LF document with $description update', ({ updateValue }) => {
+    const existing = 'key = """line1\nline2\r\nline3"""\r\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('line1\nline2\r\nline3');
+
+    obj.key = updateValue;
+
+    // detectNewline finds \n first (inside the MLBS value), so the document format
+    // is LF. The single trailing \r\n is counted as 1 trailing newline and output as \n.
+    // Note that even when we updated using a CRLF format string, the output is still
+    // LF because the original document format is LF.
+    expect(patch(existing, obj)).toEqual('key = """updated\nvalue"""\n');
   });
 });

@@ -1,3 +1,12 @@
+/**
+ * @file Utility functions for the TOML patch library.
+ * @module utils
+ */
+
+/**
+ * General utility functions
+ */
+
 export function last<TValue>(values: TValue[]): TValue | undefined {
   return values[values.length - 1];
 }
@@ -35,6 +44,34 @@ export function isObject(value: any): boolean {
 export function isIterable<T>(value: any): value is Iterable<T> {
   return value != null && typeof value[Symbol.iterator] === 'function';
 }
+
+/**
+ * String type detection functions
+ *
+ * These functions identify the type of TOML string representation from the raw string.
+ * The library preserves the preference for escape sequences by maintaining the original
+ * string type (basic vs literal, single-line vs multiline) when possible during patching.
+ */
+
+export function isBasicString(raw: string): boolean {
+  return raw.startsWith('"') && !raw.startsWith('"""');
+}
+
+export function isMultilineBasicString(raw: string): boolean {
+  return raw.startsWith('"""');
+}
+
+export function isLiteralString(raw: string): boolean {
+  return raw.startsWith("'") && !raw.startsWith("'''");
+}
+
+export function isMultilineLiteralString(raw: string): boolean {
+  return raw.startsWith("'''");
+}
+
+/**
+ * Object and array utilities
+ */
 
 export function has(object: any, key: string): boolean {
   // All objects come from blank() (Object.create(null)) so there is no
@@ -83,11 +120,4 @@ export function merge<TValue>(target: TValue[], values: TValue[]) {
   }
 }
 
-/**
- * Checks if a string is a multiline string (starts with """ or ''')
- * @param raw The raw string value including quotes
- * @returns true if the string is multiline, false otherwise
- */
-export function isMultilineString(raw: string): boolean {
-  return raw.startsWith('"""') || raw.startsWith("'''");
-}
+

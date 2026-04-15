@@ -830,7 +830,12 @@ export function shiftNode(
       type === NodeType.Comment) {
     if (!first_line_only || node.loc.start.line === start_line) {
       node.loc.start.column += columns;
-      node.loc.end.column += columns;
+      // Only shift end.column when start and end are on the same line.
+      // For multiline strings the end is on a completely different line, so its
+      // column is an absolute position independent of where the node starts.
+      if (node.loc.end.line === node.loc.start.line) {
+        node.loc.end.column += columns;
+      }
     }
     node.loc.start.line += lines;
     node.loc.end.line += lines;

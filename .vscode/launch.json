@@ -58,7 +58,9 @@
       "name": "Debug Current Test File",
       "program": "${workspaceFolder}/node_modules/jest/bin/jest",
       "args": [
-        "${fileBasename}"
+        "${fileBasename}",
+        "--config",
+        "${workspaceFolder}/jest.config.json"
       ],
       "cwd": "${fileDirname}",
       "console": "integratedTerminal",

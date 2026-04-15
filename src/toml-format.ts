@@ -180,25 +180,29 @@ function checkTrailingCommaInItems(items: any[]): boolean | null {
   return false;
 }
 
-// Returns the detected newline (\n or \r\n) from a string, defaulting to \n
+// Returns the detected newline (\n or \r\n) from a string, defaulting to \n.
+// First occurrence wins: if \r\n appears anywhere before a bare \n, the document
+// is considered CRLF even if later lines (or string values) use bare LF.
 export function detectNewline(str: string): string {
   const lfIndex = str.indexOf('\n');
-  if (lfIndex > 0 && str.substring(lfIndex - 1, lfIndex) === '\r') {
+  if (lfIndex > 0 && str[lfIndex - 1] === '\r') {
     return '\r\n';
   }
   return '\n';
 }
 
-// Counts consecutive trailing newlines at the end of a string
-export function countTrailingNewlines(str: string, newlineChar: string): number {
+// Counts consecutive trailing newlines at the end of a string.
+// Counts each \n (whether bare or as part of \r\n) as one newline unit,
+// so mixed trailing line endings (e.g. a CRLF document with a bare \n at EOF)
+// are still counted correctly.
+export function countTrailingNewlines(str: string): number {
   let count = 0;
   let pos = str.length;
-  while (pos >= newlineChar.length) {
-    if (str.substring(pos - newlineChar.length, pos) === newlineChar) {
-      count++;
-      pos -= newlineChar.length;
-    } else {
-      break;
+  while (pos > 0 && str[pos - 1] === '\n') {
+    count++;
+    pos--;
+    if (pos > 0 && str[pos - 1] === '\r') {
+      pos--; // consume the \r as part of CRLF
     }
   }
   return count;
@@ -467,7 +471,7 @@ export class TomlFormat {
     format.newLine = detectNewline(tomlString);
     
     // Detect trailing newline count
-    format.trailingNewline = countTrailingNewlines(tomlString, format.newLine);
+    format.trailingNewline = countTrailingNewlines(tomlString);
     
     // Parse the TOML to detect comma and bracket spacing usage patterns
     try {
