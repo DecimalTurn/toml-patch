@@ -259,8 +259,8 @@ export function validateFormatObject(format: any): any {
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     truncateZeroTimeInDates: isBool,
     useTabsForIndentation: isBool,
-    minimumDecimals: v => typeof v === 'number' && Number.isInteger(v) && v >= 0
-      ? null : `expected non-negative integer, got ${typeof v}`,
+    minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
+      ? null : `expected non-negative integer or undefined, got ${typeof v}`,
   };
 
   const validatedFormat: any = {};
