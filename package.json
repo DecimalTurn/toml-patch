@@ -87,6 +87,7 @@
       "@tootallnate/once": "^3.0.1",
       "brace-expansion": "^5.0.0",
       "lodash": "^4.18.1",
+      "picomatch": "^4.0.4",
       "serialize-javascript": "^7.0.5"
     }
   },
@@ -105,6 +106,7 @@
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",
     "package.json": {
       "pnpm.overrides.lodash": "Override needed to avoid vuln detailed in https://github.com/DecimalTurn/toml-patch/security/dependabot/44",
+      "pnpm.overrides.picomatch": "Override needed to avoid picomatch vuln detailed in https://github.com/DecimalTurn/toml-patch/security/dependabot/42",
       "pnpm.overrides.serialize-javascript": "https://github.com/DecimalTurn/toml-patch/security/dependabot/40"
     }
   }
