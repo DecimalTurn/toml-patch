@@ -36,6 +36,23 @@ export function isIterable<T>(value: any): value is Iterable<T> {
   return value != null && typeof value[Symbol.iterator] === 'function';
 }
 
+
+export function isBasicString(raw: string): boolean {
+  return raw.startsWith('"') && !raw.startsWith('"""');
+}
+
+export function isMultilineBasicString(raw: string): boolean {
+  return raw.startsWith('"""') || raw.startsWith("'''");
+}
+
+export function isLiteralString(raw: string): boolean {
+  return raw.startsWith("'") && !raw.startsWith("'''");
+}
+
+export function isMultilineLiteralString(raw: string): boolean {
+  return raw.startsWith("'''");
+}
+
 export function has(object: any, key: string): boolean {
   // All objects come from blank() (Object.create(null)) so there is no
   // prototype chain — `key in object` is safe and avoids the slow

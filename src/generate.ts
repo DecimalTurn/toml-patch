@@ -23,22 +23,13 @@ import {
   InlineTable,
   Comment
 } from './ast';
-import { zero, cloneLocation, clonePosition, Location, Position } from './location';
+import { zero, cloneLocation, clonePosition, Position } from './location';
 import { LocalDate } from './parse-toml';
 import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
-import { MultilineBasicString, MultilineLiteralString, detectLineContinuation, rawStringWrapper, LiteralString, BasicString } from './string-format';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
-
-function detectFirstLineEnding(value: string): '\r\n' | '\n' | '' {
-  const match = value.match(/\r\n|\n/);
-  return (match?.[0] as '\r\n' | '\n' | undefined) ?? '';
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled string type for existing raw value: ${String(value)}`);
-}
+import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString} from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -171,42 +162,41 @@ export function generateString(value: string, existingRaw?: string): String {
 }
 
 function generateStringKeepFormatting(value: string, existingRaw: string): String {
-  const existingStringValue = rawStringWrapper(existingRaw);
-
-  if (existingStringValue === null) {
-    // existingRaw is misformatted. This should be impossible
-    throw new Error(`Existing raw string value is not valid: ${existingRaw}`);
+  if (isBasicString(existingRaw)) {
+    return generateBasicString(value, existingRaw);
   }
 
-  switch (existingStringValue.type) {
-    case 'basic':
-      return generateBasicString(value, existingRaw);
-
-    case 'literal':
-      if (!value.includes("'")) {
-        return generateLiteralString(value);
-      }
-      // Value contains a single quote — single-line literal strings cannot contain '.
-      // Fall back to MLLS ('''value''') unless the value also contains ''', in which
-      // case we must use a basic string.
-      if (!value.includes("'''")) {
-        return generateMultilineLiteralString(value, MultilineLiteralString.fromLiteralString(existingStringValue));
-      }
-      return generateBasicString(value);
-
-    case 'multiline-literal':
-      // Literal strings cannot contain ''' - fallback to basic multi-line string if needed
-      if (!value.includes("'''")) {
-        return generateMultilineLiteralString(value, existingStringValue);
-      }
-      return generateMultilineBasicString(value, MultilineBasicString.fromMultilineLiteralString(existingStringValue));
-
-    case 'multiline-basic':
-      return generateMultilineBasicString(value, existingStringValue);
-
-    default:
-      return assertNever(existingStringValue);
+  if (isLiteralString(existingRaw)) {
+    if (!value.includes("'")) {
+      return generateLiteralString(value);
+    }
+    // Value contains a single quote — single-line literal strings cannot contain '.
+    // Fall back to MLLS ('''value''') unless the value also contains ''', in which
+    // case we must use a basic string.
+    if (!value.includes("'''")) {
+      const existingValue = existingRaw.slice(1, -1);
+      const multilineRaw = `'''${existingValue}'''`;
+      return generateMultilineLiteralString(value, multilineRaw);
+    }
+    return generateBasicString(value);
   }
+
+  if (isMultilineLiteralString(existingRaw)) {
+    // Literal strings cannot contain ''' - fallback to basic multi-line string if needed
+    if (!value.includes("'''")) {
+      return generateMultilineLiteralString(value, existingRaw);
+    }
+    const existingValue = existingRaw.slice(3, -3);
+    const multilineRaw = `"""${existingValue}"""`;
+    return generateMultilineBasicString(value, multilineRaw);
+  }
+
+  if (isMultilineBasicString(existingRaw)) {
+    return generateMultilineBasicString(value, existingRaw);
+  }
+
+  // existingRaw is misformatted. This should be impossible
+  throw new Error(`Existing raw string value is not valid: ${existingRaw}`);
 }
 
 function generateBasicString(value: string, existingRaw?: string): String {
@@ -248,26 +238,29 @@ function generateLiteralString(value: string): String {
   };
 }
 
-function generateMultilineBasicString(value: string, existingRaw: MultilineBasicString): String {
-  const escaped = escapeStringContent(value, existingRaw.raw, 'multiline-basic');
-  const structuralNewline = detectFirstLineEnding(existingRaw.raw) || '\n';
+function generateMultilineBasicString(value: string, existingRaw: string): String {
+  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic');
 
-  const leadingNewLine = existingRaw.raw.startsWith('"""\r\n')
+  const leadingNewLine = existingRaw.startsWith('"""\r\n')
     ? '\r\n'
-    : existingRaw.raw.startsWith('"""\n')
+    : existingRaw.startsWith('"""\n')
     ? '\n'
     : '';
 
   let raw = '"""' + leadingNewLine + escaped + '"""';
 
-  if (detectLineContinuation(existingRaw)) {
-    const rebuilt = rebuildLineContinuation(existingRaw.raw, escaped);
+  const existingValue = existingRaw.slice(3, -3);
+  // Line continuation is indicated by an odd number of backslashes at the end of any line.
+  // Match: (start-of-line or a non-backslash), then zero or more escaped-backslash pairs,
+  // then a single trailing backslash at end-of-line.
+  if (/(^|[^\\])(\\\\)*\\$/m.test(existingValue)) {
+    const rebuilt = rebuildLineContinuation(existingRaw, escaped);
     if (rebuilt !== null) {
       raw = rebuilt;
     }
   }
 
-  const endLocation = endlocation(new MultilineBasicString(raw));
+  const endLocation = endlocation(raw);
 
   return {
     type: NodeType.String,
@@ -277,16 +270,16 @@ function generateMultilineBasicString(value: string, existingRaw: MultilineBasic
   };
 }
 
-function generateMultilineLiteralString(value: string, existingRaw: MultilineLiteralString): String {
+function generateMultilineLiteralString(value: string, existingRaw: string): String {
 
-  const leadingNewLine = existingRaw.raw.startsWith("'''\r\n")
+  const leadingNewLine = existingRaw.startsWith("'''\r\n")
     ? '\r\n'
-    : existingRaw.raw.startsWith("'''\n")
+    : existingRaw.startsWith("'''\n")
     ? '\n'
     : '';
 
   const raw = "'''" + leadingNewLine + value + "'''";
-  const endLocation = endlocation(new MultilineLiteralString(raw));
+  const endLocation = endlocation(raw);
   return {
     type: NodeType.String,
     loc: { start: zero(), end: endLocation },
@@ -295,8 +288,7 @@ function generateMultilineLiteralString(value: string, existingRaw: MultilineLit
   };
 }
 
-function endlocation (stringValue: MultilineBasicString | MultilineLiteralString): Position {
-  const raw = stringValue.raw;
+function endlocation (raw: string): Position {
   if (raw.includes('\n')) {
     const lines = raw.split(/\r\n|\n/);
     const lastLine = lines[lines.length - 1];

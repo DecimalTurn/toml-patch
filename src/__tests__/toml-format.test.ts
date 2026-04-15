@@ -301,36 +301,36 @@ describe('TomlFormat comprehensive tests', () => {
 
   describe('countTrailingNewlines edge cases', () => {
     test('should handle empty string', () => {
-      expect(countTrailingNewlines('', '\n')).toBe(0);
+      expect(countTrailingNewlines('')).toBe(0);
     });
 
     test('should handle string with no trailing newlines', () => {
-      expect(countTrailingNewlines('content', '\n')).toBe(0);
+      expect(countTrailingNewlines('content')).toBe(0);
     });
 
     test('should count multiple LF newlines', () => {
-      expect(countTrailingNewlines('content\n\n\n', '\n')).toBe(3);
+      expect(countTrailingNewlines('content\n\n\n')).toBe(3);
     });
 
     test('should count multiple CRLF newlines', () => {
-      expect(countTrailingNewlines('content\r\n\r\n', '\r\n')).toBe(2);
+      expect(countTrailingNewlines('content\r\n\r\n')).toBe(2);
     });
 
     test('should handle string that is only newlines', () => {
-      expect(countTrailingNewlines('\n\n\n', '\n')).toBe(3);
+      expect(countTrailingNewlines('\n\n\n')).toBe(3);
     });
 
     test('should handle mixed content with trailing newlines', () => {
-      expect(countTrailingNewlines('line1\nline2\n\n', '\n')).toBe(2);
+      expect(countTrailingNewlines('line1\nline2\n\n')).toBe(2);
     });
 
     test('should not count embedded newlines', () => {
-      expect(countTrailingNewlines('line1\n\ncontent', '\n')).toBe(0);
+      expect(countTrailingNewlines('line1\n\ncontent')).toBe(0);
     });
 
     test('should handle large numbers of trailing newlines', () => {
       const content = 'text' + '\n'.repeat(10);
-      expect(countTrailingNewlines(content, '\n')).toBe(10);
+      expect(countTrailingNewlines(content)).toBe(10);
     });
   });
 

@@ -37,7 +37,6 @@ test('should stringify simple example', () => {
     }
   );
 
-  //console.log(toml);
   let ouput = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`
@@ -68,7 +67,6 @@ test('should stringify simple example with simple value at the end', () => {
     }
   );
 
-  //console.log(toml);
   let ouput = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`
@@ -101,7 +99,6 @@ test('should stringify simple example with empty object', () => {
     }
   );
 
-  //console.log(toml);
   let ouput = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`

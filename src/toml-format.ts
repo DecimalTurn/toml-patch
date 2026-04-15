@@ -195,7 +195,7 @@ export function detectNewline(str: string): string {
 // Counts each \n (whether bare or as part of \r\n) as one newline unit,
 // so mixed trailing line endings (e.g. a CRLF document with a bare \n at EOF)
 // are still counted correctly.
-export function countTrailingNewlines(str: string, _newlineChar: string): number {
+export function countTrailingNewlines(str: string): number {
   let count = 0;
   let pos = str.length;
   while (pos > 0 && str[pos - 1] === '\n') {
@@ -471,7 +471,7 @@ export class TomlFormat {
     format.newLine = detectNewline(tomlString);
     
     // Detect trailing newline count
-    format.trailingNewline = countTrailingNewlines(tomlString, format.newLine);
+    format.trailingNewline = countTrailingNewlines(tomlString);
     
     // Parse the TOML to detect comma and bracket spacing usage patterns
     try {

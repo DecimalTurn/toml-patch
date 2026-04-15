@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { parse } from '../';
 
 test('it should parse example from readme', () => {
@@ -100,8 +99,6 @@ test('it should parse MLBS with \r\n newlines and preserve them in the value', (
     'Goodbye world."""'
   );
 
-  console.log('Parsed value:', parsed.text);
-
   expect(parsed).toEqual({
     a: 1,
     text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
@@ -118,8 +115,6 @@ test('it should parse MLBS with \r\n newlines and preserve them in the value - e
     'Goodbye world."""' + '\n'
   );
 
-  console.log('Parsed value:', parsed.text);
-
   expect(parsed).toEqual({
     a: 1,
     text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
@@ -135,8 +130,6 @@ test('it should parse MLBS with mixed newlines and preserve them in the value', 
     'This is a test. ' + '\r\n' +
     'Goodbye world."""' + '\n'
   );
-
-  console.log('Parsed value:', parsed.text);
 
   expect(parsed).toEqual({
     a: 1,
