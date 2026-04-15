@@ -89,13 +89,13 @@ function mandatoryEscaping(ch: string, mode: EscapeMode): string {
 }
 
 /**
- * Scans a raw TOML string token and records preferred escape lexemes per decoded character.
+ * Scans a raw TOML string token and records preferred escape sequence representations for characters.
  *
  * Example: if `existingRaw` contains `\u263A`, this map stores `☺ -> "\\u263A"`.
  * The first seen escape for a character wins to preserve original style.
  *
  * @param existingRaw - Raw TOML string content including escape sequences.
- * @returns A map from decoded character to preferred TOML escape lexeme.
+ * @returns A map from decoded character to preferred TOML escape sequence representation.
  */
 export function collectPreferredEscapes(existingRaw: string): Map<string, string> {
   const preferred = new Map<string, string>();
@@ -108,7 +108,10 @@ export function collectPreferredEscapes(existingRaw: string): Map<string, string
 
     const simple = decodeSimpleEscape(n1);
     if (simple !== null) {
-      if (!preferred.has(simple)) preferred.set(simple, '\\' + n1);
+      // Newlines (\n, \r) are handled separately and excluded from preference tracking.
+      if (simple !== '\n' && simple !== '\r' && !preferred.has(simple)) {
+        preferred.set(simple, '\\' + n1);
+      }
       i += 1;
       continue;
     }
@@ -165,7 +168,7 @@ function applyPreferredAndMandatoryEscapes(
 }
 
 /**
- * Escapes TOML basic-string content while preserving preferred escape lexemes from existing raw text.
+ * Escapes TOML basic-string content while preserving preferred escape sequences representation from existing raw text.
  *
  * In `singleline-basic` mode, output is suitable for `"..."` strings.
  * In `multiline-basic` mode, output is suitable for `"""..."""` strings and additionally

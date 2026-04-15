@@ -1555,3 +1555,110 @@ describe('Escape preference preserved in LEB multiline basic strings', () => {
     expect(parse(patch(existing, obj)).text).toEqual('☺\tcol2 end.');
   });
 });
+
+describe('Escape token integrity at word-wrap boundaries in LEB strings', () => {
+  test('should emit \\u263A as a whole token when maxLength equals the escape sequence length', () => {
+    // E1: The original line has no trailing space before \\, so content width = 6
+    // (= len("\\u263A")) = maxLength. When patching with a value where \\u263A is
+    // followed by another word, the packer must NOT split inside the escape sequence.
+    // It should put \\u263A on its own line and the next word on the following line.
+    const existing =
+      'text = """\\' + '\n' +
+      '  \\u263A\\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('☺world.');
+
+    obj.text = '☺ world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  \\u263A \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('☺ world.');
+  });
+
+  test('should not misinterpret a \\n escape token as a line-continuation marker', () => {
+    // E2: The original raw has an explicit \\n escape sequence for a newline character.
+    // collectPreferredEscapes records "\\n" as the preferred form for newline.
+    // After escaping, the escaped string passed to the word packer contains the
+    // 2-char sequence \\n (backslash + n). The packer must treat it as an opaque
+    // word token, never as a bare newline or a line-continuation candidate.
+    const existing =
+      'text = """\\' + '\n' +
+      '  hello\\n \\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('hello\n world.');
+
+    obj.text = 'goodbye\n world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  goodbye\\n \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('goodbye\n world.');
+  });
+
+  test('should not misinterpret a \\n escape token as a line-continuation marker (CRLF document)', () => {
+    const existing =
+      'text = """\\' + '\r\n' +
+      '  hello\\n \\' + '\r\n' +
+      '  world."""\r\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('hello\n world.');
+
+    obj.text = 'goodbye\n world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\r\n' +
+      '  goodbye\\n \\' + '\r\n' +
+      '  world."""\r\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('goodbye\n world.');
+  });
+
+  test('should not misinterpret a \\r\\n escape token as a line-continuation marker (LF document)', () => {
+    const existing =
+      'text = """\\' + '\n' +
+      '  hello\\r\\n \\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('hello\r\n world.');
+
+    obj.text = 'goodbye\r\n world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """\\' + '\n' +
+      '  goodbye\\r\\n \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('goodbye\r\n world.');
+  });
+
+  test('should not misinterpret a starting \\r\\n escape token as a line-continuation marker (LF document)', () => {
+    const existing =
+      'text = """' + '\\r\\n' + '\\'  + '\n' +
+      '  hello\\r\\n \\' + '\n' +
+      '  world."""\n';
+
+    const obj = parse(existing);
+    expect(obj.text).toEqual('\r\nhello\r\n world.');
+
+    obj.text = '\r\ngoodbye\r\n world.';
+
+    expect(patch(existing, obj)).toEqual(
+      'text = """' + '\\r\\n' + '\\'  + '\n' +
+      '  goodbye\\r\\n \\' + '\n' +
+      '  world."""\n'
+    );
+    expect(parse(patch(existing, obj)).text).toEqual('\r\ngoodbye\r\n world.');
+  });
+
+});

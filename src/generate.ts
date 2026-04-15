@@ -36,10 +36,6 @@ function detectFirstLineEnding(value: string): '\r\n' | '\n' | '' {
   return (match?.[0] as '\r\n' | '\n' | undefined) ?? '';
 }
 
-function normalizeActualLineEndings(value: string, newlineChar: '\r\n' | '\n'): string {
-  return value.replace(/\r\n/g, '\n').replace(/\n/g, newlineChar);
-}
-
 function assertNever(value: never): never {
   throw new Error(`Unhandled string type for existing raw value: ${String(value)}`);
 }
@@ -262,8 +258,8 @@ function generateMultilineBasicString(value: string, existingRaw: MultilineBasic
     ? '\n'
     : '';
 
-  let raw = '"""' + leadingNewLine + normalizeActualLineEndings(escaped, structuralNewline) + '"""';
-  
+  let raw = '"""' + leadingNewLine + escaped + '"""';
+
   if (detectLineContinuation(existingRaw)) {
     const rebuilt = rebuildLineContinuation(existingRaw.raw, escaped);
     if (rebuilt !== null) {

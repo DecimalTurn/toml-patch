@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { parse } from '../';
 
 test('it should parse example from readme', () => {
@@ -88,4 +89,58 @@ other_negative_zero = -0 # This form should not resolve to -0 in JS Object forma
   expect(Object.is(parsed.calculations.negative_zero, -0)).toBe(true);
   expect(Object.is(parsed.calculations.other_negative_zero, 0)).toBe(true);
   
+});
+
+test('it should parse MLBS with \r\n newlines and preserve them in the value', () => {
+  const parsed = parse(
+    'a = 1' + '\r\n' +
+    'text = """' + '\r\n' +
+    'Hello world ' + '\r\n' +
+    'This is a test. ' + '\r\n' +
+    'Goodbye world."""'
+  );
+
+  console.log('Parsed value:', parsed.text);
+
+  expect(parsed).toEqual({
+    a: 1,
+    text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
+  });
+
+});
+
+test('it should parse MLBS with \r\n newlines and preserve them in the value - even with LF at TOML file level', () => {
+  const parsed = parse(
+    'a = 1' + '\n' +
+    'text = """' + '\r\n' +
+    'Hello world ' + '\r\n' +
+    'This is a test. ' + '\r\n' +
+    'Goodbye world."""' + '\n'
+  );
+
+  console.log('Parsed value:', parsed.text);
+
+  expect(parsed).toEqual({
+    a: 1,
+    text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
+  });
+
+});
+
+test('it should parse MLBS with mixed newlines and preserve them in the value', () => {
+  const parsed = parse(
+    'a = 1' + '\n' +
+    'text = """' + '\r\n' +
+    'Hello world ' + '\n' +
+    'This is a test. ' + '\r\n' +
+    'Goodbye world."""' + '\n'
+  );
+
+  console.log('Parsed value:', parsed.text);
+
+  expect(parsed).toEqual({
+    a: 1,
+    text: 'Hello world \nThis is a test. \r\nGoodbye world.'
+  });
+
 });

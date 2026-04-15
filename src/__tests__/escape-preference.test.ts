@@ -47,6 +47,12 @@ describe('collectPreferredEscapes', () => {
     const map = collectPreferredEscapes('plain text only');
     expect(map.size).toBe(0);
   });
+
+  test('should not record \\n or \\r as preferences (newlines are handled separately)', () => {
+    const map = collectPreferredEscapes('line1\\nline2\\r\\nline3');
+    expect(map.has('\n')).toBe(false);
+    expect(map.has('\r')).toBe(false);
+  });
 });
 
 // ─── escapeStringContent ─────────────────────────────────────────────────────
