@@ -21,6 +21,21 @@ describe('TomlDocument', () => {
     expect(doc.toJsObject).toEqual(simpleObj);
   });
 
+  it('supports parse options in constructor (integersAsBigInt: false)', () => {
+    const doc = new TomlDocument('x = 9223372036854775807\n', { integersAsBigInt: false });
+    const parsed = doc.toJsObject;
+
+    expect(typeof parsed.x).toBe('number');
+  });
+
+  it('supports parse options in constructor (integersAsBigInt: true)', () => {
+    const doc = new TomlDocument('x = 42\n', { integersAsBigInt: true });
+    const parsed = doc.toJsObject;
+
+    expect(typeof parsed.x).toBe('bigint');
+    expect(parsed.x).toBe(BigInt(42));
+  });
+
   it('returns the original TOML string', () => {
     const doc = new TomlDocument(simpleToml);
     expect(doc.toTomlString).toBe(simpleToml);

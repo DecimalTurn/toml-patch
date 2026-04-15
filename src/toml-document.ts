@@ -5,6 +5,7 @@ import { Block } from './ast';
 import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
+import type { ParseOptions, IntegersAsBigInt } from './parse-options';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -13,6 +14,7 @@ export class TomlDocument {
   private _ast: Block[];
   private _currentTomlString: string;
   private _format: TomlFormat;
+  private _integersAsBigInt: IntegersAsBigInt;
 
   /**
    * Initializes the TomlDocument with TOML source, parsing it into an AST.
@@ -21,14 +23,17 @@ export class TomlDocument {
    * This rejects invalid UTF-8 sequences before parsing.
    *
    * @param tomlSource - The TOML source to parse (string or raw UTF-8 bytes)
+   * @param options - Optional parse options
+   * @param options.integersAsBigInt - Controls bigint vs number for TOML integers
    */
-  constructor(tomlSource: string | Uint8Array) {
+  constructor(tomlSource: string | Uint8Array, options?: ParseOptions) {
     const tomlString = typeof tomlSource === 'string'
       ? tomlSource
       : new TextDecoder('utf-8', { fatal: true }).decode(tomlSource);
 
     this._currentTomlString = tomlString;
     this._ast = Array.from(parseTOML(tomlString));
+    this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
     this._format = TomlFormat.autoDetectFormat(tomlString);
   }
@@ -41,7 +46,7 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this._ast, this._currentTomlString);
+    const jsObject = toJS(this._ast, this._currentTomlString, this._integersAsBigInt);
     // Convert custom date classes to regular JavaScript Date objects
     return convertCustomDateClasses(jsObject);
   }

@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Patching: Editing a multiline basic string that uses a line ending backslash now preserves the original line-break structure and indentation. When the new value cannot be faithfully represented with a line ending backslash (e.g., values with leading or trailing whitespace), the format falls back to a regular multiline basic string to preserve content integrity ([#131]).
-- Parsing: Preserve full integer precision by returning `BigInt` for values outside the JS safe integer range. Fallback to `Number` when integer cannot be parsed as a `BigInt` ([#153]).
+- Parsing: Preserve full integer precision by returning `BigInt` for values outside the JS safe integer range. Fallback to `Number` when integer cannot be parsed as a `BigInt` ([#153] & [#158]).
 - Patching: Fixed mixed line endings bugs ([#131]).
 - Date formatting: Ensure UTC year output is zero-padded to 4 digits for RFC3339 compliance ([#153]).
 - Encoding: Fix encoding issue with DEL control character ([#153] & [#131]).
@@ -202,30 +202,31 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 - Ensures all latest spec tests from https://github.com/iarna/toml-spec-tests are passing (1880b1a)
 
 
-[#131]: https://github.com/DecimalTurn/toml-patch/pull/131
-[#153]: https://github.com/DecimalTurn/toml-patch/pull/153
-[#148]: https://github.com/DecimalTurn/toml-patch/pull/148
-[#127]: https://github.com/DecimalTurn/toml-patch/pull/127
-[#144]: https://github.com/DecimalTurn/toml-patch/pull/144
-[#118]: https://github.com/DecimalTurn/toml-patch/pull/118
-[#122]: https://github.com/DecimalTurn/toml-patch/pull/122
-[#125]: https://github.com/DecimalTurn/toml-patch/pull/125
-[#106]: https://github.com/DecimalTurn/toml-patch/pull/106
-[#105]: https://github.com/DecimalTurn/toml-patch/pull/105
-[#104]: https://github.com/DecimalTurn/toml-patch/pull/104
-[#100]: https://github.com/DecimalTurn/toml-patch/pull/100
-[#94]: https://github.com/DecimalTurn/toml-patch/pull/95
-[#90]: https://github.com/DecimalTurn/toml-patch/pull/90
-[#87]: https://github.com/DecimalTurn/toml-patch/pull/87
-[#86]: https://github.com/DecimalTurn/toml-patch/pull/86
+[#1]: https://github.com/DecimalTurn/toml-patch/pull/1
+[#2]: https://github.com/DecimalTurn/toml-patch/pull/2
+[#3]: https://github.com/DecimalTurn/toml-patch/pull/3
+[#4]: https://github.com/DecimalTurn/toml-patch/pull/4
+[#53]: https://github.com/DecimalTurn/toml-patch/pull/53
+[#61]: https://github.com/DecimalTurn/toml-patch/pull/61
+[#64]: https://github.com/DecimalTurn/toml-patch/pull/64
 [#66]: https://github.com/DecimalTurn/toml-patch/pull/66
 [#77]: https://github.com/DecimalTurn/toml-patch/pull/77
 [#79]: https://github.com/DecimalTurn/toml-patch/pull/79
 [#82]: https://github.com/DecimalTurn/toml-patch/pull/82
-[#64]: https://github.com/DecimalTurn/toml-patch/pull/64
-[#53]: https://github.com/DecimalTurn/toml-patch/pull/53
-[#61]: https://github.com/DecimalTurn/toml-patch/pull/61
-[#4]: https://github.com/DecimalTurn/toml-patch/pull/4
-[#3]: https://github.com/DecimalTurn/toml-patch/pull/3
-[#1]: https://github.com/DecimalTurn/toml-patch/pull/1
-[#2]: https://github.com/DecimalTurn/toml-patch/pull/2
+[#86]: https://github.com/DecimalTurn/toml-patch/pull/86
+[#87]: https://github.com/DecimalTurn/toml-patch/pull/87
+[#90]: https://github.com/DecimalTurn/toml-patch/pull/90
+[#94]: https://github.com/DecimalTurn/toml-patch/pull/94
+[#100]: https://github.com/DecimalTurn/toml-patch/pull/100
+[#104]: https://github.com/DecimalTurn/toml-patch/pull/104
+[#105]: https://github.com/DecimalTurn/toml-patch/pull/105
+[#106]: https://github.com/DecimalTurn/toml-patch/pull/106
+[#118]: https://github.com/DecimalTurn/toml-patch/pull/118
+[#122]: https://github.com/DecimalTurn/toml-patch/pull/122
+[#125]: https://github.com/DecimalTurn/toml-patch/pull/125
+[#127]: https://github.com/DecimalTurn/toml-patch/pull/127
+[#131]: https://github.com/DecimalTurn/toml-patch/pull/131
+[#144]: https://github.com/DecimalTurn/toml-patch/pull/144
+[#148]: https://github.com/DecimalTurn/toml-patch/pull/148
+[#153]: https://github.com/DecimalTurn/toml-patch/pull/153
+[#158]: https://github.com/DecimalTurn/toml-patch/pull/158
