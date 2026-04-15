@@ -192,7 +192,7 @@ export function isString(node: TreeNode): node is String {
 export interface Integer extends TreeNode {
   type: NodeType.Integer;
   raw: string;
-  value: number;
+  value: number | bigint;
 }
 export function isInteger(node: TreeNode): node is Integer {
   return node.type === NodeType.Integer;

@@ -15,10 +15,18 @@ export class TomlDocument {
   private _format: TomlFormat;
 
   /**
-   * Initializes the TomlDocument with a TOML string, parsing it into an AST.
-   * @param tomlString - The TOML string to parse
+   * Initializes the TomlDocument with TOML source, parsing it into an AST.
+   *
+   * When bytes are provided, they are decoded as UTF-8 in fatal mode.
+   * This rejects invalid UTF-8 sequences before parsing.
+   *
+   * @param tomlSource - The TOML source to parse (string or raw UTF-8 bytes)
    */
-  constructor(tomlString: string) {
+  constructor(tomlSource: string | Uint8Array) {
+    const tomlString = typeof tomlSource === 'string'
+      ? tomlSource
+      : new TextDecoder('utf-8', { fatal: true }).decode(tomlSource);
+
     this._currentTomlString = tomlString;
     this._ast = Array.from(parseTOML(tomlString));
     // Auto-detect formatting preferences from the original TOML string
@@ -33,7 +41,7 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this._ast);
+    const jsObject = toJS(this._ast, this._currentTomlString);
     // Convert custom date classes to regular JavaScript Date objects
     return convertCustomDateClasses(jsObject);
   }

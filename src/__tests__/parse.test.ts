@@ -137,3 +137,30 @@ test('it should parse MLBS with mixed newlines and preserve them in the value', 
   });
 
 });
+
+test('it should parse unsafe integers as bigint by default', () => {
+  const parsed = parse(`
+big_pos = 9223372036854775807
+big_neg = -9223372036854775808
+`);
+
+  expect(typeof parsed.big_pos).toBe('bigint');
+  expect(typeof parsed.big_neg).toBe('bigint');
+  expect(parsed.big_pos).toBe(BigInt('9223372036854775807'));
+  expect(parsed.big_neg).toBe(BigInt('-9223372036854775808'));
+});
+
+test('it should keep safe integers as number by default', () => {
+  const parsed = parse(`
+small = 42
+safe_max = 9007199254740991
+safe_min = -9007199254740991
+`);
+
+  expect(typeof parsed.small).toBe('number');
+  expect(typeof parsed.safe_max).toBe('number');
+  expect(typeof parsed.safe_min).toBe('number');
+  expect(parsed.small).toBe(42);
+  expect(parsed.safe_max).toBe(Number.MAX_SAFE_INTEGER);
+  expect(parsed.safe_min).toBe(Number.MIN_SAFE_INTEGER);
+});

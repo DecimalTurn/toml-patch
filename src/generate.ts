@@ -132,8 +132,13 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   };
 }
 
+function quoteTomlString(value: string): string {
+  // JSON.stringify leaves U+007F as a raw character, but TOML requires it escaped.
+  return JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+}
+
 function keyValueToRaw(value: string[]): string {
-  return value.map(part => (IS_BARE_KEY.test(part) ? part : JSON.stringify(part))).join('.');
+  return value.map(part => (IS_BARE_KEY.test(part) ? part : quoteTomlString(part))).join('.');
 }
 
 export function generateKey(value: string[]): Key {
@@ -202,7 +207,7 @@ function generateStringKeepFormatting(value: string, existingRaw: string): Strin
 function generateBasicString(value: string, existingRaw?: string): String {
   let raw = '';
   if (!existingRaw) {
-    raw = JSON.stringify(value);
+    raw = quoteTomlString(value);
   } else {
     raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic')}"`;
   }
@@ -308,7 +313,7 @@ function endlocation (raw: string): Position {
  * @param value - The integer value.
  * @returns A new Integer node.
  */
-export function generateInteger(value: number): Integer {
+export function generateInteger(value: number | bigint): Integer {
   const raw = value.toString();
   return {
     type: NodeType.Integer,
@@ -318,7 +323,7 @@ export function generateInteger(value: number): Integer {
   };
 }
 
-export function generateFloat(value: number): Float {
+export function generateFloat(value: number, minimumDecimals: number = 1): Float {
   let raw: string;
   
   if (value === Infinity) {
@@ -328,9 +333,35 @@ export function generateFloat(value: number): Float {
   } else if (Number.isNaN(value)) {
     raw = 'nan';
   } else if (Object.is(value, -0)) {
-    raw = '-0.0';
+    raw = '-0.' + '0'.repeat(Math.max(minimumDecimals, 1));
   } else {
     raw = value.toString();
+    const exponentIndex = raw.search(/[eE]/);
+
+    if (exponentIndex !== -1) {
+      const mantissa = raw.slice(0, exponentIndex);
+      const exponent = raw.slice(exponentIndex);
+      const dotIndex = mantissa.indexOf('.');
+
+      if (dotIndex === -1) {
+        raw = `${mantissa}.${'0'.repeat(Math.max(minimumDecimals, 1))}${exponent}`;
+      } else {
+        const currentDecimals = mantissa.length - dotIndex - 1;
+        raw = currentDecimals < minimumDecimals
+          ? `${mantissa}${'0'.repeat(minimumDecimals - currentDecimals)}${exponent}`
+          : `${mantissa}${exponent}`;
+      }
+    } else {
+      const dotIndex = raw.indexOf('.');
+      if (dotIndex === -1) {
+        raw += '.' + '0'.repeat(Math.max(minimumDecimals, 1));
+      } else {
+        const currentDecimals = raw.length - dotIndex - 1;
+        if (currentDecimals < minimumDecimals) {
+          raw += '0'.repeat(minimumDecimals - currentDecimals);
+        }
+      }
+    }
   }
 
   return {

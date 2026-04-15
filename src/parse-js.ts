@@ -13,7 +13,7 @@ import {
 } from './generate';
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
-import { isObject, isString, isInteger, isFloat, isBoolean, isDate } from './utils';
+import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 /**
@@ -52,6 +52,8 @@ function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue
 }
 
 function walkValue(value: any, format: TomlFormat): Value {
+  const minimumDecimals = format.minimumDecimals ?? 0;
+
   if (value === null) {
     throw new Error('"null" values are not supported');
   }
@@ -61,10 +63,12 @@ function walkValue(value: any, format: TomlFormat): Value {
 
   if (isString(value)) {
     return generateString(value);
-  } else if (isInteger(value)) {
+  } else if (isBigInt(value)) {
     return generateInteger(value);
+  } else if (isInteger(value)) {
+    return minimumDecimals > 0 ? generateFloat(value, minimumDecimals) : generateInteger(value);
   } else if (isFloat(value)) {
-    return generateFloat(value);
+    return generateFloat(value, Math.max(minimumDecimals, 1));
   } else if (isBoolean(value)) {
     return generateBoolean(value);
   } else if (isDate(value)) {

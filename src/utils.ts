@@ -25,6 +25,10 @@ export function isInteger(value: any): value is number {
   return typeof value === 'number' && value % 1 === 0 && isFinite(value) && !Object.is(value, -0);
 }
 
+export function isBigInt(value: any): value is bigint {
+  return typeof value === 'bigint';
+}
+
 export function isFloat(value: any): value is number {
   return typeof value === 'number' && (!isInteger(value) || !isFinite(value) || Object.is(value, -0));
 }
