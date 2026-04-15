@@ -29,7 +29,6 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
-    - [When to Use](#when-to-use-tomldocument-vs-functional-api)
 - [Formatting](#formatting)
   - [TomlFormat Class](#tomlformat-class)
   - [Basic Usage](#basic-usage)
@@ -145,18 +144,25 @@ owner.name = "Tim"
 );
 ```
 
-#### <a id="parse"></a>parse(*value*)
+#### <a id="parse"></a>parse(*value*, *options?*)
 
 ```typescript
-function parse(value: string): any
+function parse(value: string | Uint8Array, options?: ParseOptions): any
 ```
 
-Parses a TOML string into a JavaScript object. The function converts TOML syntax to its JavaScript equivalent. This proceeds in two steps: first, it parses the TOML string into an abstract syntax tree (AST), and then it converts the AST into a JavaScript object.
+Parses a TOML string (or raw UTF-8 bytes) into a JavaScript object.
 
 **Parameters:**
-- `value: string` - The TOML string to parse
+- `value: string | Uint8Array` - The TOML source to parse
+- `options?: ParseOptions` - Optional parse options
+  - `integersAsBigInt?: 'asNeeded' | true | false` — Controls how TOML integers are represented in JS:
+    - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
+    - `true` — all integers are returned as `bigint`
+    - `false` — all integers are returned as `number` (large values lose precision)
 
 **Returns:** `any` - The parsed JavaScript object
+
+> **Note:** The default `'asNeeded'` mode is a behavioral change from v1.0.7 and earlier. If your code serializes the result to JSON or mixes `number`/`bigint` arithmetic, set `integersAsBigInt: false` to restore the previous behavior.
 
 ##### Example
 ```js
@@ -229,13 +235,13 @@ The `TomlDocument` class provides a stateful interface for working with TOML doc
 #### Constructor
 
 ```typescript
-new TomlDocument(tomlString: string)
+new TomlDocument(tomlSource: string | Uint8Array)
 ```
 
-Initializes the TomlDocument with a TOML string, parsing it into an internal representation (AST).
+Initializes the TomlDocument with TOML source, parsing it into an internal representation (AST). When bytes are provided they are decoded as UTF-8 in fatal mode, rejecting invalid sequences before parsing.
 
 **Parameters:**
-- `tomlString: string` - The TOML string to parse
+- `tomlSource: string | Uint8Array` - The TOML source to parse
 
 ##### Basic Usage Example
 
@@ -361,16 +367,6 @@ doc.update(updatedToml);
 console.log(doc.toJsObject.server.port); // 3000
 ```
 
-#### When to use TomlDocument vs Functional API
-
-| Use Case | TomlDocument | Functional API |
-|----------|-------------|----------------|
-| Multiple operations on same document | ✅ Preferred | ❌ Inefficient |
-| One-time parsing/patching | ⚠️ Overkill | ✅ Preferred |
-| Incremental text updates | ✅ `update()` method | ❌ Not supported |
-| Preserving document state | ✅ Built-in | ❌ Manual |
-| Working with large files | ✅ Better performance | ❌ Re-parses entirely |
-
 ## Formatting
 
 The `TomlFormat` class provides decent control over how TOML documents are formatted during stringification and patching operations. This class encapsulates all formatting preferences, making it easy to maintain consistent styling across your TOML documents.
@@ -385,7 +381,8 @@ class TomlFormat {
   bracketSpacing: boolean
   inlineTableStart?: number
   truncateZeroTimeInDates: boolean
-  
+  minimumDecimals?: number
+
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
 }
@@ -521,6 +518,18 @@ stringify(data, format);
 // Output:
 // startDate = 2024-01-15
 // endDate = 2024-12-31T23:59:59.999Z
+```
+
+**minimumDecimals**
+- **Type:** `number` (optional)
+- **Default:** `0`
+- **Description:** The minimum number of decimal places to use when serializing JS numbers as TOML floats. When greater than `0`, plain JS integer values are serialized as TOML floats padded with zeros to reach the specified decimal count. `bigint` values are always serialized as TOML integers regardless of this setting.
+
+```js
+const format = TomlFormat.default();
+format.minimumDecimals = 0;  // { x: 1, y: 1.5 }  →  { x = 1, y = 1.5 }  (default)
+format.minimumDecimals = 1;  // { x: 1, y: 1.5 }  →  { x = 1.0, y = 1.5 }
+format.minimumDecimals = 2;  // { x: 1, y: 1.5 }  →  { x = 1.00, y = 1.50 }
 ```
 
 ### Auto-Detection and Patching
