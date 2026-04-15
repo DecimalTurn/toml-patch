@@ -18,8 +18,20 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  * The string path has zero overhead — the bytes path incurs one TextDecoder
  * decode (which also produces the string needed for parsing).
  *
+ * By default (`options.integersAsBigInt` unset or `'asNeeded'`), integers that
+ * fit within the JavaScript safe-integer range are returned as `number`; integers
+ * outside that range are returned as `bigint` to preserve precision. Set
+ * `options.integersAsBigInt` to `true` to always return `bigint` for all integers,
+ * or `false` to always return `number` (large integers will lose precision).
+ *
+ * Note: the `'asNeeded'` default is a behavioral change from prior versions (<=1.0.7). If
+ * your code serializes the result to JSON or performs arithmetic mixing `number`
+ * and `bigint`, set `integersAsBigInt: false` to restore the previous behavior.
+ *
  * @param value - TOML source as a string or raw UTF-8 bytes
  * @param options - Optional parse options
+ * @param options.integersAsBigInt - Controls `bigint` vs `number` for integers.
+ *   `'asNeeded'` (default) | `true` | `false`
  * @returns The parsed JavaScript object
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
