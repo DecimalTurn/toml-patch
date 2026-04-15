@@ -139,7 +139,17 @@ toml_test.forEach(([name, input_file, expected_file]) => {
   testFn(`toml-test - ${name}`, async () => {
     const input = await readFile(input_file, 'utf8');
     const expected = expandJSON(JSON.parse(await readFile(expected_file, 'utf8')));
-    expect(parse(input)).toEqual(expected);
+    expect(parse(input, { integersAsBigInt: false })).toEqual(expected);
+  });
+});
+
+test('toml-test - integer/long preserves full precision by default', async () => {
+  const input = await readFile('submodules/toml-test/tests/valid/integer/long.toml', 'utf8');
+  const actual = parse(input);
+
+  expect(actual).toEqual({
+    'int64-max': BigInt('9223372036854775807'),
+    'int64-max-neg': BigInt('-9223372036854775808'),
   });
 });
 
@@ -149,7 +159,7 @@ spec_test.forEach(([name, input_file, expected_file]) => {
   testFn(`spec-test - ${name}`, async () => {
     const input = await readFile(input_file, 'utf8');
     const expected = load(await readFile(expected_file, 'utf8'));
-    const actual = parse(input);
+    const actual = parse(input, { integersAsBigInt: false });
     expect(actual).toEqual(expected);
   });
 });
