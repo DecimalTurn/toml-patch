@@ -37,6 +37,7 @@
   "scripts": {
     "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "jest --config jest.config.json",
+    "test:go": "./run-toml-test.bash",
     "test:js": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.js.config.mjs",
     "test:playwright": "playwright test",
     "playwright:install": "playwright install --with-deps chromium",
