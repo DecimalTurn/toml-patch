@@ -48,10 +48,11 @@ jobs:
       - name: Publish to npm
         id: pnpm-publish
         run: pnpm publish --provenance --no-git-checks
+        continue-on-error: true
 
       - name: Check git status
         run: git status && git diff
 
       - name: Publish to jsr
-        run: npx -y jsr publish
-        if: success() || steps.npm-publish.outcome == 'failure'
+        run: npx -y jsr publish --allow-dirty
+        if: success() || steps.pnpm-publish.outcome == 'failure'
