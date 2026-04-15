@@ -68,7 +68,7 @@ jobs:
         go-version: stable
 
     - name: Install toml-test
-      run: go install github.com/toml-lang/toml-test/v2/cmd/toml-test@latest
+      run: go install github.com/toml-lang/toml-test/v2/cmd/toml-test@v2.1.0
 
     - name: Go Test (toml-test)
       run: pnpm run test:go
