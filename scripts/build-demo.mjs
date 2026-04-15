@@ -19,13 +19,13 @@ let html = readFileSync(src, 'utf-8');
 
 // Replace the commented-out unpkg line + local import with just the unpkg import
 html = html.replace(
-  /(\s*)\/\/ import \* as TOML from 'https:\/\/unpkg\.com\/@decimalturn\/toml-patch';\n\s*import \* as TOML from '\.\/dist\/toml-patch\.js';/,
+  /(\s*)\/\/ import \* as TOML from 'https:\/\/unpkg\.com\/@decimalturn\/toml-patch';\r?\n\s*import \* as TOML from '\.\/dist\/toml-patch\.js';/,
   "$1import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';"
 );
 
 // Update the footer: remove the local build link, activate the unpkg link
 html = html.replace(
-  /·\s*<!--(Loaded via <a href="https:\/\/unpkg\.com\/@decimalturn\/toml-patch">unpkg<\/a>)-->\s*\n\s*·\s*Loaded from <a href="\.\/dist\/toml-patch\.js">local build<\/a>/,
+  /·\s*<!--(Loaded via <a href="https:\/\/unpkg\.com\/@decimalturn\/toml-patch">unpkg<\/a>)-->\s*\r?\n\s*·\s*Loaded from <a href="\.\/dist\/toml-patch\.js">local build<\/a>/,
   '· $1'
 );
 
