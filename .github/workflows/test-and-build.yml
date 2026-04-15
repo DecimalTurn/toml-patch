@@ -62,6 +62,17 @@ jobs:
     - name: Specs
       run: pnpm run specs
 
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: stable
+
+    - name: Install toml-test
+      run: go install github.com/toml-lang/toml-test/v2/cmd/toml-test@latest
+
+    - name: Go Test (toml-test)
+      run: pnpm run test:go
+
     - name: Benchmark (CI samples)
       if: matrix.benchmark
       run: pnpm run benchmark:ci
