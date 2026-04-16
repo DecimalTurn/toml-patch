@@ -1856,7 +1856,7 @@ test('should patch date field from example toml', () => {
 
     [owner]
     name = "Tom Preston-Werner"
-    dob = 1979-05-28T07:32:00Z     # First class dates? Why not?
+    dob = 1979-05-28T07:32:00Z # First class dates? Why not?
 
     [database]
     enabled = true
