@@ -22,12 +22,6 @@
  */
 
 /**
- * Decoded JS string value intended to be rendered as a TOML basic string.
- *
- * This is currently a semantic alias of `string` for API readability.
- */
-
-/**
  * Decodes a TOML single-character escape code to its JS character.
  *
  * @param ch - Escape code character (without the leading backslash).
