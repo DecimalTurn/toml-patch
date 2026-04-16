@@ -102,6 +102,7 @@
   "json-comments": {
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",
     "package.json": {
+      "devDependencies.js-yaml": "Used by specs/specs.test.ts to parse YAML expected-value fixtures from submodules/spec-tests (https://github.com/iarna/toml-spec-tests).",
       "pnpm.overrides.lodash": "Override needed to avoid vuln detailed in https://github.com/DecimalTurn/toml-patch/security/dependabot/44",
       "pnpm.overrides.picomatch": "Override needed to avoid picomatch vuln detailed in https://github.com/DecimalTurn/toml-patch/security/dependabot/42",
       "pnpm.overrides.serialize-javascript": "https://github.com/DecimalTurn/toml-patch/security/dependabot/40"
