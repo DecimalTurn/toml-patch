@@ -2269,6 +2269,89 @@ test('should preserve aligned inline comments when patching mixed date kinds wit
     ` + '\n');
 });
 
+  test('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with same width', () => {
+    const existing = dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan"                    # single-line basic string
+      retry_count   = 3                                 # integer
+      error_rate    = 0.125                             # float
+      build_numbers = [1, 2, 3]                         # inline array
+
+      [service]
+      display_name  = "API"                             # string in table
+      ports         = [8080, 8081]                      # array in table
+      timeout_ms    = 1500                              # number in table
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.title = 'Sprint notes';
+    value.retry_count = 7;
+    value.error_rate = 0.875;
+    value.build_numbers = [2, 4, 6];
+    value.service.display_name = 'CLI';
+    value.service.ports = [9000, 9001];
+    value.service.timeout_ms = 2500;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Sprint notes"                    # single-line basic string
+      retry_count   = 7                                 # integer
+      error_rate    = 0.875                             # float
+      build_numbers = [2, 4, 6]                         # inline array
+
+      [service]
+      display_name  = "CLI"                             # string in table
+      ports         = [9000, 9001]                      # array in table
+      timeout_ms    = 2500                              # number in table
+      ` + '\n');
+  });
+
+  // TODO: Implement comments alignment detection across lines to preserve
+  //      even when value width changes. This is currently not supported, 
+  //      so the test is skipped.
+  test.skip('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with different width', () => {
+    const existing = dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan"                    # single-line basic string
+      retry_count   = 3                                 # integer
+      error_rate    = 0.125                             # float
+      build_numbers = [1, 2, 3]                         # inline array
+
+      [service]
+      display_name  = "API"                             # string in table
+      ports         = [8080, 8081]                      # array in table
+      timeout_ms    = 1500                              # number in table
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.title = 'Release plan v2';
+    value.retry_count = 12;
+    value.error_rate = 0.5;
+    value.build_numbers = [1, 2, 3, 5, 8];
+    value.service.display_name = 'API Gateway';
+    value.service.ports = [8080, 8081, 8082];
+    value.service.timeout_ms = 25000;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan v2"                 # single-line basic string
+      retry_count   = 12                                # integer
+      error_rate    = 0.5                               # float
+      build_numbers = [1, 2, 3, 5, 8]                   # inline array
+
+      [service]
+      display_name  = "API Gateway"                     # string in table
+      ports         = [8080, 8081, 8082]                # array in table
+      timeout_ms    = 25000                             # number in table
+      ` + '\n');
+  });
+
 describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
     {
