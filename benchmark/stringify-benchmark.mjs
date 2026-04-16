@@ -125,6 +125,15 @@ function installPackageToCache(packageName, version) {
   }
 }
 
+function resolveWorkspacePackage(packageName) {
+  const modulePath = join(__dirname, '../node_modules', packageName);
+  if (!existsSync(modulePath)) {
+    console.error(c.error(`  ❌ Missing workspace dependency: ${packageName}. Run \`pnpm install\`.`));
+    return null;
+  }
+  return modulePath;
+}
+
 /**
  * Dynamically import a module, resolving ESM entry points for cached packages.
  * @param {string} modulePath - Absolute or relative path to the module
@@ -201,7 +210,7 @@ let TOML_IMPLEMENTATIONS = [
   },
   {
     name: 'smol-toml',
-    path: installPackageToCache('smol-toml'),
+    path: resolveWorkspacePackage('smol-toml'),
   },
   {
     name: '@rainbowatcher/toml-edit-js',

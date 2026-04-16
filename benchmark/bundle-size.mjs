@@ -8,7 +8,7 @@
  *   pnpm run build   (so dist/toml-patch.js exists)
  *
  * The script:
- *   1. Installs smol-toml into .bench-cache (reuses if already present)
+ *   1. Resolves smol-toml from the workspace node_modules
  *   2. Resolves the ESM entry for each library
  *   3. Bundles each with esbuild (minified, no external deps)
  *   4. Measures raw minified size and gzipped size
@@ -60,13 +60,12 @@ function bundleMinified(esbuildCmd, entryPoint, label) {
   return readFileSync(outfile, 'utf8');
 }
 
-// ── Load smol-toml from cache ──────────────────────────────────────
+// ── Load smol-toml from workspace dependencies ─────────────────────
 function getSmolTomlEntry() {
-  const smolDir = join(cacheDir, 'smol-toml', 'node_modules', 'smol-toml');
+  const smolDir = join(rootDir, 'node_modules', 'smol-toml');
   if (!existsSync(smolDir)) {
-    console.log('Installing smol-toml to benchmark cache...');
-    const dest = join(cacheDir, 'smol-toml');
-    execSync(`npm install --prefix "${dest}" --no-save --no-package-lock smol-toml`, { stdio: 'pipe' });
+    console.error('node_modules/smol-toml not found. Run `pnpm install` first.');
+    process.exit(1);
   }
   const pkg = JSON.parse(readFileSync(join(smolDir, 'package.json'), 'utf8'));
   const entry = pkg.exports?.import ?? pkg.exports?.['.']?.import ?? pkg.module ?? pkg.main;

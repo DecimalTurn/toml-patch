@@ -6,19 +6,16 @@
 import { join, dirname } from 'path';
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { execSync } from 'child_process';
 import { globSync } from 'glob';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
-// ── Load smol-toml from cache ──────────────────────────────────────
-const cacheDir = join(__dirname, '../.bench-cache');
-const smolDir = join(cacheDir, 'smol-toml', 'node_modules', 'smol-toml');
+// ── Load smol-toml from workspace dependencies ─────────────────────
+const smolDir = join(rootDir, 'node_modules', 'smol-toml');
 if (!existsSync(smolDir)) {
-  console.log('Installing smol-toml to benchmark cache...');
-  const dest = join(cacheDir, 'smol-toml');
-  execSync(`npm install --prefix "${dest}" --no-save --no-package-lock smol-toml`, { stdio: 'pipe' });
+  console.error('node_modules/smol-toml not found. Run `pnpm install` first.');
+  process.exit(1);
 }
 const pkg = JSON.parse(readFileSync(join(smolDir, 'package.json'), 'utf8'));
 const entry = pkg.exports?.import ?? pkg.exports?.['.']?.import ?? pkg.module ?? pkg.main;

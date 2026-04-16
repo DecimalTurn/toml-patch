@@ -5,15 +5,15 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { Session } from 'node:inspector/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Import individual pipeline stages from dist
 const tomlPatch = await import('../dist/toml-patch.js');
-const smolTomlPath = join(__dirname, '../.bench-cache/smol-toml/node_modules/smol-toml/dist/index.js');
-const smolToml = await import(smolTomlPath);
+const smolTomlPath = join(__dirname, '../node_modules/smol-toml/dist/index.js');
+const smolToml = await import(pathToFileURL(smolTomlPath).href);
 
 const WARMUP = 100;
 const ITERATIONS = 1000;
