@@ -173,12 +173,12 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     // Update the replacement with the properly formatted date
     replacement.value = formattedDate;
     replacement.raw = formattedDate.toISOString();
-    
-    // Adjust the location information to match the new raw length
-    const lengthDiff = replacement.raw.length - originalRaw.length;
-    if (lengthDiff !== 0) {
-      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
-    }
+
+    // Always sync the node width to the final raw value. Replacement nodes may
+    // have been generated from a plain Date first, then re-formatted to match
+    // the existing TOML date kind, so comparing only against originalRaw misses
+    // stale widths left over from the temporary representation.
+    replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
   }
   
   // Preserve array trailing comma format

@@ -2188,7 +2188,7 @@ test('should patch offset datetime with milliseconds and preserve precision', ()
     ` + '\n');
 });
 
-test('should preserve aligned inline comments when patching mixed date and time value kinds', () => {
+test('should preserve aligned inline comments when patching mixed date kinds with regular Date values', () => {
   const existing = dedent`
     # Demo fixture covering TOML date and time value kinds
     title = "Date parser demo"
@@ -2205,28 +2205,50 @@ test('should preserve aligned inline comments when patching mixed date and time 
     release_day      = 2026-05-02                  # date only
     ` + '\n';
 
+  type Operation = { keyPath: string; changed: boolean };
+
+  const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+  const TIME_ONLY_RE = /^\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/u;
   const value = parse(existing);
+  const operations: Operation[] = [];
 
-  const bumpNonTimeDates = (input: unknown) => {
-    if (!input || typeof input !== 'object') {
-      return;
-    }
+  const incrementDateValues = (input: Record<string, unknown>, pathParts: string[]) => {
+    for (const [key, nestedValue] of Object.entries(input)) {
+      const nextPath = [...pathParts, key];
 
-    for (const nestedValue of Object.values(input as Record<string, unknown>)) {
-      if (!(nestedValue instanceof Date)) {
-        bumpNonTimeDates(nestedValue);
+      if (nestedValue instanceof Date && TIME_ONLY_RE.test(nestedValue.toISOString())) {
+        operations.push({ keyPath: nextPath.join('.'), changed: false });
         continue;
       }
 
-      if ((nestedValue as unknown as { isTime?: boolean }).isTime) {
+      if (nestedValue instanceof Date) {
+        input[key] = new Date(nestedValue.getTime() + ONE_DAY_IN_MS);
+        operations.push({ keyPath: nextPath.join('.'), changed: true });
         continue;
       }
 
-      nestedValue.setUTCDate(nestedValue.getUTCDate() + 1);
+      if (!nestedValue || typeof nestedValue !== 'object') {
+        continue;
+      }
+
+      incrementDateValues(nestedValue as Record<string, unknown>, nextPath);
     }
   };
 
-  bumpNonTimeDates(value);
+  incrementDateValues(value as Record<string, unknown>, []);
+
+  expect(operations.filter(operation => operation.changed).map(operation => operation.keyPath)).toEqual([
+    'dates.offset_date_time',
+    'dates.local_date_time',
+    'dates.local_date',
+    'events.published_at',
+    'events.release_day'
+  ]);
+
+  expect(operations.filter(operation => !operation.changed).map(operation => operation.keyPath)).toEqual([
+    'dates.local_time',
+    'events.cutoff_time'
+  ]);
 
   const patched = patch(existing, value);
 
