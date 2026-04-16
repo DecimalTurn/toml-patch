@@ -2188,6 +2188,65 @@ test('should patch offset datetime with milliseconds and preserve precision', ()
     ` + '\n');
 });
 
+test('should preserve aligned inline comments when patching mixed date and time value kinds', () => {
+  const existing = dedent`
+    # Demo fixture covering TOML date and time value kinds
+    title = "Date parser demo"
+
+    [dates]
+    offset_date_time = 1979-05-28T07:32:00-08:00   # offset date-time
+    local_date_time  = 1979-05-28T07:32:00         # local date-time
+    local_date       = 1979-05-28                  # local date
+    local_time       = 07:32:00                    # local time
+
+    [events]
+    published_at     = 2026-04-17T09:15:30Z        # UTC timestamp
+    cutoff_time      = 18:45:00                    # time only
+    release_day      = 2026-05-02                  # date only
+    ` + '\n';
+
+  const value = parse(existing);
+
+  const bumpNonTimeDates = (input: unknown) => {
+    if (!input || typeof input !== 'object') {
+      return;
+    }
+
+    for (const nestedValue of Object.values(input as Record<string, unknown>)) {
+      if (!(nestedValue instanceof Date)) {
+        bumpNonTimeDates(nestedValue);
+        continue;
+      }
+
+      if ((nestedValue as unknown as { isTime?: boolean }).isTime) {
+        continue;
+      }
+
+      nestedValue.setUTCDate(nestedValue.getUTCDate() + 1);
+    }
+  };
+
+  bumpNonTimeDates(value);
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Demo fixture covering TOML date and time value kinds
+    title = "Date parser demo"
+
+    [dates]
+    offset_date_time = 1979-05-29T07:32:00-08:00   # offset date-time
+    local_date_time  = 1979-05-29T07:32:00         # local date-time
+    local_date       = 1979-05-29                  # local date
+    local_time       = 07:32:00                    # local time
+
+    [events]
+    published_at     = 2026-04-18T09:15:30Z        # UTC timestamp
+    cutoff_time      = 18:45:00                    # time only
+    release_day      = 2026-05-03                  # date only
+    ` + '\n');
+});
+
 describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
     {
