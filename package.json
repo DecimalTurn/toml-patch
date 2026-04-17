@@ -79,7 +79,7 @@
     "smol-toml": "^1.6.1",
     "ts-jest": "^29",
     "tslib": "^2.0.0",
-    "typescript": "6.0.2"
+    "typescript": "6.0.3"
   },
   "pnpm": {
     "overrides": {
