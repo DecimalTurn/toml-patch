@@ -3328,6 +3328,29 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
 
 describe('TOML v1.1 multiline inline tables - trailing comma preservation', () => {
 
+  test('should preserve multiline inline table formatting when replacing the whole value', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      t: {
+        b: 20,
+        c: 3,
+      },
+    });
+
+    expect(patched).toEqual(dedent`
+      t = {
+          b = 20,
+          c = 3,
+      }
+      ` + '\n');
+  });
+
   test('should preserve trailing comma on last item when editing last item', () => {
     const existing = dedent`
       t = {
@@ -3448,6 +3471,25 @@ describe('TOML v1.1 multiline inline tables with comments (newline-comment.toml 
     expect(patched).toEqual(dedent`
       tbl-1 = {#comment
               b = 2,#comment
+      }#comment
+      ` + '\n');
+  });
+
+  test('should delete the only key from a commented multiline inline table and preserve surrounding comments', () => {
+    const existing = dedent`
+      tbl-1 = {#comment
+              only = 1,#comment
+              #comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {#comment
+              #comment
       }#comment
       ` + '\n');
   });
@@ -3830,6 +3872,37 @@ describe('undefined handling in patch', () => {
           tags = [
             { key = "color", value = "gray" }
           ]
+        }
+      ]
+      ` + '\n');
+  });
+
+  test('should preserve multiline inline table formatting when replacing an object inside a multiline inline array', () => {
+    const existing = dedent`
+      items = [
+        {
+          name = "Hammer",
+          color = "red",
+        },
+        {
+          name = "Nail",
+          color = "gray",
+        }
+      ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.items[0] = { name: 'Hammer', sku: 'H1' };
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [
+        {
+          name = "Hammer",
+          sku = "H1",
+        },
+        {
+          name = "Nail",
+          color = "gray",
         }
       ]
       ` + '\n');
