@@ -30,7 +30,8 @@ import {
 import { getSpan } from './location';
 import { TomlFormat } from './toml-format';
 
-const inline_table_comment_deltas = new WeakMap<Comment, number>();
+const reserved_comment_spacing = new WeakMap<Comment, number>();
+const original_comment_column = new WeakMap<Comment, number>();
 
 /**
  * Returns the inline comment attached to the item at the given index.
@@ -87,6 +88,22 @@ function applyInlineCommentColumnAdjustment(comment: Comment, targetColumn: numb
   if (adjustment !== 0) {
     comment.loc.start.column += adjustment;
     comment.loc.end.column += adjustment;
+  }
+}
+
+/**
+ * Stores the original minimum spacing between a row and its trailing comment.
+ *
+ * @param row Key-value row that owns the trailing comment.
+ * @param comment Trailing inline comment attached to the row.
+ */
+function rememberReservedCommentSpacing(row: KeyValue, comment: Comment) {
+  if (!original_comment_column.has(comment)) {
+    original_comment_column.set(comment, comment.loc.start.column);
+  }
+
+  if (!reserved_comment_spacing.has(comment)) {
+    reserved_comment_spacing.set(comment, comment.loc.start.column - row.loc.end.column);
   }
 }
 
@@ -218,8 +235,8 @@ export function preserveAlignedInlineCommentForDelta(
  * Records the net width delta for a commented row whose value is a single-line
  * inline table and whose internal contents are being edited.
  *
- * This is used by the final normalization pass to distinguish widened inline
- * table rows from rows that stayed the same width or became shorter.
+ * This is used by the final normalization pass to preserve the row's original
+ * minimum gap while nested inline-table edits change the rendered width.
  *
  * @param container Parent container that owns the row.
  * @param row Key-value row whose trailing comment should track nested width changes.
@@ -235,7 +252,7 @@ export function recordInlineTableCommentDelta(container: TreeNode, row: KeyValue
   const comment = getAttachedInlineComment(items, rowIndex);
   if (!comment) return;
 
-  inline_table_comment_deltas.set(comment, (inline_table_comment_deltas.get(comment) || 0) + deltaColumns);
+  rememberReservedCommentSpacing(row, comment);
 }
 
 /**
@@ -323,6 +340,9 @@ function collectSingleLineInlineTableCommentLines(
  * comment styles while still restoring vertical alignment for normal row-based
  * comment blocks.
  *
+ * For groups touched by nested inline-table edits, the target column is derived
+ * from the widest current row plus the group's original minimum reserved gap.
+ *
  * @param document Patched AST document whose comment locations are updated in-place.
  * @param tomlString Rendered TOML output to normalize.
  * @param format Active TOML formatting settings.
@@ -368,42 +388,45 @@ export function normalizeInlineCommentAlignmentInString(
   for (const group of groups) {
     if (group.length < 2) continue;
 
-    const isInlineTableGroup = group.every(comment => inlineTableCommentLines.has(comment.loc.start.line));
+    let targetColumn = original_comment_column.get(group[0]) ?? group[0].loc.start.column;
+    const counts = new Map<number, number>();
+    for (const comment of group) {
+      const baselineColumn = original_comment_column.get(comment) ?? comment.loc.start.column;
+      counts.set(baselineColumn, (counts.get(baselineColumn) || 0) + 1);
+    }
 
-    let targetColumn: number | undefined;
-    if (isInlineTableGroup) {
-      const netGroupDelta = group.reduce(
-        (sum, comment) => sum + (inline_table_comment_deltas.get(comment) || 0),
-        0
-      );
-
-      if (netGroupDelta > 0) {
-        targetColumn = Math.max(
-          ...group.map(comment => {
-            const line = lines[comment.loc.start.line - 1] || '';
-            const code = line.slice(0, comment.loc.start.column).trimEnd();
-            return code.length;
-          })
-        ) + 2;
-      } else {
-        targetColumn = Math.max(...group.map(comment => comment.loc.start.column));
-      }
-    } else {
-      const counts = new Map<number, number>();
-      for (const comment of group) {
-        counts.set(comment.loc.start.column, (counts.get(comment.loc.start.column) || 0) + 1);
-      }
-
-      let highestCount = 1;
-      for (const [column, count] of counts) {
-        if (count > highestCount) {
-          highestCount = count;
-          targetColumn = column;
-        }
+    let highestCount = 1;
+    for (const [column, count] of counts) {
+      if (count > highestCount) {
+        highestCount = count;
+        targetColumn = column;
       }
     }
 
-    if (targetColumn == null) continue;
+    const reservedComments = group.filter(comment => reserved_comment_spacing.has(comment));
+    const hasNonInlineTableRows = group.some(comment => !inlineTableCommentLines.has(comment.loc.start.line));
+    if (reservedComments.length > 0 && hasNonInlineTableRows) {
+      const widestCodeColumn = Math.max(
+        ...group.map(comment => {
+          const line = lines[comment.loc.start.line - 1] || '';
+          const code = line.slice(0, comment.loc.start.column).trimEnd();
+          return code.length;
+        })
+      );
+      const groupMinimumGap = Math.min(
+        ...group.map(comment => {
+          if (reserved_comment_spacing.has(comment)) {
+            return reserved_comment_spacing.get(comment) || 1;
+          }
+
+          const line = lines[comment.loc.start.line - 1] || '';
+          const code = line.slice(0, comment.loc.start.column).trimEnd();
+          return Math.max(1, comment.loc.start.column - code.length);
+        })
+      );
+      const requiredColumn = widestCodeColumn + groupMinimumGap;
+      targetColumn = Math.max(targetColumn, requiredColumn);
+    }
 
     for (const comment of group) {
       if (comment.loc.start.column === targetColumn) continue;

@@ -2418,6 +2418,95 @@ test('should preserve aligned inline comments when patching mixed date kinds wit
       ` + '\n');
   });
 
+    test('should preserve aligned inline comments when patching single-line inline tables with different width '
+          + '+ need to increase whitespace across the full mixed-type group', () => {
+    const existing = dedent`
+      # Demo fixture covering single-line inline tables
+      profile      = "dev"                                   # string before inline tables
+      release      = { name = "api", retries = 1 }           # inline table at root
+      deployment   = { region = "eu", timeout_ms = 1500 }    # another inline table at root
+      retry_limit  = 3                                       # integer after inline tables
+      backends     = ["api", "worker"]                       # array after inline tables
+
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.profile = 'development';
+    value.release.name = 'api-gateway';
+    value.release.retries = 12;
+    value.deployment.region = 'europe-west-1';
+    value.deployment.timeout_ms = 25000;
+    value.retry_limit = 12;
+    value.backends = ['api', 'worker', 'scheduler'];
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering single-line inline tables
+      profile      = "development"                                       # string before inline tables
+      release      = { name = "api-gateway", retries = 12 }              # inline table at root
+      deployment   = { region = "europe-west-1", timeout_ms = 25000 }    # another inline table at root
+      retry_limit  = 12                                                  # integer after inline tables
+      backends     = ["api", "worker", "scheduler"]                      # array after inline tables
+
+      ` + '\n');
+  });
+
+  test('should preserve aligned inline comments when patching single-line inline tables with different width '
+          + '+ need to increase whitespace across the full mixed-type group 2', () => {
+    const existing = dedent`
+      # Demo fixture covering single-line inline tables
+      profile      = "dev"                                          # string before inline tables
+      release      = { name = "api", retries = 1 }                  # inline table at root
+      deployment   = { region = "eu", timeout_ms = 1500 }           # another inline table at root
+      retry_limit  = 3                                              # integer after inline tables
+      backends     = ["api", "worker", "cloud", "model", "engine"]  # array after inline tables
+
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.profile = 'development';
+    value.release.name = 'api-gateway';
+    value.release.retries = 12;
+    value.deployment.region = 'europe-west-1';
+    value.deployment.timeout_ms = 25000;
+    value.retry_limit = 12;
+    // Backend unchanged, but still needs to be shifted to maintain alignment with the rest of the group
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering single-line inline tables
+      profile      = "development"                                     # string before inline tables
+      release      = { name = "api-gateway", retries = 12 }            # inline table at root
+      deployment   = { region = "europe-west-1", timeout_ms = 25000 }  # another inline table at root
+      retry_limit  = 12                                                # integer after inline tables
+      backends     = ["api", "worker", "cloud", "model", "engine"]     # array after inline tables
+
+      ` + '\n');
+  });
+
+  test('should not preserve aligned comment if only a regular comment is present', () => {
+    const existing = dedent`
+                                        # Demo fixture covering single-line inline tables
+      profile      = "dev"              # string before inline tables
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.profile = 'development';
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+                                        # Demo fixture covering single-line inline tables
+      profile      = "development"              # string before inline tables
+      ` + '\n');
+  });
+
+
 describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
     {
