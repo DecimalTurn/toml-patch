@@ -2343,10 +2343,7 @@ test('should preserve aligned inline comments when patching mixed date kinds wit
       ` + '\n');
   });
 
-  // TODO: Implement comments alignment detection across lines to preserve
-  //      even when value width changes. This is currently not supported, 
-  //      so the test is skipped.
-  test.skip('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with different width', () => {
+    test('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with different width', () => {
     const existing = dedent`
       # Demo fixture covering strings, arrays and number value kinds
       title         = "Release plan"                    # single-line basic string
