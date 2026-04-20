@@ -23,11 +23,14 @@ import {
   isInlineArray,
   isInlineItem,
   isInlineTable,
+  isKeyValue,
   isTable,
   isTableArray
 } from './ast';
 import { getSpan } from './location';
 import { TomlFormat } from './toml-format';
+
+const inline_table_comment_deltas = new WeakMap<Comment, number>();
 
 /**
  * Returns the inline comment attached to the item at the given index.
@@ -212,6 +215,30 @@ export function preserveAlignedInlineCommentForDelta(
 }
 
 /**
+ * Records the net width delta for a commented row whose value is a single-line
+ * inline table and whose internal contents are being edited.
+ *
+ * This is used by the final normalization pass to distinguish widened inline
+ * table rows from rows that stayed the same width or became shorter.
+ *
+ * @param container Parent container that owns the row.
+ * @param row Key-value row whose trailing comment should track nested width changes.
+ * @param deltaColumns Horizontal width delta introduced by the nested edit.
+ */
+export function recordInlineTableCommentDelta(container: TreeNode, row: KeyValue, deltaColumns: number) {
+  if (!hasItems(container) || deltaColumns === 0) return;
+
+  const items = container.items as TreeNode[];
+  const rowIndex = items.indexOf(row);
+  if (rowIndex < 0) return;
+
+  const comment = getAttachedInlineComment(items, rowIndex);
+  if (!comment) return;
+
+  inline_table_comment_deltas.set(comment, (inline_table_comment_deltas.get(comment) || 0) + deltaColumns);
+}
+
+/**
  * Estimates the horizontal column delta caused by inserting a new inline item.
  *
  * The result includes the inserted value width and the comma/spacing overhead
@@ -263,6 +290,32 @@ function collectComments(node: Document | Table | TableArray, comments: Comment[
 }
 
 /**
+ * Collects the line numbers of single-line key-value rows whose value is a
+ * single-line inline table.
+ *
+ * @param node Document or table-like node to traverse.
+ * @param lines Accumulator used during recursion.
+ * @returns A set of row end lines for inline-table rows.
+ */
+function collectSingleLineInlineTableCommentLines(
+  node: Document | Table | TableArray,
+  lines: Set<number> = new Set()
+): Set<number> {
+  for (const item of node.items) {
+    if (isKeyValue(item) && isInlineTable(item.value) && item.loc.start.line === item.loc.end.line) {
+      lines.add(item.loc.end.line);
+      continue;
+    }
+
+    if (isTable(item) || isTableArray(item)) {
+      collectSingleLineInlineTableCommentLines(item, lines);
+    }
+  }
+
+  return lines;
+}
+
+/**
  * Normalizes padded inline comment groups in the final rendered TOML string.
  *
  * This pass is intentionally limited to comments that already have explicit
@@ -285,6 +338,7 @@ export function normalizeInlineCommentAlignmentInString(
   const trailing = trailingMatch ? trailingMatch[0] : '';
   const body = trailing ? tomlString.slice(0, -trailing.length) : tomlString;
   const lines = body.length ? body.split(newLine) : [];
+  const inlineTableCommentLines = collectSingleLineInlineTableCommentLines(document);
 
   const comments = collectComments(document)
     .filter(comment => {
@@ -314,17 +368,38 @@ export function normalizeInlineCommentAlignmentInString(
   for (const group of groups) {
     if (group.length < 2) continue;
 
-    const counts = new Map<number, number>();
-    for (const comment of group) {
-      counts.set(comment.loc.start.column, (counts.get(comment.loc.start.column) || 0) + 1);
-    }
+    const isInlineTableGroup = group.every(comment => inlineTableCommentLines.has(comment.loc.start.line));
 
     let targetColumn: number | undefined;
-    let highestCount = 1;
-    for (const [column, count] of counts) {
-      if (count > highestCount) {
-        highestCount = count;
-        targetColumn = column;
+    if (isInlineTableGroup) {
+      const netGroupDelta = group.reduce(
+        (sum, comment) => sum + (inline_table_comment_deltas.get(comment) || 0),
+        0
+      );
+
+      if (netGroupDelta > 0) {
+        targetColumn = Math.max(
+          ...group.map(comment => {
+            const line = lines[comment.loc.start.line - 1] || '';
+            const code = line.slice(0, comment.loc.start.column).trimEnd();
+            return code.length;
+          })
+        ) + 2;
+      } else {
+        targetColumn = Math.max(...group.map(comment => comment.loc.start.column));
+      }
+    } else {
+      const counts = new Map<number, number>();
+      for (const comment of group) {
+        counts.set(comment.loc.start.column, (counts.get(comment.loc.start.column) || 0) + 1);
+      }
+
+      let highestCount = 1;
+      for (const [column, count] of counts) {
+        if (count > highestCount) {
+          highestCount = count;
+          targetColumn = column;
+        }
       }
     }
 

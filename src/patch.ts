@@ -40,8 +40,10 @@ import {
   getInlineInsertColumnDelta,
   normalizeInlineCommentAlignmentInString,
   preserveAlignedInlineCommentColumn,
-  preserveAlignedInlineCommentForDelta
+  preserveAlignedInlineCommentForDelta,
+  recordInlineTableCommentDelta
 } from './comment-alignment';
+import { getSpan } from './location';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -367,6 +369,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       let replacement = findByPath(updated, change.path);
       let parent;
       const containerParent = tryFindByPath(original, change.path.slice(0, -1));
+      const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
@@ -411,6 +414,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isKeyValue(arrayNode) && isInlineArray(arrayNode.value)) {
             parent = arrayNode.value;
           }
+        }
+      }
+
+      if (inlineTableRowContext) {
+        const existingSpan = getSpan(existing.loc);
+        const replacementSpan = getSpan(replacement.loc);
+        const deltaColumns = replacementSpan.columns - existingSpan.columns;
+        if (deltaColumns !== 0) {
+          recordInlineTableCommentDelta(inlineTableRowContext.container, inlineTableRowContext.row, deltaColumns);
         }
       }
 
@@ -596,5 +608,20 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
   const additionalTables = convertNestedInlineTablesToMultiline(separateTable, original, format);
   for (const table of additionalTables) {
     insert(original, original, table, undefined);
+  }
+}
+
+function findEnclosingInlineTableRowContext(
+  document: Document,
+  path: Array<string | number>
+): { container: TreeNode; row: KeyValue } | undefined {
+  for (let i = path.length - 1; i > 0; i--) {
+    const candidate = tryFindByPath(document, path.slice(0, i));
+    if (!candidate || !isKeyValue(candidate) || !isInlineTable(candidate.value)) continue;
+
+    const container = tryFindByPath(document, path.slice(0, i - 1));
+    if (container && hasItems(container)) {
+      return { container, row: candidate };
+    }
   }
 }

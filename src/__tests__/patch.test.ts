@@ -2383,6 +2383,41 @@ test('should preserve aligned inline comments when patching mixed date kinds wit
       ` + '\n');
   });
 
+  test('should preserve aligned inline comments when patching single-line inline tables with different width', () => {
+    const existing = dedent`
+      # Demo fixture covering single-line inline tables
+      release      = { name = "api", retries = 1 }                     # inline table at root
+      deployment   = { region = "eu", timeout_ms = 1500 }              # another inline table at root
+
+      [service]
+      endpoints     = { primary = 8080, secondary = 8081 }             # inline table in table
+      observability = { traces = false, metrics = true }               # another inline table in table
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.release.name = 'api-gateway';
+    value.release.retries = 12;
+    value.deployment.region = 'europe-west-1';
+    value.deployment.timeout_ms = 25000;
+    value.service.endpoints.primary = 80;
+    value.service.endpoints.secondary = 443;
+    value.service.observability.traces = true;
+    value.service.observability.metrics = false;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering single-line inline tables
+      release      = { name = "api-gateway", retries = 12 }            # inline table at root
+      deployment   = { region = "europe-west-1", timeout_ms = 25000 }  # another inline table at root
+
+      [service]
+      endpoints     = { primary = 80, secondary = 443 }                # inline table in table
+      observability = { traces = true, metrics = false }               # another inline table in table
+      ` + '\n');
+  });
+
 describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
     {
