@@ -173,12 +173,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     // Update the replacement with the properly formatted date
     replacement.value = formattedDate;
     replacement.raw = formattedDate.toISOString();
-    
-    // Adjust the location information to match the new raw length
-    const lengthDiff = replacement.raw.length - originalRaw.length;
-    if (lengthDiff !== 0) {
-      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
-    }
+    replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
   }
   
   // Preserve array trailing comma format

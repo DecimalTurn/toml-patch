@@ -133,6 +133,24 @@ function resolveWorkspacePackage(packageName) {
   return modulePath;
 }
 
+function getParseOptions(implementationName) {
+  if (implementationName === 'smol-toml') {
+    return { maxDepth: 1010 };
+  }
+
+  return undefined;
+}
+
+function createParseRunner(TOML, implementationName) {
+  const parseOptions = getParseOptions(implementationName);
+
+  if (parseOptions == null) {
+    return (toml) => TOML.parse(toml);
+  }
+
+  return (toml) => TOML.parse(toml, parseOptions);
+}
+
 /**
  * Dynamically import a module, resolving ESM entry points for cached packages.
  * @param {string} modulePath - Absolute or relative path to the module
@@ -294,7 +312,7 @@ const allResults = [];
 /**
  * Warmup phase to allow V8 to optimize the code before benchmarking
  */
-async function warmupModule(TOML, benchmarks, implementationName) {
+async function warmupModule(parseToml, benchmarks, implementationName) {
   console.log(c.dim(`  🔥 Warming up ${implementationName}...`));
   const warmupIterations = 50;
   
@@ -302,7 +320,7 @@ async function warmupModule(TOML, benchmarks, implementationName) {
   for (let i = 0; i < warmupIterations; i++) {
     for (const { data } of benchmarks) {
       try {
-        TOML.parse(data);
+        parseToml(data);
       } catch (_) {
         // Ignore errors during warmup
       }
@@ -329,13 +347,15 @@ for (const implementation of implementationsToRun) {
     continue;
   }
 
+  const parseToml = createParseRunner(TOML, implementation.name);
+
   // Warmup phase to ensure fair V8 optimization
-  await warmupModule(TOML, benchmarks, implementation.name);
+  await warmupModule(parseToml, benchmarks, implementation.name);
 
   // Create benchmark suite
   const suite = new Suite(`${implementation.name}-parse`);
   benchmarks.forEach(({ name, data }) => {
-    suite.add(name, () => TOML.parse(data));
+    suite.add(name, () => parseToml(data));
   });
 
   // Run benchmarks

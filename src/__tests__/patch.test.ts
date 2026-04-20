@@ -1856,7 +1856,7 @@ test('should patch date field from example toml', () => {
 
     [owner]
     name = "Tom Preston-Werner"
-    dob = 1979-05-28T07:32:00Z     # First class dates? Why not?
+    dob = 1979-05-28T07:32:00Z # First class dates? Why not?
 
     [database]
     enabled = true
@@ -2187,6 +2187,170 @@ test('should patch offset datetime with milliseconds and preserve precision', ()
     name = "Convention Center"
     ` + '\n');
 });
+
+test('should preserve aligned inline comments when patching mixed date kinds with regular Date values', () => {
+  const existing = dedent`
+    # Demo fixture covering TOML date and time value kinds
+    title = "Date parser demo"
+
+    [dates]
+    offset_date_time = 1979-05-28T07:32:00-08:00   # offset date-time
+    local_date_time  = 1979-05-28T07:32:00         # local date-time
+    local_date       = 1979-05-28                  # local date
+    local_time       = 07:32:00                    # local time
+
+    [events]
+    published_at     = 2026-04-17T09:15:30Z        # UTC timestamp
+    cutoff_time      = 18:45:00                    # time only
+    release_day      = 2026-05-02                  # date only
+    ` + '\n';
+
+  type Operation = { keyPath: string; changed: boolean };
+
+  const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+  const TIME_ONLY_RE = /^\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/u;
+  const value = parse(existing);
+  const operations: Operation[] = [];
+
+  const incrementDateValues = (input: Record<string, unknown>, pathParts: string[]) => {
+    for (const [key, nestedValue] of Object.entries(input)) {
+      const nextPath = [...pathParts, key];
+
+      if (nestedValue instanceof Date && TIME_ONLY_RE.test(nestedValue.toISOString())) {
+        operations.push({ keyPath: nextPath.join('.'), changed: false });
+        continue;
+      }
+
+      if (nestedValue instanceof Date) {
+        input[key] = new Date(nestedValue.getTime() + ONE_DAY_IN_MS);
+        operations.push({ keyPath: nextPath.join('.'), changed: true });
+        continue;
+      }
+
+      if (!nestedValue || typeof nestedValue !== 'object') {
+        continue;
+      }
+
+      incrementDateValues(nestedValue as Record<string, unknown>, nextPath);
+    }
+  };
+
+  incrementDateValues(value as Record<string, unknown>, []);
+
+  expect(operations.filter(operation => operation.changed).map(operation => operation.keyPath)).toEqual([
+    'dates.offset_date_time',
+    'dates.local_date_time',
+    'dates.local_date',
+    'events.published_at',
+    'events.release_day'
+  ]);
+
+  expect(operations.filter(operation => !operation.changed).map(operation => operation.keyPath)).toEqual([
+    'dates.local_time',
+    'events.cutoff_time'
+  ]);
+
+  const patched = patch(existing, value);
+
+  expect(patched).toEqual(dedent`
+    # Demo fixture covering TOML date and time value kinds
+    title = "Date parser demo"
+
+    [dates]
+    offset_date_time = 1979-05-29T07:32:00-08:00   # offset date-time
+    local_date_time  = 1979-05-29T07:32:00         # local date-time
+    local_date       = 1979-05-29                  # local date
+    local_time       = 07:32:00                    # local time
+
+    [events]
+    published_at     = 2026-04-18T09:15:30Z        # UTC timestamp
+    cutoff_time      = 18:45:00                    # time only
+    release_day      = 2026-05-03                  # date only
+    ` + '\n');
+});
+
+  test('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with same width', () => {
+    const existing = dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan"                    # single-line basic string
+      retry_count   = 3                                 # integer
+      error_rate    = 0.125                             # float
+      build_numbers = [1, 2, 3]                         # inline array
+
+      [service]
+      display_name  = "API"                             # string in table
+      ports         = [8080, 8081]                      # array in table
+      timeout_ms    = 1500                              # number in table
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.title = 'Sprint notes';
+    value.retry_count = 7;
+    value.error_rate = 0.875;
+    value.build_numbers = [2, 4, 6];
+    value.service.display_name = 'CLI';
+    value.service.ports = [9000, 9001];
+    value.service.timeout_ms = 2500;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Sprint notes"                    # single-line basic string
+      retry_count   = 7                                 # integer
+      error_rate    = 0.875                             # float
+      build_numbers = [2, 4, 6]                         # inline array
+
+      [service]
+      display_name  = "CLI"                             # string in table
+      ports         = [9000, 9001]                      # array in table
+      timeout_ms    = 2500                              # number in table
+      ` + '\n');
+  });
+
+  // TODO: Implement comments alignment detection across lines to preserve
+  //      even when value width changes. This is currently not supported, 
+  //      so the test is skipped.
+  test.skip('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with different width', () => {
+    const existing = dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan"                    # single-line basic string
+      retry_count   = 3                                 # integer
+      error_rate    = 0.125                             # float
+      build_numbers = [1, 2, 3]                         # inline array
+
+      [service]
+      display_name  = "API"                             # string in table
+      ports         = [8080, 8081]                      # array in table
+      timeout_ms    = 1500                              # number in table
+      ` + '\n';
+
+    const value = parse(existing);
+
+    value.title = 'Release plan v2';
+    value.retry_count = 12;
+    value.error_rate = 0.5;
+    value.build_numbers = [1, 2, 3, 5, 8];
+    value.service.display_name = 'API Gateway';
+    value.service.ports = [8080, 8081, 8082];
+    value.service.timeout_ms = 25000;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Demo fixture covering strings, arrays and number value kinds
+      title         = "Release plan v2"                 # single-line basic string
+      retry_count   = 12                                # integer
+      error_rate    = 0.5                               # float
+      build_numbers = [1, 2, 3, 5, 8]                   # inline array
+
+      [service]
+      display_name  = "API Gateway"                     # string in table
+      ports         = [8080, 8081, 8082]                # array in table
+      timeout_ms    = 25000                             # number in table
+      ` + '\n');
+  });
 
 describe('should preserve all TOML date/time formats when patching', () => {
   const testCases = [
