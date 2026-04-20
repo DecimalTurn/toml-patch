@@ -17,8 +17,8 @@ importers:
   .:
     devDependencies:
       '@decimalturn/toml-patch':
-        specifier: npm:@decimalturn/toml-patch@1.1.0
-        version: 1.1.0
+        specifier: npm:@decimalturn/toml-patch@1.1.1
+        version: 1.1.1
       '@playwright/test':
         specifier: ^1.59.1
         version: 1.59.1
@@ -260,8 +260,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@decimalturn/toml-patch@1.1.0':
-    resolution: {integrity: sha512-bjqGveYuk/U/SMzv9wKKGs9SSLArSUlE9t4UkjXoIanlb/43gRWAqlXh5FS/QAgEG9/cEx3Za1NnIa0/nC5YpA==}
+  '@decimalturn/toml-patch@1.1.1':
+    resolution: {integrity: sha512-EEKLREI/UHL006/n52xxLuBkILSacCPjwhqF1a2RCGegjkAKcXf2F1KMXbwOxsM3Jn5iYAPd1IgGUIfWMMddTA==}
 
   '@emnapi/core@1.9.0':
     resolution: {integrity: sha512-0DQ98G9ZQZOxfUcQn1waV2yS8aWdZ6kJMbYCJB3oUBecjWYO1fqJ+a1DRfPF3O5JEkwqwP1A9QEN/9mYm2Yd0w==}
@@ -2578,7 +2578,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@decimalturn/toml-patch@1.1.0': {}
+  '@decimalturn/toml-patch@1.1.1': {}
 
   '@emnapi/core@1.9.0':
     dependencies:
