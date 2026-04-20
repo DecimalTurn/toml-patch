@@ -269,6 +269,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = parent.value;
         } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
           parent = parent.item.value;
+        } else if (isInlineItem(parent) && isInlineTable(parent.item)) {
+          parent = parent.item;
         }
       }
 

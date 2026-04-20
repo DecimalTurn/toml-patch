@@ -490,7 +490,17 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   };
 
   // If there is nothing left, don't perform any offsets
-  if(previous === undefined && next === undefined) {
+  const hasRootInlineTableComments =
+    isInlineTable(parent) &&
+    hasItems(root) &&
+    root !== parent &&
+    (root as WithItems).items.some(item => isComment(item));
+
+  if (
+    previous === undefined &&
+    next === undefined &&
+    !hasRootInlineTableComments
+  ) {
     offset.lines = 0;
     offset.columns = 0;
   }
@@ -570,7 +580,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   // Fix: for root-level comments that sit before the removed line, pre-shift them in the
   // opposite direction so that the bleedthrough restores them to their original position.
   // Comments on the deleted line are removed from root.items entirely.
-  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
+  if (isInlineTable(parent) && hasItems(root) && root !== parent) {
     const removedLine = node.loc.start.line;
     const rootItems = (root as WithItems).items;
     const toRemove: number[] = [];
@@ -582,7 +592,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
       if (commentLine === removedLine) {
         // Comment was on the same line as the removed item — drop it.
         toRemove.push(i);
-      } else if (commentLine < removedLine) {
+      } else if (offset.lines !== 0 && commentLine < removedLine) {
         // Comment is before the removed line: pre-compensate so the bleedthrough
         // offset applied during applyWrites leaves it at its original position.
         (item as Comment).loc.start.line -= offset.lines;
