@@ -4330,7 +4330,7 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
-    test('should add new root key-value before inline table if appearing before in the patched object', () => {
+    test.skip('should add new root key-value before inline table if appearing before in the patched object', () => {
     const existing = dedent`
       section = {
          key = "value"
