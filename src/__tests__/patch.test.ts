@@ -4309,3 +4309,66 @@ describe('Mixed line endings', () => {
     expect(patch(existing, obj)).toEqual('key = """updated\nvalue"""\n');
   });
 });
+
+describe('Root key-value placement', () => {
+  test('should add new root key-value before existing table section', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing table section while preserving existing root keys', () => {
+    const existing = dedent`
+      name = "foo"
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      name: 'foo',
+      project_doc_max_bytes: 65536,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      name = "foo"
+      project_doc_max_bytes = 65536
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing AOT section', () => {
+    const existing = dedent`
+      [[tasks]]
+      name = "build"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      version: '1.0.0',
+      tasks: [{ name: 'build' }]
+    });
+
+    expect(patched).toEqual(dedent`
+      version = "1.0.0"
+
+      [[tasks]]
+      name = "build"
+    ` + '\n');
+  });
+});
