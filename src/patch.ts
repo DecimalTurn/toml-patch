@@ -209,6 +209,17 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 }
 
 /**
+ * Returns the first key component of a top-level Document item (KeyValue, Table, or TableArray),
+ * used to match items across different document instances when finding insertion positions.
+ */
+function getRootKey(item: TreeNode): string | null {
+  if (isKeyValue(item)) return item.key.value[0] ?? null;
+  if (isTable(item)) return item.key.item.value[0] ?? null;
+  if (isTableArray(item)) return item.key.item.value[0] ?? null;
+  return null;
+}
+
+/**
  * Applies a list of changes to the original TOML document AST while preserving formatting and structure.
  * 
  * This function processes different types of changes (Add, Edit, Remove, Move, Rename) and applies them
@@ -327,16 +338,29 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // first explicit section header ([table] or [[array]]). When the index
           // is a string key, insert() falls back to parent.items.length —
           // appending after all sections and silently nesting the new key under
-          // the last one. Clamp to the end of the root table scope instead.
+          // the last one.
+          //
+          // Find the correct insertion point by consulting the updated document's
+          // item order: insert before the first successor key that already exists
+          // in the original document (whether as a KV, Table, or TableArray).
           // For non-KV children (e.g. table-array entries) the index was already
           // resolved to a correct integer above, so leave it as-is.
           let resolvedIndex = index;
           if (isDocument(parent) && isKeyValue(child)) {
-            const rootTableEnd = (parent as Document).items.findIndex(
-              item => isTable(item) || isTableArray(item)
-            );
-            if (rootTableEnd !== -1) {
-              resolvedIndex = rootTableEnd;
+            const updatedDoc = updated as Document;
+            const childUpdatedIdx = updatedDoc.items.indexOf(child);
+            if (childUpdatedIdx !== -1) {
+              for (let i = childUpdatedIdx + 1; i < updatedDoc.items.length; i++) {
+                const successorKey = getRootKey(updatedDoc.items[i]);
+                if (successorKey === null) continue;
+                const originalIdx = (parent as Document).items.findIndex(
+                  item => getRootKey(item) === successorKey
+                );
+                if (originalIdx !== -1) {
+                  resolvedIndex = originalIdx;
+                  break;
+                }
+              }
             }
           }
           insert(original, parent, child, resolvedIndex);

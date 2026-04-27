@@ -242,12 +242,19 @@ function insertOnNewLine(
   // Apply offsets after child node
   const child_span = getSpan(child.loc);
   // When prepending to a non-empty document, push all existing items down by the
-  // new child's physical line count plus one newline separator. The existing
-  // items' original leading-lines budget is already encoded in their loc.start.line
-  // values, so we only need to account for the space the new child occupies.
-  const offset_lines = prepend_to_document
-    ? child_span.lines + 1
-    : child_span.lines + (leading_lines - 1);
+  // new child's physical line count plus a separator. The existing items' original
+  // leading-lines budget is already encoded in their loc.start.line values, so we
+  // only need to account for the space the new child occupies plus any blank line
+  // between it and the successor. Section headers ([table]/[[array]]) require a
+  // blank line; consecutive key-values do not.
+  let offset_lines: number;
+  if (prepend_to_document) {
+    const successor = parent.items[index + 1];
+    const needsBlankLine = successor !== undefined && (isTable(successor) || isTableArray(successor));
+    offset_lines = child_span.lines + (needsBlankLine ? 1 : 0);
+  } else {
+    offset_lines = child_span.lines + (leading_lines - 1);
+  }
   const offset = {
     lines: offset_lines,
     columns: child_span.columns
