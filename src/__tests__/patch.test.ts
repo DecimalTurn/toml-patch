@@ -4330,6 +4330,45 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
+    test('should add new root key-value before inline table if appearing before in the patched object', () => {
+    const existing = dedent`
+      section = {
+         key = "value"
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+      section = {
+         key = "value"
+      }
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing table section - Even if the new key is added after the section in the patched object', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      section: { key: 'value' },
+      new_root: 42,
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
   test('should add new root key-value before existing table section while preserving existing root keys', () => {
     const existing = dedent`
       name = "foo"
