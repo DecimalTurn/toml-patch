@@ -4439,3 +4439,111 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 });
+
+describe('Key insertion order inside sections', () => {
+  test('should insert a new key-value before an existing one in a [table] based on JS object order', () => {
+    const existing = dedent`
+      [server]
+      host = "localhost"
+      port = 8080
+    ` + '\n';
+
+    const patched = patch(existing, {
+      server: { timeout: 30, host: 'localhost', port: 8080 }
+    });
+
+    expect(patched).toEqual(dedent`
+      [server]
+      timeout = 30
+      host = "localhost"
+      port = 8080
+    ` + '\n');
+  });
+
+  test('should insert a new key-value after an existing one in a [table] based on JS object order', () => {
+    const existing = dedent`
+      [server]
+      host = "localhost"
+      port = 8080
+    ` + '\n';
+
+    const patched = patch(existing, {
+      server: { host: 'localhost', timeout: 30, port: 8080 }
+    });
+
+    expect(patched).toEqual(dedent`
+      [server]
+      host = "localhost"
+      timeout = 30
+      port = 8080
+    ` + '\n');
+  });
+
+  test('should insert a new key-value at the end of a [table] based on JS object order', () => {
+    const existing = dedent`
+      [server]
+      host = "localhost"
+      port = 8080
+    ` + '\n';
+
+    const patched = patch(existing, {
+      server: { host: 'localhost', port: 8080, timeout: 30 }
+    });
+
+    expect(patched).toEqual(dedent`
+      [server]
+      host = "localhost"
+      port = 8080
+      timeout = 30
+    ` + '\n');
+  });
+
+  test('should insert a new key-value before an existing one in an [[AOT]] entry based on JS object order', () => {
+    const existing = dedent`
+      [[tasks]]
+      name = "build"
+      command = "pnpm run build"
+
+      [[tasks]]
+      name = "test"
+      command = "pnpm run test"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      tasks: [
+        { env: 'production', name: 'build', command: 'pnpm run build' },
+        { name: 'test', command: 'pnpm run test' }
+      ]
+    });
+
+    expect(patched).toEqual(dedent`
+      [[tasks]]
+      env = "production"
+      name = "build"
+      command = "pnpm run build"
+
+      [[tasks]]
+      name = "test"
+      command = "pnpm run test"
+    ` + '\n');
+  });
+
+  test('should insert a new key-value between existing ones in an [[AOT]] entry based on JS object order', () => {
+    const existing = dedent`
+      [[tasks]]
+      name = "build"
+      command = "pnpm run build"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      tasks: [{ name: 'build', env: 'production', command: 'pnpm run build' }]
+    });
+
+    expect(patched).toEqual(dedent`
+      [[tasks]]
+      name = "build"
+      env = "production"
+      command = "pnpm run build"
+    ` + '\n');
+  });
+});
