@@ -206,6 +206,11 @@ function insertOnNewLine(
 
   const previous = parent.items[index - 1];
   const use_first_line = isDocument(parent) && !parent.items.length;
+  // Inserting at position 0 of a non-empty Document: no previous sibling but the
+  // document already has content. The new item lands at line 1 (no leading blank)
+  // and all existing items must be shifted down to make room. This happens when a
+  // new root-table key-value is prepended before the first explicit section header.
+  const prepend_to_document = isDocument(parent) && !use_first_line && previous === undefined;
 
   parent.items.splice(index, 0, child);
 
@@ -220,8 +225,8 @@ function insertOnNewLine(
   
   const isSquareBracketsStructure = isTable(child) || isTableArray(child);
   let leading_lines = 0;
-  if (use_first_line) {
-    // 0 leading lines
+  if (use_first_line || prepend_to_document) {
+    // 0 leading lines — item starts at line 1
   } else if (isSquareBracketsStructure) {
     leading_lines = 2;
   } else {
@@ -236,8 +241,15 @@ function insertOnNewLine(
 
   // Apply offsets after child node
   const child_span = getSpan(child.loc);
+  // When prepending to a non-empty document, push all existing items down by the
+  // new child's physical line count plus one newline separator. The existing
+  // items' original leading-lines budget is already encoded in their loc.start.line
+  // values, so we only need to account for the space the new child occupies.
+  const offset_lines = prepend_to_document
+    ? child_span.lines + 1
+    : child_span.lines + (leading_lines - 1);
   const offset = {
-    lines: child_span.lines + (leading_lines - 1),
+    lines: offset_lines,
     columns: child_span.columns
   };
 
