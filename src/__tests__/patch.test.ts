@@ -3141,6 +3141,24 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       ` + '\n');
   });
 
+
+  test('should delete the only key from a multiline inline table and leave it empty', () => {
+    const existing = dedent`
+      tbl-1 = {
+              only = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+      }
+      ` + '\n');
+  });
+
   test('should delete a nested inline table key leaving empty nested table', () => {
     const existing = dedent`
       tbl-1 = {
@@ -3161,7 +3179,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       }
       ` + '\n');
   });
-
+  
   test('should delete an entire nested inline table entry', () => {
     const existing = dedent`
       tbl-1 = {
@@ -3507,23 +3525,6 @@ describe('TOML v1.1 multiline inline tables with comments (newline-comment.toml 
       tbl-1 = {#comment
               #comment
       }#comment
-      ` + '\n');
-  });
-
-  test('should delete the only key from a multiline inline table without comments', () => {
-    const existing = dedent`
-      tbl-1 = {
-              only = 1,
-      }
-      ` + '\n';
-
-    const value = parse(existing);
-    delete value['tbl-1'].only;
-    const patched = patch(existing, value);
-
-    expect(patched).toEqual(dedent`
-      tbl-1 = {
-      }
       ` + '\n');
   });
 
