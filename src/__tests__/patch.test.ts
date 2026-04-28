@@ -46,6 +46,23 @@ test('should remove key-value from table', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
+test('should remove key-value with inline comment from table', () => {
+  const input = dedent`
+    [database]
+    server = "192.168.1.1"
+    enabled = true # enable this feature
+    ports = [8001, 8001, 8002]
+  `;
+  const value = parse(input);
+  delete value.database.enabled;
+
+  expect(patch(input, value)).toEqual(dedent`
+    [database]
+    server = "192.168.1.1"
+    ports = [8001, 8001, 8002]
+  `);
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);
