@@ -63,6 +63,23 @@ test('should remove key-value with inline comment from table', () => {
   `);
 });
 
+test('should preserve trailing comment on single-line inline table when deleting a key', () => {
+  // Regression for: the orphaned-comment cleanup in writer.ts must NOT fire for
+  // single-line inline tables. For a single-line table the parser does not extract
+  // comments into root.items — any trailing `# comment` remains a root-level item
+  // associated with the KV line, not the inline table. Incorrectly dropping it by
+  // matching `commentLine === removedLine` would silently delete user comments.
+  const input = dedent`
+    t = { a = 1, b = 2 } # keep this comment
+  `;
+  const value = parse(input);
+  delete value.t.a;
+
+  expect(patch(input, value)).toEqual(dedent`
+    t = { b = 2 } # keep this comment
+  `);
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);

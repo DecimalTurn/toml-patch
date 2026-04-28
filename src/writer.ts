@@ -584,7 +584,12 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   // Fix: for root-level comments that sit before the removed line, pre-shift them in the
   // opposite direction so that the bleedthrough restores them to their original position.
   // Comments on the deleted line are removed from root.items entirely.
-  if (isInlineTable(parent) && hasItems(root) && root !== parent) {
+  //
+  // Scope: only multiline inline tables. For single-line inline tables the parser does NOT
+  // extract comments into root — any comment after `{ ... }` on the same line stays as a
+  // root-level item but is NOT associated with the inline table's items, so the
+  // `commentLine === removedLine` drop would incorrectly delete it.
+  if (isMultilineInlineContainer && hasItems(root) && root !== parent) {
     const removedLine = node.loc.start.line;
     const rootItems = (root as WithItems).items;
     const toRemove: number[] = [];
