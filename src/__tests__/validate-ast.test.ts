@@ -298,6 +298,64 @@ describe('AST position consistency after patching', () => {
     expectConsistent('flag = true\n', { flag: false });
   });
 
+  test('aligned inline comment shifts keep document end containing children', () => {
+    const toml = dedent`
+      first = "a"                   # one
+      second = "bb"                 # two
+    ` + '\n';
+
+    expectConsistent(toml, {
+      first: 'a',
+      second: 'a much longer value than before'
+    });
+  });
+
+  test('aligned inline comment shifts keep table end containing children', () => {
+    const toml = dedent`
+      [pkg]
+      first = "a"                   # one
+      second = "bb"                 # two
+    ` + '\n';
+
+    expectConsistent(toml, {
+      pkg: {
+        first: 'a',
+        second: 'a much longer value than before'
+      }
+    });
+  });
+
+  test('aligned inline comment overflow on middle row keeps document end containing shifted last row comment', () => {
+    const toml = dedent`
+      first = "a"                   # one
+      second = "bb"                 # two
+      third = 1                     # three
+    ` + '\n';
+
+    expectConsistent(toml, {
+      first: 'a',
+      second: 'a much longer value than before',
+      third: 1,
+    });
+  });
+
+  test('aligned inline comment overflow on middle row keeps table end containing shifted last row comment', () => {
+    const toml = dedent`
+      [pkg]
+      first = "a"                   # one
+      second = "bb"                 # two
+      third = 1                     # three
+    ` + '\n';
+
+    expectConsistent(toml, {
+      pkg: {
+        first: 'a',
+        second: 'a much longer value than before',
+        third: 1,
+      }
+    });
+  });
+
   // ------ top-level key additions / removals ------
 
   test('add new key-value at document root', () => {
