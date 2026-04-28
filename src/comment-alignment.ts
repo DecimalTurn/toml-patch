@@ -83,7 +83,11 @@ function getNeighborRowIndex(items: TreeNode[], index: number, direction: -1 | 1
  * @param deltaColumns Horizontal width delta introduced by the edit.
  */
 function applyInlineCommentColumnAdjustment(comment: Comment, targetColumn: number, deltaColumns: number) {
-  const adjustment = targetColumn - (comment.loc.start.column + deltaColumns);
+  const shiftedColumn = comment.loc.start.column + deltaColumns;
+  // Never pull a widened row's comment left into its own code; let the
+  // normalization pass realign neighboring rows to the widened target.
+  const desiredColumn = Math.max(targetColumn, shiftedColumn);
+  const adjustment = desiredColumn - shiftedColumn;
 
   if (adjustment !== 0) {
     comment.loc.start.column += adjustment;
@@ -360,10 +364,16 @@ export function normalizeInlineCommentAlignmentInString(
   const lines = body.length ? body.split(newLine) : [];
   const inlineTableCommentLines = collectSingleLineInlineTableCommentLines(document);
 
+  const resolveCommentColumn = (line: string, comment: Comment): number => {
+    const fromLine = line.lastIndexOf(comment.raw);
+    return fromLine >= 0 ? fromLine : comment.loc.start.column;
+  };
+
   const comments = collectComments(document)
     .filter(comment => {
       const line = lines[comment.loc.start.line - 1] || '';
-      const beforeComment = line.slice(0, comment.loc.start.column);
+      const commentColumn = resolveCommentColumn(line, comment);
+      const beforeComment = line.slice(0, commentColumn);
       return beforeComment.trim().length > 0 && /\s{2,}$/u.test(beforeComment);
     })
     .sort((a, b) => a.loc.start.line - b.loc.start.line);
@@ -403,16 +413,19 @@ export function normalizeInlineCommentAlignmentInString(
       }
     }
 
+    const widestCodeColumn = Math.max(
+      ...group.map(comment => {
+        const line = lines[comment.loc.start.line - 1] || '';
+        const commentColumn = resolveCommentColumn(line, comment);
+        const code = line.slice(0, commentColumn).trimEnd();
+        return code.length;
+      })
+    );
+    targetColumn = Math.max(targetColumn, widestCodeColumn + 1);
+
     const reservedComments = group.filter(comment => reserved_comment_spacing.has(comment));
     const hasNonInlineTableRows = group.some(comment => !inlineTableCommentLines.has(comment.loc.start.line));
     if (reservedComments.length > 0 && hasNonInlineTableRows) {
-      const widestCodeColumn = Math.max(
-        ...group.map(comment => {
-          const line = lines[comment.loc.start.line - 1] || '';
-          const code = line.slice(0, comment.loc.start.column).trimEnd();
-          return code.length;
-        })
-      );
       const groupMinimumGap = Math.min(
         ...group.map(comment => {
           if (reserved_comment_spacing.has(comment)) {
@@ -420,8 +433,9 @@ export function normalizeInlineCommentAlignmentInString(
           }
 
           const line = lines[comment.loc.start.line - 1] || '';
-          const code = line.slice(0, comment.loc.start.column).trimEnd();
-          return Math.max(1, comment.loc.start.column - code.length);
+          const commentColumn = resolveCommentColumn(line, comment);
+          const code = line.slice(0, commentColumn).trimEnd();
+          return Math.max(1, commentColumn - code.length);
         })
       );
       const requiredColumn = widestCodeColumn + groupMinimumGap;
@@ -429,17 +443,20 @@ export function normalizeInlineCommentAlignmentInString(
     }
 
     for (const comment of group) {
-      if (comment.loc.start.column === targetColumn) continue;
-
       const lineIndex = comment.loc.start.line - 1;
       const line = lines[lineIndex] || '';
-      const code = line.slice(0, comment.loc.start.column).trimEnd();
-      const spaces = ' '.repeat(Math.max(1, targetColumn - code.length));
-      lines[lineIndex] = code + spaces + comment.raw;
+      const commentColumn = resolveCommentColumn(line, comment);
+      const code = line.slice(0, commentColumn).trimEnd();
+      const actualTargetColumn = Math.max(targetColumn, code.length + 1);
+      if (commentColumn !== actualTargetColumn) {
+        const spaces = ' '.repeat(actualTargetColumn - code.length);
+        lines[lineIndex] = code + spaces + comment.raw;
+      }
 
-      const delta = targetColumn - comment.loc.start.column;
-      comment.loc.start.column += delta;
-      comment.loc.end.column += delta;
+      if (comment.loc.start.column !== actualTargetColumn) {
+        comment.loc.start.column = actualTargetColumn;
+        comment.loc.end.column = actualTargetColumn + comment.raw.length;
+      }
     }
   }
 
