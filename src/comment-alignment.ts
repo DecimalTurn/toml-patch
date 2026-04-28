@@ -83,6 +83,10 @@ function getNeighborRowIndex(items: TreeNode[], index: number, direction: -1 | 1
  * @param deltaColumns Horizontal width delta introduced by the edit.
  */
 function applyInlineCommentColumnAdjustment(comment: Comment, targetColumn: number, deltaColumns: number) {
+  if (!original_comment_column.has(comment)) {
+    original_comment_column.set(comment, comment.loc.start.column);
+  }
+
   const shiftedColumn = comment.loc.start.column + deltaColumns;
   // Never pull a widened row's comment left into its own code; let the
   // normalization pass realign neighboring rows to the widened target.
@@ -421,12 +425,21 @@ export function normalizeInlineCommentAlignmentInString(
         return code.length;
       })
     );
-    targetColumn = Math.max(targetColumn, widestCodeColumn + 1);
 
+    const currentGroupMinimumGap = Math.min(
+      ...group.map(comment => {
+        const line = lines[comment.loc.start.line - 1] || '';
+        const commentColumn = resolveCommentColumn(line, comment);
+        const code = line.slice(0, commentColumn).trimEnd();
+        return Math.max(1, commentColumn - code.length);
+      })
+    );
+
+    let groupMinimumGap = currentGroupMinimumGap;
     const reservedComments = group.filter(comment => reserved_comment_spacing.has(comment));
     const hasNonInlineTableRows = group.some(comment => !inlineTableCommentLines.has(comment.loc.start.line));
     if (reservedComments.length > 0 && hasNonInlineTableRows) {
-      const groupMinimumGap = Math.min(
+      const reservedMinimumGap = Math.min(
         ...group.map(comment => {
           if (reserved_comment_spacing.has(comment)) {
             return reserved_comment_spacing.get(comment) || 1;
@@ -438,6 +451,10 @@ export function normalizeInlineCommentAlignmentInString(
           return Math.max(1, commentColumn - code.length);
         })
       );
+      groupMinimumGap = Math.min(groupMinimumGap, reservedMinimumGap);
+    }
+
+    if (targetColumn < widestCodeColumn + 1) {
       const requiredColumn = widestCodeColumn + groupMinimumGap;
       targetColumn = Math.max(targetColumn, requiredColumn);
     }
