@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: Ensure deleting last key of inline-table is done cleanly ([#164]).
+- Patching: Preserving trailing comments on inline tables when deleting keys ([#164]).
+- Patching: Support nested multiline inline-table patching inside arrays ([#164]).
+
 ## [1.1.1] - 2026-04-20
 
 ### Fixed
@@ -236,3 +242,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#148]: https://github.com/DecimalTurn/toml-patch/pull/148
 [#153]: https://github.com/DecimalTurn/toml-patch/pull/153
 [#158]: https://github.com/DecimalTurn/toml-patch/pull/158
+[#164]: https://github.com/DecimalTurn/toml-patch/pull/164
