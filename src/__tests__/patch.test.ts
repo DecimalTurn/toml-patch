@@ -46,6 +46,40 @@ test('should remove key-value from table', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
+test('should remove key-value with inline comment from table', () => {
+  const input = dedent`
+    [database]
+    server = "192.168.1.1"
+    enabled = true # enable this feature
+    ports = [8001, 8001, 8002]
+  `;
+  const value = parse(input);
+  delete value.database.enabled;
+
+  expect(patch(input, value)).toEqual(dedent`
+    [database]
+    server = "192.168.1.1"
+    ports = [8001, 8001, 8002]
+  `);
+});
+
+test('should preserve trailing comment on single-line inline table when deleting a key', () => {
+  // Regression for: the orphaned-comment cleanup in writer.ts must NOT fire for
+  // single-line inline tables. For a single-line table the parser does not extract
+  // comments into root.items — any trailing `# comment` remains a root-level item
+  // associated with the KV line, not the inline table. Incorrectly dropping it by
+  // matching `commentLine === removedLine` would silently delete user comments.
+  const input = dedent`
+    t = { a = 1, b = 2 } # keep this comment
+  `;
+  const value = parse(input);
+  delete value.t.a;
+
+  expect(patch(input, value)).toEqual(dedent`
+    t = { b = 2 } # keep this comment
+  `);
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);
@@ -3124,6 +3158,24 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       ` + '\n');
   });
 
+
+  test('should delete the only key from a multiline inline table and leave it empty', () => {
+    const existing = dedent`
+      tbl-1 = {
+              only = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {
+      }
+      ` + '\n');
+  });
+
   test('should delete a nested inline table key leaving empty nested table', () => {
     const existing = dedent`
       tbl-1 = {
@@ -3140,12 +3192,11 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     expect(patched).toEqual(dedent`
       tbl-1 = {
               tbl = {
-
               }
       }
       ` + '\n');
   });
-
+  
   test('should delete an entire nested inline table entry', () => {
     const existing = dedent`
       tbl-1 = {
@@ -3328,6 +3379,29 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
 
 describe('TOML v1.1 multiline inline tables - trailing comma preservation', () => {
 
+  test('should preserve multiline inline table formatting when replacing the whole value', () => {
+    const existing = dedent`
+      t = {
+          a = 1,
+          b = 2,
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      t: {
+        b: 20,
+        c: 3,
+      },
+    });
+
+    expect(patched).toEqual(dedent`
+      t = {
+          b = 20,
+          c = 3,
+      }
+      ` + '\n');
+  });
+
   test('should preserve trailing comma on last item when editing last item', () => {
     const existing = dedent`
       t = {
@@ -3448,6 +3522,25 @@ describe('TOML v1.1 multiline inline tables with comments (newline-comment.toml 
     expect(patched).toEqual(dedent`
       tbl-1 = {#comment
               b = 2,#comment
+      }#comment
+      ` + '\n');
+  });
+
+  test('should delete the only key from a commented multiline inline table and preserve surrounding comments', () => {
+    const existing = dedent`
+      tbl-1 = {#comment
+              only = 1,#comment
+              #comment
+      }#comment
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      tbl-1 = {#comment
+              #comment
       }#comment
       ` + '\n');
   });
@@ -3830,6 +3923,37 @@ describe('undefined handling in patch', () => {
           tags = [
             { key = "color", value = "gray" }
           ]
+        }
+      ]
+      ` + '\n');
+  });
+
+  test('should preserve multiline inline table formatting when replacing an object inside a multiline inline array', () => {
+    const existing = dedent`
+      items = [
+        {
+          name = "Hammer",
+          color = "red",
+        },
+        {
+          name = "Nail",
+          color = "gray",
+        }
+      ]
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.items[0] = { name: 'Hammer', sku: 'H1' };
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      items = [
+        {
+          name = "Hammer",
+          sku = "H1",
+        },
+        {
+          name = "Nail",
+          color = "gray",
         }
       ]
       ` + '\n');

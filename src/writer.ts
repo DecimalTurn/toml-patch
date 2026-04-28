@@ -489,8 +489,22 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     columns: keep_line ? -removed_span.columns : 0
   };
 
-  // If there is nothing left, don't perform any offsets
-  if(previous === undefined && next === undefined) {
+  // If there is nothing left, don't perform any offsets.
+  //
+  // Exception: multiline inline containers (InlineTable / InlineArray whose opening
+  // and closing brackets are on different lines).  For those, `offset.lines` must
+  // stay intact so that `applyWrites` shifts the closing bracket up to close the
+  // gap left by the removed item.  Single-line containers are fine to zero because
+  // the bracket is on the same line as the (now-gone) item.
+  const isMultilineInlineContainer =
+    (isInlineTable(parent) || isInlineArray(parent)) &&
+    parent.loc.end.line > parent.loc.start.line;
+
+  if (
+    previous === undefined &&
+    next === undefined &&
+    !isMultilineInlineContainer
+  ) {
     offset.lines = 0;
     offset.columns = 0;
   }
@@ -570,7 +584,12 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   // Fix: for root-level comments that sit before the removed line, pre-shift them in the
   // opposite direction so that the bleedthrough restores them to their original position.
   // Comments on the deleted line are removed from root.items entirely.
-  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
+  //
+  // Scope: only multiline inline tables. For single-line inline tables the parser does NOT
+  // extract comments into root — any comment after `{ ... }` on the same line stays as a
+  // root-level item but is NOT associated with the inline table's items, so the
+  // `commentLine === removedLine` drop would incorrectly delete it.
+  if (isMultilineInlineContainer && hasItems(root) && root !== parent) {
     const removedLine = node.loc.start.line;
     const rootItems = (root as WithItems).items;
     const toRemove: number[] = [];
@@ -582,7 +601,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
       if (commentLine === removedLine) {
         // Comment was on the same line as the removed item — drop it.
         toRemove.push(i);
-      } else if (commentLine < removedLine) {
+      } else if (offset.lines !== 0 && commentLine < removedLine) {
         // Comment is before the removed line: pre-compensate so the bleedthrough
         // offset applied during applyWrites leaves it at its original position.
         (item as Comment).loc.start.line -= offset.lines;
