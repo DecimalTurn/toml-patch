@@ -53,7 +53,8 @@
     "build:demo": "node scripts/build-demo.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint:fix": "oxlint --fix",
+    "publish:jsr": "jsr publish --allow-dirty"
   },
   "devDependencies": {
     "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.1.1",
@@ -68,6 +69,7 @@
     "dedent": "^1.5.3",
     "glob": "^13.0.0",
     "jest": "^30.0.0",
+    "jsr": "^0.13.4",
     "js-yaml": "^4.0.0",
     "mri": "^1",
     "npm-run-all2": "^8.0.0",
