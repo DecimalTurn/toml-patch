@@ -489,17 +489,21 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     columns: keep_line ? -removed_span.columns : 0
   };
 
-  // If there is nothing left, don't perform any offsets
-  const hasRootInlineTableComments =
-    isInlineTable(parent) &&
-    hasItems(root) &&
-    root !== parent &&
-    (root as WithItems).items.some(item => isComment(item));
+  // If there is nothing left, don't perform any offsets.
+  //
+  // Exception: multiline inline containers (InlineTable / InlineArray whose opening
+  // and closing brackets are on different lines).  For those, `offset.lines` must
+  // stay intact so that `applyWrites` shifts the closing bracket up to close the
+  // gap left by the removed item.  Single-line containers are fine to zero because
+  // the bracket is on the same line as the (now-gone) item.
+  const isMultilineInlineContainer =
+    (isInlineTable(parent) || isInlineArray(parent)) &&
+    parent.loc.end.line > parent.loc.start.line;
 
   if (
     previous === undefined &&
     next === undefined &&
-    !hasRootInlineTableComments
+    !isMultilineInlineContainer
   ) {
     offset.lines = 0;
     offset.columns = 0;
