@@ -4,6 +4,30 @@ import { parse } from '../';
 import dedent from 'dedent';
 
 describe('inline comment alignment', () => {
+  test('should shift an entire comment group right when one row grows past the original alignment column', () => {
+    const existing = dedent`
+      # Baseline aligned comment group
+      short_label = "a"                # one
+      medium      = "bb"               # two
+      count       = 1                  # three
+      ` + '\n';
+
+    const value = parse(existing);
+
+    // This row grows beyond the original comment column and previously caused
+    // text/comment-column desync in normalizeInlineCommentAlignmentInString.
+    value.medium = 'a much longer value than before';
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      # Baseline aligned comment group
+      short_label = "a"                                             # one
+      medium      = "a much longer value than before"               # two
+      count       = 1                                               # three
+      ` + '\n');
+  });
+
   test('should preserve aligned inline comments when patching single-line basic strings, arrays and numbers with same width', () => {
     const existing = dedent`
       # Demo fixture covering strings, arrays and number value kinds
