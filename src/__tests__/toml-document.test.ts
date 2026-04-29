@@ -76,6 +76,56 @@ describe('TomlDocument', () => {
     expect(patched).toEqual('[x]\r\ny = 2\r\n');
   });
 
+  it('preserves trailing comments and values across successive patch calls on the same document', () => {
+    const toml = dedent`
+      short  = "a"                     # one
+      medium = "bb"                    # two
+      count  = 1                       # three
+    ` + '\n';
+
+    const doc = new TomlDocument(toml);
+
+    doc.patch({
+      short: 'a',
+      medium: 'a much longer value than before',
+      count: 1,
+    });
+    expect(doc.toJsObject).toEqual({
+      short: 'a',
+      medium: 'a much longer value than before',
+      count: 1,
+    });
+    expect((doc.toTomlString.match(/# one|# two|# three/g) || []).length).toBe(3);
+
+    doc.patch({
+      short: '# stays data',
+      medium: 'b',
+      count: 2,
+    });
+    expect(doc.toJsObject).toEqual({
+      short: '# stays data',
+      medium: 'b',
+      count: 2,
+    });
+    expect((doc.toTomlString.match(/# one|# two|# three/g) || []).length).toBe(3);
+    expect(doc.toTomlString).toContain('short  = "# stays data"');
+
+    doc.patch({
+      short: 'ok',
+      medium: 'bb',
+      count: 3,
+    });
+    expect(doc.toJsObject).toEqual({
+      short: 'ok',
+      medium: 'bb',
+      count: 3,
+    });
+    expect((doc.toTomlString.match(/# one|# two|# three/g) || []).length).toBe(3);
+    expect(doc.toTomlString).toContain('short  = "ok"');
+    expect(doc.toTomlString).toContain('medium = "bb"');
+    expect(doc.toTomlString).toContain('count  = 3');
+  });
+
   it('patches date field and preserves format in output', () => {
     const toml = dedent`
       # Event information

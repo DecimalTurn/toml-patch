@@ -213,6 +213,142 @@ describe('inline comment alignment', () => {
       ` + '\n');
   });
 
+  test('should preserve data when adjacent rows share identical trailing comment text', () => {
+    const existing = dedent`
+      short  = "a"                     # duplicate note
+      medium = "bb"                    # duplicate note
+      count  = 1                       # duplicate note
+      ` + '\n';
+
+    const value = parse(existing);
+    value.medium = 'a much longer value than before';
+
+    const patched = patch(existing, value);
+
+    expect(parse(patched)).toEqual({
+      short: 'a',
+      medium: 'a much longer value than before',
+      count: 1,
+    });
+    expect((patched.match(/# duplicate note/g) || []).length).toBe(3);
+    expect(patched).toContain('short  = "a"');
+    expect(patched).toContain('medium = "a much longer value than before"');
+    expect(patched).toContain('count  = 1');
+  });
+
+  test('should keep # inside string values as data while preserving aligned trailing comments', () => {
+    const existing = dedent`
+      alpha = "id#A"                   # inline note
+      beta  = "id#B"                   # inline note
+      gamma = 1                        # inline note
+      ` + '\n';
+
+    const value = parse(existing);
+    value.beta = 'payload#B#2026';
+    value.gamma = 2;
+
+    const patched = patch(existing, value);
+
+    expect(parse(patched)).toEqual({
+      alpha: 'id#A',
+      beta: 'payload#B#2026',
+      gamma: 2,
+    });
+    expect((patched.match(/# inline note/g) || []).length).toBe(3);
+    expect(patched).toContain('alpha = "id#A"');
+    expect(patched).toContain('beta  = "payload#B#2026"');
+    expect(patched).toContain('gamma = 2');
+  });
+
+  test('should not confuse full comment text inside a string value with the actual trailing comment', () => {
+    // The string value of alpha contains the FULL comment text "# inline note".
+    // resolveCommentColumn uses lastIndexOf so it must find the rightmost occurrence
+    // (the real trailing comment), not the one embedded in the quoted string.
+    // A regression to indexOf would return the wrong column and corrupt alignment.
+    const existing = dedent`
+      alpha = "# inline note"   # inline note
+      beta  = "B"               # inline note
+      gamma = 1                 # inline note
+      ` + '\n';
+
+    const value = parse(existing);
+    value.beta = 'much much longer value';
+    value.gamma = 2;
+
+    const patched = patch(existing, value);
+
+    expect(parse(patched)).toEqual({
+      alpha: '# inline note',
+      beta: 'much much longer value',
+      gamma: 2,
+    });
+    expect(patched).toEqual(dedent`
+      alpha = "# inline note"            # inline note
+      beta  = "much much longer value"   # inline note
+      gamma = 2                          # inline note
+      ` + '\n');
+  });
+
+  test('should not update trailing comments for inline tables', () => {
+
+    const existing = dedent`
+      alpha = "# inline note"   # inline note
+      beta  = { key1 = "B",     # inline note
+                key2 = "C" }    # inline note
+      gamma = 1                 # inline note
+      ` + '\n';
+
+    const value = parse(existing);
+    value.beta.key1 = 'much much longer value';
+    value.gamma = 21;
+
+    const patched = patch(existing, value);
+
+    expect(parse(patched)).toEqual({
+      alpha: '# inline note',
+      beta: { key1: 'much much longer value', key2: 'C' },
+      gamma: 21,
+    });
+    expect(patched).toEqual(dedent`
+      alpha = "# inline note"                      # inline note
+      beta  = { key1 = "much much longer value",   # inline note
+                key2 = "C" }                       # inline note
+      gamma = 21                                   # inline note
+      ` + '\n');
+  });
+
+
+  test('should preserve aligned comments when a string becomes multiline', () => {
+    const existing = dedent`
+      title   = "A"                    # one
+      details = """short"""            # two
+      count   = 1                      # three
+      feet    = 5                      # four
+      ` + '\n';
+
+    const value = parse(existing);
+    value.details = 'first line\nsecond # still data\nthird line';
+    value.count = 21;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+      title   = "A"                    # one
+      details = """first line
+      second # still data
+      third line"""                    # two
+      count   = 21                     # three
+      feet    = 5                      # four
+      ` + '\n');
+
+    expect(parse(patched)).toEqual({
+      title: 'A',
+      details: 'first line\nsecond # still data\nthird line',
+      count: 21,
+      feet: 5
+    });
+  });
+
   test('should not preserve aligned comment if only a regular comment is present', () => {
     const existing = dedent`
                                         # Demo fixture covering single-line inline tables
