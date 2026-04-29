@@ -238,15 +238,17 @@ export function preserveAlignedInlineCommentForDelta(
 }
 
 /**
- * Records the net width delta for a commented row whose value is a single-line
- * inline table and whose internal contents are being edited.
+ * Records baseline comment alignment metadata for a row whose value is a
+ * single-line inline table and whose internal contents are being edited.
  *
- * This is used by the final normalization pass to preserve the row's original
- * minimum gap while nested inline-table edits change the rendered width.
+ * This captures the comment's current column and reserved gap (comment start
+ * minus row end) so the final normalization pass can preserve spacing
+ * expectations after nested inline-table edits.
  *
  * @param container Parent container that owns the row.
- * @param row Key-value row whose trailing comment should track nested width changes.
- * @param deltaColumns Horizontal width delta introduced by the nested edit.
+ * @param row Key-value row whose trailing comment alignment metadata is refreshed.
+ * @param deltaColumns Horizontal width delta introduced by the nested edit; used
+ * only as a fast no-op guard when zero.
  */
 export function recordInlineTableCommentDelta(container: TreeNode, row: KeyValue, deltaColumns: number) {
   if (!hasItems(container) || deltaColumns === 0) return;
