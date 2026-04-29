@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Patching: New root-level key-values are now inserted at the top within the implicit root table scope (before the first `[table]` or `[[array]]` header) instead of being appended at the end of the document ([#171]).
 - Patching: Ensure deleting last key of inline-table is done cleanly ([#164]).
 - Patching: Preserving trailing comments on inline tables when deleting keys ([#164]).
 - Patching: Support nested multiline inline-table patching inside arrays ([#164]).
