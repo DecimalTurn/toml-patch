@@ -4330,21 +4330,28 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
+  // TODO: This test is currently skipped because the current implementation of patch() does not
+  // guarantee the order of root keys in the output. The test illustrates a desirable behavior
+  // where new root keys are added before existing inline-table since they appeared before
+  // the inline table in the patched object. Implementing this behavior would require a more
+  // complex diffing algorithm that takes into account the order of keys in the patched object,
+  // which is currently out of scope. For now, this test serves as a reminder of a potential
+  // improvement to the patching logic.
   test.skip('should add new root key-value before inline table if appearing before in the patched object', () => {
     const existing = dedent`
-      section = {
+      mytable = {
          key = "value"
       }
       ` + '\n';
 
     const patched = patch(existing, {
       new_root: 42,
-      section: { key: 'value' }
+      mytable: { key: 'value' }
     });
 
     expect(patched).toEqual(dedent`
       new_root = 42
-      section = {
+      mytable = {
          key = "value"
       }
     ` + '\n');
