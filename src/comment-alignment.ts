@@ -341,6 +341,43 @@ function collectSingleLineInlineTableCommentLines(
 }
 
 /**
+ * Recomputes `loc.end` for the document/table container chain from children.
+ *
+ * Inline comment normalization can move trailing comments horizontally; this
+ * keeps parent containers' end positions consistent with their updated children.
+ *
+ * @param node Document or table-like container to normalize.
+ */
+function recomputeContainerEnds(node: Document | Table | TableArray) {
+  for (const item of node.items) {
+    if (isTable(item) || isTableArray(item)) {
+      recomputeContainerEnds(item);
+    }
+  }
+
+  let maxLine = node.loc.end.line;
+  let maxColumn = node.loc.end.column;
+
+  const updateMax = (line: number, column: number) => {
+    if (line > maxLine || (line === maxLine && column > maxColumn)) {
+      maxLine = line;
+      maxColumn = column;
+    }
+  };
+
+  if (isTable(node) || isTableArray(node)) {
+    updateMax(node.key.loc.end.line, node.key.loc.end.column);
+  }
+
+  for (const item of node.items) {
+    updateMax(item.loc.end.line, item.loc.end.column);
+  }
+
+  node.loc.end.line = maxLine;
+  node.loc.end.column = maxColumn;
+}
+
+/**
  * Normalizes padded inline comment groups in the final rendered TOML string.
  *
  * This pass is intentionally limited to comments that already have explicit
@@ -476,6 +513,8 @@ export function normalizeInlineCommentAlignmentInString(
       }
     }
   }
+
+  recomputeContainerEnds(document);
 
   return lines.join(newLine) + trailing;
 }
