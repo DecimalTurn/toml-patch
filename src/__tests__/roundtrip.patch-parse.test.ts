@@ -1,4 +1,4 @@
-import { parse, patch } from '../';
+import { TomlDocument } from '../';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
 
@@ -13,12 +13,11 @@ function getTomlFiles(directoryPath: string): string[] {
 }
 
 /**
- * Runs a roundtrip patch-parse test on a TOML file
- * - Parses the original TOML to a JS object
- * - Adds a new root key-value pair to the JS object
- * - Patches the original TOML with the modified JS object
- * - Parses the patched TOML again
- * - Compares the re-parsed object with the expected modified JS object
+ * Runs a roundtrip patch-parse AST test on a TOML file
+ * - Parses the original TOML into a TomlDocument
+ * - Adds a new root key-value pair and patches the document
+ * - Stringifies the patched document and parses it into a second TomlDocument
+ * - Compares the two ASTs for equality
  */
 function testRoundtripPatchParse(filePath: string) {
   const filename = basename(filePath);
@@ -26,20 +25,16 @@ function testRoundtripPatchParse(filePath: string) {
   test(`roundtrip patch-parse: ${filename}`, () => {
     const tomlContent = readFileSync(filePath, 'utf8');
 
-    // Parse TOML to JS
-    const parsedObject = parse(tomlContent);
+    // Parse the original TOML and apply the patch
+    const doc = new TomlDocument(tomlContent);
+    const modifiedObject = { ...doc.toJsObject, roundtrip: 'test' };
+    doc.patch(modifiedObject);
 
-    // Add a new root key-value pair
-    const modifiedObject = { ...parsedObject, roundtrip: 'test' };
+    // Parse the patched TOML string into a fresh document
+    const reparsedDoc = new TomlDocument(doc.toTomlString);
 
-    // Patch the original TOML with the modified JS object
-    const patchedToml = patch(tomlContent, modifiedObject);
-
-    // Parse the patched TOML
-    const reparsedObject = parse(patchedToml);
-
-    // The re-parsed object should equal the modified object
-    expect(reparsedObject).toEqual(modifiedObject);
+    // The two ASTs should be identical
+    expect(reparsedDoc.ast).toEqual(doc.ast);
   });
 }
 
