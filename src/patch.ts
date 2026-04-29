@@ -322,7 +322,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             insert(original, original, table, undefined);
           }
         } else {
-          insert(original, parent, child, index);
+          // Root-level key-values belong to TOML's implicit root table, which
+          // spans from the start of the document up to (but not including) the
+          // first explicit section header ([table] or [[array]]). When the index
+          // is a string key, insert() falls back to parent.items.length —
+          // appending after all sections and silently nesting the new key under
+          // the last one. Clamp to the end of the root table scope instead.
+          // For non-KV children (e.g. table-array entries) the index was already
+          // resolved to a correct integer above, so leave it as-is.
+          let resolvedIndex = index;
+          if (isDocument(parent) && isKeyValue(child)) {
+            const rootTableEnd = (parent as Document).items.findIndex(
+              item => isTable(item) || isTableArray(item)
+            );
+            if (rootTableEnd !== -1) {
+              resolvedIndex = rootTableEnd;
+            }
+          }
+          insert(original, parent, child, resolvedIndex);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable

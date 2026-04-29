@@ -4309,3 +4309,133 @@ describe('Mixed line endings', () => {
     expect(patch(existing, obj)).toEqual('key = """updated\nvalue"""\n');
   });
 });
+
+describe('Root key-value placement', () => {
+  test('should add new root key-value before existing table section', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  // TODO: This test is currently skipped because the current implementation of patch() does not
+  // guarantee the order of root keys in the output. The test illustrates a desirable behavior
+  // where new root keys are added before existing inline-table since they appeared before
+  // the inline table in the patched object. Implementing this behavior would require a more
+  // complex diffing algorithm that takes into account the order of keys in the patched object,
+  // which is currently out of scope. For now, this test serves as a reminder of a potential
+  // improvement to the patching logic.
+  test.skip('should add new root key-value before inline table if appearing before in the patched object', () => {
+    const existing = dedent`
+      mytable = {
+         key = "value"
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      mytable: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+      mytable = {
+         key = "value"
+      }
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing table section - Even if the new key is added after the section in the patched object', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      section: { key: 'value' },
+      new_root: 42,
+    });
+
+    expect(patched).toEqual(dedent`
+      new_root = 42
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing table section while preserving existing root keys', () => {
+    const existing = dedent`
+      name = "foo"
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      name: 'foo',
+      project_doc_max_bytes: 65536,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      name = "foo"
+      project_doc_max_bytes = 65536
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('should add 2 new root key-value pairs before existing table section', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      name: 'foo',
+      age: 30,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      name = "foo"
+      age = 30
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('should add new root key-value before existing AOT section', () => {
+    const existing = dedent`
+      [[tasks]]
+      name = "build"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      version: '1.0.0',
+      tasks: [{ name: 'build' }]
+    });
+
+    expect(patched).toEqual(dedent`
+      version = "1.0.0"
+
+      [[tasks]]
+      name = "build"
+    ` + '\n');
+  });
+});
