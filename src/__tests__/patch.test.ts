@@ -4399,6 +4399,27 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
+  test('should add 2 new root key-value pairs before existing table section', () => {
+    const existing = dedent`
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const patched = patch(existing, {
+      name: 'foo',
+      age: 30,
+      section: { key: 'value' }
+    });
+
+    expect(patched).toEqual(dedent`
+      name = "foo"
+      age = 30
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
   test('should add new root key-value before existing AOT section', () => {
     const existing = dedent`
       [[tasks]]
