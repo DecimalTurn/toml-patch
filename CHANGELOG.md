@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Patching: Preserve trailing comments alignement when element of a row changes width ([#165]).
+
 ### Fixed
 
 - Patching: Ensure deleting last key of inline-table is done cleanly ([#164]).
@@ -243,3 +247,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#153]: https://github.com/DecimalTurn/toml-patch/pull/153
 [#158]: https://github.com/DecimalTurn/toml-patch/pull/158
 [#164]: https://github.com/DecimalTurn/toml-patch/pull/164
+[#165]: https://github.com/DecimalTurn/toml-patch/pull/165
