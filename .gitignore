@@ -1,4 +1,5 @@
-/dist
+dist/
+local/
 
 node_modules
 .DS_store
@@ -8,7 +9,7 @@ toml-patch.code-workspace
 *.tgz
 
 # Benchmark cache
-.bench-cache
+.bench-cache/
 
 # Profile outputs
 *.cpuprofile
