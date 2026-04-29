@@ -100,19 +100,17 @@ function applyInlineCommentColumnAdjustment(comment: Comment, targetColumn: numb
 }
 
 /**
- * Stores the original minimum spacing between a row and its trailing comment.
+ * Stores the current minimum spacing between a row and its trailing comment.
+ *
+ * This data is refreshed each time it is observed so reused AST comment nodes
+ * do not retain stale spacing or column values from a previous patch run.
  *
  * @param row Key-value row that owns the trailing comment.
  * @param comment Trailing inline comment attached to the row.
  */
 function rememberReservedCommentSpacing(row: KeyValue, comment: Comment) {
-  if (!original_comment_column.has(comment)) {
-    original_comment_column.set(comment, comment.loc.start.column);
-  }
-
-  if (!reserved_comment_spacing.has(comment)) {
-    reserved_comment_spacing.set(comment, comment.loc.start.column - row.loc.end.column);
-  }
+  original_comment_column.set(comment, comment.loc.start.column);
+  reserved_comment_spacing.set(comment, comment.loc.start.column - row.loc.end.column);
 }
 
 /**
