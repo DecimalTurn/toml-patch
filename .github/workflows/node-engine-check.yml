@@ -1,0 +1,152 @@
+name: Lowest Node Engine Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Build package tarball
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          CI: true
+
+      - name: Build package
+        run: pnpm run build
+
+      - name: Pack package tarball
+        run: pnpm pack --pack-destination ./pack
+
+      - name: Verify package tarball exists
+        shell: bash
+        run: |
+          ls -la ./pack
+          count=$(ls -1 ./pack/*.tgz 2>/dev/null | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "No .tgz file was produced in ./pack" >&2
+            exit 1
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-tarball
+          path: pack/*.tgz
+          if-no-files-found: error
+
+  probe:
+    name: Probe consumer on Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    needs: [package]
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["4","6","8","10","12","14", "16", "18", "20", "22", "24"]
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: package-tarball
+          path: ./pack
+
+      - name: Install package in consumer project
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p consumer-app
+          cd consumer-app
+          npm init -y
+          npm install ../pack/*.tgz
+
+      - name: Runtime consumer smoke test
+        id: smoke
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: |
+          cd consumer-app
+          node --input-type=module -e "import { parse, stringify, patch } from '@decimalturn/toml-patch'; const src = 'a = 1\n'; const parsed = parse(src); if (parsed.a !== 1) throw new Error('parse failed'); const out = stringify({ a: 1 }); if (!out.includes('a = 1')) throw new Error('stringify failed'); const patched = patch(src, { a: 2 }); if (!patched.includes('a = 2')) throw new Error('patch failed');"
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p probe-results
+          status="fail"
+          if [ "${{ steps.install.outcome }}" = "success" ] && [ "${{ steps.smoke.outcome }}" = "success" ]; then
+            status="pass"
+          fi
+          echo "${{ matrix.node-version }} ${status}" > "probe-results/node-${{ matrix.node-version }}.txt"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-check-${{ matrix.node-version }}
+          path: probe-results/node-${{ matrix.node-version }}.txt
+
+  report:
+    name: Report lowest supported Node
+    runs-on: ubuntu-latest
+    needs: [probe]
+    if: always()
+
+    steps:
+      - name: Download probe artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: node-check-*
+          merge-multiple: true
+          path: probe-results
+
+      - name: Summarize lowest passing version
+        shell: bash
+        run: |
+          if ! ls probe-results/*.txt >/dev/null 2>&1; then
+            echo "No probe artifacts found." >&2
+            exit 1
+          fi
+
+          sort -n probe-results/*.txt > probe-results/all-results.txt
+
+          echo "## Node compatibility probe" >> "$GITHUB_STEP_SUMMARY"
+          while read -r version status; do
+            echo "- Node ${version}: ${status}" >> "$GITHUB_STEP_SUMMARY"
+          done < probe-results/all-results.txt
+
+          lowest_pass=$(awk '$2 == "pass" { print $1; exit }' probe-results/all-results.txt)
+
+          if [ -z "$lowest_pass" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No tested Node version passed consumer install + runtime smoke test." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Lowest passing Node version: ${lowest_pass}" >> "$GITHUB_STEP_SUMMARY"
+          echo "LOWEST_SUPPORTED_NODE=${lowest_pass}" >> "$GITHUB_ENV"
+
+      - name: Print result
+        run: echo "Lowest supported Node is ${LOWEST_SUPPORTED_NODE}"
