@@ -30,7 +30,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem, generateTable, generateString } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -245,7 +245,7 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
   changes.forEach(change => {
     if (isAdd(change)) {
 
-      const child = findByPath(updated, change.path);
+      let child = findByPath(updated, change.path);
       const parent_path = change.path.slice(0, -1);
       let index = last(change.path)! as number;
 
@@ -254,6 +254,31 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
         const sibling = tryFindByPath(original, parent_path.concat(0));
         if (sibling && isTableArray(sibling)) {
           is_table_array = true;
+        }
+      }
+      // Also detect nested AOTs (e.g. fruit.1.variety) where parent_path contains
+      // integers but the immediate parent key is a string (like 'variety').
+      if (isInteger(index) && !is_table_array && !isInteger(last(parent_path))) {
+        const sibling = tryFindByPath(original, parent_path.concat(0));
+        if (sibling && isTableArray(sibling)) {
+          is_table_array = true;
+        }
+      }
+      // When is_table_array is true but the child from the updated document is not
+      // a TableArray block (e.g. parseJS inlined it because of inlineTableStart),
+      // regenerate a fresh TableArray from the JS value.
+      if (is_table_array && !isTableArray(child)) {
+        const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
+        let jsValue: any = updated_js;
+        for (const k of change.path) jsValue = jsValue?.[k];
+        if (jsValue !== undefined) {
+          const freshTableArray = generateTableArray(tableArrayKey);
+          const entryDoc = parseJS(jsValue, format);
+          for (const item of entryDoc.items) {
+            insert(original, freshTableArray, item, undefined);
+          }
+          applyWrites(freshTableArray);
+          child = freshTableArray;
         }
       }
 
