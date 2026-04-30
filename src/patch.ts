@@ -111,7 +111,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format);
+  const patched_document = applyChanges(existing_document, updated_document, updated_js, changes, format);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -231,7 +231,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
+function applyChanges(original: Document, updated: Document, updated_js: any, changes: Change[], format: TomlFormat): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -421,6 +421,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = existing.item;
         existing = existing.item.value;
         replacement = replacement.item.value;
+      } else if (isTable(existing)) {
+        // Type change: a block table section ([x.y.z.w]) is being replaced by a scalar value.
+        // The diff produces an Edit at path e.g. ['x','y','z','w'], where `existing` is the Table
+        // node and `replacement` (from the updated document) may be an InlineItem or KV that does
+        // not carry the full scope. Simply splicing it into the Document would lose the scope.
+        // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
+        let jsValue: any = updated_js;
+        for (const key of change.path) {
+          jsValue = jsValue?.[key];
+        }
+
+        if (jsValue !== undefined) {
+          const existingTableKey = (existing as Table).key.item.value;
+          const lastSegment = existingTableKey.slice(-1);
+          const parentKey = existingTableKey.slice(0, -1);
+          const tableParent = findParent(original, change.path);
+
+          // Regenerate a fresh KV using parseJS on just the single key-value
+          const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
+          const freshKV = freshDoc.items[0] as KeyValue;
+
+          if (parentKey.length > 0) {
+            const newTable = generateTable(parentKey);
+            insert(original, newTable, freshKV, 0);
+            replace(original, tableParent, existing, newTable);
+          } else {
+            // Single-segment table [w] — KV belongs directly in the Document
+            replace(original, tableParent, existing, freshKV);
+          }
+          return; // handled; skip the generic replace() below
+        }
+
+        // Could not resolve the JS value — fall back to generic handling
+        parent = findParent(original, change.path);
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits
