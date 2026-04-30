@@ -250,14 +250,9 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
       let index = last(change.path)! as number;
 
       let is_table_array = isTableArray(child);
-      if (isInteger(index) && !parent_path.some(isInteger)) {
-        const sibling = tryFindByPath(original, parent_path.concat(0));
-        if (sibling && isTableArray(sibling)) {
-          is_table_array = true;
-        }
-      }
-      // Also detect nested AOTs (e.g. fruit.1.variety) where parent_path contains
-      // integers but the immediate parent key is a string (like 'variety').
+      // Detect AOT append: the new entry is an integer index and the immediate
+      // parent key is a string (covers both top-level and nested AOTs such as
+      // [[fruit]] or [[fruit.variety]]).
       if (isInteger(index) && !is_table_array && !isInteger(last(parent_path))) {
         const sibling = tryFindByPath(original, parent_path.concat(0));
         if (sibling && isTableArray(sibling)) {
