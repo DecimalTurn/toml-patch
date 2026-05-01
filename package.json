@@ -25,6 +25,9 @@
     "decoder"
   ],
   "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=12"
+  },
   "type": "module",
   "types": "./dist/toml-patch.d.ts",
   "exports": {
