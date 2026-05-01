@@ -66,7 +66,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Download package artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: package-tarball
           path: ./pack
@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: node-check-${{ matrix.node-version }}
           path: probe-results/node-${{ matrix.node-version }}.txt
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Download probe artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: node-check-*
           merge-multiple: true
