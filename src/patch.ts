@@ -270,7 +270,7 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
           const freshTableArray = generateTableArray(tableArrayKey);
           const entryDoc = parseJS(jsValue, format);
           for (const item of entryDoc.items) {
-            insert(original, freshTableArray, item, undefined);
+            insert(freshTableArray, freshTableArray, item, undefined);
           }
           applyWrites(freshTableArray);
           child = freshTableArray;

@@ -292,6 +292,118 @@ test('spec example: add a new variety to the second fruit entry', () => {
   ]);
 });
 
+test('spec example: append nested AOT without collapsing later root table spacing', () => {
+  const input = dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [after]
+    value = 1
+  `;
+  const value = parse(input);
+  value.fruit[0].variety.push({ name: 'cavendish' });
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [[fruit.variety]]
+    name = "cavendish"
+
+    [after]
+    value = 1
+  `);
+});
+
+test('spec example: append nested AOT entry with multiple KVs and verify later section placement', () => {
+  // Exercises the freshTableArray span accounting: when a nested AOT entry is
+  // regenerated from scratch its KV items must not corrupt the position of
+  // subsequent root sections.
+  const input = dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [after]
+    key1 = "a"
+    key2 = "b"
+    key3 = "c"
+  `;
+  const value = parse(input);
+  value.fruit[0].variety.push({ name: 'cavendish', color: 'yellow', origin: 'ecuador', fresh: true, sku: 42 });
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [[fruit.variety]]
+    name = "cavendish"
+    color = "yellow"
+    origin = "ecuador"
+    fresh = true
+    sku = 42
+
+    [after]
+    key1 = "a"
+    key2 = "b"
+    key3 = "c"
+  `);
+});
+
+test('spec example: append multiple nested AOT entries and verify later section placement', () => {
+  const input = dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [after]
+    value = 1
+  `;
+  const value = parse(input);
+  value.fruit[0].variety.push({ name: 'cavendish' });
+  value.fruit[0].variety.push({ name: 'goldfinger' });
+  value.fruit[0].variety.push({ name: 'dwarf' });
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [[fruit]]
+    name = "banana"
+
+    [[fruit.variety]]
+    name = "plantain"
+
+    [[fruit.variety]]
+    name = "cavendish"
+
+    [[fruit.variety]]
+    name = "goldfinger"
+
+    [[fruit.variety]]
+    name = "dwarf"
+
+    [after]
+    value = 1
+  `);
+});
+
 // ---------------------------------------------------------------------------
 // Cross-section: add a root-level key alongside nested tables
 // ---------------------------------------------------------------------------
