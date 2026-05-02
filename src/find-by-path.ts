@@ -154,7 +154,9 @@ function findByPathInAotScope(
     }
 
     if (key.length && arraysEqual(key, remainingPath.slice(0, key.length))) {
-      return findByPath(item, remainingPath.slice(key.length));
+      try {
+        return findByPath(item, remainingPath.slice(key.length));
+      } catch {}
     }
   }
 
