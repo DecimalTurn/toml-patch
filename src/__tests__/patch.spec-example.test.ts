@@ -82,6 +82,54 @@ test('spec example: edit value in deeply nested implicit table x.y.z.w', () => {
 
 
 
+test('spec example: replace non-empty table with scalar and verify later section placement', () => {
+  // Exercises replace() span accounting: when a non-empty table is replaced by a
+  // scalar the stale newTable span must not corrupt following section positions.
+  const input = dedent`
+    [x.y.z.w]
+    a = 1
+    b = 2
+
+    [after]
+    value = 1
+  `;
+  const value = parse(input);
+  value.x.y.z.w = 'deep';
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [x.y.z]
+    w = "deep"
+
+    [after]
+    value = 1
+  `);
+});
+
+test('spec example: replace empty table with multi-KV object and verify later section placement', () => {
+  const input = dedent`
+    [x.y.z.w]
+
+    [after]
+    value = 1
+  `;
+  const value = parse(input);
+  value.x.y.z.w = { one: 1, two: 2, three: 3 };
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [x.y.z.w]
+    one = 1
+    two = 2
+    three = 3
+
+    [after]
+    value = 1
+  `);
+});
+
 test('spec example: add a key-value inside deeply nested implicit table x.y.z.w', () => {
   const value = parse(fixture);
   value.x.y.z.w.foo = 'deep';
