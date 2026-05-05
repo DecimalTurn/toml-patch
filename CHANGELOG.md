@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: Correctly append to nested AOT (array of tables) ([#176]).
+- Patching: Fixed `findByPath` scanning in AOT scope to continue looking at sibling entries after a partial prefix match fails ([#176]).
+- Patching: Support replacement of a entire table section with a scalar value ([#176]).
+
 ## [1.2.0] - 2026-04-29
 
 ### Added
