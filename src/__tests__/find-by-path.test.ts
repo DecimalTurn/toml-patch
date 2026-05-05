@@ -68,3 +68,29 @@ it('should find nodes within nested inline tables', () => {
   expect(cache.type).toEqual('InlineItem');
   expect(cache.item.value.type).toEqual('InlineTable');
 });
+
+it('should keep scanning AOT-scoped siblings after a shorter prefix match fails', () => {
+  const toml = dedent`
+    [[fruit]]
+    name = "apple"
+
+    [fruit.physical]
+    color = "red"
+
+    [fruit.physical.dimensions]
+    width = 10
+
+    [[fruit]]
+    name = "banana"
+    `;
+
+  const ast = parseTOML(toml);
+  const document: Document = {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    items: [...ast]
+  };
+
+  const width = findByPath(document, ['fruit', 0, 'physical', 'dimensions', 'width']) as any;
+  expect(width.value.value).toEqual(10);
+});

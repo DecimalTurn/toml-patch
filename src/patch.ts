@@ -30,7 +30,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem, generateTable, generateString } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -245,15 +245,36 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   changes.forEach(change => {
     if (isAdd(change)) {
 
-      const child = findByPath(updated, change.path);
+      let child = findByPath(updated, change.path);
       const parent_path = change.path.slice(0, -1);
       let index = last(change.path)! as number;
 
       let is_table_array = isTableArray(child);
-      if (isInteger(index) && !parent_path.some(isInteger)) {
+      // Detect AOT append: the new entry is an integer index and the immediate
+      // parent key is a string (covers both top-level and nested AOTs such as
+      // [[fruit]] or [[fruit.variety]]).
+      if (isInteger(index) && !is_table_array && !isInteger(last(parent_path))) {
         const sibling = tryFindByPath(original, parent_path.concat(0));
         if (sibling && isTableArray(sibling)) {
           is_table_array = true;
+        }
+      }
+      // When is_table_array is true but the child from the updated document is not
+      // a TableArray block (e.g. parseJS inlined it because of inlineTableStart),
+      // regenerate a fresh TableArray from the JS value.
+      if (is_table_array && !isTableArray(child)) {
+        const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
+        const updated_js = toJS(updated.items);
+        let jsValue: any = updated_js;
+        for (const k of change.path) jsValue = jsValue?.[k];
+        if (jsValue !== undefined) {
+          const freshTableArray = generateTableArray(tableArrayKey);
+          const entryDoc = parseJS(jsValue, format);
+          for (const item of entryDoc.items) {
+            insert(freshTableArray, freshTableArray, item, undefined);
+          }
+          applyWrites(freshTableArray);
+          child = freshTableArray;
         }
       }
 
@@ -421,6 +442,41 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = existing.item;
         existing = existing.item.value;
         replacement = replacement.item.value;
+      } else if (isTable(existing)) {
+        // Type change: a block table section (e.g: [x.y.z.w]) is being replaced by a scalar value.
+        // The diff produces an Edit at path e.g. ['x','y','z','w'], where `existing` is the Table
+        // node and `replacement` (from the updated document) may be an InlineItem or KV that does
+        // not carry the full scope. Simply splicing it into the Document would lose the scope.
+        // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
+        const updated_js = toJS(updated.items);
+        let jsValue: any = updated_js;
+        for (const key of change.path) {
+          jsValue = jsValue?.[key];
+        }
+
+        if (jsValue !== undefined) {
+          const existingTableKey = (existing as Table).key.item.value;
+          const lastSegment = existingTableKey.slice(-1);
+          const parentKey = existingTableKey.slice(0, -1);
+          const tableParent = findParent(original, change.path);
+
+          // Regenerate a fresh KV using parseJS on just the single key-value
+          const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
+          const freshKV = freshDoc.items[0] as KeyValue;
+
+          if (parentKey.length > 0) {
+            const newTable = generateTable(parentKey);
+            insert(original, newTable, freshKV, 0);
+            replace(original, tableParent, existing, newTable);
+          } else {
+            // Single-segment table [w] — KV belongs directly in the Document
+            replace(original, tableParent, existing, freshKV);
+          }
+          return; // handled; skip the generic replace() below
+        }
+
+        // Could not resolve the JS value — fall back to generic handling
+        parent = findParent(original, change.path);
       } else {
         parent = findParent(original, change.path);
         // Special handling for array element edits
