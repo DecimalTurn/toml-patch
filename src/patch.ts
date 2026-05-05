@@ -228,7 +228,8 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  *   { type: 'add', path: ['newKey'], value: 'newValue' },
  *   { type: 'edit', path: ['existingKey'], value: 'updatedValue' }
  * ];
- * const result = applyChanges(originalDoc, updatedDoc, changes, format);
+ * const updatedJs = { newKey: 'newValue', existingKey: 'updatedValue' };
+ * const result = applyChanges(originalDoc, updatedDoc, updatedJs, changes, format);
  * ```
  */
 function applyChanges(original: Document, updated: Document, updated_js: any, changes: Change[], format: TomlFormat): Document {
