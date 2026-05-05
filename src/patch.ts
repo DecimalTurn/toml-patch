@@ -111,7 +111,7 @@ export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { 
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, updated_js, changes, format);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -228,11 +228,10 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  *   { type: 'add', path: ['newKey'], value: 'newValue' },
  *   { type: 'edit', path: ['existingKey'], value: 'updatedValue' }
  * ];
- * const updatedJs = { newKey: 'newValue', existingKey: 'updatedValue' };
- * const result = applyChanges(originalDoc, updatedDoc, updatedJs, changes, format);
+ * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, updated_js: any, changes: Change[], format: TomlFormat): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -265,6 +264,7 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
       // regenerate a fresh TableArray from the JS value.
       if (is_table_array && !isTableArray(child)) {
         const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
+        const updated_js = toJS(updated.items);
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
@@ -443,11 +443,12 @@ function applyChanges(original: Document, updated: Document, updated_js: any, ch
         existing = existing.item.value;
         replacement = replacement.item.value;
       } else if (isTable(existing)) {
-        // Type change: a block table section ([x.y.z.w]) is being replaced by a scalar value.
+        // Type change: a block table section (e.g: [x.y.z.w]) is being replaced by a scalar value.
         // The diff produces an Edit at path e.g. ['x','y','z','w'], where `existing` is the Table
         // node and `replacement` (from the updated document) may be an InlineItem or KV that does
         // not carry the full scope. Simply splicing it into the Document would lose the scope.
         // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
+        const updated_js = toJS(updated.items);
         let jsValue: any = updated_js;
         for (const key of change.path) {
           jsValue = jsValue?.[key];
