@@ -1,0 +1,4 @@
+allowBuilds:
+  # post-install script is only needed for legacy npm versions and can be disabled for modern versions
+  # https://github.com/unrs/unrs-resolver/issues/193#issuecomment-4397843323
+  unrs-resolver: false
