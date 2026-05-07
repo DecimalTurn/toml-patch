@@ -186,6 +186,26 @@ function validateTimeRange(
   }
 }
 
+/** Validate that decimal integer contains only ASCII digits (0-9) and underscores. 
+    Only validates decimal integers, not prefixed (hex/octal/binary) ones. */
+function validateDecimalDigits(
+  raw: string, input: string, loc: any
+): void {
+  // Only validate if it's not a prefixed integer (hex/octal/binary)
+  if (IS_HEX.test(raw) || IS_OCTAL.test(raw) || IS_BINARY.test(raw)) {
+    return;
+  }
+  
+  // Remove sign, then validate only ASCII digits and underscores remain
+  const withoutSign = raw.replace(/^[+-]/, '');
+  const digitsOnly = withoutSign.replace(/_/g, '');
+  
+  // Check that all characters are ASCII digits (0-9)
+  if (!/^[0-9]+$/.test(digitsOnly)) {
+    throw new ParseError(input, loc, `Invalid integer "${raw}"`);
+  }
+}
+
 /**
  * Validate a prefixed integer (hex, octal, or binary).
  * @param prefix - lowercase prefix like "0x", "0o", "0b"
@@ -984,6 +1004,9 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
 
     // Validation: underscore placement
     validateUnderscores(raw, input, loc.start);
+    
+    // Validation: only ASCII digits allowed for decimal integers
+    validateDecimalDigits(raw, input, loc.start);
   }
 
   let radix = 10;
