@@ -320,11 +320,11 @@ export function* tokenize(input: string): IterableIterator<Token> {
       // Bare literals must not contain ASCII control chars.
       if (!(double_quoted || single_quoted)) {
         const cc = input.charCodeAt(pos);
-        if ((cc <= 0x1f || cc === CH_DEL) && cc !== CH_TAB && cc !== CH_CR && cc !== CH_LF) {
+        if (cc <= 0x1f || cc === CH_DEL) {
           throw new ParseError(
             input,
             findPosition(lines, pos),
-            `Control char 0x${cc.toString(16).toUpperCase().padStart(2, '0')} not allowed`
+            `Control char 0x${cc.toString(16).toUpperCase().padStart(2, '0')} not allowed in unquoted value`
           );
         }
       }
