@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Parsing: Strip leading UTF-8 BOM (byte order mark) from input strings and byte buffers.
-- Parsing: Reject disallowed control characters in bare tokens.
-- Parsing: Reject Arabic numerals and other Unicode digits in decimal integers per TOML spec.
+- Parsing: Strip leading UTF-8 BOM (byte order mark) from input strings and byte buffers ([#189]).
+- Parsing: Reject disallowed control characters in bare tokens ([#189]).
+- Parsing: Reject Arabic numerals and other Unicode digits in decimal integers ([#187]).
 
 ## [1.2.1] - 2026-05-05
 
@@ -265,3 +265,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#158]: https://github.com/DecimalTurn/toml-patch/pull/158
 [#164]: https://github.com/DecimalTurn/toml-patch/pull/164
 [#165]: https://github.com/DecimalTurn/toml-patch/pull/165
+[#176]: https://github.com/DecimalTurn/toml-patch/pull/176
+[#187]: https://github.com/DecimalTurn/toml-patch/pull/187
+[#189]: https://github.com/DecimalTurn/toml-patch/pull/189
