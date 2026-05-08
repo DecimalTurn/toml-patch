@@ -164,3 +164,8 @@ safe_min = -9007199254740991
   expect(parsed.safe_max).toBe(Number.MAX_SAFE_INTEGER);
   expect(parsed.safe_min).toBe(Number.MIN_SAFE_INTEGER);
 });
+
+test('it should accept string input that starts with UTF-8 BOM', () => {
+  const parsed = parse('\uFEFFa=1\n');
+  expect(parsed).toEqual({ a: 1 });
+});
