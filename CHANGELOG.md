@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-05-08
+
 ### Fixed
 
 - Parsing: Strip leading UTF-8 BOM (byte order mark) from input strings and byte buffers ([#189]).
