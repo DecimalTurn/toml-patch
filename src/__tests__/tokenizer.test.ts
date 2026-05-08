@@ -32,3 +32,7 @@ test('should tokenize complex input', () => {
 test('should handle escaped solidus', () => {
   expect([...tokenize(`a = "\\\\"`)]).toMatchSnapshot();
 });
+
+test('should reject vertical tab control character in bare number token', () => {
+  expect(() => [...tokenize('x = 1.5\u000B')]).toThrow();
+});
