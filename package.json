@@ -60,7 +60,7 @@
     "publish:jsr": "jsr publish --allow-dirty"
   },
   "devDependencies": {
-    "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.2.1",
+    "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@1.2.2",
     "@playwright/test": "^1.59.1",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
