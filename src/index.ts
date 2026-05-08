@@ -4,6 +4,7 @@ import toTOML from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
+import { decodeUtf8Bytes, stripLeadingBom } from './decode-utf8';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
 
@@ -36,8 +37,8 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
   const str = typeof value === 'string'
-    ? value
-    : new TextDecoder('utf-8', { fatal: true }).decode(value);
+    ? stripLeadingBom(value)
+    : decodeUtf8Bytes(value);
   return toJS(parseTOML(str), str, options?.integersAsBigInt ?? 'asNeeded');
 }
 

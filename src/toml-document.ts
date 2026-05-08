@@ -6,6 +6,7 @@ import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
+import { decodeUtf8Bytes, stripLeadingBom } from './decode-utf8';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -28,8 +29,8 @@ export class TomlDocument {
    */
   constructor(tomlSource: string | Uint8Array, options?: ParseOptions) {
     const tomlString = typeof tomlSource === 'string'
-      ? tomlSource
-      : new TextDecoder('utf-8', { fatal: true }).decode(tomlSource);
+      ? stripLeadingBom(tomlSource)
+      : decodeUtf8Bytes(tomlSource);
 
     this._currentTomlString = tomlString;
     this._ast = Array.from(parseTOML(tomlString));

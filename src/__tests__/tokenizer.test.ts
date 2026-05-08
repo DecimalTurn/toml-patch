@@ -32,3 +32,13 @@ test('should tokenize complex input', () => {
 test('should handle escaped solidus', () => {
   expect([...tokenize(`a = "\\\\"`)]).toMatchSnapshot();
 });
+
+test('should reject control characters in unquoted values', () => {
+  expect(() => [...tokenize('x = 1.5\u000B')]).toThrow(); // vertical tab
+  expect(() => [...tokenize('x = 1.5\u007F')]).toThrow(); // DEL
+  expect(() => [...tokenize('x = 1.5\u000C')]).toThrow(); // form feed
+});
+
+test('should reject control characters in comments', () => {
+  expect(() => [...tokenize('a = 1 # c\u007F')]).toThrow(); // DEL
+});
