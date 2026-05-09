@@ -37,9 +37,10 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
   const str = typeof value === 'string'
-    ? stripLeadingBom(value)
+    ? value
     : decodeUtf8Bytes(value);
-  return toJS(parseTOML(str), str, options?.integersAsBigInt ?? 'asNeeded');
+  const tomlString = stripLeadingBom(str);
+  return toJS(parseTOML(tomlString), tomlString, options?.integersAsBigInt ?? 'asNeeded');
 }
 
 /**

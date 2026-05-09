@@ -41,6 +41,24 @@ describe('TomlDocument', () => {
     expect(doc.toTomlString).toBe(simpleToml);
   });
 
+  it('preserves UTF-8 BOM when patching string input', () => {
+    const bomToml = '\uFEFFa = 1\n';
+    const doc = new TomlDocument(bomToml);
+
+    doc.patch({ a: 2 });
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 2\n');
+  });
+
+  it('preserves UTF-8 BOM when patching raw UTF-8 bytes', () => {
+    const bomBytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('a = 1\n')]);
+    const doc = new TomlDocument(bomBytes);
+
+    doc.patch({ a: 2 });
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 2\n');
+  });
+
   it('preserves newline and trailing newlines', () => {
     const toml = dedent`
       [a]

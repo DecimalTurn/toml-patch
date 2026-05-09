@@ -6,7 +6,7 @@ import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
-import { decodeUtf8Bytes, stripLeadingBom } from './decode-utf8';
+import { decodeUtf8Bytes, hasLeadingBom, hasLeadingUtf8BomBytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -16,6 +16,7 @@ export class TomlDocument {
   private _currentTomlString: string;
   private _format: TomlFormat;
   private _integersAsBigInt: IntegersAsBigInt;
+  private _hasUtf8Bom: boolean;
 
   /**
    * Initializes the TomlDocument with TOML source, parsing it into an AST.
@@ -28,9 +29,13 @@ export class TomlDocument {
    * @param options.integersAsBigInt - Controls bigint vs number for TOML integers
    */
   constructor(tomlSource: string | Uint8Array, options?: ParseOptions) {
-    const tomlString = typeof tomlSource === 'string'
-      ? stripLeadingBom(tomlSource)
+    const sourceString = typeof tomlSource === 'string'
+      ? tomlSource
       : decodeUtf8Bytes(tomlSource);
+    this._hasUtf8Bom = typeof tomlSource === 'string'
+      ? hasLeadingBom(sourceString)
+      : hasLeadingUtf8BomBytes(tomlSource);
+    const tomlString = stripLeadingBom(sourceString);
 
     this._currentTomlString = tomlString;
     this._ast = Array.from(parseTOML(tomlString));
@@ -40,7 +45,7 @@ export class TomlDocument {
   }
 
   get toTomlString(): string {
-    return this._currentTomlString;
+    return this._hasUtf8Bom ? `${UTF8_BOM}${this._currentTomlString}` : this._currentTomlString;
   }
 
   /**
@@ -85,14 +90,17 @@ export class TomlDocument {
    * @param tomlString - The modified TOML string to update with
    */
   update(tomlString: string): void {
-    if (tomlString === this.toTomlString) {
+    this._hasUtf8Bom = hasLeadingBom(tomlString);
+    const tomlContent = stripLeadingBom(tomlString);
+
+    if (tomlContent === this._currentTomlString) {
       return;
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this._format.newLine);
-    const newLineChar = detectNewline(tomlString);
-    const newTextLines = tomlString.split(newLineChar);
+    const existingLines = this._currentTomlString.split(this._format.newLine);
+    const newLineChar = detectNewline(tomlContent);
+    const newTextLines = tomlContent.split(newLineChar);
     let firstDiffLineIndex = 0;
     while (
       firstDiffLineIndex < existingLines.length &&
@@ -140,10 +148,10 @@ export class TomlDocument {
     const remainingToml = remainingLines.join(this._format.newLine);
     
     this._ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
-    this._currentTomlString = tomlString;
+    this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormat(tomlContent);
   }
 
   /**
@@ -152,16 +160,19 @@ export class TomlDocument {
    * @param tomlString - The TOML string to overwrite with
    */
   overwrite(tomlString: string): void {
-    if (tomlString === this.toTomlString) {
+    this._hasUtf8Bom = hasLeadingBom(tomlString);
+    const tomlContent = stripLeadingBom(tomlString);
+
+    if (tomlContent === this._currentTomlString) {
       return;
     }
 
     // Re-parse the entire document
-    this._ast = Array.from(parseTOML(tomlString));
-    this._currentTomlString = tomlString;
+    this._ast = Array.from(parseTOML(tomlContent));
+    this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormat(tomlContent);
   }
 }
 
