@@ -1,5 +1,5 @@
 import parseTOML from './parse-toml';
-import { hasLeadingBom, stripLeadingBom } from './decode-utf8';
+import { hasLeadingBom } from './decode-utf8';
 
 // Default formatting values
 export const DEFAULT_NEWLINE = '\n';
