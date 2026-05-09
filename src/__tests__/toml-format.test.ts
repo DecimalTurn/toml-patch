@@ -462,7 +462,8 @@ data = "test"`;
 
     test('should allow forced leading BOM override', () => {
       const toml = 'title = "No BOM"\n';
-      const format = TomlFormat.autoDetectFormat(toml, true);
+      const format = TomlFormat.autoDetectFormat(toml);
+      format.leadingBom = true; // Force leading BOM for testing
 
       expect(format.leadingBom).toBe(true);
     });

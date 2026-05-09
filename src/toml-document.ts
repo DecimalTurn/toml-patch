@@ -38,7 +38,8 @@ export class TomlDocument {
     this._ast = Array.from(parseTOML(tomlString));
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
-    this._format = TomlFormat.autoDetectFormat(sourceString, hasLeadingBom);
+    this._format = TomlFormat.autoDetectFormat(sourceString);
+    this._format.leadingBom = hasLeadingBom ?? this._format.leadingBom;
   }
 
   get toTomlString(): string {

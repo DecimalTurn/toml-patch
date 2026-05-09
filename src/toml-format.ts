@@ -497,24 +497,23 @@ export class TomlFormat {
    * // format.trailingNewline will be 0 (no trailing newline)
    * ```
    */
-  static autoDetectFormat(tomlString: string, forcedLeadingBom?: boolean): TomlFormat {
+  static autoDetectFormat(tomlString: string): TomlFormat {
     const format = TomlFormat.default();
-    const tomlContent = stripLeadingBom(tomlString);
-    format.leadingBom = forcedLeadingBom ?? hasLeadingBom(tomlString);
+    format.leadingBom = hasLeadingBom(tomlString);
     
     // Detect line ending style
-    format.newLine = detectNewline(tomlContent);
+    format.newLine = detectNewline(tomlString);
     
     // Detect trailing newline count
-    format.trailingNewline = countTrailingNewlines(tomlContent);
+    format.trailingNewline = countTrailingNewlines(tomlString);
     
     // Parse the TOML to detect comma and bracket spacing usage patterns
     try {
-      const ast = parseTOML(tomlContent);
+      const ast = parseTOML(tomlString);
       // Convert to array once to avoid consuming the iterator multiple times
       const astArray = Array.from(ast);
       format.trailingComma = detectTrailingComma(astArray);
-      format.bracketSpacing = detectBracketSpacing(tomlContent, astArray);
+      format.bracketSpacing = detectBracketSpacing(tomlString, astArray);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
@@ -523,7 +522,7 @@ export class TomlFormat {
     }
     
     // Detect if tabs are used for indentation
-    format.useTabsForIndentation = detectTabsForIndentation(tomlContent);
+    format.useTabsForIndentation = detectTabsForIndentation(tomlString);
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences
