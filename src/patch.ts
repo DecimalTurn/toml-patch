@@ -60,7 +60,7 @@ import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
  * @returns A new TOML string with the changes applied
  */
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const existing_ast = parseTOML(stripLeadingBom(existing));
+  const existing_ast = Array.from(parseTOML(stripLeadingBom(existing)));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormat(existing, existing_ast);
