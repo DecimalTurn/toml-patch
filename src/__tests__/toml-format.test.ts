@@ -442,6 +442,16 @@ data = "test"`;
       expect(format.trailingComma).toBe(true); // Should detect from multiple trailing commas
     });
 
+    test('should reuse an existing parse tree when auto-detecting format', () => {
+      const toml = 'title = "Cached"\narray = ["a", "b", ]\n';
+      const ast = Array.from(parseTOML(toml));
+      const format = TomlFormat.autoDetectFormat(toml, ast);
+
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(1);
+      expect(format.trailingComma).toBe(true);
+    });
+
     test('should handle malformed TOML gracefully', () => {
       const malformed = 'title = "Broken\n[unclosed section\narray = ["incomplete"';
       const format = TomlFormat.autoDetectFormat(malformed);

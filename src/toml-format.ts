@@ -497,7 +497,7 @@ export class TomlFormat {
    * // format.trailingNewline will be 0 (no trailing newline)
    * ```
    */
-  static autoDetectFormat(tomlString: string): TomlFormat {
+  static autoDetectFormat(tomlString: string, ast?: Iterable<any>): TomlFormat {
     const format = TomlFormat.default();
     format.leadingBom = hasLeadingBom(tomlString);
     // We need to strip the BOM in case parseTOML is called, since it doesn't expect it.
@@ -511,9 +511,9 @@ export class TomlFormat {
     
     // Parse the TOML to detect comma and bracket spacing usage patterns
     try {
-      const ast = parseTOML(tomlContent);
+      const astSource = ast ?? parseTOML(tomlContent);
       // Convert to array once to avoid consuming the iterator multiple times
-      const astArray = Array.from(ast);
+      const astArray = Array.from(astSource);
       format.trailingComma = detectTrailingComma(astArray);
       format.bracketSpacing = detectBracketSpacing(tomlContent, astArray);
     } catch (error) {
