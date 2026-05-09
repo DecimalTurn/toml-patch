@@ -470,6 +470,24 @@ data = "test"`;
       expect(format.newLine).toBe('\n');
     });
 
+    test('should detect leading BOM from inline input', () => {
+      const bomToml = '\uFEFFa = 1\n';
+      const format = TomlFormat.autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingComma).toBe(false);
+    });
+
+    test('should detect leading BOM with trailing commas', () => {
+      const bomToml = '\uFEFFarray = ["a", "b", ]\ntable = { x = 1, y = 2, }\n';
+      const format = TomlFormat.autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingComma).toBe(true);
+    });
+
     test('should allow forced leading BOM override', () => {
       const toml = 'title = "No BOM"\n';
       const format = TomlFormat.autoDetectFormat(toml);
