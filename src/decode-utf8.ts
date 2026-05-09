@@ -4,10 +4,10 @@
 export const UTF8_BOM = '\uFEFF';
 
 /**
- * Decodes UTF-8 bytes in fatal mode.
+ * Decodes UTF-8 bytes in fatal mode, preserving any leading BOM.
  */
 export function decodeUtf8Bytes(value: Uint8Array): string {
-  return new TextDecoder('utf-8', { fatal: true }).decode(value);
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(value);
 }
 
 /**

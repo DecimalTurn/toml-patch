@@ -1,5 +1,5 @@
 import parseTOML from './parse-toml';
-import { hasLeadingBom } from './decode-utf8';
+import { hasLeadingBom, stripLeadingBom } from './decode-utf8';
 
 // Default formatting values
 export const DEFAULT_NEWLINE = '\n';
@@ -500,20 +500,22 @@ export class TomlFormat {
   static autoDetectFormat(tomlString: string): TomlFormat {
     const format = TomlFormat.default();
     format.leadingBom = hasLeadingBom(tomlString);
+    // We need to strip the BOM in case parseTOML is called, since it doesn't expect it.
+    const tomlContent = stripLeadingBom(tomlString);
     
     // Detect line ending style
-    format.newLine = detectNewline(tomlString);
+    format.newLine = detectNewline(tomlContent);
     
     // Detect trailing newline count
-    format.trailingNewline = countTrailingNewlines(tomlString);
+    format.trailingNewline = countTrailingNewlines(tomlContent);
     
     // Parse the TOML to detect comma and bracket spacing usage patterns
     try {
-      const ast = parseTOML(tomlString);
+      const ast = parseTOML(tomlContent);
       // Convert to array once to avoid consuming the iterator multiple times
       const astArray = Array.from(ast);
       format.trailingComma = detectTrailingComma(astArray);
-      format.bracketSpacing = detectBracketSpacing(tomlString, astArray);
+      format.bracketSpacing = detectBracketSpacing(tomlContent, astArray);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
@@ -522,7 +524,7 @@ export class TomlFormat {
     }
     
     // Detect if tabs are used for indentation
-    format.useTabsForIndentation = detectTabsForIndentation(tomlString);
+    format.useTabsForIndentation = detectTabsForIndentation(tomlContent);
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences

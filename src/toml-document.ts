@@ -6,7 +6,7 @@ import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
-import { decodeUtf8Bytes, hasLeadingUtf8BomBytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -31,7 +31,6 @@ export class TomlDocument {
     const sourceString = typeof tomlSource === 'string'
       ? tomlSource
       : decodeUtf8Bytes(tomlSource);
-    const hasLeadingBom = typeof tomlSource === 'string' ? undefined : hasLeadingUtf8BomBytes(tomlSource);
     const tomlString = stripLeadingBom(sourceString);
 
     this._currentTomlString = tomlString;
@@ -39,7 +38,6 @@ export class TomlDocument {
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
     this._format = TomlFormat.autoDetectFormat(sourceString);
-    this._format.leadingBom = hasLeadingBom ?? this._format.leadingBom;
   }
 
   get toTomlString(): string {
