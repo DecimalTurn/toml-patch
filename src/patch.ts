@@ -44,7 +44,7 @@ import {
   recordInlineTableCommentDelta
 } from './comment-alignment';
 import { getSpan } from './location';
-import { hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -60,16 +60,15 @@ import { hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
  * @returns A new TOML string with the changes applied
  */
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const hasUtf8Bom = hasLeadingBom(existing);
   const existingToml = stripLeadingBom(existing);
   const existing_ast = parseTOML(existingToml);
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
-  const autoDetectedFormat = TomlFormat.autoDetectFormat(existingToml);
+  const autoDetectedFormat = TomlFormat.autoDetectFormat(existing);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
   const patchedToml = patchAst(existing_ast, updated, fmt).tomlString;
-  return hasUtf8Bom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
+  return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
 }
 
 export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {

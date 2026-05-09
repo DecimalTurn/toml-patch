@@ -451,6 +451,21 @@ data = "test"`;
       expect(format.trailingNewline).toBe(0);
       expect(format.trailingComma).toBe(false); // Fallback value
     });
+
+    test('should detect leading BOM from string input', () => {
+      const bomToml = '\uFEFFtitle = "BOM"\n';
+      const format = TomlFormat.autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+    });
+
+    test('should allow forced leading BOM override', () => {
+      const toml = 'title = "No BOM"\n';
+      const format = TomlFormat.autoDetectFormat(toml, true);
+
+      expect(format.leadingBom).toBe(true);
+    });
   });
 });
 
@@ -482,6 +497,10 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ bracketSpacing: false })).toEqual({ bracketSpacing: false });
     });
 
+    test('accepts boolean leadingBom', () => {
+      expect(validateFormatObject({ leadingBom: true })).toEqual({ leadingBom: true });
+    });
+
     test('accepts non-negative integer inlineTableStart', () => {
       expect(validateFormatObject({ inlineTableStart: 0 })).toEqual({ inlineTableStart: 0 });
       expect(validateFormatObject({ inlineTableStart: 3 })).toEqual({ inlineTableStart: 3 });
@@ -506,6 +525,7 @@ describe('validateFormatObject', () => {
         trailingNewline: 1,
         trailingComma: true,
         bracketSpacing: false,
+        leadingBom: true,
         inlineTableStart: 2,
         truncateZeroTimeInDates: true,
         useTabsForIndentation: false,
@@ -533,6 +553,11 @@ describe('validateFormatObject', () => {
     test('rejects non-boolean bracketSpacing', () => {
       expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(TypeError);
       expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(/bracketSpacing/);
+    });
+
+    test('rejects non-boolean leadingBom', () => {
+      expect(() => validateFormatObject({ leadingBom: 'yes' })).toThrow(TypeError);
+      expect(() => validateFormatObject({ leadingBom: 'yes' })).toThrow(/leadingBom/);
     });
 
     test('rejects negative inlineTableStart', () => {

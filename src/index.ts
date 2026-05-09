@@ -36,10 +36,10 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  * @returns The parsed JavaScript object
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
-  const str = typeof value === 'string'
+  const rawString = typeof value === 'string'
     ? value
     : decodeUtf8Bytes(value);
-  const tomlString = stripLeadingBom(str);
+  const tomlString = stripLeadingBom(rawString);
   return toJS(parseTOML(tomlString), tomlString, options?.integersAsBigInt ?? 'asNeeded');
 }
 
