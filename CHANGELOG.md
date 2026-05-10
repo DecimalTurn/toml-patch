@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-10
+
 ### Added
 
 - Formatting: Add `leadingBom` option to `TomlFormat` to preserve or add UTF-8 BOM (byte order mark) on output. This option is auto-detected from input strings and maintained through patch, stringify, and document update operations ([#198]).
