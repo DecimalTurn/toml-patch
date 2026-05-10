@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Formatting: Add `leadingBom` option to `TomlFormat` to preserve or add UTF-8 BOM (byte order mark) on output. This option is auto-detected from input strings and maintained through patch, stringify, and document update operations ([#198]).
+
 ## [1.2.2] - 2026-05-08
 
 ### Fixed
@@ -270,3 +274,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#176]: https://github.com/DecimalTurn/toml-patch/pull/176
 [#187]: https://github.com/DecimalTurn/toml-patch/pull/187
 [#189]: https://github.com/DecimalTurn/toml-patch/pull/189
+[#198]: https://github.com/DecimalTurn/toml-patch/pull/198

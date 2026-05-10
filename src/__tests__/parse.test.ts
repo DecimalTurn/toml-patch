@@ -169,3 +169,9 @@ test('it should accept string input that starts with UTF-8 BOM', () => {
   const parsed = parse('\uFEFFa=1\n');
   expect(parsed).toEqual({ a: 1 });
 });
+
+test('it should accept raw UTF-8 bytes that start with UTF-8 BOM', () => {
+  const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('a=1\n')]);
+  const parsed = parse(bytes);
+  expect(parsed).toEqual({ a: 1 });
+});

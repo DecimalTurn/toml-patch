@@ -1,3 +1,4 @@
+import { hasLeadingBom, stripLeadingBom } from './decode-utf8';
 import parseTOML from './parse-toml';
 
 // Default formatting values
@@ -9,13 +10,13 @@ export const DEFAULT_INLINE_TABLE_START = 1;
 export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
+export const DEFAULT_LEADING_BOM = false;
 
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
 export function detectTrailingComma(ast: Iterable<any>): boolean {
-  // Convert iterable to array and look for the first inline array or inline table to determine trailing comma preference
-  const items = Array.from(ast);
-  for (const item of items) {
+  // Look for the first inline array or inline table to determine trailing comma preference
+  for (const item of ast) {
     const result = findTrailingCommaInNode(item);
     if (result !== null) {
       return result;
@@ -28,9 +29,8 @@ export function detectTrailingComma(ast: Iterable<any>): boolean {
 // Detects if bracket spacing is used in inline arrays and tables by examining the raw string
 // Returns true if bracket spacing is found, false if not or no bracket structures found (default to true)
 export function detectBracketSpacing(tomlString: string, ast: Iterable<any>): boolean {
-  // Convert iterable to array and look for inline arrays and tables
-  const items = Array.from(ast);
-  for (const item of items) {
+  // Look for inline arrays and tables
+  for (const item of ast) {
     const result = findBracketSpacingInNode(item, tomlString);
     if (result !== null) {
       return result;
@@ -255,6 +255,7 @@ export function validateFormatObject(format: any): any {
     trailingNewline: v => typeof v === 'boolean' || typeof v === 'number' ? null : `expected boolean or number, got ${typeof v}`,
     trailingComma: isBool,
     bracketSpacing: isBool,
+    leadingBom: isBool,
     inlineTableStart: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     truncateZeroTimeInDates: isBool,
@@ -319,6 +320,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
         validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
         validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
+        validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
       );
     }
   } else {
@@ -368,6 +370,13 @@ export class TomlFormat {
    * - false: [1, 2, 3] and {x = 1, y = 2}
    */
   bracketSpacing: boolean;
+
+  /**
+   * Whether the output should include a leading UTF-8 BOM marker (U+FEFF).
+   *
+   * This is auto-detected from the source TOML and preserved during patching.
+   */
+  leadingBom: boolean;
 
   /**
    * The nesting depth at which new tables should start being formatted as inline tables.
@@ -429,7 +438,8 @@ export class TomlFormat {
     inlineTableStart?: number,
     truncateZeroTimeInDates?: boolean,
     useTabsForIndentation?: boolean,
-    minimumDecimals?: number
+    minimumDecimals?: number,
+    leadingBom?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
@@ -440,6 +450,7 @@ export class TomlFormat {
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
+    this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
   }
 
   /**
@@ -450,8 +461,11 @@ export class TomlFormat {
    *   - trailingNewline: 1
    *   - trailingComma: false
    *   - bracketSpacing: true
+   *   - leadingBom: false
    *   - inlineTableStart: 1
    *   - truncateZeroTimeInDates: false
+   *   - useTabsForIndentation: false
+   *   - minimumDecimals: 0
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -461,7 +475,9 @@ export class TomlFormat {
       DEFAULT_BRACKET_SPACING,
       DEFAULT_INLINE_TABLE_START,
       DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES,
-      DEFAULT_USE_TABS_FOR_INDENTATION
+      DEFAULT_USE_TABS_FOR_INDENTATION,
+      DEFAULT_MINIMUM_DECIMALS,
+      DEFAULT_LEADING_BOM
     );
   }
 
@@ -484,21 +500,40 @@ export class TomlFormat {
    * ```
    */
   static autoDetectFormat(tomlString: string): TomlFormat {
+    return TomlFormat.autoDetectFormatWithAst(tomlString);
+  }
+
+  /**
+   * Internal method: Auto-detects formatting preferences from a TOML string with optional pre-parsed AST.
+   * 
+   * This is used internally to avoid redundant parsing when the AST is already available.
+   * External callers should use `autoDetectFormat(tomlString)` instead.
+   * 
+   * @internal
+   * @param tomlString - The TOML string to analyze for formatting patterns
+   * @param syntaxTree - Optional pre-parsed AST to avoid redundant parsing
+   * @returns A new TomlFormat instance with detected formatting preferences
+   */
+  static autoDetectFormatWithAst(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
     const format = TomlFormat.default();
+    format.leadingBom = hasLeadingBom(tomlString);
+    // Strip the BOM before other formatting detection to avoid interference.
+    const tomlContent = stripLeadingBom(tomlString);
     
     // Detect line ending style
-    format.newLine = detectNewline(tomlString);
+    format.newLine = detectNewline(tomlContent);
     
     // Detect trailing newline count
-    format.trailingNewline = countTrailingNewlines(tomlString);
+    format.trailingNewline = countTrailingNewlines(tomlContent);
     
-    // Parse the TOML to detect comma and bracket spacing usage patterns
+    // Get TOML syntax tree to detect comma and bracket spacing usage patterns
     try {
-      const ast = parseTOML(tomlString);
-      // Convert to array once to avoid consuming the iterator multiple times
-      const astArray = Array.from(ast);
-      format.trailingComma = detectTrailingComma(astArray);
-      format.bracketSpacing = detectBracketSpacing(tomlString, astArray);
+      // Materialize only when needed so we can traverse the same AST twice.
+      const astNodes = Array.isArray(syntaxTree)
+        ? syntaxTree
+        : Array.from(syntaxTree ?? parseTOML(tomlContent));
+      format.trailingComma = detectTrailingComma(astNodes);
+      format.bracketSpacing = detectBracketSpacing(tomlContent, astNodes);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
@@ -507,7 +542,7 @@ export class TomlFormat {
     }
     
     // Detect if tabs are used for indentation
-    format.useTabsForIndentation = detectTabsForIndentation(tomlString);
+    format.useTabsForIndentation = detectTabsForIndentation(tomlContent);
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences

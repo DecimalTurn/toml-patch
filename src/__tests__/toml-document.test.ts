@@ -41,6 +41,50 @@ describe('TomlDocument', () => {
     expect(doc.toTomlString).toBe(simpleToml);
   });
 
+  it('preserves UTF-8 BOM when patching string input', () => {
+    const bomToml = '\uFEFFa = 1\n';
+    const doc = new TomlDocument(bomToml);
+
+    doc.patch({ a: 2 });
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 2\n');
+  });
+
+  it('preserves UTF-8 BOM when patching raw UTF-8 bytes', () => {
+    const bomBytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('a = 1\n')]);
+    const doc = new TomlDocument(bomBytes);
+
+    doc.patch({ a: 2 });
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 2\n');
+  });
+
+  it('update allows adding BOM when content is unchanged', () => {
+    const doc = new TomlDocument('a = 1\n');
+
+    doc.update('\uFEFFa = 1\n');
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 1\n');
+  });
+
+  it('update allows removing BOM when content is unchanged', () => {
+    const doc = new TomlDocument('\uFEFFa = 1\n');
+
+    doc.update('a = 1\n');
+
+    expect(doc.toTomlString).toBe('a = 1\n');
+  });
+
+  it('overwrite allows toggling BOM when content is unchanged', () => {
+    const doc = new TomlDocument('a = 1\n');
+
+    doc.overwrite('\uFEFFa = 1\n');
+    expect(doc.toTomlString).toBe('\uFEFFa = 1\n');
+
+    doc.overwrite('a = 1\n');
+    expect(doc.toTomlString).toBe('a = 1\n');
+  });
+
   it('preserves newline and trailing newlines', () => {
     const toml = dedent`
       [a]

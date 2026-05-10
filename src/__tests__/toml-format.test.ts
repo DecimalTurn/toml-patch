@@ -2,6 +2,11 @@ import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject 
 import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
+import { stripLeadingBom } from '../decode-utf8';
+
+function autoDetectFormat(toml: string) {
+  return TomlFormat.autoDetectFormatWithAst(toml, parseTOML(stripLeadingBom(toml)));
+}
 
 describe('TomlFormat comprehensive tests', () => {
   
@@ -337,7 +342,7 @@ describe('TomlFormat comprehensive tests', () => {
   describe('format preservation in roundtrip operations', () => {
     test('should preserve CRLF in autoDetectFormat roundtrip', () => {
       const original = 'key = "value"\r\n[section]\r\ndata = "test"\r\n\r\n';
-      const format = TomlFormat.autoDetectFormat(original);
+      const format = autoDetectFormat(original);
       const ast = parseTOML(original);
       const result = toTOML(ast, format);
       
@@ -348,7 +353,7 @@ describe('TomlFormat comprehensive tests', () => {
 
     test('should preserve trailing comma preference in autoDetectFormat roundtrip', () => {
       const original = 'arr = ["a", "b", ]\ntable = ["x", "y", ]\n';
-      const format = TomlFormat.autoDetectFormat(original);
+      const format = autoDetectFormat(original);
       const ast = parseTOML(original);
       const result = toTOML(ast, format);
       
@@ -358,14 +363,14 @@ describe('TomlFormat comprehensive tests', () => {
 
     test('should preserve no trailing comma preference', () => {
       const original = 'arr = ["a", "b"]\ntable = ["x", "y"]\n';
-      const format = TomlFormat.autoDetectFormat(original);
+      const format = autoDetectFormat(original);
       
       expect(format.trailingComma).toBe(false);
     });
 
     test('should preserve no trailing newlines in autoDetectFormat roundtrip', () => {
       const original = 'key = "value"';
-      const format = TomlFormat.autoDetectFormat(original);
+      const format = autoDetectFormat(original);
       const ast = parseTOML(original);
       const result = toTOML(ast, format);
       
@@ -375,7 +380,7 @@ describe('TomlFormat comprehensive tests', () => {
 
     test('should handle complex mixed formatting preservation', () => {
       const original = 'title = "Test"\r\narray = ["a", "b", ]\r\n[section]\r\nkey = "value"\r\n\r\n\r\n';
-      const format = TomlFormat.autoDetectFormat(original);
+      const format = autoDetectFormat(original);
       
       expect(format.newLine).toBe('\r\n');
       expect(format.trailingNewline).toBe(3);
@@ -407,7 +412,7 @@ describe('TomlFormat comprehensive tests', () => {
   describe('autoDetectFormat comprehensive scenarios', () => {
     test('should detect Windows-style formatting', () => {
       const windowsToml = 'title = "Windows"\r\narray = ["a", "b", ]\r\n\r\n';
-      const format = TomlFormat.autoDetectFormat(windowsToml);
+      const format = autoDetectFormat(windowsToml);
       
       expect(format.newLine).toBe('\r\n');
       expect(format.trailingNewline).toBe(2);
@@ -416,7 +421,7 @@ describe('TomlFormat comprehensive tests', () => {
 
     test('should detect minimal TOML formatting', () => {
       const minimal = 'key="value"';
-      const format = TomlFormat.autoDetectFormat(minimal);
+      const format = autoDetectFormat(minimal);
       
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(0);
@@ -435,21 +440,73 @@ table = { key = "value", num = 42, }
 [section]
 data = "test"`;
 
-      const format = TomlFormat.autoDetectFormat(complex);
+      const format = autoDetectFormat(complex);
       
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(0);
       expect(format.trailingComma).toBe(true); // Should detect from multiple trailing commas
     });
 
+    test('should reuse an existing parse tree when auto-detecting format', () => {
+      const toml = 'title = "Cached"\narray = ["a", "b", ]\n';
+      const ast = Array.from(parseTOML(toml));
+      const format = TomlFormat.autoDetectFormatWithAst(toml, ast);
+
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingNewline).toBe(1);
+      expect(format.trailingComma).toBe(true);
+    });
+
     test('should handle malformed TOML gracefully', () => {
       const malformed = 'title = "Broken\n[unclosed section\narray = ["incomplete"';
-      const format = TomlFormat.autoDetectFormat(malformed);
+      const format = autoDetectFormat(malformed);
       
       // Should still detect basic formatting and fallback to defaults for parsing errors
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(0);
       expect(format.trailingComma).toBe(false); // Fallback value
+    });
+
+    test('should detect leading BOM from string input', () => {
+      const bomToml = '\uFEFFtitle = "BOM"\n';
+      const format = autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+    });
+
+    test('should detect leading BOM from inline input', () => {
+      const bomToml = '\uFEFFa = 1\n';
+      const format = autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingComma).toBe(false);
+    });
+
+    test('should detect leading BOM with trailing commas', () => {
+      const bomToml = '\uFEFFarray = ["a", "b", ]\ntable = { x = 1, y = 2, }\n';
+      const format = autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.newLine).toBe('\n');
+      expect(format.trailingComma).toBe(true);
+    });
+
+    test('should detect tab indentation when BOM is present on a single-line document', () => {
+      const bomToml = '\uFEFF\tkey = "value"\n';
+      const format = autoDetectFormat(bomToml);
+
+      expect(format.leadingBom).toBe(true);
+      expect(format.useTabsForIndentation).toBe(true);
+    });
+
+    test('should allow forced leading BOM override', () => {
+      const toml = 'title = "No BOM"\n';
+      const format = autoDetectFormat(toml);
+      format.leadingBom = true; // Force leading BOM for testing
+
+      expect(format.leadingBom).toBe(true);
     });
   });
 });
@@ -482,6 +539,10 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ bracketSpacing: false })).toEqual({ bracketSpacing: false });
     });
 
+    test('accepts boolean leadingBom', () => {
+      expect(validateFormatObject({ leadingBom: true })).toEqual({ leadingBom: true });
+    });
+
     test('accepts non-negative integer inlineTableStart', () => {
       expect(validateFormatObject({ inlineTableStart: 0 })).toEqual({ inlineTableStart: 0 });
       expect(validateFormatObject({ inlineTableStart: 3 })).toEqual({ inlineTableStart: 3 });
@@ -506,6 +567,7 @@ describe('validateFormatObject', () => {
         trailingNewline: 1,
         trailingComma: true,
         bracketSpacing: false,
+        leadingBom: true,
         inlineTableStart: 2,
         truncateZeroTimeInDates: true,
         useTabsForIndentation: false,
@@ -533,6 +595,11 @@ describe('validateFormatObject', () => {
     test('rejects non-boolean bracketSpacing', () => {
       expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(TypeError);
       expect(() => validateFormatObject({ bracketSpacing: 'true' })).toThrow(/bracketSpacing/);
+    });
+
+    test('rejects non-boolean leadingBom', () => {
+      expect(() => validateFormatObject({ leadingBom: 'yes' })).toThrow(TypeError);
+      expect(() => validateFormatObject({ leadingBom: 'yes' })).toThrow(/leadingBom/);
     });
 
     test('rejects negative inlineTableStart', () => {

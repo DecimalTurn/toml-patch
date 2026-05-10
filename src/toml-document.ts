@@ -6,7 +6,7 @@ import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
-import { decodeUtf8Bytes, stripLeadingBom } from './decode-utf8';
+import { decodeUtf8Bytes, hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -28,19 +28,20 @@ export class TomlDocument {
    * @param options.integersAsBigInt - Controls bigint vs number for TOML integers
    */
   constructor(tomlSource: string | Uint8Array, options?: ParseOptions) {
-    const tomlString = typeof tomlSource === 'string'
-      ? stripLeadingBom(tomlSource)
+    const sourceString = typeof tomlSource === 'string'
+      ? tomlSource
       : decodeUtf8Bytes(tomlSource);
+    const tomlString = stripLeadingBom(sourceString);
 
     this._currentTomlString = tomlString;
     this._ast = Array.from(parseTOML(tomlString));
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
-    this._format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormatWithAst(sourceString, this._ast);
   }
 
   get toTomlString(): string {
-    return this._currentTomlString;
+    return this._format.leadingBom ? `${UTF8_BOM}${this._currentTomlString}` : this._currentTomlString;
   }
 
   /**
@@ -76,6 +77,7 @@ export class TomlDocument {
       fmt
     );
     this._ast = document.items;
+    this._format = fmt;
     this._currentTomlString = tomlString;
   }
 
@@ -85,14 +87,17 @@ export class TomlDocument {
    * @param tomlString - The modified TOML string to update with
    */
   update(tomlString: string): void {
-    if (tomlString === this.toTomlString) {
+    const tomlContent = stripLeadingBom(tomlString);
+
+    if (tomlContent === this._currentTomlString) {
+      this._format.leadingBom = hasLeadingBom(tomlString);
       return;
     }
 
     // Now, let's check where the first difference is
-    const existingLines = this.toTomlString.split(this._format.newLine);
-    const newLineChar = detectNewline(tomlString);
-    const newTextLines = tomlString.split(newLineChar);
+    const existingLines = this._currentTomlString.split(this._format.newLine);
+    const newLineChar = detectNewline(tomlContent);
+    const newTextLines = tomlContent.split(newLineChar);
     let firstDiffLineIndex = 0;
     while (
       firstDiffLineIndex < existingLines.length &&
@@ -140,28 +145,31 @@ export class TomlDocument {
     const remainingToml = remainingLines.join(this._format.newLine);
     
     this._ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
-    this._currentTomlString = tomlString;
+    this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
   }
 
   /**
-   * Overwrites the internal AST by fully re-parsing the supplied tomlString.
+   * Overwrites the internal syntax tree by fully re-parsing the supplied tomlString.
    * This is simpler but slower than update() which uses incremental parsing.
    * @param tomlString - The TOML string to overwrite with
    */
   overwrite(tomlString: string): void {
-    if (tomlString === this.toTomlString) {
+    const tomlContent = stripLeadingBom(tomlString);
+
+    if (tomlContent === this._currentTomlString) {
+      this._format.leadingBom = hasLeadingBom(tomlString);
       return;
     }
 
     // Re-parse the entire document
-    this._ast = Array.from(parseTOML(tomlString));
-    this._currentTomlString = tomlString;
+    this._ast = Array.from(parseTOML(tomlContent));
+    this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString);
+    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
   }
 }
 

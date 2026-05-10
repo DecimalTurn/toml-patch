@@ -4,7 +4,7 @@ import toTOML from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
-import { decodeUtf8Bytes, stripLeadingBom } from './decode-utf8';
+import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
 
@@ -36,10 +36,11 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  * @returns The parsed JavaScript object
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
-  const str = typeof value === 'string'
-    ? stripLeadingBom(value)
+  const rawString = typeof value === 'string'
+    ? value
     : decodeUtf8Bytes(value);
-  return toJS(parseTOML(str), str, options?.integersAsBigInt ?? 'asNeeded');
+  const tomlString = stripLeadingBom(rawString);
+  return toJS(parseTOML(tomlString), tomlString, options?.integersAsBigInt ?? 'asNeeded');
 }
 
 /**
@@ -53,7 +54,8 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
   const fmt = resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
-  return toTOML(document.items, fmt);
+  const tomlString = toTOML(document.items, fmt);
+  return fmt.leadingBom ? `${UTF8_BOM}${tomlString}` : tomlString;
 }
 
 export { default as patch } from './patch';

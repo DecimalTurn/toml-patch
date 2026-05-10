@@ -390,6 +390,7 @@ class TomlFormat {
   inlineTableStart?: number
   truncateZeroTimeInDates: boolean
   minimumDecimals?: number
+  leadingBom: boolean
 
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
@@ -465,6 +466,11 @@ const format = TomlFormat.default();
 format.bracketSpacing = true;   // [ 1, 2, 3 ] and { x = 1, y = 2 }
 format.bracketSpacing = false;  // [1, 2, 3] and {x = 1, y = 2}
 ```
+
+**leadingBom**
+- **Type:** `boolean`
+- **Default:** `false` (auto-detected from input)
+- **Description:** Whether to prepend a UTF-8 BOM (byte order mark, U+FEFF) to the output TOML. This is automatically detected from input strings and maintained through patch and stringify operations. 
 
 **inlineTableStart**
 - **Type:** `number` (optional)
