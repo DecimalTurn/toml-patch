@@ -1,4 +1,5 @@
 import { hasLeadingBom, stripLeadingBom } from './decode-utf8';
+import parseTOML from './parse-toml';
 
 // Default formatting values
 export const DEFAULT_NEWLINE = '\n';
@@ -496,7 +497,7 @@ export class TomlFormat {
    * // format.trailingNewline will be 0 (no trailing newline)
    * ```
    */
-  static autoDetectFormat(tomlString: string, syntaxTree: Iterable<any>): TomlFormat {
+  static autoDetectFormat(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
     const format = TomlFormat.default();
     format.leadingBom = hasLeadingBom(tomlString);
     // Strip the BOM before other formatting detection to avoid interference.
@@ -508,9 +509,9 @@ export class TomlFormat {
     // Detect trailing newline count
     format.trailingNewline = countTrailingNewlines(tomlContent);
     
-    // Parse the TOML to detect comma and bracket spacing usage patterns
+    // Get TOML syntax tree to detect comma and bracket spacing usage patterns
     try {
-      const astSource = syntaxTree;
+      const astSource = syntaxTree ?? Array.from(parseTOML(stripLeadingBom(tomlString)));
       // Convert to array once to avoid consuming the iterator multiple times
       const astArray = Array.from(astSource);
       format.trailingComma = detectTrailingComma(astArray);
