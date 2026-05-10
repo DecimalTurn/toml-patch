@@ -15,9 +15,8 @@ export const DEFAULT_LEADING_BOM = false;
 // Detects if trailing commas are used in the existing TOML by examining the AST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
 export function detectTrailingComma(ast: Iterable<any>): boolean {
-  // Convert iterable to array and look for the first inline array or inline table to determine trailing comma preference
-  const items = Array.from(ast);
-  for (const item of items) {
+  // Look for the first inline array or inline table to determine trailing comma preference
+  for (const item of ast) {
     const result = findTrailingCommaInNode(item);
     if (result !== null) {
       return result;
@@ -30,9 +29,8 @@ export function detectTrailingComma(ast: Iterable<any>): boolean {
 // Detects if bracket spacing is used in inline arrays and tables by examining the raw string
 // Returns true if bracket spacing is found, false if not or no bracket structures found (default to true)
 export function detectBracketSpacing(tomlString: string, ast: Iterable<any>): boolean {
-  // Convert iterable to array and look for inline arrays and tables
-  const items = Array.from(ast);
-  for (const item of items) {
+  // Look for inline arrays and tables
+  for (const item of ast) {
     const result = findBracketSpacingInNode(item, tomlString);
     if (result !== null) {
       return result;
@@ -530,11 +528,12 @@ export class TomlFormat {
     
     // Get TOML syntax tree to detect comma and bracket spacing usage patterns
     try {
-      const astSource = syntaxTree ?? Array.from(parseTOML(stripLeadingBom(tomlString)));
-      // Convert to array once to avoid consuming the iterator multiple times
-      const astArray = Array.from(astSource);
-      format.trailingComma = detectTrailingComma(astArray);
-      format.bracketSpacing = detectBracketSpacing(tomlContent, astArray);
+      // Materialize only when needed so we can traverse the same AST twice.
+      const astNodes = Array.isArray(syntaxTree)
+        ? syntaxTree
+        : Array.from(syntaxTree ?? parseTOML(tomlContent));
+      format.trailingComma = detectTrailingComma(astNodes);
+      format.bracketSpacing = detectBracketSpacing(tomlContent, astNodes);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
