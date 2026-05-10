@@ -77,6 +77,7 @@ export class TomlDocument {
       fmt
     );
     this._ast = document.items;
+    this._format = fmt;
     this._currentTomlString = tomlString;
   }
 
