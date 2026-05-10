@@ -159,6 +159,18 @@ test('should stringify special float values correctly', () => {
   expect(result).toEqual(expectedOutput);
 });
 
+test('should stringify with leading BOM when requested', () => {
+  const result = stringify({ a: 1 }, { leadingBom: true });
+
+  expect(result).toBe('\uFEFFa = 1\n');
+});
+
+test('should stringify without leading BOM by default', () => {
+  const result = stringify({ a: 1 });
+
+  expect(result).toBe('a = 1\n');
+});
+
 // Test for special float values in arrays
 test('should stringify arrays with special float values correctly', () => {
   const jsObject = {
