@@ -59,6 +59,32 @@ describe('TomlDocument', () => {
     expect(doc.toTomlString).toBe('\uFEFFa = 2\n');
   });
 
+  it('update allows adding BOM when content is unchanged', () => {
+    const doc = new TomlDocument('a = 1\n');
+
+    doc.update('\uFEFFa = 1\n');
+
+    expect(doc.toTomlString).toBe('\uFEFFa = 1\n');
+  });
+
+  it('update allows removing BOM when content is unchanged', () => {
+    const doc = new TomlDocument('\uFEFFa = 1\n');
+
+    doc.update('a = 1\n');
+
+    expect(doc.toTomlString).toBe('a = 1\n');
+  });
+
+  it('overwrite allows toggling BOM when content is unchanged', () => {
+    const doc = new TomlDocument('a = 1\n');
+
+    doc.overwrite('\uFEFFa = 1\n');
+    expect(doc.toTomlString).toBe('\uFEFFa = 1\n');
+
+    doc.overwrite('a = 1\n');
+    expect(doc.toTomlString).toBe('a = 1\n');
+  });
+
   it('preserves newline and trailing newlines', () => {
     const toml = dedent`
       [a]

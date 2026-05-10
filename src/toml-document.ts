@@ -6,7 +6,7 @@ import { patchAst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateAst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
-import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { decodeUtf8Bytes, hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
@@ -90,6 +90,7 @@ export class TomlDocument {
     const tomlContent = stripLeadingBom(tomlString);
 
     if (tomlContent === this._currentTomlString) {
+      this._format.leadingBom = hasLeadingBom(tomlString);
       return;
     }
 
@@ -151,7 +152,7 @@ export class TomlDocument {
   }
 
   /**
-   * Overwrites the internal AST by fully re-parsing the supplied tomlString.
+   * Overwrites the internal syntax tree by fully re-parsing the supplied tomlString.
    * This is simpler but slower than update() which uses incremental parsing.
    * @param tomlString - The TOML string to overwrite with
    */
@@ -159,6 +160,7 @@ export class TomlDocument {
     const tomlContent = stripLeadingBom(tomlString);
 
     if (tomlContent === this._currentTomlString) {
+      this._format.leadingBom = hasLeadingBom(tomlString);
       return;
     }
 
