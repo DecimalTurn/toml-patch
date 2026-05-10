@@ -497,7 +497,22 @@ export class TomlFormat {
    * // format.trailingNewline will be 0 (no trailing newline)
    * ```
    */
-  static autoDetectFormat(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
+  static autoDetectFormat(tomlString: string): TomlFormat {
+    return TomlFormat.autoDetectFormatWithAst(tomlString);
+  }
+
+  /**
+   * Internal method: Auto-detects formatting preferences from a TOML string with optional pre-parsed AST.
+   * 
+   * This is used internally to avoid redundant parsing when the AST is already available.
+   * External callers should use `autoDetectFormat(tomlString)` instead.
+   * 
+   * @internal
+   * @param tomlString - The TOML string to analyze for formatting patterns
+   * @param syntaxTree - Optional pre-parsed AST to avoid redundant parsing
+   * @returns A new TomlFormat instance with detected formatting preferences
+   */
+  static autoDetectFormatWithAst(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
     const format = TomlFormat.default();
     format.leadingBom = hasLeadingBom(tomlString);
     // Strip the BOM before other formatting detection to avoid interference.

@@ -63,7 +63,7 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   const existing_ast = Array.from(parseTOML(stripLeadingBom(existing)));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
-  const autoDetectedFormat = TomlFormat.autoDetectFormat(existing, existing_ast);
+  const autoDetectedFormat = TomlFormat.autoDetectFormatWithAst(existing, existing_ast);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
   const patchedToml = patchAst(existing_ast, updated, fmt).tomlString;

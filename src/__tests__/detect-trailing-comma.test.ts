@@ -3,7 +3,7 @@ import { TomlFormat } from '../toml-format';
 import parseTOML from '../parse-toml';
 
 function autoDetectFormat(toml: string) {
-  return TomlFormat.autoDetectFormat(toml, parseTOML(toml));
+  return TomlFormat.autoDetectFormatWithAst(toml, parseTOML(toml));
 }
 
 describe('detectTrailingComma', () => {

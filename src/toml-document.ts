@@ -37,7 +37,7 @@ export class TomlDocument {
     this._ast = Array.from(parseTOML(tomlString));
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
-    this._format = TomlFormat.autoDetectFormat(sourceString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithAst(sourceString, this._ast);
   }
 
   get toTomlString(): string {
@@ -148,7 +148,7 @@ export class TomlDocument {
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
   }
 
   /**
@@ -169,7 +169,7 @@ export class TomlDocument {
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormat(tomlString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
   }
 }
 

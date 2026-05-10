@@ -5,7 +5,7 @@ import toTOML from '../to-toml';
 import { stripLeadingBom } from '../decode-utf8';
 
 function autoDetectFormat(toml: string) {
-  return TomlFormat.autoDetectFormat(toml, parseTOML(stripLeadingBom(toml)));
+  return TomlFormat.autoDetectFormatWithAst(toml, parseTOML(stripLeadingBom(toml)));
 }
 
 describe('TomlFormat comprehensive tests', () => {
@@ -450,7 +450,7 @@ data = "test"`;
     test('should reuse an existing parse tree when auto-detecting format', () => {
       const toml = 'title = "Cached"\narray = ["a", "b", ]\n';
       const ast = Array.from(parseTOML(toml));
-      const format = TomlFormat.autoDetectFormat(toml, ast);
+      const format = TomlFormat.autoDetectFormatWithAst(toml, ast);
 
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(1);
