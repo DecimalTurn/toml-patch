@@ -18,7 +18,7 @@ export function hasLeadingBom(value: string): boolean {
 }
 
 /**
- * Returns true when raw bytes start with an UTF-8 BOM prefix.
+ * Returns true when raw bytes start with a UTF-8 BOM prefix.
  */
 export function hasLeadingUtf8BomBytes(value: Uint8Array): boolean {
   return value.length >= 3 && value[0] === 0xef && value[1] === 0xbb && value[2] === 0xbf;

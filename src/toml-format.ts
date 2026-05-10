@@ -318,11 +318,11 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
         validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
         validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
-        validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
         validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
         validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
         validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
         validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
+        validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
       );
     }
   } else {
@@ -437,22 +437,22 @@ export class TomlFormat {
     trailingNewline?: number,
     trailingComma?: boolean,
     bracketSpacing?: boolean,
-    leadingBom?: boolean,
     inlineTableStart?: number,
     truncateZeroTimeInDates?: boolean,
     useTabsForIndentation?: boolean,
-    minimumDecimals?: number
+    minimumDecimals?: number,
+    leadingBom?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
-    this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
+    this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
   }
 
   /**
@@ -463,8 +463,11 @@ export class TomlFormat {
    *   - trailingNewline: 1
    *   - trailingComma: false
    *   - bracketSpacing: true
+   *   - leadingBom: false
    *   - inlineTableStart: 1
    *   - truncateZeroTimeInDates: false
+   *   - useTabsForIndentation: false
+   *   - minimumDecimals: 0
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -472,10 +475,11 @@ export class TomlFormat {
       DEFAULT_TRAILING_NEWLINE,
       DEFAULT_TRAILING_COMMA,
       DEFAULT_BRACKET_SPACING,
-      DEFAULT_LEADING_BOM,
       DEFAULT_INLINE_TABLE_START,
       DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES,
-      DEFAULT_USE_TABS_FOR_INDENTATION
+      DEFAULT_USE_TABS_FOR_INDENTATION,
+      DEFAULT_MINIMUM_DECIMALS,
+      DEFAULT_LEADING_BOM
     );
   }
 
