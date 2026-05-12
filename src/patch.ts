@@ -126,9 +126,6 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   };
 }
 
-/** @deprecated Use patchCst instead. */
-export const patchAst = patchCst;
-
 function reorder(changes: Change[]): Change[] {
   //Reorder deletions among themselves to avoid index issues
   // We want the path to be looking at the last item in the array first and go down from there

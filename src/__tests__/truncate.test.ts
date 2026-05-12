@@ -4,7 +4,7 @@ import toJS from '../to-js';
 import { NodeType } from '../ast';
 import dedent from 'dedent';
 
-describe('truncateAst', () => {
+describe('truncateCst', () => {
   it('truncates CST at specified position', () => {
     const toml = dedent`
       [section1]
@@ -18,7 +18,7 @@ describe('truncateAst', () => {
     // Truncate at line 3 (before section2)
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 3, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({
       section1: { key1: 'value1' }
     });
@@ -38,7 +38,7 @@ describe('truncateAst', () => {
     // Truncate at a position beyond the document
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 100, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({
       section1: { key1: 'value1' },
       section2: { key2: 'value2' }
@@ -56,7 +56,7 @@ describe('truncateAst', () => {
     // Truncate at line 0 (before everything)
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 0, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({});
     expect(lastEndPosition).toBeNull();
   });
@@ -97,7 +97,7 @@ describe('truncateAst', () => {
     // So only "a = 1" which ends at line 1
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 2, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({ a: 1 });
     expect(lastEndPosition).not.toBeNull();
   });
@@ -118,7 +118,7 @@ describe('truncateAst', () => {
     // Truncate to include only first two products
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 6, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({
       products: [
         { name: 'Product 1' },
@@ -146,7 +146,7 @@ describe('truncateAst', () => {
     // So only [parent.child1] which ends at line 2
     const { truncatedCst, lastEndPosition } = truncateCst(cst, 5, 0);
     
-    const result = toJS(truncatedAst);
+    const result = toJS(truncatedCst);
     expect(result).toEqual({
       parent: {
         child1: { key1: 1 }

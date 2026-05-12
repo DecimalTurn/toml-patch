@@ -34,9 +34,6 @@ export enum NodeType {
 //
 export type CST = Iterable<Block>;
 
-/** @deprecated Use CST instead. */
-export type AST = CST;
-
 //
 // Document
 //

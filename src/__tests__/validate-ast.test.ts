@@ -212,7 +212,7 @@ function expectConsistent(toml: string, updated: any) {
 // ---------------------------------------------------------------------------
 
 /**
- * These tests check whether the CST returned by patchAst() has consistent
+ * These tests check whether the CST returned by patchCst() has consistent
  * position metadata after modifications (no parent-child location overlaps).
  *
  * The TOML string output is always correct — toTOML serializes from the CST

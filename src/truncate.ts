@@ -55,8 +55,6 @@ function shouldIncludeBlock(node: Block, limit: Position): boolean {
  */
 export function truncateCst(cst: CST, line: number, column: number): {
   truncatedCst: CST;
-  /** @deprecated Use truncatedCst instead. */
-  truncatedAst: CST;
   lastEndPosition: Position | null 
 } {
   const limit: Position = { line, column };
@@ -85,7 +83,6 @@ export function truncateCst(cst: CST, line: number, column: number): {
   
   return {
     truncatedCst: nodes,
-    truncatedAst: nodes,
     lastEndPosition
   };
 }
@@ -121,13 +118,4 @@ export function findLastNodeBeforePosition(cst: CST, line: number, column: numbe
   }
   
   return lastNode;
-}
-
-/** @deprecated Use truncateCst instead. */
-export function truncateAst(cst: CST, line: number, column: number): {
-  truncatedAst: CST;
-  lastEndPosition: Position | null;
-} {
-  const { truncatedCst, lastEndPosition } = truncateCst(cst, line, column);
-  return { truncatedAst: truncatedCst, lastEndPosition };
 }
