@@ -61,16 +61,6 @@ export class TomlDocument {
     return this._cst;
   }
 
-  /** @deprecated Use cst instead. */
-  get CST(): Block[] {
-    return this._cst;
-  }
-
-  /** @deprecated Use cst instead. */
-  get ast(): Block[] {
-    return this._cst;
-  }
-
   /**
    * Applies a patch to the current CST using a modified JS object.
    * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
