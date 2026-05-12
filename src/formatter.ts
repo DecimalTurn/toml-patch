@@ -10,7 +10,7 @@ import {
   isTableArray,
   Document,
   TreeNode
-} from './ast';
+} from './cst';
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
 import { TomlFormat } from './toml-format';

@@ -1,5 +1,5 @@
 import { generateString } from '../generate';
-import { NodeType } from '../ast';
+import { NodeType } from '../cst';
 
 describe('generateString', () => {
   describe('with multiline basic string format preservation', () => {

@@ -8,7 +8,7 @@ import {
   generateDocument
 } from '../generate';
 import { TomlFormat } from '../toml-format';
-import { String as StringNode, NodeType } from '../ast';
+import { String as StringNode, NodeType } from '../cst';
 
 test('it should insert elements into empty inline array', () => {
   const inline_array = generateInlineArray();

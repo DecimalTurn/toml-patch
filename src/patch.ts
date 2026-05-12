@@ -25,7 +25,7 @@ import {
   Table,
   Value,
   isDateTime
-} from './ast';
+} from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';

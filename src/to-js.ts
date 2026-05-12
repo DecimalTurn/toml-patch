@@ -1,4 +1,4 @@
-import { Value, NodeType, TreeNode, CST, InlineTable, Table, TableArray, KeyValue } from './ast';
+import { Value, NodeType, TreeNode, CST, InlineTable, Table, TableArray, KeyValue } from './cst';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
 import { IntegersAsBigInt } from './parse-options';

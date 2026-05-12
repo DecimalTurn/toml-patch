@@ -1,7 +1,7 @@
 import parseTOML from '../parse-toml';
 import { truncateCst, findLastNodeBeforePosition } from '../truncate';
 import toJS from '../to-js';
-import { NodeType } from '../ast';
+import { NodeType } from '../cst';
 import dedent from 'dedent';
 
 describe('truncateCst', () => {

@@ -1,7 +1,7 @@
 import findByPath from '../find-by-path';
 import parseTOML from '../parse-toml';
 import { example } from '../__fixtures__';
-import { Document, NodeType } from '../ast';
+import { Document, NodeType } from '../cst';
 import dedent from 'dedent';
 
 it('should find node by path', () => {

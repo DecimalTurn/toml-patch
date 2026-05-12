@@ -1,4 +1,4 @@
-import { Value, KeyValue, Document, InlineArray, InlineTable } from './ast';
+import { Value, KeyValue, Document, InlineArray, InlineTable } from './cst';
 import {
   generateDocument,
   generateKeyValue,

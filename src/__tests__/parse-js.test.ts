@@ -2,7 +2,7 @@ import parseJS from '../parse-js';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import dedent from 'dedent';
-import { NodeType, CST, Document } from '../ast';
+import { NodeType, CST, Document } from '../cst';
 import { TomlFormat } from '../toml-format';
 
 function toDocument(cst: CST): Document {

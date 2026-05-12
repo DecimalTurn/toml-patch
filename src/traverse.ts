@@ -18,7 +18,7 @@ import {
   InlineArray,
   InlineTable,
   InlineItem
-} from './ast';
+} from './cst';
 import { isIterable } from './utils';
 
 export type Visit<TNode = TreeNode> = (node: TNode, parent: TNode | null) => void;

@@ -28,7 +28,7 @@ import {
   Block,
   isBlock,
   WithItems
-} from './ast';
+} from './cst';
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
 import traverse from './traverse';

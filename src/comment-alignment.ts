@@ -26,7 +26,7 @@ import {
   isKeyValue,
   isTable,
   isTableArray
-} from './ast';
+} from './cst';
 import { getSpan } from './location';
 import { TomlFormat } from './toml-format';
 

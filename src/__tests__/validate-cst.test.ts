@@ -1,7 +1,7 @@
 import {
   Document, NodeType, TreeNode, Table, TableArray,
   InlineArray, InlineTable, InlineItem, KeyValue
-} from '../ast';
+} from '../cst';
 import { Location, Position } from '../location';
 import parseTOML from '../parse-toml';
 import { patchCst } from '../patch';

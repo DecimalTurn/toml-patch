@@ -17,7 +17,7 @@ import {
   Comment,
   CST,
   Block
-} from './ast';
+} from './cst';
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';

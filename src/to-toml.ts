@@ -18,7 +18,7 @@ import {
   InlineTable,
   InlineItem,
   Comment
-} from './ast';
+} from './cst';
 import { Location } from './location';
 import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';

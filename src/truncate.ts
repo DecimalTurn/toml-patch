@@ -1,4 +1,4 @@
-import { CST, Block } from './ast';
+import { CST, Block } from './cst';
 import { Position } from './location';
 
 /**

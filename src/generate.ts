@@ -22,7 +22,7 @@ import {
   InlineItem,
   InlineTable,
   Comment
-} from './ast';
+} from './cst';
 import { zero, cloneLocation, clonePosition, Position } from './location';
 import { LocalDate } from './parse-toml';
 import { shiftNode } from './writer';
