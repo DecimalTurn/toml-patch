@@ -86,6 +86,6 @@ export { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './parse-tom
 export { TomlFormat } from './toml-format';
 
 /**
- * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
+ * TomlDocument encapsulates a TOML CST and provides methods to interact with it.
  */
 export { TomlDocument } from './toml-document';

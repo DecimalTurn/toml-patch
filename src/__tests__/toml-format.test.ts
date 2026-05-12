@@ -5,7 +5,7 @@ import toTOML from '../to-toml';
 import { stripLeadingBom } from '../decode-utf8';
 
 function autoDetectFormat(toml: string) {
-  return TomlFormat.autoDetectFormatWithAst(toml, parseTOML(stripLeadingBom(toml)));
+  return TomlFormat.autoDetectFormatWithCst(toml, parseTOML(stripLeadingBom(toml)));
 }
 
 describe('TomlFormat comprehensive tests', () => {
@@ -343,8 +343,8 @@ describe('TomlFormat comprehensive tests', () => {
     test('should preserve CRLF in autoDetectFormat roundtrip', () => {
       const original = 'key = "value"\r\n[section]\r\ndata = "test"\r\n\r\n';
       const format = autoDetectFormat(original);
-      const ast = parseTOML(original);
-      const result = toTOML(ast, format);
+      const cst = parseTOML(original);
+      const result = toTOML(cst, format);
       
       expect(format.newLine).toBe('\r\n');
       expect(format.trailingNewline).toBe(2);
@@ -354,8 +354,8 @@ describe('TomlFormat comprehensive tests', () => {
     test('should preserve trailing comma preference in autoDetectFormat roundtrip', () => {
       const original = 'arr = ["a", "b", ]\ntable = ["x", "y", ]\n';
       const format = autoDetectFormat(original);
-      const ast = parseTOML(original);
-      const result = toTOML(ast, format);
+      const cst = parseTOML(original);
+      const result = toTOML(cst, format);
       
       expect(format.trailingComma).toBe(true);
       expect(result).toBe(original);
@@ -371,8 +371,8 @@ describe('TomlFormat comprehensive tests', () => {
     test('should preserve no trailing newlines in autoDetectFormat roundtrip', () => {
       const original = 'key = "value"';
       const format = autoDetectFormat(original);
-      const ast = parseTOML(original);
-      const result = toTOML(ast, format);
+      const cst = parseTOML(original);
+      const result = toTOML(cst, format);
       
       expect(format.trailingNewline).toBe(0);
       expect(result).toBe(original);
@@ -449,8 +449,8 @@ data = "test"`;
 
     test('should reuse an existing parse tree when auto-detecting format', () => {
       const toml = 'title = "Cached"\narray = ["a", "b", ]\n';
-      const ast = Array.from(parseTOML(toml));
-      const format = TomlFormat.autoDetectFormatWithAst(toml, ast);
+      const cst = Array.from(parseTOML(toml));
+      const format = TomlFormat.autoDetectFormatWithCst(toml, cst);
 
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(1);

@@ -3,7 +3,7 @@ import toJS from '../to-js';
 import dedent from 'dedent';
 
 describe('continueParsingTOML', () => {
-  it('appends parsed items from remaining string to existing AST', () => {
+  it('appends parsed items from remaining string to existing CST', () => {
     const initialToml = dedent`
       [section1]
       key1 = "value1"
@@ -62,7 +62,7 @@ describe('continueParsingTOML', () => {
     });
   });
 
-  it('handles empty initial AST', () => {
+  it('handles empty initial CST', () => {
     const initialToml = '';
     const remainingToml = dedent`
       [section]

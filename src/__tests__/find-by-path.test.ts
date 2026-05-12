@@ -5,11 +5,11 @@ import { Document, NodeType } from '../ast';
 import dedent from 'dedent';
 
 it('should find node by path', () => {
-  const ast = parseTOML(example);
+  const cst = parseTOML(example);
   const document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
-    items: [...ast]
+    items: [...cst]
   };
 
   expect(findByPath(document, []).type).toEqual('Document');
@@ -29,11 +29,11 @@ it('should find nodes within nested inline tables', () => {
     }
     `;
   
-  const ast = parseTOML(toml);
+  const cst = parseTOML(toml);
   const document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
-    items: [...ast]
+    items: [...cst]
   };
 
   // Should find simple inline table properties
@@ -84,11 +84,11 @@ it('should keep scanning AOT-scoped siblings after a shorter prefix match fails'
     name = "banana"
     `;
 
-  const ast = parseTOML(toml);
+  const cst = parseTOML(toml);
   const document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
-    items: [...ast]
+    items: [...cst]
   };
 
   const width = findByPath(document, ['fruit', 0, 'physical', 'dimensions', 'width']) as any;

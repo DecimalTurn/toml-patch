@@ -241,7 +241,7 @@ The `TomlDocument` class provides a stateful interface for working with TOML doc
 new TomlDocument(tomlSource: string | Uint8Array, options?: ParseOptions)
 ```
 
-Initializes the TomlDocument with TOML source, parsing it into an internal representation (AST). When bytes are provided they are decoded as UTF-8 in fatal mode, rejecting invalid sequences before parsing.
+Initializes the TomlDocument with TOML source, parsing it into an internal representation (CST). When bytes are provided they are decoded as UTF-8 in fatal mode, rejecting invalid sequences before parsing.
 
 **Parameters:**
 - `tomlSource: string | Uint8Array` - The TOML source to parse
@@ -289,22 +289,22 @@ overwrite(tomlString: string): void
 ```
 
 **patch(updatedObject, format?)**
-- Applies a patch to the current AST using a modified JS object
-- Updates the internal AST while preserving formatting and comments
+- Applies a patch to the current CST using a modified JS object
+- Updates the internal CST while preserving formatting and comments
 - Use `toTomlString` getter to retrieve the updated TOML string
 - **Parameters:**
   - `updatedObject: any` - The modified JS object to patch with
   - `format?: Format` - Optional formatting options
 
 **update(tomlString)**
-- Updates the internal AST by supplying a modified TOML string
+- Updates the internal CST by supplying a modified TOML string
 - Uses incremental parsing for efficiency (only re-parses changed portions)
 - Use `toJsObject` getter to retrieve the updated JS object representation
 - **Parameters:**
   - `tomlString: string` - The modified TOML string to update with
 
 **overwrite(tomlString)**
-- Overwrites the internal AST by fully re-parsing the supplied TOML string
+- Overwrites the internal CST by fully re-parsing the supplied TOML string
 - Simpler but slower than `update()` which uses incremental parsing
 - **Parameters:**
   - `tomlString: string` - The TOML string to overwrite with
@@ -425,7 +425,7 @@ const toml = stringify({
 **newLine**
 - **Type:** `string`
 - **Default:** `'\n'`
-- **Description:** The line ending character(s) to use in the output TOML. This option affects only the stringification process, not the internal representation (AST).
+- **Description:** The line ending character(s) to use in the output TOML. This option affects only the stringification process, not the internal representation (CST).
 
 ```js
 const format = TomlFormat.default();
@@ -436,7 +436,7 @@ format.newLine = '\r\n';  // Windows line endings
 **trailingNewline**
 - **Type:** `number`
 - **Default:** `1`
-- **Description:** The number of trailing newlines to add at the end of the TOML document. This option affects only the stringification process, not the internal representation (AST).
+- **Description:** The number of trailing newlines to add at the end of the TOML document. This option affects only the stringification process, not the internal representation (CST).
 
 ```js
 const format = TomlFormat.default();

@@ -2,23 +2,23 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './ast';
-import { patchAst } from './patch';
+import { patchCst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
-import { truncateAst } from './truncate';
+import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
 import { decodeUtf8Bytes, hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
- * TomlDocument encapsulates a TOML AST and provides methods to interact with it.
+ * TomlDocument encapsulates a TOML CST and provides methods to interact with it.
  */
 export class TomlDocument {
-  private _ast: Block[];
+  private _cst: Block[];
   private _currentTomlString: string;
   private _format: TomlFormat;
   private _integersAsBigInt: IntegersAsBigInt;
 
   /**
-   * Initializes the TomlDocument with TOML source, parsing it into an AST.
+  * Initializes the TomlDocument with TOML source, parsing it into a CST.
    *
    * When bytes are provided, they are decoded as UTF-8 in fatal mode.
    * This rejects invalid UTF-8 sequences before parsing.
@@ -34,10 +34,10 @@ export class TomlDocument {
     const tomlString = stripLeadingBom(sourceString);
 
     this._currentTomlString = tomlString;
-    this._ast = Array.from(parseTOML(tomlString));
+    this._cst = Array.from(parseTOML(tomlString));
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
     // Auto-detect formatting preferences from the original TOML string
-    this._format = TomlFormat.autoDetectFormatWithAst(sourceString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithCst(sourceString, this._cst);
   }
 
   get toTomlString(): string {
@@ -48,22 +48,32 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this._ast, this._currentTomlString, this._integersAsBigInt);
+    const jsObject = toJS(this._cst, this._currentTomlString, this._integersAsBigInt);
     // Convert custom date classes to regular JavaScript Date objects
     return convertCustomDateClasses(jsObject);
   }
 
   /**
-   * Returns the internal AST (for testing purposes).
+   * Returns the internal CST (for testing purposes).
    * @internal
    */
+  get cst(): Block[] {
+    return this._cst;
+  }
+
+  /** @deprecated Use cst instead. */
+  get CST(): Block[] {
+    return this._cst;
+  }
+
+  /** @deprecated Use cst instead. */
   get ast(): Block[] {
-    return this._ast;
+    return this._cst;
   }
 
   /**
-   * Applies a patch to the current AST using a modified JS object.
-   * Updates the internal AST. Use toTomlString getter to retrieve the updated TOML string.
+   * Applies a patch to the current CST using a modified JS object.
+   * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
@@ -71,12 +81,12 @@ export class TomlDocument {
 
     const fmt = resolveTomlFormat(format, this._format);
 
-    const { tomlString, document } = patchAst(
-      this._ast,
+    const { tomlString, document } = patchCst(
+      this._cst,
       updatedObject,
       fmt
     );
-    this._ast = document.items;
+    this._cst = document.items;
     this._format = fmt;
     this._currentTomlString = tomlString;
   }
@@ -126,7 +136,7 @@ export class TomlDocument {
     }
 
     let firstDiffLine = firstDiffLineIndex + 1; // Convert to 1-based
-    const { truncatedAst, lastEndPosition } = truncateAst(this._ast, firstDiffLine, firstDiffColumn);
+    const { truncatedCst, lastEndPosition } = truncateCst(this._cst, firstDiffLine, firstDiffColumn);
 
     // Determine where to continue parsing from in the new string
     // If lastEndPosition exists, continue from there; otherwise from the start of the document
@@ -134,7 +144,7 @@ export class TomlDocument {
     const continueFromColumn = lastEndPosition ? lastEndPosition.column + 1 : 0;
 
     // Based on the first difference, we can re-parse only the affected part
-    // We will need to supply the remaining string after where the AST was truncated
+    // We will need to supply the remaining string after where the CST was truncated
     const remainingLines = newTextLines.slice(continueFromLine - 1);
     
     // If there's a partial line match, we need to extract only the part after the continuation column
@@ -144,11 +154,11 @@ export class TomlDocument {
     
     const remainingToml = remainingLines.join(this._format.newLine);
     
-    this._ast = Array.from(continueParsingTOML(truncatedAst, remainingToml));
+    this._cst = Array.from(continueParsingTOML(truncatedCst, remainingToml));
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithCst(tomlString, this._cst);
   }
 
   /**
@@ -165,11 +175,11 @@ export class TomlDocument {
     }
 
     // Re-parse the entire document
-    this._ast = Array.from(parseTOML(tomlContent));
+    this._cst = Array.from(parseTOML(tomlContent));
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
-    this._format = TomlFormat.autoDetectFormatWithAst(tomlString, this._ast);
+    this._format = TomlFormat.autoDetectFormatWithCst(tomlString, this._cst);
   }
 }
 

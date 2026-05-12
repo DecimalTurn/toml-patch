@@ -1,6 +1,6 @@
 /**
- * Tests for comparing AST structures when parsing from JS objects vs TOML files.
- * This test explores the different ways the AST is built in both scenarios.
+ * Tests for comparing CST structures when parsing from JS objects vs TOML files.
+ * This test explores the different ways the CST is built in both scenarios.
  */
 
 import parseJS from '../parse-js';
@@ -10,10 +10,10 @@ import { TomlFormat } from '../toml-format';
 import { readFileSync } from 'fs';
 import path from 'path';
 
-describe('AST parsing comparison', () => {
+describe('CST parsing comparison', () => {
   const fmt = new TomlFormat();
 
-  describe('JS object to AST', () => {
+  describe('JS object to CST', () => {
     it('should parse nested objects with inline table formatting by default', () => {
       const jsObject = {
         top: {
@@ -24,12 +24,12 @@ describe('AST parsing comparison', () => {
         }
       };
 
-      const ast = parseJS(jsObject);
-      const str = toTOML(ast.items, fmt);
+      const cst = parseJS(jsObject);
+      const str = toTOML(cst.items, fmt);
 
       // The default formatting for nested tables should be inline
       expect(str).toMatchSnapshot('js-object-to-toml');
-      expect(ast).toMatchSnapshot('js-object-ast');
+      expect(cst).toMatchSnapshot('js-object-cst');
       
       // Verify that nested tables are formatted as inline by default
       expect(str).toContain('nested = { key = "value" }');
@@ -38,16 +38,16 @@ describe('AST parsing comparison', () => {
     });
   });
 
-  describe('TOML file to AST', () => {
+  describe('TOML file to CST', () => {
     it('should parse nested tables preserving separate section formatting', () => {
       const tomlInput = readFileSync(
         path.join(__dirname, '../__fixtures__/nested-tables.toml'),
         'utf-8'
       );
       
-      const astGenerator = parseTOML(tomlInput);
-      const blocks = Array.from(astGenerator);
-      const astFromToml = {
+      const cstGenerator = parseTOML(tomlInput);
+      const blocks = Array.from(cstGenerator);
+      const cstFromToml = {
         type: 'Document',
         items: blocks,
         loc: blocks.length > 0 ? {
@@ -60,7 +60,7 @@ describe('AST parsing comparison', () => {
 
       // Should preserve the separate section formatting when parsed from TOML
       expect(strFromToml).toMatchSnapshot('toml-file-to-toml');
-      expect(astFromToml).toMatchSnapshot('toml-file-ast');
+      expect(cstFromToml).toMatchSnapshot('toml-file-cst');
       
       // Verify that nested tables maintain separate sections
       expect(strFromToml).toContain('[top]');
@@ -85,8 +85,8 @@ describe('AST parsing comparison', () => {
           nested: { key: "value" }
         }
       };
-      const jsAst = parseJS(jsObject);
-      const jsToml = toTOML(jsAst.items, fmt);
+      const jsCst = parseJS(jsObject);
+      const jsToml = toTOML(jsCst.items, fmt);
       
       // TOML file parsing preserves separate sections
       const tomlInput = readFileSync(

@@ -15,7 +15,7 @@ import {
   InlineTable,
   InlineArray,
   Comment,
-  AST,
+  CST,
   Block
 } from './ast';
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE } from './tokenizer';
@@ -250,7 +250,7 @@ export {
   DateFormatHelper
 } from './date-format';
 
-export default function* parseTOML(input: string): AST {
+export default function* parseTOML(input: string): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
   const cursor = new Cursor(tokenize(input));
   
@@ -263,14 +263,14 @@ export default function* parseTOML(input: string): AST {
 }
 
 /**
- * Continues parsing TOML from a remaining string and appends the results to an existing AST.
+ * Continues parsing TOML from a remaining string and appends the results to an existing CST.
  * 
- * @param existingAst - The existing AST to append to
+ * @param existingAst - The existing CST to append to
  * @param remainingString - The remaining TOML string to parse
- * @returns A new complete AST with both the existing and newly parsed items
+ * @returns A new complete CST with both the existing and newly parsed items
  */
-export function* continueParsingTOML(existingAst: AST, remainingString: string): AST {
-  // Yield all items from the existing AST
+export function* continueParsingTOML(existingAst: CST, remainingString: string): CST {
+  // Yield all items from the existing CST
   for (const item of existingAst) {
     yield item;
   }

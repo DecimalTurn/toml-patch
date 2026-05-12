@@ -3,32 +3,32 @@ import { TomlFormat } from '../toml-format';
 import parseTOML from '../parse-toml';
 
 function autoDetectFormat(toml: string) {
-  return TomlFormat.autoDetectFormatWithAst(toml, parseTOML(toml));
+  return TomlFormat.autoDetectFormatWithCst(toml, parseTOML(toml));
 }
 
 describe('detectTrailingComma', () => {
   test('should detect trailing comma in inline array', () => {
     const toml = `array = ["a", "b", "c",]`;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(true);
   });
 
   test('should detect no trailing comma in inline array', () => {
     const toml = `array = ["a", "b", "c"]`;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(false);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(false);
   });
 
   test('should detect trailing comma in inline table', () => {
     const toml = `table = { a = "1", b = "2", }`;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(true);
   });
 
   test('should detect no trailing comma in inline table', () => {
     const toml = `table = { a = "1", b = "2" }`;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(false);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(false);
   });
 
   test('should return false for TOML without comma-separated structures', () => {
@@ -37,8 +37,8 @@ describe('detectTrailingComma', () => {
       [section]
       key = "value"
     `;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(false);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(false);
   });
 
   test('should find trailing comma in nested structures', () => {
@@ -47,8 +47,8 @@ describe('detectTrailingComma', () => {
       [section]
       array = ["a", "b",]
     `;
-    const ast = parseTOML(toml);
-    expect(detectTrailingComma(ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectTrailingComma(cst)).toBe(true);
   });
 });
 
@@ -119,26 +119,26 @@ describe('TomlFormat.autoDetectFormat', () => {
 describe('detectBracketSpacing', () => {
   test('should detect bracket spacing in inline array', () => {
     const toml = `array = [ "a", "b", "c" ]`;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(true);
   });
 
   test('should detect no bracket spacing in inline array', () => {
     const toml = `array = ["a", "b", "c"]`;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(false);
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(false);
   });
 
   test('should detect bracket spacing in inline table', () => {
     const toml = `table = { a = "1", b = "2" }`;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(true);
   });
 
   test('should detect no bracket spacing in inline table', () => {
     const toml = `table = {a = "1", b = "2"}`;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(false);
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(false);
   });
 
   test('should return true for TOML without bracket structures', () => {
@@ -147,8 +147,8 @@ describe('detectBracketSpacing', () => {
       [section]
       key = "value"
     `;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(true); // Default to true
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(true); // Default to true
   });
 
   test('should find bracket spacing in nested structures', () => {
@@ -157,16 +157,16 @@ describe('detectBracketSpacing', () => {
       [section]
       array = [ "a", "b" ]
     `;
-    const ast = parseTOML(toml);
-    expect(detectBracketSpacing(toml, ast)).toBe(true);
+    const cst = parseTOML(toml);
+    expect(detectBracketSpacing(toml, cst)).toBe(true);
   });
 
   test('should handle mixed bracket spacing correctly', () => {
     const toml = `array1 = [ "a", "b" ]
 array2 = ["c", "d"]`;
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Should return true based on the first occurrence found
-    expect(detectBracketSpacing(toml, ast)).toBe(true);
+    expect(detectBracketSpacing(toml, cst)).toBe(true);
   });
 });
 

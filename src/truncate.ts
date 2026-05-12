@@ -1,4 +1,4 @@
-import { AST, Block } from './ast';
+import { CST, Block } from './ast';
 import { Position } from './location';
 
 /**
@@ -27,41 +27,43 @@ function shouldIncludeBlock(node: Block, limit: Position): boolean {
 }
 
 /**
- * Truncates an AST based on a position (line, column) in the source string.
+ * Truncates a CST based on a position (line, column) in the source string.
  * 
- * This function filters the AST to include only the nodes that end before
+ * This function filters the CST to include only the nodes that end before
  * the specified position. This ensures that blocks containing changes are
  * excluded and can be reparsed. This is useful for incremental parsing scenarios
- * where you want to keep only the unchanged portion of the AST.
+ * where you want to keep only the unchanged portion of the CST.
  * 
  * Special handling: If the truncation point falls within a Table or TableArray
  * (e.g., in a comment inside the table), the entire table is excluded to ensure
  * proper reparsing.
  * 
- * @param ast - The AST to truncate
+ * @param cst - The CST to truncate
  * @param line - The line number (1-indexed) at which to truncate
  * @param column - The column number (0-indexed) at which to truncate
- * @returns An object containing the truncated AST and the end position of the last included node
+ * @returns An object containing the truncated CST and the end position of the last included node
  * 
  * @example
  * ```typescript
- * const ast = parseTOML(tomlString);
- * // Get AST up to line 5, column 10 (only nodes that end before this position)
- * const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 10);
- * for (const node of truncatedAst) {
+ * const cst = parseTOML(tomlString);
+ * // Get CST up to line 5, column 10 (only nodes that end before this position)
+ * const { truncatedCst, lastEndPosition } = truncateCst(cst, 5, 10);
+ * for (const node of truncatedCst) {
  *   // process node
  * }
  * ```
  */
-export function truncateAst(ast: AST, line: number, column: number): { 
-  truncatedAst: AST; 
+export function truncateCst(cst: CST, line: number, column: number): {
+  truncatedCst: CST;
+  /** @deprecated Use truncatedCst instead. */
+  truncatedAst: CST;
   lastEndPosition: Position | null 
 } {
   const limit: Position = { line, column };
   const nodes: Block[] = [];
   let lastEndPosition: Position | null = null;
   
-  for (const node of ast) {
+  for (const node of cst) {
     const nodeEndsBeforeLimit = comparePositions(node.loc.end, limit) < 0;
     const nodeStartsBeforeLimit = comparePositions(node.loc.start, limit) < 0;
     
@@ -82,33 +84,34 @@ export function truncateAst(ast: AST, line: number, column: number): {
   }
   
   return {
+    truncatedCst: nodes,
     truncatedAst: nodes,
     lastEndPosition
   };
 }
 
 /**
- * Finds the last block node in an AST that ends before the specified position.
+ * Finds the last block node in a CST that ends before the specified position.
  * 
- * @param ast - The AST to search
+ * @param cst - The CST to search
  * @param line - The line number (1-indexed)
  * @param column - The column number (0-indexed)
  * @returns The last block node that ends before the position, or undefined if no such node exists
  * 
  * @example
  * ```typescript
- * const ast = parseTOML(tomlString);
- * const lastNode = findLastNodeBeforePosition(ast, 5, 10);
+ * const cst = parseTOML(tomlString);
+ * const lastNode = findLastNodeBeforePosition(cst, 5, 10);
  * if (lastNode) {
  *   console.log('Last node type:', lastNode.type);
  * }
  * ```
  */
-export function findLastNodeBeforePosition(ast: AST, line: number, column: number): Block | undefined {
+export function findLastNodeBeforePosition(cst: CST, line: number, column: number): Block | undefined {
   const limit: Position = { line, column };
   let lastNode: Block | undefined = undefined;
   
-  for (const node of ast) {
+  for (const node of cst) {
     if (shouldIncludeBlock(node, limit)) {
       lastNode = node;
     } else {
@@ -118,4 +121,13 @@ export function findLastNodeBeforePosition(ast: AST, line: number, column: numbe
   }
   
   return lastNode;
+}
+
+/** @deprecated Use truncateCst instead. */
+export function truncateAst(cst: CST, line: number, column: number): {
+  truncatedAst: CST;
+  lastEndPosition: Position | null;
+} {
+  const { truncatedCst, lastEndPosition } = truncateCst(cst, line, column);
+  return { truncatedAst: truncatedCst, lastEndPosition };
 }

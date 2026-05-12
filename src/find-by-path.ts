@@ -103,7 +103,7 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
 /**
  * Searches for a path within an AOT entry's logical scope.
  *
- * In the TOML AST, sub-tables and sub-AOTs under a [[name]] entry are stored
+ * In the TOML CST, sub-tables and sub-AOTs under a [[name]] entry are stored
  * as siblings in the Document rather than as children of the entry node.
  * This function first tries the entry's own items, then falls back to the
  * scoped document items (those between this [[name]] and the next [[name]]).

@@ -4,7 +4,7 @@ import {
 } from '../ast';
 import { Location, Position } from '../location';
 import parseTOML from '../parse-toml';
-import { patchAst } from '../patch';
+import { patchCst } from '../patch';
 import { TomlFormat } from '../toml-format';
 import traverse from '../traverse';
 import dedent from 'dedent';
@@ -38,8 +38,8 @@ function locStr(loc: Location): string {
 /**
  * Check whether `child`'s location is fully contained within `parent`'s location.
  *
- * @param parent - The enclosing AST node.
- * @param child  - The nested AST node whose location is being validated.
+ * @param parent - The enclosing CST node.
+ * @param child  - The nested CST node whose location is being validated.
  * @returns A human-readable error string describing the violation, or `null` when
  *   the child is properly contained.
  */
@@ -66,7 +66,7 @@ function checkContainment(
 }
 
 /**
- * Walk the AST and return an array of human-readable overlap descriptions.
+ * Walk the CST and return an array of human-readable overlap descriptions.
  * An empty array means all child positions fit within their parents.
  *
  * Validates every parent→child edge in the tree, including:
@@ -170,27 +170,27 @@ function findInvertedLocations(doc: Document): string[] {
 
 /**
  * Parse `toml`, apply `updated` as a patch, and return any parent-child
- * location-overlap violations found in the resulting AST.
+ * location-overlap violations found in the resulting CST.
  *
  * @param toml    - TOML source string to parse and patch.
  * @param updated - Plain JS object representing the desired document state.
  * @returns Overlap violation strings from {@link findPositionOverlaps}.
  */
 function getOverlaps(toml: string, updated: any): string[] {
-  const { document } = patchAst(parseTOML(toml), updated, new TomlFormat());
+  const { document } = patchCst(parseTOML(toml), updated, new TomlFormat());
   return findPositionOverlaps(document);
 }
 
 /**
  * Parse `toml`, apply `updated` as a patch, and return any inverted-location
- * violations found in the resulting AST.
+ * violations found in the resulting CST.
  *
  * @param toml    - TOML source string to parse and patch.
  * @param updated - Plain JS object representing the desired document state.
  * @returns Inverted-location violation strings from {@link findInvertedLocations}.
  */
 function getInverted(toml: string, updated: any): string[] {
-  const { document } = patchAst(parseTOML(toml), updated, new TomlFormat());
+  const { document } = patchCst(parseTOML(toml), updated, new TomlFormat());
   return findInvertedLocations(document);
 }
 
@@ -212,16 +212,16 @@ function expectConsistent(toml: string, updated: any) {
 // ---------------------------------------------------------------------------
 
 /**
- * These tests check whether the AST returned by patchAst() has consistent
+ * These tests check whether the CST returned by patchAst() has consistent
  * position metadata after modifications (no parent-child location overlaps).
  *
- * The TOML string output is always correct — toTOML serializes from the AST
- * structure, not from raw positions. However, the AST position metadata may
+ * The TOML string output is always correct — toTOML serializes from the CST
+ * structure, not from raw positions. However, the CST position metadata may
  * become inconsistent when the writer adjusts nodes without fully propagating
  * position changes to parent containers.
  */
 
-describe('AST position consistency after patching', () => {
+describe('CST position consistency after patching', () => {
 
   // ------ inline array mutations ------
 
@@ -274,7 +274,7 @@ describe('AST position consistency after patching', () => {
   test('Document end position contracts after key removal', () => {
     // Removing `b = 2` from a two-key document should shrink the document end
     // to the last remaining line (line 1 / `a = 1`).
-    const { document } = patchAst(parseTOML('a = 1\nb = 2\n'), { a: 1 }, new TomlFormat());
+    const { document } = patchCst(parseTOML('a = 1\nb = 2\n'), { a: 1 }, new TomlFormat());
     expect(document.loc.end.line).toBe(1);
     expect(document.loc.end.column).toBe(5);
     expectConsistent('a = 1\nb = 2\n', { a: 1 });

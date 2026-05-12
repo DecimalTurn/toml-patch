@@ -28,16 +28,19 @@ export enum NodeType {
 }
 
 //
-// Abstract Syntax Tree
+// Concrete Syntax Tree
 //
-// AST nodes are used to represent TOML data
+// CST nodes are used to represent TOML data
 //
-export type AST = Iterable<Block>;
+export type CST = Iterable<Block>;
+
+/** @deprecated Use CST instead. */
+export type AST = CST;
 
 //
 // Document
 //
-// Top-level document that stores AST nodes
+// Top-level document that stores CST nodes
 //
 export interface Document extends TreeNode {
   type: NodeType.Document;
@@ -250,7 +253,7 @@ export function isInlineArray(node: TreeNode): node is InlineArray {
   return node.type === NodeType.InlineArray;
 }
 
-// InlineItem  (internal AST wrapper — not a TOML spec concept)
+// InlineItem  (internal CST wrapper — not a TOML spec concept)
 //
 // InlineItem is a container node that wraps each element inside an inline
 // container (InlineArray or InlineTable).  It carries two responsibilities:
@@ -419,7 +422,7 @@ export function hasItem(node: TreeNode): node is WithItem {
  * ```
  * 
  * Type Safety:
- * This distinction is crucial for the AST structure because:
+ * This distinction is crucial for the CST structure because:
  * - Document.items: Block[]
  * - Table.items: RowItem[] (KeyValue | Comment)
  * - TableArray.items: RowItem[] (KeyValue | Comment)

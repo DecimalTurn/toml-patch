@@ -13,22 +13,22 @@ import { String as StringNode, NodeType } from '../ast';
 test('it should insert elements into empty inline array', () => {
   const inline_array = generateInlineArray();
   const key_value = generateKeyValue(['a'], inline_array);
-  const ast = [key_value];
+  const cst = [key_value];
   const format = TomlFormat.default();
 
-  expect(toTOML(ast, format)).toEqual(`a = []\n`);
+  expect(toTOML(cst, format)).toEqual(`a = []\n`);
 
   insert(key_value, inline_array, generateInlineItem(generateString('b')));
   applyWrites(key_value);
 
-  expect(toTOML(ast, format)).toEqual(`a = ["b"]\n`);
+  expect(toTOML(cst, format)).toEqual(`a = ["b"]\n`);
 
   insert(key_value, inline_array, generateInlineItem(generateString('c')));
   insert(key_value, inline_array, generateInlineItem(generateString('d')));
   insert(key_value, inline_array, generateInlineItem(generateString('e')));
   applyWrites(key_value);
 
-  expect(toTOML(ast, format)).toEqual(`a = ["b", "c", "d", "e"]\n`);
+  expect(toTOML(cst, format)).toEqual(`a = ["b", "c", "d", "e"]\n`);
 });
 
 test('it should insert first item on first line in document', () => {

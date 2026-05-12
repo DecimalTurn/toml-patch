@@ -17,10 +17,10 @@ import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate } f
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 /**
- * Parses a JavaScript object into an AST Document, applying formatting options from TomlFormat.
+ * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
  * @param value - The JavaScript object to parse.
  * @param format - The formatting options to apply.
- * @returns The resulting AST Document.
+ * @returns The resulting CST Document.
  */
 export default function parseJS(value: any, format: TomlFormat = TomlFormat.default()): Document {
   value = toJSON(value);

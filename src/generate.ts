@@ -1,5 +1,5 @@
 /**
- * @file Helpers to generate and update TOML AST nodes.
+ * @file Helpers to generate and update TOML CST nodes.
  * @module generate
  */
 

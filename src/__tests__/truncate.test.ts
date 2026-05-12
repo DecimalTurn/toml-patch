@@ -1,11 +1,11 @@
 import parseTOML from '../parse-toml';
-import { truncateAst, findLastNodeBeforePosition } from '../truncate';
+import { truncateCst, findLastNodeBeforePosition } from '../truncate';
 import toJS from '../to-js';
 import { NodeType } from '../ast';
 import dedent from 'dedent';
 
 describe('truncateAst', () => {
-  it('truncates AST at specified position', () => {
+  it('truncates CST at specified position', () => {
     const toml = dedent`
       [section1]
       key1 = "value1"
@@ -14,9 +14,9 @@ describe('truncateAst', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate at line 3 (before section2)
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 3, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 3, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({
@@ -34,9 +34,9 @@ describe('truncateAst', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate at a position beyond the document
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 100, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 100, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({
@@ -46,15 +46,15 @@ describe('truncateAst', () => {
     expect(lastEndPosition).not.toBeNull();
   });
 
-  it('returns empty AST when position is before any content', () => {
+  it('returns empty CST when position is before any content', () => {
     const toml = dedent`
       [section1]
       key1 = "value1"
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate at line 0 (before everything)
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 0, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 0, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({});
@@ -72,10 +72,10 @@ describe('truncateAst', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate just before section2 (line 6 starts section2, so use line 5)
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 999);
-    const truncated = [...truncatedAst];
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 5, 999);
+    const truncated = [...truncatedCst];
     
     // Should include: Comment 1, section1 (with key1 and Comment 2 inside its items)
     expect(truncated).toHaveLength(2); // Comment, Table
@@ -91,11 +91,11 @@ describe('truncateAst', () => {
       c = 3
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate at line 2, column 0 (right at the start of "b = 2")
     // With the new semantics, this should only include blocks that END before line 2, column 0
     // So only "a = 1" which ends at line 1
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 2, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 2, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({ a: 1 });
@@ -114,9 +114,9 @@ describe('truncateAst', () => {
       name = "Product 3"
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate to include only first two products
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 6, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 6, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({
@@ -140,11 +140,11 @@ describe('truncateAst', () => {
       key3 = 3
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Truncate at line 5, column 0 (start of [parent.child2])
     // With the new semantics, this should only include blocks that END before line 5
     // So only [parent.child1] which ends at line 2
-    const { truncatedAst, lastEndPosition } = truncateAst(ast, 5, 0);
+    const { truncatedCst, lastEndPosition } = truncateCst(cst, 5, 0);
     
     const result = toJS(truncatedAst);
     expect(result).toEqual({
@@ -166,8 +166,8 @@ describe('findLastNodeBeforePosition', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
-    const lastNode = findLastNodeBeforePosition(ast, 3, 0);
+    const cst = parseTOML(toml);
+    const lastNode = findLastNodeBeforePosition(cst, 3, 0);
     
     expect(lastNode).toBeDefined();
     expect(lastNode?.type).toBe(NodeType.Table);
@@ -179,8 +179,8 @@ describe('findLastNodeBeforePosition', () => {
       key1 = "value1"
     `;
     
-    const ast = parseTOML(toml);
-    const lastNode = findLastNodeBeforePosition(ast, 0, 0);
+    const cst = parseTOML(toml);
+    const lastNode = findLastNodeBeforePosition(cst, 0, 0);
     
     expect(lastNode).toBeUndefined();
   });
@@ -194,8 +194,8 @@ describe('findLastNodeBeforePosition', () => {
       key2 = "value2"
     `;
     
-    const ast = parseTOML(toml);
-    const lastNode = findLastNodeBeforePosition(ast, 100, 0);
+    const cst = parseTOML(toml);
+    const lastNode = findLastNodeBeforePosition(cst, 100, 0);
     
     expect(lastNode).toBeDefined();
     expect(lastNode?.type).toBe(NodeType.Table);
@@ -227,9 +227,9 @@ describe('findLastNodeBeforePosition', () => {
       c = 3
     `;
     
-    const ast = parseTOML(toml);
+    const cst = parseTOML(toml);
     // Position at the start of "b = 2"
-    const lastNode = findLastNodeBeforePosition(ast, 2, 0);
+    const lastNode = findLastNodeBeforePosition(cst, 2, 0);
     
     expect(lastNode).toBeDefined();
     expect(lastNode?.type).toBe(NodeType.KeyValue);

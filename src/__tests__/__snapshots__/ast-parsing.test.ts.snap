@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`AST parsing comparison JS object to AST should parse nested objects with inline table formatting by default: js-object-ast 1`] = `
+exports[`CST parsing comparison JS object to CST should parse nested objects with inline table formatting by default: js-object-cst 1`] = `
 Object {
   "items": Array [
     Object {
@@ -215,14 +215,14 @@ Object {
 }
 `;
 
-exports[`AST parsing comparison JS object to AST should parse nested objects with inline table formatting by default: js-object-to-toml 1`] = `
+exports[`CST parsing comparison JS object to CST should parse nested objects with inline table formatting by default: js-object-to-toml 1`] = `
 "[top]
 name = \\"example\\"
 nested = { key = \\"value\\" }
 "
 `;
 
-exports[`AST parsing comparison TOML file to AST should parse nested tables preserving separate section formatting: toml-file-ast 1`] = `
+exports[`CST parsing comparison TOML file to CST should parse nested tables preserving separate section formatting: toml-file-cst 1`] = `
 Object {
   "items": Array [
     Object {
@@ -423,7 +423,7 @@ Object {
 }
 `;
 
-exports[`AST parsing comparison TOML file to AST should parse nested tables preserving separate section formatting: toml-file-to-toml 1`] = `
+exports[`CST parsing comparison TOML file to CST should parse nested tables preserving separate section formatting: toml-file-to-toml 1`] = `
 "[top]
 name = \\"example\\"
 

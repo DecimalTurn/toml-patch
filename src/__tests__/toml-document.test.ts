@@ -380,7 +380,7 @@ describe('TomlDocument', () => {
       expect(doc.toJsObject).toEqual({ section: { key: 'value' } });
     });
 
-    it('updates AST when a value changes', () => {
+    it('updates CST when a value changes', () => {
       const toml = dedent`
         [section]
         key = "value"
@@ -602,7 +602,7 @@ describe('TomlDocument', () => {
       expect(doc.toJsObject).toEqual({ section: { key: 'value' } });
     });
 
-    it('overwrites AST when a value changes', () => {
+    it('overwrites CST when a value changes', () => {
       const toml = dedent`
         [section]
         key = "value"
@@ -992,7 +992,7 @@ describe('TomlDocument', () => {
     });
   });
 
-  describe('update preserves unchanged AST nodes', () => {
+  describe('update preserves unchanged CST nodes', () => {
     it('preserves unchanged sections when updating a different section', () => {
       const toml = dedent`
         [section1]
@@ -1005,7 +1005,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Update only section2
       const updatedToml = dedent`
@@ -1019,11 +1019,11 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
-      // First section's AST node should be the same object reference
+      // First section's CST node should be the same object reference
       expect(updatedAst[0]).toBe(originalAst[0]);
-      // Second section's AST node should be different (was reparsed)
+      // Second section's CST node should be different (was reparsed)
       expect(updatedAst[1]).not.toBe(originalAst[1]);
       
       // Verify the values are correct
@@ -1040,7 +1040,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Update only the third and fourth values
       const updatedToml = dedent`
@@ -1051,9 +1051,9 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
-      // First two AST nodes should be preserved
+      // First two CST nodes should be preserved
       expect(updatedAst[0]).toBe(originalAst[0]);
       expect(updatedAst[1]).toBe(originalAst[1]);
       // Last two should be different (reparsed)
@@ -1067,7 +1067,7 @@ describe('TomlDocument', () => {
       expect(doc.toJsObject.fourth).toBe(100);
     });
 
-    it('preserves entire AST when only a comment changes at the end', () => {
+    it('preserves entire CST when only a comment changes at the end', () => {
       const toml = dedent`
         # Comment at the start
         [section]
@@ -1077,7 +1077,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Change only the comment at the end
       const updatedToml = dedent`
@@ -1089,7 +1089,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // Original structure: [Comment, Table (containing a comment inside)]
       // After update: [Comment (unchanged), Table (changed because comment inside changed)]
@@ -1104,7 +1104,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Add a new section after the first one
       const updatedToml = dedent`
@@ -1116,7 +1116,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // First section should be preserved
       expect(updatedAst[0]).toBe(originalAst[0]);
@@ -1140,7 +1140,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Update only the third product
       const updatedToml = dedent`
@@ -1158,7 +1158,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // First two array table elements should be preserved
       expect(updatedAst[0]).toBe(originalAst[0]);
@@ -1183,7 +1183,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       const originalLength = originalAst.length;
       
       // Add a new section at the end
@@ -1199,7 +1199,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // All original nodes should be preserved
       for (let i = 0; i < originalLength; i++) {
@@ -1233,7 +1233,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Update only servers.beta
       const updatedToml = dedent`
@@ -1253,7 +1253,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.update(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // Title, database, and servers.alpha should be preserved
       expect(updatedAst[0]).toBe(originalAst[0]); // title
@@ -1270,7 +1270,7 @@ describe('TomlDocument', () => {
       expect(doc.toJsObject.servers.beta.ip).toBe('10.0.0.99');
     });
 
-    it('overwrite does NOT preserve AST nodes (for comparison)', () => {
+    it('overwrite does NOT preserve CST nodes (for comparison)', () => {
       const toml = dedent`
         [section1]
         key1 = "value1"
@@ -1280,7 +1280,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       const doc = new TomlDocument(toml);
-      const originalAst = doc.ast;
+      const originalAst = doc.cst;
       
       // Use overwrite instead of update
       const updatedToml = dedent`
@@ -1292,7 +1292,7 @@ describe('TomlDocument', () => {
       ` + '\n';
       
       doc.overwrite(updatedToml);
-      const updatedAst = doc.ast;
+      const updatedAst = doc.cst;
       
       // With overwrite, ALL nodes are reparsed, so none should be preserved
       expect(updatedAst[0]).not.toBe(originalAst[0]);

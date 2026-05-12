@@ -1,6 +1,6 @@
 import {
   NodeType,
-  AST,
+  CST,
   TreeNode,
   Document,
   Table,
@@ -27,22 +27,22 @@ import { isIterable } from './utils';
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
 /**
- * Converts an Abstract Syntax Tree (AST) back to TOML format string.
+ * Converts a Concrete Syntax Tree (CST) back to TOML format string.
  * 
- * This function traverses the AST and reconstructs the original TOML document
+ * This function traverses the CST and reconstructs the original TOML document
  * by writing each node's raw content to the appropriate location coordinates.
  * It preserves the original formatting, spacing, and structure of the TOML file.
  * 
- * @param ast - The Abstract Syntax Tree representing the parsed TOML document
+ * @param cst - The Concrete Syntax Tree representing the parsed TOML document
  * @param format - The formatting options to use for the output
  * @returns The reconstructed TOML document as a string
  * 
  * @example
  * ```typescript
- * const tomlString = toTOML(ast, TomlFormat.default());
+ * const tomlString = toTOML(cst, TomlFormat.default());
  * ```
  */
-export default function toTOML(ast: AST, format: TomlFormat): string {
+export default function toTOML(cst: CST, format: TomlFormat): string {
 
   const lines: string[] = [];
 
@@ -153,10 +153,10 @@ export default function toTOML(ast: AST, format: TomlFormat): string {
   }
 
   // Handle both Document nodes and bare iterables (document.items)
-  if (isIterable(ast)) {
-    for (const item of ast) emitNode(item as TreeNode);
+  if (isIterable(cst)) {
+    for (const item of cst) emitNode(item as TreeNode);
   } else {
-    emitNode(ast as unknown as TreeNode);
+    emitNode(cst as unknown as TreeNode);
   }
 
   // Post-process: convert leading spaces to tabs if useTabsForIndentation is enabled
