@@ -26,7 +26,7 @@ import {
   isKeyValue,
   isTable,
   isTableArray
-} from './ast';
+} from './cst';
 import { getSpan } from './location';
 import { TomlFormat } from './toml-format';
 
@@ -102,7 +102,7 @@ function applyInlineCommentColumnAdjustment(comment: Comment, targetColumn: numb
 /**
  * Stores the current minimum spacing between a row and its trailing comment.
  *
- * This data is refreshed each time it is observed so reused AST comment nodes
+ * This data is refreshed each time it is observed so reused CST comment nodes
  * do not retain stale spacing or column values from a previous patch run.
  *
  * @param row Key-value row that owns the trailing comment.
@@ -270,7 +270,7 @@ export function recordInlineTableCommentDelta(container: TreeNode, row: KeyValue
  * needed by the surrounding inline array or inline table formatting.
  *
  * @param parent Inline container receiving the new child.
- * @param child AST node being inserted.
+ * @param child CST node being inserted.
  * @param index Target insertion index.
  * @returns The number of columns added to the rendered row.
  */
@@ -388,7 +388,7 @@ function recomputeContainerEnds(node: Document | Table | TableArray) {
  * For groups touched by nested inline-table edits, the target column is derived
  * from the widest current row plus the group's original minimum reserved gap.
  *
- * @param document Patched AST document whose comment locations are updated in-place.
+ * @param document Patched CST document whose comment locations are updated in-place.
  * @param tomlString Rendered TOML output to normalize.
  * @param format Active TOML formatting settings.
  * @returns The normalized TOML string.

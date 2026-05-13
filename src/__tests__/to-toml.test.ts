@@ -4,7 +4,7 @@ import { example, kitchen_sink, hard_example, hard_example_unicode } from '../__
 import dedent from 'dedent';
 import { TomlFormat } from '../toml-format';
 
-test('it should convert ast to toml', () => {
+test('it should convert CST to toml', () => {
   expect(toTOML(parseTOML(example), TomlFormat.default())).toEqual(example);
 });
 

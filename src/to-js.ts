@@ -1,4 +1,4 @@
-import { Value, NodeType, TreeNode, AST, InlineTable, Table, TableArray, KeyValue } from './ast';
+import { Value, NodeType, TreeNode, CST, InlineTable, Table, TableArray, KeyValue } from './cst';
 import { last, blank, isDate, has } from './utils';
 import ParseError from './parse-error';
 import { IntegersAsBigInt } from './parse-options';
@@ -55,13 +55,13 @@ function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], i
 }
 
 /**
- * Converts the given AST to a JavaScript object.
+ * Converts the given CST to a JavaScript object.
  * 
- * @param ast The abstract syntax tree to convert.
+ * @param cst The Concrete Syntax Tree to convert.
  * @param input The original input string (used for error reporting).
- * @returns The JavaScript object representation of the AST.
+ * @returns The JavaScript object representation of the CST.
  */
-export default function toJS(ast: AST, input: string = '', integersAsBigInt: IntegersAsBigInt = 'asNeeded'): any {
+export default function toJS(cst: CST, input: string = '', integersAsBigInt: IntegersAsBigInt = 'asNeeded'): any {
   const result = blank();
   const tables: Set<string> = new Set();
   const table_arrays: Set<string> = new Set();
@@ -76,8 +76,8 @@ export default function toJS(ast: AST, input: string = '', integersAsBigInt: Int
   // Specialized inline walk — only visits Table, TableArray, and KeyValue.
   // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
   // InlineArray recursively). This avoids the overhead of the generic traverse
-  // dispatching through every AST node.
-  for (const block of ast) {
+  // dispatching through every CST node.
+  for (const block of cst) {
     switch (block.type) {
       case NodeType.Table:
         handleTable(block as Table);
@@ -178,8 +178,8 @@ export default function toJS(ast: AST, input: string = '', integersAsBigInt: Int
 }
 
 /**
- * Converts a TOML AST value node to a JavaScript value.
- * @param node The TOML AST value node.
+ * Converts a TOML CST value node to a JavaScript value.
+ * @param node The TOML CST value node.
  * @returns The corresponding JavaScript value.
  */
 export function toValue(node: Value, integersAsBigInt: IntegersAsBigInt = 'asNeeded'): any {

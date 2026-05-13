@@ -28,17 +28,17 @@ import {
   Block,
   isBlock,
   WithItems
-} from './ast';
+} from './cst';
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
 import traverse from './traverse';
 
 ////////////////////////////////////////
-// The purpose of this file is to provide a way to modify the AST
+// The purpose of this file is to provide a way to modify the CST
 ////////////////////////////////////////
 
 
-// Root node of the AST
+// Root node of the CST
 export type Root = Document | TreeNode;
 
 // Store line and column offsets per node
@@ -126,9 +126,9 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   dirty_roots.add(root);
 }
 /**
- * Inserts a child node into the AST.
+ * Inserts a child node into the CST.
  *
- * @param root - The root node of the AST
+ * @param root - The root node of the CST
  * @param parent - The parent node to insert the child into
  * @param child - The child node to insert
  * @param index - The index at which to insert the child (optional)
@@ -663,12 +663,12 @@ export function applyTrailingComma(
 }
 
 /**
- * Applies all accumulated write offsets (enter and exit) to the given AST node.
+ * Applies all accumulated write offsets (enter and exit) to the given CST node.
  * This function adjusts the start and end locations of each node in the tree based on
  * the offsets stored in the `enter` and `exit` maps. It ensures that the tree's location
  * data is consistent after modifications.
  *
- * @param root - The root node of the AST tree to which the write offsets will be applied.
+ * @param root - The root node of the CST tree to which the write offsets will be applied.
  */
 export function applyWrites(root: TreeNode) {
   if (!dirty_roots.has(root)) return;

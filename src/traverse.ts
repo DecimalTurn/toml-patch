@@ -1,6 +1,6 @@
 import {
   NodeType,
-  AST,
+  CST,
   TreeNode,
   Document,
   Table,
@@ -18,7 +18,7 @@ import {
   InlineArray,
   InlineTable,
   InlineItem
-} from './ast';
+} from './cst';
 import { isIterable } from './utils';
 
 export type Visit<TNode = TreeNode> = (node: TNode, parent: TNode | null) => void;
@@ -44,13 +44,13 @@ export type Visitor = {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// The traverse function is used to walk the AST and call the visitor functions
+// The traverse function is used to walk the CST and call the visitor functions
 ////////////////////////////////////////////////////////////////////////////////
-export default function traverse(ast: AST | TreeNode, visitor: Visitor) {
-  if (isIterable(ast)) {
-    traverseArray(ast, null);
+export default function traverse(cst: CST | TreeNode, visitor: Visitor) {
+  if (isIterable(cst)) {
+    traverseArray(cst, null);
   } else {
-    traverseNode(ast, null);
+    traverseNode(cst, null);
   }
 
   function traverseArray(array: Iterable<TreeNode>, parent: TreeNode | null) {

@@ -13,7 +13,7 @@ function getTomlFiles(directoryPath: string): string[] {
 }
 
 /**
- * Runs a roundtrip patch-parse AST test on a TOML file
+ * Runs a roundtrip patch-parse CST test on a TOML file
  * - Parses the original TOML into a TomlDocument
  * - Adds a new root key-value pair and patches the document
  * - Stringifies the patched document and parses it into a second TomlDocument
@@ -34,7 +34,7 @@ function testRoundtripPatchParse(filePath: string) {
     const reparsedDoc = new TomlDocument(doc.toTomlString);
 
     // The two ASTs should be identical
-    expect(reparsedDoc.ast).toEqual(doc.ast);
+    expect(reparsedDoc.cst).toEqual(doc.cst);
   });
 }
 

@@ -21,11 +21,11 @@ import {
   hasItem,
   hasItems,
   InlineItem,
-  AST,
+  CST,
   Table,
   Value,
   isDateTime
-} from './ast';
+} from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
@@ -60,18 +60,18 @@ import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
  * @returns A new TOML string with the changes applied
  */
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const existing_ast = Array.from(parseTOML(stripLeadingBom(existing)));
+  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
-  const autoDetectedFormat = TomlFormat.autoDetectFormatWithAst(existing, existing_ast);
+  const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
-  const patchedToml = patchAst(existing_ast, updated, fmt).tomlString;
+  const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
 }
 
-export function patchAst(existing_ast:AST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
-  const items = [...existing_ast];
+export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
+  const items = [...existing_cst];
 
   // Compute the Document's end position from its children so that
   // offset-based position updates in applyWrites start from the correct
@@ -211,15 +211,15 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 }
 
 /**
- * Applies a list of changes to the original TOML document AST while preserving formatting and structure.
+ * Applies a list of changes to the original TOML document CST while preserving formatting and structure.
  * 
  * This function processes different types of changes (Add, Edit, Remove, Move, Rename) and applies them
  * to the original document in a way that maintains the existing formatting preferences, comments, and
  * structural elements as much as possible. Special handling is provided for different node types like
  * inline tables, arrays, and table arrays to ensure proper formatting consistency.
  * 
- * @param original - The original TOML document AST to be modified
- * @param updated - The updated document AST containing new values for changes
+ * @param original - The original TOML document CST to be modified
+ * @param updated - The updated document CST containing new values for changes
  * @param changes - Array of change objects describing what modifications to apply
  * @param format - Formatting preferences to use for newly added elements
  * @returns The modified original document with all changes applied
@@ -507,7 +507,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       if (!node) {
         // The path likely refers to all entries of a TableArray sequence
-        // (e.g. path ['tasks'] when the AST stores entries at ['tasks',0], ['tasks',1]…).
+        // (e.g. path ['tasks'] when the CST stores entries at ['tasks',0], ['tasks',1]…).
         // Remove all entries by repeatedly pulling the one at index 0.
         const first = tryFindByPath(original, change.path.concat(0));
         if (first) {
@@ -535,7 +535,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (isInlineItem(parent) && isInlineTable((parent as InlineItem).item)) {
           parent = (parent as InlineItem).item;
         }
-        // The logical (JS-object) parent may differ from the AST parent.
+        // The logical (JS-object) parent may differ from the CST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
         // Fall back to the document root when the parent doesn't contain the node.
         if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {

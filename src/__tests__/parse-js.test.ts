@@ -2,11 +2,11 @@ import parseJS from '../parse-js';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import dedent from 'dedent';
-import { NodeType, AST, Document } from '../ast';
+import { NodeType, CST, Document } from '../cst';
 import { TomlFormat } from '../toml-format';
 
-function toDocument(ast: AST): Document {
-  const items = [...ast];
+function toDocument(cst: CST): Document {
+  const items = [...cst];
   return {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },

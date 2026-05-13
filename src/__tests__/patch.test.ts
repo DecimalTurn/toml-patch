@@ -943,7 +943,7 @@ test('should patch example of modification of an inline-table element', () => {
 // of applyChanges (condition 3).
 //
 // Condition 3 fires when:
-//   - `existing` (from the original AST) is an InlineItem<KeyValue>  — i.e. a named key
+//   - `existing` (from the original CST) is an InlineItem<KeyValue>  — i.e. a named key
 //     inside a root-level inline table such as `target = { type = "xlsm", path = "…" }`
 //   - `replacement` (from parseJS on the updated object) is a bare KeyValue  — because
 //     `formatTopLevel` in parseJS promotes root-level objects to block [table] sections.
@@ -2828,7 +2828,7 @@ test('should remove multiple leading KVs and preserve table section', () => {
   expect(patched).toContain('debug = true');
 });
 
-// BUG: Same as validate-ast 'remove table array after leading KV' —
+// BUG: Same as validate-CST 'remove table array after leading KV' —
 // findByPath fails for whole-table-array removal path ['tasks'].
 test('should remove table array and preserve leading KV', () => {
   const existing = dedent`

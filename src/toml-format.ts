@@ -12,11 +12,11 @@ export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
 
-// Detects if trailing commas are used in the existing TOML by examining the AST
+// Detects if trailing commas are used in the existing TOML by examining the CST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
-export function detectTrailingComma(ast: Iterable<any>): boolean {
+export function detectTrailingComma(cst: Iterable<any>): boolean {
   // Look for the first inline array or inline table to determine trailing comma preference
-  for (const item of ast) {
+  for (const item of cst) {
     const result = findTrailingCommaInNode(item);
     if (result !== null) {
       return result;
@@ -28,9 +28,9 @@ export function detectTrailingComma(ast: Iterable<any>): boolean {
 
 // Detects if bracket spacing is used in inline arrays and tables by examining the raw string
 // Returns true if bracket spacing is found, false if not or no bracket structures found (default to true)
-export function detectBracketSpacing(tomlString: string, ast: Iterable<any>): boolean {
+export function detectBracketSpacing(tomlString: string, cst: Iterable<any>): boolean {
   // Look for inline arrays and tables
-  for (const item of ast) {
+  for (const item of cst) {
     const result = findBracketSpacingInNode(item, tomlString);
     if (result !== null) {
       return result;
@@ -333,7 +333,7 @@ export class TomlFormat {
   
   /**
    * The line ending character(s) to use in the output TOML.
-   * This option affects only the stringification process, not the internal representation (AST).
+   * This option affects only the stringification process, not the internal representation (CST).
    * 
    * @example
    * - '\n' for Unix/Linux line endings
@@ -343,7 +343,7 @@ export class TomlFormat {
   
   /**
    * The number of trailing newlines to add at the end of the TOML document.
-   * This option affects only the stringification process, not the internal representation (AST).
+   * This option affects only the stringification process, not the internal representation (CST).
    * 
    * @example
    * - 0: No trailing newline
@@ -500,21 +500,21 @@ export class TomlFormat {
    * ```
    */
   static autoDetectFormat(tomlString: string): TomlFormat {
-    return TomlFormat.autoDetectFormatWithAst(tomlString);
+    return TomlFormat.autoDetectFormatWithCst(tomlString);
   }
 
   /**
-   * Internal method: Auto-detects formatting preferences from a TOML string with optional pre-parsed AST.
+   * Internal method: Auto-detects formatting preferences from a TOML string with optional pre-parsed CST.
    * 
-   * This is used internally to avoid redundant parsing when the AST is already available.
+   * This is used internally to avoid redundant parsing when the CST is already available.
    * External callers should use `autoDetectFormat(tomlString)` instead.
    * 
    * @internal
    * @param tomlString - The TOML string to analyze for formatting patterns
-   * @param syntaxTree - Optional pre-parsed AST to avoid redundant parsing
+   * @param syntaxTree - Optional pre-parsed CST to avoid redundant parsing
    * @returns A new TomlFormat instance with detected formatting preferences
    */
-  static autoDetectFormatWithAst(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
+  static autoDetectFormatWithCst(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
     const format = TomlFormat.default();
     format.leadingBom = hasLeadingBom(tomlString);
     // Strip the BOM before other formatting detection to avoid interference.
@@ -528,12 +528,12 @@ export class TomlFormat {
     
     // Get TOML syntax tree to detect comma and bracket spacing usage patterns
     try {
-      // Materialize only when needed so we can traverse the same AST twice.
-      const astNodes = Array.isArray(syntaxTree)
+      // Materialize only when needed so we can traverse the same CST twice.
+      const cstNodes = Array.isArray(syntaxTree)
         ? syntaxTree
         : Array.from(syntaxTree ?? parseTOML(tomlContent));
-      format.trailingComma = detectTrailingComma(astNodes);
-      format.bracketSpacing = detectBracketSpacing(tomlContent, astNodes);
+      format.trailingComma = detectTrailingComma(cstNodes);
+      format.bracketSpacing = detectBracketSpacing(tomlContent, cstNodes);
     } catch (error) {
       // If parsing fails, fall back to defaults
       // This ensures the method is robust against malformed TOML
@@ -558,5 +558,10 @@ export class TomlFormat {
     format.minimumDecimals = DEFAULT_MINIMUM_DECIMALS;
     
     return format;
+  }
+
+  /** @deprecated Use autoDetectFormatWithCst instead. */
+  static autoDetectFormatWithAst(tomlString: string, syntaxTree?: Iterable<any>): TomlFormat {
+    return TomlFormat.autoDetectFormatWithCst(tomlString, syntaxTree);
   }
 }
