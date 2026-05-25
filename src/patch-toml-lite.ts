@@ -29,7 +29,6 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray } from './generate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
-import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -49,13 +48,13 @@ export default function patchLite(
   existing_js: any,
   updated: any
 ): string {
-  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
+  const existing_cst = Array.from(parseTOML(existing));
 
   // Lite mode always applies default formatting and does not accept custom style options.
   const fmt = createDefaultPatchLiteFormat();
 
   const patchedToml = patchCstLite(existing_cst, existing_js, updated).tomlString;
-  return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
+  return patchedToml;
 }
 
 export function patchCstLite(
