@@ -20,14 +20,12 @@ import {
   hasItems,
   InlineItem,
   CST,
-  Table,
-  Value
+  Table
 } from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray } from './generate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas } from './formatter';
 
 type Path = Array<string | number>;
 
@@ -225,34 +223,6 @@ function findParent(node: TreeNode, path: Path): TreeNode {
 }
 
 /**
- * Preserves formatting from the existing node when applying it to the replacement node.
- * This includes multiline string formats, trailing commas, DateTime formats, etc.
- * 
- * @param existing - The existing node with formatting to preserve
- * @param replacement - The replacement node to apply formatting to
- */
-function preserveFormatting(existing: Value, replacement: Value): void {
-
-  // Preserve array trailing comma format
-  if (isInlineArray(existing) && isInlineArray(replacement)) {
-    const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
-    if (replacement.items.length > 0) {
-      const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
-    }
-  }
-  
-  // Preserve inline table trailing comma format
-  if (isInlineTable(existing) && isInlineTable(replacement)) {
-    const originalHadTrailingCommas = tableHadTrailingCommas(existing);
-    if (replacement.items.length > 0) {
-      const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
-    }
-  }
-}
-
-/**
  * Applies a list of changes to the original TOML document CST while preserving formatting and structure.
  * 
  * This function processes different types of changes (Add, Edit, Remove, Move, Rename) and applies them
@@ -358,17 +328,6 @@ function applyChanges(
       }
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
-        // Special handling for InlineArray: preserve original trailing comma format
-        if (isInlineArray(parent)) {
-          const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
-          // If this is an InlineItem being added to an array, check its comma setting
-          if (isInlineItem(child)) {
-            // The child comes from the updated document with global format applied
-            // Override with the original array's format
-            child.comma = originalHadTrailingCommas;
-          }
-        }
-
         // Root-level key-values belong to TOML's implicit root table, which
         // spans from the start of the document up to (but not including) the
         // first explicit section header ([table] or [[array]]). When the index
@@ -389,13 +348,9 @@ function applyChanges(
         insert(original, parent, child, resolvedIndex);
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
-        // Preserve original trailing comma format
-        const originalHadTrailingCommas = tableHadTrailingCommas(parent);
         // InlineTable items must be wrapped in InlineItem
         if (isKeyValue(child)) {
           const inlineItem = generateInlineItem(child);
-          // Override with the original table's format
-          inlineItem.comma = originalHadTrailingCommas;
           insert(original, parent, inlineItem);
         } else {
           insert(original, parent, child);
@@ -418,9 +373,6 @@ function applyChanges(
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
-        // Preserve formatting from existing value in replacement value
-        preserveFormatting(existing.value, replacement.value);
-        
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;
@@ -435,14 +387,12 @@ function applyChanges(
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
         // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
         const existingKeyValue = existing.item;
-        preserveFormatting(existingKeyValue.value, replacement.value);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
         // Both are InlineItems wrapping KeyValues (nested inline table edits)
-        // Preserve formatting and edit the value within
-        preserveFormatting(existing.item.value, replacement.item.value);
+        // Edit the value within
         parent = existing.item;
         existing = existing.item.value;
         replacement = replacement.item.value;
