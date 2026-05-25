@@ -29,7 +29,7 @@
 
 // Script for https://github.com/toml-lang/toml-test
 
-import { stringify, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
+import { stringify, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/index.js'
 
 function untagObject (obj) {
 	if (Array.isArray(obj)) return obj.map((o) => untagObject(o))
