@@ -15,8 +15,8 @@ The script writes this file (`benchmark/patch-lite-bundle-size.md`) directly.
 
 | Metric | patch | patch-lite | Difference |
 |--------|-------|------------|------------|
-| Minified | ~73.4 kB | ~64.6 kB | -8.8 kB |
-| Min + Gzipped | ~22.5 kB | ~19.8 kB | -2.7 kB |
+| Minified | ~73.4 kB | ~63.0 kB | -10.4 kB |
+| Min + Gzipped | ~22.5 kB | ~19.4 kB | -3.1 kB |
 | Dependencies | 0 | 0 | - |
 
-patch-lite difference is **-8.8 kB minified** / **-2.7 kB gzipped** versus patch.
+patch-lite difference is **-10.4 kB minified** / **-3.1 kB gzipped** versus patch.

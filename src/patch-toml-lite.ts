@@ -1,7 +1,7 @@
 import parseTOML from './parse-toml';
 import parseJS from './parse-js';
 import toTOML from './to-toml';
-import { TomlFormat } from './toml-format';
+import { PatchLiteFormat, createDefaultPatchLiteFormat } from './patch-lite-format';
 import {
   isKeyValue,
   WithItems,
@@ -55,7 +55,7 @@ export default function patchLite(
   const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
 
   // Lite mode always applies default formatting and does not accept custom style options.
-  const fmt = TomlFormat.default();
+  const fmt = createDefaultPatchLiteFormat();
 
   const patchedToml = patchCstLite(existing_cst, existing_js, updated).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
@@ -66,7 +66,7 @@ export function patchCstLite(
   existing_js: any,
   updated: any
 ): { tomlString: string; document: Document } {
-  const format = TomlFormat.default();
+  const format = createDefaultPatchLiteFormat();
   const items = [...existing_cst];
 
   // Compute the Document's end position from its children so that
@@ -92,7 +92,7 @@ export function patchCstLite(
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
   // convert all nested tables to multiline, which is not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
-  const diffing_fmt = TomlFormat.default();
+  const diffing_fmt = createDefaultPatchLiteFormat();
   diffing_fmt.inlineTableStart = undefined;
   const updated_document = parseJS(updated, diffing_fmt);
 
@@ -223,7 +223,7 @@ function applyChanges(
   updated: Document,
   updated_js: any,
   changes: Change[],
-  format: TomlFormat
+  format: PatchLiteFormat
 ): Document {
   // Potential Changes:
   //
@@ -563,7 +563,7 @@ function applyChanges(
  * @param format - The formatting options
  * @returns Array of additional tables that should be added to the document
  */
-function convertNestedInlineTablesToMultiline(table: Table, original: Document, format: TomlFormat): Table[] {
+function convertNestedInlineTablesToMultiline(table: Table, original: Document, format: PatchLiteFormat): Table[] {
   const additionalTables: Table[] = [];
   
   const processTableForNestedInlines = (currentTable: Table, tablesToAdd: Table[]) => {
@@ -616,7 +616,7 @@ function convertNestedInlineTablesToMultiline(table: Table, original: Document, 
  * @param original - The original document for inserting new items
  * @param format - The formatting options
  */
-function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, original: Document, format: TomlFormat): void {
+function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, original: Document, format: PatchLiteFormat): void {
   // Convert the inline table to a separate table section
   const baseTableKey = parent.key.item.value; // Get the parent table's key path
   const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key
