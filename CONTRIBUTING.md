@@ -51,8 +51,9 @@ This command:
 - Creates TypeScript declaration files
 
 The build outputs are:
-- `dist/toml-patch.js` - ESM format (for Node.js and modern bundlers)
-- `dist/toml-patch.d.ts` - TypeScript type declarations
+- `dist/index.js` - canonical ESM entrypoint (for Node.js and modern bundlers)
+- `dist/index.d.ts` - canonical TypeScript type declarations
+- `dist/toml-patch.js` and `dist/toml-patch.d.ts` - deprecated compatibility aliases
 
 ### Testing
 
