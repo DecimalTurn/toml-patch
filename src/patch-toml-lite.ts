@@ -28,7 +28,7 @@ import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray } from './generate';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
+import { arrayHadTrailingCommas, tableHadTrailingCommas } from './formatter';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -285,38 +285,25 @@ function applyChanges(
             child.comma = originalHadTrailingCommas;
           }
         }
-        
-        // Check if we should convert nested inline tables to multiline tables
-        if (format.inlineTableStart !== undefined && format.inlineTableStart > 0 && isDocument(parent) && isTable(child)) {
-          const additionalTables = convertNestedInlineTablesToMultiline(child, original, format);
-          
-          // Insert the main table first
-          insert(original, parent, child, index);
-          
-          // Then insert all the additional tables
-          for (const table of additionalTables) {
-            insert(original, original, table, undefined);
+
+        // Root-level key-values belong to TOML's implicit root table, which
+        // spans from the start of the document up to (but not including) the
+        // first explicit section header ([table] or [[array]]). When the index
+        // is a string key, insert() falls back to parent.items.length —
+        // appending after all sections and silently nesting the new key under
+        // the last one. Clamp to the end of the root table scope instead.
+        // For non-KV children (e.g. table-array entries) the index was already
+        // resolved to a correct integer above, so leave it as-is.
+        let resolvedIndex = index;
+        if (isDocument(parent) && isKeyValue(child)) {
+          const rootTableEnd = (parent as Document).items.findIndex(
+            item => isTable(item) || isTableArray(item)
+          );
+          if (rootTableEnd !== -1) {
+            resolvedIndex = rootTableEnd;
           }
-        } else {
-          // Root-level key-values belong to TOML's implicit root table, which
-          // spans from the start of the document up to (but not including) the
-          // first explicit section header ([table] or [[array]]). When the index
-          // is a string key, insert() falls back to parent.items.length —
-          // appending after all sections and silently nesting the new key under
-          // the last one. Clamp to the end of the root table scope instead.
-          // For non-KV children (e.g. table-array entries) the index was already
-          // resolved to a correct integer above, so leave it as-is.
-          let resolvedIndex = index;
-          if (isDocument(parent) && isKeyValue(child)) {
-            const rootTableEnd = (parent as Document).items.findIndex(
-              item => isTable(item) || isTableArray(item)
-            );
-            if (rootTableEnd !== -1) {
-              resolvedIndex = rootTableEnd;
-            }
-          }
-          insert(original, parent, child, resolvedIndex);
         }
+        insert(original, parent, child, resolvedIndex);
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
@@ -331,30 +318,13 @@ function applyChanges(
           insert(original, parent, child);
         }
       } else {
-        // Check if we should convert inline tables to multiline tables when adding to existing tables
-        if (format.inlineTableStart !== undefined && format.inlineTableStart > 0 && isKeyValue(child) && isInlineTable(child.value) && isTable(parent)) {
-          // Calculate the depth of the inline table that would be created
-          const baseTableKey = parent.key.item.value;
-          const nestedTableKey = [...baseTableKey, ...child.key.value];
-          const depth = calculateTableDepth(nestedTableKey);
-          
-          // Convert to separate section only if depth is less than inlineTableStart
-          if (depth < format.inlineTableStart) {
-            convertInlineTableToSeparateSection(child, parent, original, format);
-          } else {
-            insert(original, parent, child);
-          }
-        } else if (format.inlineTableStart === 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
-          insert(original, parent, child, undefined, true);
-        } else {
-          // Unwrap InlineItem if we're adding to a Table (not InlineTable)
-          // InlineItems should only exist within InlineTables or InlineArrays
-          let childToInsert = child;
-          if (isInlineItem(child) && (isTable(parent) || isDocument(parent))) {
-            childToInsert = child.item;
-          }
-          insert(original, parent, childToInsert);
+        // Unwrap InlineItem if we're adding to a Table (not InlineTable)
+        // InlineItems should only exist within InlineTables or InlineArrays
+        let childToInsert = child;
+        if (isInlineItem(child) && (isTable(parent) || isDocument(parent))) {
+          childToInsert = child.item;
         }
+        insert(original, parent, childToInsert);
       }
 
     } else if (isEdit(change)) {
@@ -525,96 +495,4 @@ function applyChanges(
 
   applyWrites(original);
   return original;
-}
-
-/**
- * Converts nested inline tables to separate table sections based on the inlineTableStart depth setting.
- * This function recursively processes a table and extracts any inline tables within it,
- * creating separate table sections with properly nested keys.
- * 
- * @param table - The table to process for nested inline tables
- * @param original - The original document for inserting new items
- * @param format - The formatting options
- * @returns Array of additional tables that should be added to the document
- */
-function convertNestedInlineTablesToMultiline(table: Table, original: Document, format: PatchLiteFormat): Table[] {
-  const additionalTables: Table[] = [];
-  
-  const processTableForNestedInlines = (currentTable: Table, tablesToAdd: Table[]) => {
-    for (let i = currentTable.items.length - 1; i >= 0; i--) {
-      const item = currentTable.items[i];
-      if (isKeyValue(item) && isInlineTable(item.value)) {
-        // Calculate the depth of this nested table
-        const nestedTableKey = [...currentTable.key.item.value, ...item.key.value];
-        const depth = calculateTableDepth(nestedTableKey);
-        
-        // Only convert to separate table if depth is less than inlineTableStart
-        if (depth < (format.inlineTableStart ?? 1) && format.inlineTableStart !== 0) {
-          // Convert this inline table to a separate table section
-          const separateTable = generateTable(nestedTableKey);
-          
-          // Move all items from the inline table to the separate table
-          for (const inlineItem of item.value.items) {
-            if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
-              insert(original, separateTable, inlineItem.item, undefined);
-            }
-          }
-          
-          // Remove this item from the original table
-          currentTable.items.splice(i, 1);
-          
-          // Update the parent table's end position after removal
-          postInlineItemRemovalAdjustment(currentTable);
-          
-          // Queue this table to be added to the document
-          tablesToAdd.push(separateTable);
-          
-          // Recursively process the new table for further nested inlines
-          processTableForNestedInlines(separateTable, tablesToAdd);
-        }
-      }
-    }
-  };
-  
-  processTableForNestedInlines(table, additionalTables);
-  return additionalTables;
-}
-
-/**
- * Converts an inline table to a separate table section when adding to an existing table.
- * This function creates a new table section with the combined key path and moves all
- * properties from the inline table to the separate table section.
- * 
- * @param child - The KeyValue node with an InlineTable as its value
- * @param parent - The parent table where the KeyValue would be added
- * @param original - The original document for inserting new items
- * @param format - The formatting options
- */
-function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, original: Document, format: PatchLiteFormat): void {
-  // Convert the inline table to a separate table section
-  const baseTableKey = parent.key.item.value; // Get the parent table's key path
-  const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key
-  const separateTable = generateTable(nestedTableKey);
-  
-  // We know child.value is an InlineTable from the calling context
-  if (isInlineTable(child.value)) {
-    // Move all items from the inline table to the separate table
-    for (const inlineItem of child.value.items) {
-      if (isInlineItem(inlineItem) && isKeyValue(inlineItem.item)) {
-        insert(original, separateTable, inlineItem.item, undefined);
-      }
-    }
-  }
-  
-  // Add the separate table to the document
-  insert(original, original, separateTable, undefined);
-  
-  // Update the parent table's end position since we're not adding the inline table to it
-  postInlineItemRemovalAdjustment(parent);
-  
-  // Also handle any nested inline tables within the new table
-  const additionalTables = convertNestedInlineTablesToMultiline(separateTable, original, format);
-  for (const table of additionalTables) {
-    insert(original, original, table, undefined);
-  }
 }
