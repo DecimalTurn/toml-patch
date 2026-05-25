@@ -12,7 +12,7 @@ export default defineConfig([
     // Keep the published package compact. Downstream bundlers can still
     // tree-shake the ESM output and apply their own minification.
     entry: {
-      'toml-patch': 'src/index.ts',
+      'toml-patch': 'src/toml-patch.ts',
       patch: 'src/patch-entry.ts',
       format: 'src/format-entry.ts',
     },
