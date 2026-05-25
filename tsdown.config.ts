@@ -13,6 +13,8 @@ export default defineConfig([
     // tree-shake the ESM output and apply their own minification.
     entry: {
       'toml-patch': 'src/index.ts',
+      patch: 'src/patch-entry.ts',
+      format: 'src/format-entry.ts',
     },
     format: 'esm',
     outDir: 'dist',

@@ -1,5 +1,6 @@
-import patch from '../patch';
-import { parse, stringify } from '../';
+import patch from '../patch-toml';
+import { parse } from '../';
+import { stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';

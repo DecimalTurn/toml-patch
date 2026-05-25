@@ -4,7 +4,7 @@ import {
 } from '../cst';
 import { Location, Position } from '../location';
 import parseTOML from '../parse-toml';
-import { patchCst } from '../patch';
+import { patchCst } from '../patch-toml';
 import { TomlFormat } from '../toml-format';
 import traverse from '../traverse';
 import dedent from 'dedent';

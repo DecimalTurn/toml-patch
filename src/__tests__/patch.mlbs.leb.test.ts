@@ -1,4 +1,4 @@
-import patch from '../patch';
+import patch from '../patch-toml';
 import { parse } from '..';
 
 /**

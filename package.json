@@ -41,6 +41,16 @@
       "types": "./dist/toml-patch.d.ts",
       "import": "./dist/toml-patch.js",
       "default": "./dist/toml-patch.js"
+    },
+    "./patch": {
+      "types": "./dist/patch.d.ts",
+      "import": "./dist/patch.js",
+      "default": "./dist/patch.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js",
+      "default": "./dist/format.js"
     }
   },
   "scripts": {
