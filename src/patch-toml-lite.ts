@@ -30,7 +30,6 @@ import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
-import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
 import { DateFormatHelper } from './date-format';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
@@ -46,31 +45,28 @@ import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
  * @param existing - The original TOML document as a string
  * @param existing_js - The JavaScript object equivalent of the original TOML
  * @param updated - The updated JavaScript object with desired changes
- * @param format - Optional formatting options to apply to new or modified sections
  * @returns A new TOML string with the changes applied
  */
 export default function patchLite(
   existing: string,
   existing_js: any,
-  updated: any,
-  format?: Partial<TomlFormat> | TomlFormat
+  updated: any
 ): string {
   const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
 
-  // Auto-detect formatting preferences from the existing TOML string for fallback
-  const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
-  const fmt = resolveTomlFormat(format, autoDetectedFormat);
+  // Lite mode always applies default formatting and does not accept custom style options.
+  const fmt = TomlFormat.default();
 
-  const patchedToml = patchCstLite(existing_cst, existing_js, updated, fmt).tomlString;
+  const patchedToml = patchCstLite(existing_cst, existing_js, updated).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
 }
 
 export function patchCstLite(
   existing_cst: CST,
   existing_js: any,
-  updated: any,
-  format: TomlFormat
+  updated: any
 ): { tomlString: string; document: Document } {
+  const format = TomlFormat.default();
   const items = [...existing_cst];
 
   // Compute the Document's end position from its children so that
@@ -96,7 +92,8 @@ export function patchCstLite(
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
   // convert all nested tables to multiline, which is not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
-  const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
+  const diffing_fmt = TomlFormat.default();
+  diffing_fmt.inlineTableStart = undefined;
   const updated_document = parseJS(updated, diffing_fmt);
 
   // In lite mode we intentionally avoid importing toJS and rely on the caller's

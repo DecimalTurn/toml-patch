@@ -1,11 +1,9 @@
 import dedent from 'dedent';
 import { parse } from '../';
-import patch from '../patch-toml';
 import patchLite, { patchCstLite } from '../patch-toml-lite';
 import parseTOML from '../parse-toml';
-import { TomlFormat } from '../toml-format';
 
-test('patchLite should match patch output when existing JS matches existing TOML', () => {
+test('patchLite should apply changes with default formatting', () => {
   const existing = dedent`
     title = "TOML example"
     owner.name = "Bob"
@@ -18,7 +16,9 @@ test('patchLite should match patch output when existing JS matches existing TOML
   updated.owner.name = 'Tim';
   updated.database.enabled = false;
 
-  expect(patchLite(existing, existingJs, updated)).toEqual(patch(existing, updated));
+  const patched = patchLite(existing, existingJs, updated);
+  expect(parse(patched)).toEqual(updated);
+  expect(patched.endsWith('\n')).toBe(true);
 });
 
 test('patchCstLite should patch using caller-provided existing JS', () => {
@@ -33,6 +33,6 @@ test('patchCstLite should patch using caller-provided existing JS', () => {
   const updated = parse(existing);
   updated.server.port = 9090;
 
-  const result = patchCstLite(existingCst, existingJs, updated, TomlFormat.default());
+  const result = patchCstLite(existingCst, existingJs, updated);
   expect(result.tomlString).toContain('port = 9090');
 });
