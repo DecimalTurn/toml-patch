@@ -22,8 +22,7 @@ import {
   InlineItem,
   CST,
   Table,
-  Value,
-  isDateTime
+  Value
 } from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
@@ -31,7 +30,6 @@ import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
-import { DateFormatHelper } from './date-format';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
 /**
@@ -159,21 +157,6 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const newString = generateString(replacement.value, existing.raw);
     replacement.raw = newString.raw;
     replacement.loc = newString.loc;
-  }
-  
-  // Preserve DateTime format
-  if (isDateTime(existing) && isDateTime(replacement)) {
-    // Analyze the original raw format and create a properly formatted replacement
-    const originalRaw = existing.raw;
-    const newValue = replacement.value;
-    
-    // Create a new date with the original format preserved
-    const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
-    
-    // Update the replacement with the properly formatted date
-    replacement.value = formattedDate;
-    replacement.raw = formattedDate.toISOString();
-    replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
   }
   
   // Preserve array trailing comma format
