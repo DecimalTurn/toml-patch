@@ -1,6 +1,5 @@
 import parseTOML from './parse-toml';
 import parseJS from './parse-js';
-import toJS from './to-js';
 import toTOML from './to-toml';
 import { TomlFormat } from './toml-format';
 import {
@@ -55,22 +54,33 @@ import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
  * original document structure as much as possible.
  * 
  * @param existing - The original TOML document as a string
+ * @param existing_js - The JavaScript object equivalent of the original TOML
  * @param updated - The updated JavaScript object with desired changes
  * @param format - Optional formatting options to apply to new or modified sections
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
+export default function patchLite(
+  existing: string,
+  existing_js: any,
+  updated: any,
+  format?: Partial<TomlFormat> | TomlFormat
+): string {
   const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
-  const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
+  const patchedToml = patchCstLite(existing_cst, existing_js, updated, fmt).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
 }
 
-export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
+export function patchCstLite(
+  existing_cst: CST,
+  existing_js: any,
+  updated: any,
+  format: TomlFormat
+): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
   // Compute the Document's end position from its children so that
@@ -86,7 +96,6 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     }
   }
 
-  const existing_js = toJS(items);
   const existing_document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
@@ -100,10 +109,9 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
   const updated_document = parseJS(updated, diffing_fmt);
 
-  // Diff against the JS representation rather than
-  // the raw `updated` value, so that any undefined keys (which parseJS already
-  // stripped) are consistently absent from both sides of the diff. 
-  const updated_js = toJS(updated_document.items);
+  // In lite mode we intentionally avoid importing toJS and rely on the caller's
+  // provided JS values for the diff baseline.
+  const updated_js = updated;
   const changes = reorder(diff(existing_js, updated_js));
 
   if (changes.length === 0) {
@@ -113,7 +121,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format);
+  const patched_document = applyChanges(existing_document, updated_document, updated_js, changes, format);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -233,7 +241,13 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
+function applyChanges(
+  original: Document,
+  updated: Document,
+  updated_js: any,
+  changes: Change[],
+  format: TomlFormat
+): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -266,7 +280,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // regenerate a fresh TableArray from the JS value.
       if (is_table_array && !isTableArray(child)) {
         const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
-        const updated_js = toJS(updated.items);
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
@@ -450,7 +463,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // node and `replacement` (from the updated document) may be an InlineItem or KV that does
         // not carry the full scope. Simply splicing it into the Document would lose the scope.
         // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
-        const updated_js = toJS(updated.items);
         let jsValue: any = updated_js;
         for (const key of change.path) {
           jsValue = jsValue?.[key];

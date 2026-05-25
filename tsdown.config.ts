@@ -14,6 +14,7 @@ export default defineConfig([
     entry: {
       'toml-patch': 'src/toml-patch.ts',
       patch: 'src/patch-entry.ts',
+      'patch-lite': 'src/patch-lite-entry.ts',
       format: 'src/format-entry.ts',
     },
     format: 'esm',

@@ -99,6 +99,7 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
 }
 
 export { default as patch } from './patch-toml';
+export { default as patchLite } from './patch-toml-lite';
 export { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './parse-toml';
 
 /**

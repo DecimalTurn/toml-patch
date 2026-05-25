@@ -47,6 +47,11 @@
       "import": "./dist/patch.js",
       "default": "./dist/patch.js"
     },
+    "./patch-lite": {
+      "types": "./dist/patch-lite.d.ts",
+      "import": "./dist/patch-lite.js",
+      "default": "./dist/patch-lite.js"
+    },
     "./format": {
       "types": "./dist/format.d.ts",
       "import": "./dist/format.js",
@@ -113,7 +118,10 @@
     "printWidth": 100
   },
   "files": [
-    "dist/toml-patch.*"
+    "dist/toml-patch.*",
+    "dist/patch.*",
+    "dist/patch-lite.*",
+    "dist/format.*"
   ],
   "json-comments": {
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",
