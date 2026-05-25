@@ -143,7 +143,7 @@ for (const r of results) {
 let md = `# Error Message Comparison: smol-toml vs @decimalturn/toml-patch\n\n`;
 md += `## How to generate this report\n\n`;
 md += `From the repository root:\n\n`;
-md += `1. Build the package (required so \`dist/toml-patch.js\` exists):\n`;
+md += `1. Build the package (required so \`dist/index.js\` exists):\n`;
 md += `   \`pnpm run build\`\n`;
 md += `2. Run the comparison script:\n`;
 md += `   \`node benchmark/error-comparison.mjs\`\n\n`;
