@@ -29,7 +29,7 @@
 
 // Script for https://github.com/toml-lang/toml-test
 
-import { parse, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/toml-patch.js'
+import { parse, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './dist/index.js'
 
 function tagObject (obj) {
 	if (typeof obj === 'string') {
