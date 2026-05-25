@@ -16,7 +16,6 @@ import {
   isInlineArray,
   isInlineTable,
   isInlineItem,
-  isString,
   hasItem,
   hasItems,
   InlineItem,
@@ -28,7 +27,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
-import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
+import { generateInlineItem, generateTable, generateTableArray } from './generate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 
@@ -151,14 +150,7 @@ function reorder(changes: Change[]): Change[] {
  * @param replacement - The replacement node to apply formatting to
  */
 function preserveFormatting(existing: Value, replacement: Value): void {
-  
-  // Preserve string format (handles basic, literal, multiline in all variants)
-  if (isString(existing) && isString(replacement)) {
-    const newString = generateString(replacement.value, existing.raw);
-    replacement.raw = newString.raw;
-    replacement.loc = newString.loc;
-  }
-  
+
   // Preserve array trailing comma format
   if (isInlineArray(existing) && isInlineArray(replacement)) {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
