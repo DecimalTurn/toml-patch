@@ -4,7 +4,7 @@
  */
 import { rollup } from 'rollup';
 import terser from '@rollup/plugin-terser';
-import { writeFileSync, mkdirSync, rmSync, readFileSync, statSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { gzipSync } from 'zlib';
@@ -24,24 +24,20 @@ const scenarios = [
     code: `export { parse, stringify, patch, TomlFormat, TomlDocument } from '../dist/index.js';`,
   },
   {
-    name: 'parse only',
-    code: `export { parse } from '../dist/index.js';`,
+    name: 'patch from root',
+    code: `export { patch } from '../dist/index.js';`,
   },
   {
-    name: 'stringify only',
-    code: `export { stringify } from '../dist/index.js';`,
+    name: 'patch from subpath',
+    code: `export { patch } from '../dist/patch.js';`,
   },
   {
-    name: 'parse + patch',
-    code: `export { parse, patch } from '../dist/index.js';`,
+    name: 'patch + TomlFormat (root)',
+    code: `export { patch, TomlFormat } from '../dist/index.js';`,
   },
   {
-    name: 'parse + stringify',
-    code: `export { parse, stringify } from '../dist/index.js';`,
-  },
-  {
-    name: 'parse + patch + TomlFormat',
-    code: `export { parse, patch, TomlFormat } from '../dist/index.js';`,
+    name: 'patch + format subpaths',
+    code: `export { patch } from '../dist/patch.js'; export { TomlFormat } from '../dist/format.js';`,
   },
 ];
 

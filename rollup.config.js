@@ -9,10 +9,16 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 
 const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${pkg.license}`;
 
+const entryPoints = {
+  index: 'src/index.ts',
+  patch: 'src/patch-entry.ts',
+  format: 'src/format-entry.ts'
+};
+
 export default [
   // 1. Preserved modules (for bundler consumers — enables tree-shaking)
   {
-    input: 'src/index.ts',
+    input: entryPoints,
     output: {
       dir: 'dist',
       format: 'es',
@@ -35,7 +41,7 @@ export default [
   },
   // 3. Type declarations (preserved modules)
   {
-    input: 'src/index.ts',
+    input: entryPoints,
     output: {
       dir: 'dist',
       format: 'es',

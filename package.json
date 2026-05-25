@@ -37,6 +37,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./patch": {
+      "types": "./dist/patch.d.ts",
+      "import": "./dist/patch.js",
+      "default": "./dist/patch.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js",
+      "default": "./dist/format.js"
     }
   },
   "scripts": {
