@@ -24,11 +24,12 @@ import {
   Value
 } from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
-import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray } from './generate';
 import { arrayHadTrailingCommas, tableHadTrailingCommas } from './formatter';
+
+type Path = Array<string | number>;
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -49,10 +50,6 @@ export default function patchLite(
   updated: any
 ): string {
   const existing_cst = Array.from(parseTOML(existing));
-
-  // Lite mode always applies default formatting and does not accept custom style options.
-  const fmt = createDefaultPatchLiteFormat();
-
   const patchedToml = patchCstLite(existing_cst, existing_js, updated).tomlString;
   return patchedToml;
 }
@@ -88,8 +85,7 @@ export function patchCstLite(
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
   // convert all nested tables to multiline, which is not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
-  const diffing_fmt = createDefaultPatchLiteFormat();
-  diffing_fmt.inlineTableStart = undefined;
+  const diffing_fmt: PatchLiteFormat = { ...format, inlineTableStart: undefined };
   const updated_document = parseJS(updated, diffing_fmt);
 
   // In lite mode we intentionally avoid importing toJS and rely on the caller's
@@ -139,6 +135,93 @@ function reorder(changes: Change[]): Change[] {
   
   return changes;
 
+}
+
+function pathsEqual(a: Path, b: Path): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function findByPath(node: TreeNode, path: Path): TreeNode {
+  if (!path.length) {
+    if (isInlineItem(node) && isKeyValue(node.item)) {
+      return node.item;
+    }
+    return node;
+  }
+
+  if (isKeyValue(node)) {
+    return findByPath(node.value, path);
+  }
+
+  if (hasItems(node)) {
+    const indexes: Record<string, number> = {};
+
+    for (let itemIndex = 0; itemIndex < node.items.length; itemIndex++) {
+      const item = node.items[itemIndex];
+      let key: Path = [];
+
+      if (isKeyValue(item)) {
+        key = item.key.value;
+      } else if (isTable(item)) {
+        key = item.key.item.value;
+      } else if (isTableArray(item)) {
+        key = item.key.item.value;
+        const keyString = JSON.stringify(key);
+        if (indexes[keyString] === undefined) indexes[keyString] = 0;
+        const arrayIndex = indexes[keyString]++;
+        key = key.concat(arrayIndex);
+      } else if (isInlineItem(item) && isKeyValue(item.item)) {
+        key = item.item.key.value;
+      } else if (isInlineItem(item)) {
+        key = [itemIndex];
+      }
+
+      if (!key.length || !pathsEqual(key, path.slice(0, key.length))) continue;
+
+      const remainingPath = path.slice(key.length);
+
+      if (isInlineItem(item) && isKeyValue(item.item)) {
+        if (path.length === key.length) {
+          return item;
+        }
+        return findByPath(item.item.value, remainingPath);
+      }
+
+      if (isInlineItem(item) && path.length > key.length) {
+        return findByPath(item.item, remainingPath);
+      }
+
+      return findByPath(item, remainingPath);
+    }
+  }
+
+  throw new Error(`Node not found at ${path.join('.')}`);
+}
+
+function tryFindByPath(node: TreeNode, path: Path): TreeNode | undefined {
+  try {
+    return findByPath(node, path);
+  } catch {}
+}
+
+function findParent(node: TreeNode, path: Path): TreeNode {
+  let parentPath = path;
+  let parent: TreeNode | undefined;
+
+  while (parentPath.length && !parent) {
+    parentPath = parentPath.slice(0, -1);
+    parent = tryFindByPath(node, parentPath);
+  }
+
+  if (!parent) {
+    throw new Error(`Parent not found for ${path.join('.')}`);
+  }
+
+  return parent;
 }
 
 /**
