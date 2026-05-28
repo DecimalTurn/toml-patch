@@ -6,5 +6,18 @@
   "minimumReleaseAge": "2 days",
   "git-submodules": {
     "enabled": true
-  }
+  },
+  "packageRules": [
+    {
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "matchPackageNames": [
+        "*"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    }
+  ]
 }
