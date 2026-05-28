@@ -7,6 +7,8 @@
   "git-submodules": {
     "enabled": true
   },
+
+  // https://docs.renovatebot.com/presets-group/#groupallnonmajor
   "packageRules": [
     {
       "groupName": "all non-major dependencies",
