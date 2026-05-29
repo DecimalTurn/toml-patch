@@ -28,6 +28,9 @@
     {
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
+      "excludePackageNames": [
+        "pnpm"
+      ],
       "matchPackageNames": [
         "*"
       ],
