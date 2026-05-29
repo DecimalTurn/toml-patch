@@ -12,6 +12,20 @@
   // https://docs.renovatebot.com/presets-group/#groupallnonmajor
   "packageRules": [
     {
+      "description": "Auto-merge packageManager minor/patch updates",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchDepTypes": [
+        "packageManager"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
       "matchPackageNames": [
