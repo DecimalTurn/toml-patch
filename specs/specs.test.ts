@@ -3,7 +3,7 @@ import { join, basename } from 'path';
 import { readFile as _readFile, existsSync, readFileSync } from 'fs';
 import { sync as glob } from 'glob';
 import { load } from 'js-yaml';
-import { parse } from '../src/';
+import { parse, LocalDate, LocalDateTime, LocalTime, OffsetDateTime } from '../src/';
 
 const readFile = promisify(_readFile);
 
@@ -230,14 +230,15 @@ function expandJSONValue(value: any): any {
         case 'array':
           return value.value.map(expandJSONValue);
         case 'datetime':
+          return new OffsetDateTime(value.value, value.value.includes(' '));
         case 'datetime-local':
-          return new Date(value.value);
+          return new LocalDateTime(value.value, value.value.includes(' '), value.value);
         case 'date':
         case 'date-local':
-          return new Date(`${value.value}T00:00:00.000Z`);
+          return new LocalDate(value.value);
         case 'time':
         case 'time-local':
-          return new Date(`0000-01-01T${value.value}`);
+          return new LocalTime(value.value, value.value);
         case 'string':
           return value.value;
         case 'float':
