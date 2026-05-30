@@ -41,9 +41,13 @@ const tomlVersionFiles = new Set(
     .map(line => line.trim())
 );
 
+function toPosixPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
 // Helper function to check if a file should be included based on TOML version
 function isIncludedInVersion(filePath: string): boolean {
-  const relativePath = filePath.replace('submodules/toml-test/tests/', '');
+  const relativePath = toPosixPath(filePath).replace('submodules/toml-test/tests/', '');
   // Check for both .toml and .json files
   return tomlVersionFiles.has(relativePath) || 
          tomlVersionFiles.has(relativePath.replace('.json', '.toml'));
@@ -54,7 +58,7 @@ const toml_test_input = glob(toml_test_pattern).filter(isIncludedInVersion);
 
 const toml_test = toml_test_input
   .map(input => {
-    const relativePath = input.replace('submodules/toml-test/tests/valid/', '');
+    const relativePath = toPosixPath(input).replace('submodules/toml-test/tests/valid/', '');
     const name = relativePath.replace('.toml', '');
     const expected = input.replace('.toml', '.json');
     if (!existsSync(expected)) return null;
@@ -81,7 +85,7 @@ const toml_invalid_input = glob(toml_invalid_pattern).filter(isIncludedInVersion
 
 const toml_invalid = toml_invalid_input
   .map(input => {
-    const relativePath = input.replace('submodules/toml-test/tests/invalid/', '');
+    const relativePath = toPosixPath(input).replace('submodules/toml-test/tests/invalid/', '');
     const name = relativePath.replace('.toml', '');
     return [name, input];
   });
@@ -151,6 +155,11 @@ test('toml-test - integer/long preserves full precision by default', async () =>
     'int64-max': BigInt('9223372036854775807'),
     'int64-max-neg': BigInt('-9223372036854775808'),
   });
+});
+
+test('toml-test - includes invalid control/rawmulti-cr fixture', () => {
+  const hasRawMultiCr = toml_invalid.some(([name]) => name === 'control/rawmulti-cr');
+  expect(hasRawMultiCr).toBe(true);
 });
 
 // Generate tests for spec-test valid
