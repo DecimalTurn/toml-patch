@@ -3,7 +3,7 @@ import { join, basename } from 'path';
 import { readFile as _readFile, existsSync, readFileSync } from 'fs';
 import { sync as glob } from 'glob';
 import { load } from 'js-yaml';
-import { parse } from '../src/';
+import { parse, LocalDate, LocalDateTime, LocalTime, OffsetDateTime } from '../src/';
 
 const readFile = promisify(_readFile);
 
@@ -41,9 +41,13 @@ const tomlVersionFiles = new Set(
     .map(line => line.trim())
 );
 
+function toPosixPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
 // Helper function to check if a file should be included based on TOML version
 function isIncludedInVersion(filePath: string): boolean {
-  const relativePath = filePath.replace('submodules/toml-test/tests/', '');
+  const relativePath = toPosixPath(filePath).replace('submodules/toml-test/tests/', '');
   // Check for both .toml and .json files
   return tomlVersionFiles.has(relativePath) || 
          tomlVersionFiles.has(relativePath.replace('.json', '.toml'));
@@ -54,7 +58,7 @@ const toml_test_input = glob(toml_test_pattern).filter(isIncludedInVersion);
 
 const toml_test = toml_test_input
   .map(input => {
-    const relativePath = input.replace('submodules/toml-test/tests/valid/', '');
+    const relativePath = toPosixPath(input).replace('submodules/toml-test/tests/valid/', '');
     const name = relativePath.replace('.toml', '');
     const expected = input.replace('.toml', '.json');
     if (!existsSync(expected)) return null;
@@ -81,7 +85,7 @@ const toml_invalid_input = glob(toml_invalid_pattern).filter(isIncludedInVersion
 
 const toml_invalid = toml_invalid_input
   .map(input => {
-    const relativePath = input.replace('submodules/toml-test/tests/invalid/', '');
+    const relativePath = toPosixPath(input).replace('submodules/toml-test/tests/invalid/', '');
     const name = relativePath.replace('.toml', '');
     return [name, input];
   });
@@ -153,6 +157,11 @@ test('toml-test - integer/long preserves full precision by default', async () =>
   });
 });
 
+test('toml-test - includes invalid control/rawmulti-cr fixture', () => {
+  const hasRawMultiCr = toml_invalid.some(([name]) => name === 'control/rawmulti-cr');
+  expect(hasRawMultiCr).toBe(true);
+});
+
 // Generate tests for spec-test valid
 spec_test.forEach(([name, input_file, expected_file]) => {
   const testFn = SKIPPED_VALID_TESTS.includes(name as string) ? test.skip : test;
@@ -221,14 +230,15 @@ function expandJSONValue(value: any): any {
         case 'array':
           return value.value.map(expandJSONValue);
         case 'datetime':
+          return new OffsetDateTime(value.value, value.value.includes(' '));
         case 'datetime-local':
-          return new Date(value.value);
+          return new LocalDateTime(value.value, value.value.includes(' '), value.value);
         case 'date':
         case 'date-local':
-          return new Date(`${value.value}T00:00:00.000Z`);
+          return new LocalDate(value.value);
         case 'time':
         case 'time-local':
-          return new Date(`0000-01-01T${value.value}`);
+          return new LocalTime(value.value, value.value);
         case 'string':
           return value.value;
         case 'float':
