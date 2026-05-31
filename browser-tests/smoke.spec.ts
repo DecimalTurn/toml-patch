@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const bundle = readFileSync(join(process.cwd(), 'dist/toml-patch.js'), 'utf-8');
+const bundle = readFileSync(join(process.cwd(), 'dist/toml-patch.min.js'), 'utf-8');
 
 // Load the bundle into the page via a blob URL so it runs in a real browser
 // module context — no Node.js APIs available.

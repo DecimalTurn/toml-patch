@@ -16,7 +16,7 @@
  */
 
 import { jest } from '@jest/globals';
-import { patch, TomlFormat } from "../../../dist/toml-patch.js";
+import { patch, TomlFormat } from "../../../dist/index.js";
 
 describe('patch() Function JavaScript Integration', () => {
   const originalToml = `# Configuration file

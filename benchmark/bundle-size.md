@@ -4,7 +4,7 @@
 
 From the repository root:
 
-1. Build the package (required so `dist/toml-patch.js` exists):
+1. Build the package (required so `dist/index.js` exists):
    `pnpm run build`
 2. Run the comparison script:
    `node benchmark/bundle-size.mjs`

@@ -26,15 +26,27 @@
   ],
   "packageManager": "pnpm@11.4.0",
   "engines": {
-    "node": ">=12"
+    "node": ">=14"
   },
   "type": "module",
-  "types": "./dist/toml-patch.d.ts",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
   "exports": {
     ".": {
-      "types": "./dist/toml-patch.d.ts",
-      "import": "./dist/toml-patch.js",
-      "default": "./dist/toml-patch.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./patch": {
+      "types": "./dist/patch.d.ts",
+      "import": "./dist/patch.js",
+      "default": "./dist/patch.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js",
+      "default": "./dist/format.js"
     }
   },
   "scripts": {
