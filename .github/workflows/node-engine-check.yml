@@ -1,6 +1,10 @@
 name: Lowest Node Engine Probe
 
 on:
+  push:
+    branches:
+      - latest
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -57,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["4","6","8","10","12","14", "16", "18", "20", "22", "24"]
+        node-version: ["12","14", "16", "18", "20", "22", "24"]
 
     steps:
       - name: Setup Node.js
@@ -137,10 +141,17 @@ jobs:
           done < probe-results/all-results.txt
 
           lowest_pass=$(awk '$2 == "pass" { print $1; exit }' probe-results/all-results.txt)
+          node14_status=$(awk '$1 == "14" { print $2 }' probe-results/all-results.txt)
 
           if [ -z "$lowest_pass" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "No tested Node version passed consumer install + runtime smoke test." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$node14_status" != "pass" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Required baseline failed: Node 14 must pass consumer install + runtime smoke test." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 

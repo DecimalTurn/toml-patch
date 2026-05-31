@@ -26,7 +26,7 @@
   ],
   "packageManager": "pnpm@11.4.0",
   "engines": {
-    "node": ">=12"
+    "node": ">=14"
   },
   "type": "module",
   "types": "./dist/toml-patch.d.ts",
