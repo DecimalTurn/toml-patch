@@ -3,7 +3,7 @@
  * TomlDocument JavaScript integration tests
  */
 
-import { TomlDocument, TomlFormat } from "../../../dist/toml-patch.js";
+import { TomlDocument, TomlFormat } from "../../../dist/index.js";
 
 describe('TomlDocument JavaScript Integration', () => {
   const originalToml = `title = "Test App"
