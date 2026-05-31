@@ -435,7 +435,7 @@
     <div class="install-block" style="text-align:left;font-size:0.82rem;">
       &lt;script type="module"&gt;<br>
       &nbsp;&nbsp;import * as TOML from<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;'https://unpkg.com/@decimalturn/toml-patch';<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;'https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.js';<br>
       &lt;/script&gt;
     </div>
     <p style="margin-top:1.5rem;">
@@ -448,13 +448,13 @@
 
 <footer>
   Built with <a href="https://github.com/DecimalTurn/toml-patch">@decimalturn/toml-patch</a>
-  · <!--Loaded via <a href="https://unpkg.com/@decimalturn/toml-patch">unpkg</a>-->
+  · <!--Loaded via <a href="https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.js">unpkg</a>-->
   · Loaded from <a href="./dist/toml-patch.js">local build</a>
 </footer>
 
 <script type="module">
   // ── Load dependencies ────────────────────────────────
-  // import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';
+  // import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.js'; --- IGNORE ---
   import * as TOML from './dist/toml-patch.js';
 
   import { EditorView, basicSetup } from 'https://esm.sh/codemirror';
