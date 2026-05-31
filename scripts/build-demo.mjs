@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Generates demo.html from dev_demo.html by replacing the local
- * ./dist/toml-patch.js import with the unpkg CDN URL and updating
+ * ./dist/toml-patch.min.js import with the unpkg CDN URL and updating
  * the footer link accordingly.
  */
 
@@ -19,13 +19,13 @@ let html = readFileSync(src, 'utf-8');
 
 // Replace the commented-out unpkg line + local import with just the unpkg import
 html = html.replace(
-  /(\s*)\/\/ import \* as TOML from 'https:\/\/unpkg\.com\/@decimalturn\/toml-patch';\r?\n\s*import \* as TOML from '\.\/dist\/toml-patch\.js';/,
-  "$1import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch';"
+  /(\s*)\/\/ import \* as TOML from 'https:\/\/unpkg\.com\/@decimalturn\/toml-patch';\r?\n\s*import \* as TOML from '\.\/dist\/toml-patch\.min\.js';/,
+  "$1import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.min.js';"
 );
 
 // Update the footer: remove the local build link, activate the unpkg link
 html = html.replace(
-  /·\s*<!--(Loaded via <a href="https:\/\/unpkg\.com\/@decimalturn\/toml-patch">unpkg<\/a>)-->\s*\r?\n\s*·\s*Loaded from <a href="\.\/dist\/toml-patch\.js">local build<\/a>/,
+  /·\s*<!--(Loaded via <a href="https:\/\/unpkg\.com\/@decimalturn\/toml-patch">unpkg<\/a>)-->\s*\r?\n\s*·\s*Loaded from <a href="\.\/dist\/toml-patch\.min\.js">local build<\/a>/,
   '· $1'
 );
 

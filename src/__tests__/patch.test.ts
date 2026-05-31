@@ -1,4 +1,4 @@
-import patch from '../patch';
+import patch from '../patch-toml';
 import { parse } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';

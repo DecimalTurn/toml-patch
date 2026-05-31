@@ -2,7 +2,7 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
-import { patchCst } from './patch';
+import { patchCst } from './patch-toml';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
