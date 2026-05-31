@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build: Update TypeScript `target` and `lib` to `es2025`.
 - **BREAKING**: Raise minimum supported Node.js version from `>=12` to `>=14`.
 - Packaging: Ship tree-shakable ESM output, while still publishing a minified browser bundle at `dist/toml-patch.min.js`.
-- Exports: Add focused subpath exports for `./patch` and `./format`.
+- Exports: Add focused subpath exports for `./patch`.
 - Important browser/CDN note: importing from `https://unpkg.com/@decimalturn/toml-patch` now serves the package's default unminified, unbundled ESM entry, not the old single minified bundle behavior. For explicit minified browser usage, import `https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.min.js`.
 
 ## [1.3.0] - 2026-05-10

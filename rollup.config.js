@@ -12,8 +12,7 @@ const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${
 const entryPoints = {
   index: 'src/index.ts',
   'toml-patch': 'src/toml-patch.ts',
-  patch: 'src/patch-entry.ts',
-  format: 'src/format-entry.ts'
+  patch: 'src/patch-entry.ts'
 };
 
 export default [

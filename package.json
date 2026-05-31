@@ -42,11 +42,6 @@
       "types": "./dist/patch.d.ts",
       "import": "./dist/patch.js",
       "default": "./dist/patch.js"
-    },
-    "./format": {
-      "types": "./dist/format.d.ts",
-      "import": "./dist/format.js",
-      "default": "./dist/format.js"
     }
   },
   "scripts": {
