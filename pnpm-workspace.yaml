@@ -16,3 +16,5 @@ overrides:
   serialize-javascript: "^7.0.5"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/45
   ip-address: ">=10.1.1"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/54
+  shell-quote: ">=1.8.4"
