@@ -19,7 +19,10 @@
     {
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
-      "matchPackageNames": ["*", "!pnpm"],
+      "matchPackageNames": ["!pnpm"],
+      // A negation-only pattern matches everything except what's negated.
+      // Equivalent to ["*", "!pnpm"] but avoids Renovate's validation error
+      // when mixing * or ** with other patterns.
       "matchUpdateTypes": ["minor", "patch"]
     }
   ]
