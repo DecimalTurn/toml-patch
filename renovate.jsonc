@@ -17,7 +17,7 @@
       "automerge": true
     },
     {
-      "groupName": "all non-major dependencies",
+      "groupName": "all non-major devDependencies",
       "groupSlug": "all-minor-patch",
       "matchPackageNames": ["!pnpm"],
       // A negation-only pattern matches everything except what's negated.
