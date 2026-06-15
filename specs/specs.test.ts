@@ -167,7 +167,8 @@ spec_test.forEach(([name, input_file, expected_file]) => {
   const testFn = SKIPPED_VALID_TESTS.includes(name as string) ? test.skip : test;
   testFn(`spec-test - ${name}`, async () => {
     const input = await readFile(input_file, 'utf8');
-    const expected = load(await readFile(expected_file, 'utf8'));
+    const raw = load(await readFile(expected_file, 'utf8'), { maxDepth: 2000 } as any);
+    const expected = expandYAMLNumbers(raw);
     const actual = parse(input, { integersAsBigInt: false });
     expect(actual).toEqual(expected);
   });
@@ -208,6 +209,36 @@ spec_invalid.forEach(([name, input_file]) => {
     expect(() => parse(input)).toThrow();
   });
 });
+
+// js-yaml 4.2.0 correctly parses YAML 1.2 numbers with underscores
+// (e.g. 1_000, 224_617.445_991_228) as plain strings per the spec.
+// The spec-tests YAML fixtures use TOML number notation. Convert these
+// strings back to numbers so they match the parse() output.
+function expandYAMLNumbers(value: any): any {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    // Matches TOML-style numbers: at least one underscore between digits,
+    // optionally with a decimal part (also with underscores) and exponent.
+    // Examples: 1_000, 5_349_221, 1_2_3_4_5, 224_617.445_991_228
+    if (/^[+-]?\d+(_\d+)+(\.\d+(_\d+)+)?([eE][+-]?\d+)?$/.test(value)) {
+      return Number(value.replace(/_/g, ''));
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(expandYAMLNumbers);
+  }
+  if (value && typeof value === 'object') {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = expandYAMLNumbers(v);
+    }
+    return result;
+  }
+  return value;
+}
 
 function expandJSON(value: any): any {
   const result: { [key: string]: any } = {};
