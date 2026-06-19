@@ -4,9 +4,10 @@ allowBuilds:
   unrs-resolver: false
 
 overrides:
-  "@tootallnate/once": "^3.0.1"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/47
-  tar: ">=7.5.11"
+  # Looks like it was related to its use of the tar package
+  "@tootallnate/once": "^3.0.1"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/32
   brace-expansion: "^5.0.5"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/44
   lodash: "^4.18.1"
@@ -18,3 +19,7 @@ overrides:
   ip-address: ">=10.1.1"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/54
   shell-quote: ">=1.8.4"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/56
+  js-yaml: ">=4.2.0"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/57
+  tar: ">=7.5.16"
