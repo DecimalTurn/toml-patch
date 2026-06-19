@@ -62,6 +62,7 @@
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "check-overrides": "node scripts/check-overrides.mjs",
     "publish:jsr": "jsr publish --allow-dirty"
   },
   "devDependencies": {
