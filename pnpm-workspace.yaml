@@ -23,3 +23,5 @@ overrides:
   js-yaml: ">=4.2.0"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/57
   tar: ">=7.5.16"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/55
+  "@babel/core": "^7.29.6"
