@@ -13,6 +13,7 @@ import { Temporal } from '@js-temporal/polyfill';
 (globalThis as any).Temporal = Temporal;
 
 import { parse, stringify, patch, TomlFormat } from '../index';
+import { kitchen_sink, example } from '../__fixtures__';
 
 const FMT = { trailingNewline: 0 };
 
@@ -162,6 +163,43 @@ describe('roundtrip with Temporal', () => {
     const obj2 = parse(out, { temporal: true });
     expect(obj2.z).toBeInstanceOf(Temporal.ZonedDateTime);
   });
+
+  // -- format transitions verified by re-parsing after patch --
+
+  it('date-only → PlainDateTime survives roundtrip', () => {
+    const toml = 'd = 2024-01-15\n';
+    const updated = { d: Temporal.PlainDateTime.from('2025-06-01T12:00:00') };
+    const patched = patch(toml, updated, FMT);
+    const reparsed = parse(patched, { temporal: true });
+    expect(reparsed.d).toBeInstanceOf(Temporal.PlainDateTime);
+    expect(reparsed.d.toString()).toBe('2025-06-01T12:00:00');
+  });
+
+  it('date-only → ZonedDateTime survives roundtrip', () => {
+    const toml = 'd = 2024-01-15\n';
+    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[Asia/Kolkata]') };
+    const patched = patch(toml, updated, FMT);
+    const reparsed = parse(patched, { temporal: true });
+    expect(reparsed.d).toBeInstanceOf(Temporal.ZonedDateTime);
+  });
+
+  it('datetime → PlainDate survives roundtrip', () => {
+    const toml = 'dt = 2024-01-15T10:30:00\n';
+    const updated = { dt: Temporal.PlainDate.from('2025-06-01') };
+    const patched = patch(toml, updated, FMT);
+    const reparsed = parse(patched, { temporal: true });
+    expect(reparsed.dt).toBeInstanceOf(Temporal.PlainDate);
+    expect(reparsed.dt.toString()).toBe('2025-06-01');
+  });
+
+  it('offset datetime → PlainDate survives roundtrip', () => {
+    const toml = 'z = 2024-01-15T10:30:00+05:30\n';
+    const updated = { z: Temporal.PlainDate.from('2025-06-01') };
+    const patched = patch(toml, updated, FMT);
+    const reparsed = parse(patched, { temporal: true });
+    expect(reparsed.z).toBeInstanceOf(Temporal.PlainDate);
+    expect(reparsed.z.toString()).toBe('2025-06-01');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -200,6 +238,107 @@ describe('patch() with Temporal', () => {
     };
     const result = patch(existing, updated, FMT);
     expect(result).toBe('name = "test"\nd = 2025-06-01\ncount = 43');
+  });
+
+  // -- format transitions (upgrade / downgrade) --
+
+  it('upgrades date-only → PlainDateTime when new value carries time', () => {
+    const existing = 'd = 2024-01-15\n';
+    const updated = { d: Temporal.PlainDateTime.from('2025-06-01T12:00:00') };
+    const result = patch(existing, updated, FMT);
+    expect(result).toBe('d = 2025-06-01T12:00:00');
+  });
+
+  it('upgrades date-only → ZonedDateTime when new value carries offset', () => {
+    const existing = 'd = 2024-01-15\n';
+    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[Asia/Kolkata]') };
+    const result = patch(existing, updated, FMT);
+    expect(result).toBe('d = 2025-06-01T12:00:00+05:30');
+  });
+
+  it('downgrades datetime → date-only when new value is PlainDate', () => {
+    const existing = 'dt = 2024-01-15T10:30:00\n';
+    const updated = { dt: Temporal.PlainDate.from('2025-06-01') };
+    const result = patch(existing, updated, FMT);
+    expect(result).toBe('dt = 2025-06-01');
+  });
+
+  it('downgrades offset datetime → date-only when new value is PlainDate', () => {
+    const existing = 'z = 2024-01-15T10:30:00+05:30\n';
+    const updated = { z: Temporal.PlainDate.from('2025-06-01') };
+    const result = patch(existing, updated, FMT);
+    expect(result).toBe('z = 2025-06-01');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture-based roundtrip: existing TOML fixtures with date/time values
+// ---------------------------------------------------------------------------
+
+describe('fixture roundtrip with temporal: true', () => {
+
+  it('kitchen-sink: all date/time types survive roundtrip', () => {
+    const obj = parse(kitchen_sink, { temporal: true });
+
+    // --- First pass: verify parsed types ---
+
+    const dtArray = obj.values.date.datetime;
+    expect(Array.isArray(dtArray)).toBe(true);
+
+    // 1979-05-27T07:32:00Z → ZonedDateTime
+    expect(dtArray[0]).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    // 1979-05-27T00:32:00-07:00 → ZonedDateTime
+    expect(dtArray[1]).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    // 1979-05-27T00:32:00.999999-07:00 → ZonedDateTime
+    expect(dtArray[2]).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    // 1979-05-27 07:32:00Z (space separator) → ZonedDateTime
+    expect(dtArray[3]).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    const localArray = obj.values.date.local;
+    expect(Array.isArray(localArray)).toBe(true);
+
+    // 1979-05-27T07:32:00 → PlainDateTime
+    expect(localArray[0]).toBeInstanceOf(Temporal.PlainDateTime);
+    expect(localArray[0].toString()).toBe('1979-05-27T07:32:00');
+
+    // 1979-05-27 → PlainDate
+    expect(localArray[1]).toBeInstanceOf(Temporal.PlainDate);
+    expect(localArray[1].toString()).toBe('1979-05-27');
+
+    // 07:32:00 → PlainTime
+    expect(localArray[2]).toBeInstanceOf(Temporal.PlainTime);
+    expect(localArray[2].toString()).toBe('07:32:00');
+
+    // --- Roundtrip: stringify → re-parse ---
+
+    const out = stringify(obj, FMT);
+    const obj2 = parse(out, { temporal: true });
+
+    const dtArray2 = obj2.values.date.datetime;
+    expect(dtArray2[0]).toBeInstanceOf(Temporal.ZonedDateTime);
+    expect(dtArray2[1]).toBeInstanceOf(Temporal.ZonedDateTime);
+    expect(dtArray2[2]).toBeInstanceOf(Temporal.ZonedDateTime);
+    expect(dtArray2[3]).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    const localArray2 = obj2.values.date.local;
+    expect(localArray2[0]).toBeInstanceOf(Temporal.PlainDateTime);
+    expect(localArray2[0].toString()).toBe('1979-05-27T07:32:00');
+    expect(localArray2[1]).toBeInstanceOf(Temporal.PlainDate);
+    expect(localArray2[1].toString()).toBe('1979-05-27');
+    expect(localArray2[2]).toBeInstanceOf(Temporal.PlainTime);
+    expect(localArray2[2].toString()).toBe('07:32:00');
+  });
+
+  it('example.toml: offset datetime survives roundtrip', () => {
+    const obj = parse(example, { temporal: true });
+    expect(obj.owner.dob).toBeInstanceOf(Temporal.ZonedDateTime);
+
+    const out = stringify(obj, FMT);
+    const obj2 = parse(out, { temporal: true });
+    expect(obj2.owner.dob).toBeInstanceOf(Temporal.ZonedDateTime);
   });
 });
 
