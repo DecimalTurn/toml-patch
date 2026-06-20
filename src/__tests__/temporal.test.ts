@@ -12,7 +12,7 @@ import { Temporal } from '@js-temporal/polyfill';
 // via globalThis.Temporal (same as native Temporal in browsers/Node.js).
 (globalThis as any).Temporal = Temporal;
 
-import { parse, stringify, patch, TomlFormat } from '../index';
+import { parse, stringify, patch } from '../index';
 import { kitchen_sink, example } from '../__fixtures__';
 
 const FMT = { trailingNewline: 0 };
