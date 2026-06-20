@@ -32,6 +32,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
+- [Date/Time Handling & Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
   - [TomlFormat Class](#tomlformat-class)
   - [Basic Usage](#basic-usage)
@@ -162,6 +163,7 @@ Parses a TOML string (or raw UTF-8 bytes) into a JavaScript object.
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead of custom `Date` subclasses. Default: `false`. See [Date/Time Handling](#datetime-handling--temporal).
 
 **Returns:** `any` - The parsed JavaScript object
 
@@ -250,6 +252,7 @@ Initializes the TomlDocument with TOML source, parsing it into an internal repre
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects. Default: `false`. See [Date/Time Handling](#datetime-handling--temporal).
 
 ##### Basic Usage Example
 
@@ -373,6 +376,77 @@ const updatedToml = originalToml.replace('port = 8080', 'port = 3000');
 doc.update(updatedToml);
 
 console.log(doc.toJsObject.server.port); // 3000
+```
+
+## Date/Time Handling & Temporal
+
+### Default behavior (Date subclasses)
+
+By default, TOML date/time values are parsed into custom `Date` subclasses:
+
+| TOML example | JS class |
+|---|---|
+| `2024-01-15` | `LocalDate` |
+| `10:30:00` | `LocalTime` |
+| `2024-01-15T10:30:00` | `LocalDateTime` |
+| `2024-01-15T10:30:00+05:30` | `OffsetDateTime` |
+
+Each class extends `Date` and serializes back to its original TOML format.
+
+### Temporal API (opt-in)
+
+Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects:
+
+| TOML type | Temporal type |
+|---|---|
+| Offset Date-Time | `Temporal.ZonedDateTime` |
+| Local Date-Time | `Temporal.PlainDateTime` |
+| Local Date | `Temporal.PlainDate` |
+| Local Time | `Temporal.PlainTime` |
+
+```js
+import { parse } from '@decimalturn/toml-patch';
+
+const obj = parse(
+  'd = 2024-01-15\nz = 2024-01-15T10:30:00+05:30\n',
+  { temporal: true }
+);
+// obj.d → Temporal.PlainDate
+// obj.z → Temporal.ZonedDateTime
+```
+
+Temporal is Stage 4 and available in modern browsers. For runtimes without native support, use [`@js-temporal/polyfill`](https://www.npmjs.com/package/@js-temporal/polyfill) and set `globalThis.Temporal` before parsing.
+
+### Temporal in stringify and patch
+
+`stringify()` and `patch()` auto-detect Temporal objects — no option needed:
+
+```js
+stringify({
+  start: Temporal.PlainDate.from('2024-01-15'),
+  due: Temporal.ZonedDateTime.from('2024-12-31T23:59:59Z[UTC]')
+});
+// start = 2024-01-15
+// due = 2024-12-31T23:59:59Z
+
+patch('d = 2024-01-15\n', {
+  d: Temporal.PlainDateTime.from('2025-06-01T12:00:00')
+});
+// d = 2025-06-01T12:00:00
+```
+
+> TOML only supports offsets (`+05:30`, `Z`). When a `ZonedDateTime` carries an IANA annotation like `[Asia/Kolkata]`, only the offset is kept.
+
+### Format transitions
+
+Patching automatically adapts the output format to the new Temporal type:
+
+```js
+patch('d = 2024-01-15\n', { d: Temporal.PlainDateTime.from('2025-06-01T12:00:00') });
+// → 'd = 2025-06-01T12:00:00'
+
+patch('z = 2024-01-15T10:30:00+05:30\n', { z: Temporal.PlainDate.from('2025-06-01') });
+// → 'z = 2025-06-01'
 ```
 
 ## Formatting
