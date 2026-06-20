@@ -380,74 +380,9 @@ console.log(doc.toJsObject.server.port); // 3000
 
 ## Date/Time Handling & Temporal
 
-### Default behavior (Date subclasses)
+TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
 
-By default, TOML date/time values are parsed into custom `Date` subclasses:
-
-| TOML example | JS class |
-|---|---|
-| `2024-01-15` | `LocalDate` |
-| `10:30:00` | `LocalTime` |
-| `2024-01-15T10:30:00` | `LocalDateTime` |
-| `2024-01-15T10:30:00+05:30` | `OffsetDateTime` |
-
-Each class extends `Date` and serializes back to its original TOML format.
-
-### Temporal API (opt-in)
-
-Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects:
-
-| TOML type | Temporal type |
-|---|---|
-| Offset Date-Time | `Temporal.ZonedDateTime` |
-| Local Date-Time | `Temporal.PlainDateTime` |
-| Local Date | `Temporal.PlainDate` |
-| Local Time | `Temporal.PlainTime` |
-
-```js
-import { parse } from '@decimalturn/toml-patch';
-
-const obj = parse(
-  'd = 2024-01-15\nz = 2024-01-15T10:30:00+05:30\n',
-  { temporal: true }
-);
-// obj.d → Temporal.PlainDate
-// obj.z → Temporal.ZonedDateTime
-```
-
-Temporal is Stage 4 and available in modern browsers. For runtimes without native support, use [`@js-temporal/polyfill`](https://www.npmjs.com/package/@js-temporal/polyfill) and set `globalThis.Temporal` before parsing.
-
-### Temporal in stringify and patch
-
-`stringify()` and `patch()` auto-detect Temporal objects — no option needed:
-
-```js
-stringify({
-  start: Temporal.PlainDate.from('2024-01-15'),
-  due: Temporal.ZonedDateTime.from('2024-12-31T23:59:59Z[UTC]')
-});
-// start = 2024-01-15
-// due = 2024-12-31T23:59:59Z
-
-patch('d = 2024-01-15\n', {
-  d: Temporal.PlainDateTime.from('2025-06-01T12:00:00')
-});
-// d = 2025-06-01T12:00:00
-```
-
-> TOML only supports offsets (`+05:30`, `Z`). When a `ZonedDateTime` carries an IANA annotation like `[Asia/Kolkata]`, only the offset is kept.
-
-### Format transitions
-
-Patching automatically adapts the output format to the new Temporal type:
-
-```js
-patch('d = 2024-01-15\n', { d: Temporal.PlainDateTime.from('2025-06-01T12:00:00') });
-// → 'd = 2025-06-01T12:00:00'
-
-patch('z = 2024-01-15T10:30:00+05:30\n', { z: Temporal.PlainDate.from('2025-06-01') });
-// → 'z = 2025-06-01'
-```
+See **[docs/Dates.md](docs/Dates.md)** for details and examples.
 
 ## Formatting
 

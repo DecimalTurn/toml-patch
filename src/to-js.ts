@@ -234,7 +234,9 @@ export default function toJS(
 /**
  * Converts a TOML CST value node to a JavaScript value.
  * @param node The TOML CST value node.
- * @param opts Options for integer and Temporal handling.
+ * @param opts Options object:
+ * @param opts.integersAsBigInt Controls integer representation (`'asNeeded'` | `true` | `false`).
+ * @param opts.temporal When `true`, date/time values are returned as Temporal objects
  * @returns The corresponding JavaScript value.
  */
 export function toValue(
