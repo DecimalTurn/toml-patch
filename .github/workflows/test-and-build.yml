@@ -15,6 +15,7 @@ jobs:
         include:
           - node-version: 22.x
           - node-version: 24.x
+          - node-version: 26.x
             benchmark: true
 
     steps:
