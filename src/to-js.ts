@@ -106,16 +106,16 @@ function dateValueToTemporal(value: Date): any {
  * 
  * @param cst The Concrete Syntax Tree to convert.
  * @param input The original input string (used for error reporting).
- * @param integersAsBigInt Controls integer representation.
- * @param temporal When true, date/time values are returned as Temporal objects.
+ * @param opts.integersAsBigInt Controls integer representation.
+ * @param opts.temporal When true, date/time values are returned as Temporal objects.
  * @returns The JavaScript object representation of the CST.
  */
 export default function toJS(
   cst: CST,
   input: string = '',
-  integersAsBigInt: IntegersAsBigInt = 'asNeeded',
-  temporal: boolean = false
+  opts: { integersAsBigInt?: IntegersAsBigInt; temporal?: boolean } = {}
 ): any {
+  const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   const result = blank();
   const tables: Set<string> = new Set();
   const table_arrays: Set<string> = new Set();
@@ -212,7 +212,7 @@ export default function toJS(
 
     let value;
     try {
-      value = toValue(node.value, integersAsBigInt, temporal);
+      value = toValue(node.value, { integersAsBigInt, temporal });
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.value.loc.start, e.message);
@@ -234,13 +234,14 @@ export default function toJS(
 /**
  * Converts a TOML CST value node to a JavaScript value.
  * @param node The TOML CST value node.
+ * @param opts Options for integer and Temporal handling.
  * @returns The corresponding JavaScript value.
  */
 export function toValue(
   node: Value,
-  integersAsBigInt: IntegersAsBigInt = 'asNeeded',
-  temporal: boolean = false
+  opts: { integersAsBigInt?: IntegersAsBigInt; temporal?: boolean } = {}
 ): any {
+  const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   switch (node.type) {
     case NodeType.InlineTable:
       const result = blank();
@@ -249,7 +250,7 @@ export function toValue(
 
       node.items.forEach(({ item }) => {
         const key = item.key.value;
-        const value = toValue(item.value, integersAsBigInt, temporal);
+        const value = toValue(item.value, { integersAsBigInt, temporal });
 
         // Check for duplicate keys and conflicting key paths
         const full_key = joinKey(key);
@@ -292,7 +293,7 @@ export function toValue(
       return result;
 
     case NodeType.InlineArray:
-      return node.items.map(item => toValue(item.item as Value, integersAsBigInt, temporal));
+      return node.items.map(item => toValue(item.item as Value, { integersAsBigInt, temporal }));
 
     case NodeType.DateTime:
       if (temporal) {

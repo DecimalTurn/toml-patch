@@ -105,7 +105,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     }
   }
 
-  const existing_js = toJS(items, '', 'asNeeded', useTemporal);
+  const existing_js = toJS(items, '', { temporal: useTemporal });
   const existing_document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
@@ -122,7 +122,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
   // stripped) are consistently absent from both sides of the diff. 
-  const updated_js = toJS(updated_document.items, '', 'asNeeded', useTemporal);
+  const updated_js = toJS(updated_document.items, '', { temporal: useTemporal });
   const changes = reorder(diff(existing_js, updated_js));
 
   if (changes.length === 0) {
@@ -294,7 +294,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // regenerate a fresh TableArray from the JS value.
       if (is_table_array && !isTableArray(child)) {
         const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
-        const updated_js = toJS(updated.items, '', 'asNeeded', temporal);
+        const updated_js = toJS(updated.items, '', { temporal });
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
@@ -478,7 +478,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // node and `replacement` (from the updated document) may be an InlineItem or KV that does
         // not carry the full scope. Simply splicing it into the Document would lose the scope.
         // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
-        const updated_js = toJS(updated.items, '', 'asNeeded', temporal);
+        const updated_js = toJS(updated.items, '', { temporal });
         let jsValue: any = updated_js;
         for (const key of change.path) {
           jsValue = jsValue?.[key];

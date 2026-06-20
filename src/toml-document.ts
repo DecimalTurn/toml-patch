@@ -51,7 +51,10 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this._cst, this._currentTomlString, this._integersAsBigInt, this._temporal);
+    const jsObject = toJS(this._cst, this._currentTomlString, {
+      integersAsBigInt: this._integersAsBigInt,
+      temporal: this._temporal
+    });
     // When temporal is enabled, Temporal objects are already returned — no conversion needed.
     // When temporal is disabled, convert custom date classes to regular JavaScript Date objects.
     if (this._temporal) {
