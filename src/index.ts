@@ -29,10 +29,18 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  * your code serializes the result to JSON or performs arithmetic mixing `number`
  * and `bigint`, set `integersAsBigInt: false` to restore the previous behavior.
  *
+ * By default (`options.temporal` unset or `false`), TOML date/time values are
+ * returned as custom Date subclasses (LocalDate, LocalTime, LocalDateTime,
+ * OffsetDateTime). Set `options.temporal` to `true` to return Temporal API
+ * objects instead (Temporal.PlainDate, Temporal.PlainTime, Temporal.PlainDateTime,
+ * Temporal.ZonedDateTime). The Temporal API must be available in the runtime.
+ *
  * @param value - TOML source as a string or raw UTF-8 bytes
  * @param options - Optional parse options
  * @param options.integersAsBigInt - Controls `bigint` vs `number` for integers.
  *   `'asNeeded'` (default) | `true` | `false`
+ * @param options.temporal - When true, returns Temporal objects for date/time values.
+ *   Default: false.
  * @returns The parsed JavaScript object
  */
 export function parse(value: string | Uint8Array, options?: ParseOptions): any {
@@ -40,7 +48,7 @@ export function parse(value: string | Uint8Array, options?: ParseOptions): any {
     ? value
     : decodeUtf8Bytes(value);
   const tomlString = stripLeadingBom(rawString);
-  return toJS(parseTOML(tomlString), tomlString, options?.integersAsBigInt ?? 'asNeeded');
+  return toJS(parseTOML(tomlString), tomlString, options?.integersAsBigInt ?? 'asNeeded', options?.temporal ?? false);
 }
 
 /**

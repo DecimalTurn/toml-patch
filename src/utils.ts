@@ -41,8 +41,50 @@ export function isDate(value: any): value is Date {
   return Object.prototype.toString.call(value) === '[object Date]';
 }
 
+/**
+ * Duck-type check for Temporal API objects.
+ *
+ * Works with both the native Temporal (constructor names like
+ * "Temporal.PlainDate") and the @js-temporal/polyfill (constructor
+ * names like "PlainDate"). Avoids instanceof issues across realms.
+ *
+ * Only the four TOML-relevant types are checked:
+ * PlainDate, PlainTime, PlainDateTime, ZonedDateTime.
+ */
+const TEMPORAL_TYPE_NAMES = new Set([
+  'Temporal.PlainDate', 'Temporal.PlainTime', 'Temporal.PlainDateTime', 'Temporal.ZonedDateTime',
+  'PlainDate', 'PlainTime', 'PlainDateTime', 'ZonedDateTime'
+]);
+
+export function isTemporal(value: any): boolean {
+  return value != null
+    && typeof value === 'object'
+    && TEMPORAL_TYPE_NAMES.has(value.constructor?.name);
+}
+
+/**
+ * Converts a Temporal object to its TOML-compatible string representation.
+ *
+ * For ZonedDateTime, this strips the IANA timezone annotation (e.g. [Asia/Kolkata])
+ * and normalizes +00:00 to Z, since TOML only supports offset-based timezones.
+ * For other Temporal types, this is equivalent to toString().
+ */
+export function temporalToTomlString(value: any): string {
+  const name: string = value.constructor?.name ?? '';
+
+  if (name === 'Temporal.ZonedDateTime' || name === 'ZonedDateTime') {
+    // Strip IANA annotation, keep only offset
+    let raw: string = value.toString({ timeZoneName: 'never', offset: 'auto' });
+    // Normalize +00:00 to Z
+    raw = raw.replace('+00:00', 'Z');
+    return raw;
+  }
+
+  return value.toString();
+}
+
 export function isObject(value: any): boolean {
-  return value && typeof value === 'object' && !isDate(value) && !Array.isArray(value);
+  return value && typeof value === 'object' && !isDate(value) && !isTemporal(value) && !Array.isArray(value);
 }
 
 export function isIterable<T>(value: any): value is Iterable<T> {
@@ -95,7 +137,15 @@ export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {
 }
 
 export function datesEqual(a: any, b: any): boolean {
-  return isDate(a) && isDate(b) && a.toISOString() === b.toISOString();
+  // Temporal objects: compare via toString() (returns ISO string)
+  if (isTemporal(a) && isTemporal(b)) {
+    return a.toString() === b.toString();
+  }
+  // Custom Date subclasses: compare via toISOString()
+  if (isDate(a) && isDate(b)) {
+    return a.toISOString() === b.toISOString();
+  }
+  return false;
 }
 
 export function stableStringify(object: any): string {
@@ -107,6 +157,12 @@ export function stableStringify(object: any): string {
     return `{${key_values.join(',')}}`;
   } else if (Array.isArray(object)) {
     return `[${object.map(stableStringify).join(',')}]`;
+  } else if (isTemporal(object)) {
+    // Temporal objects use toString() for a stable ISO representation
+    return JSON.stringify(object.toString());
+  } else if (isDate(object)) {
+    // Custom Date subclasses use toISOString()
+    return JSON.stringify(object.toISOString());
   } else {
     return JSON.stringify(object);
   }

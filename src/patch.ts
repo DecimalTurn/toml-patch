@@ -28,7 +28,7 @@ import {
 } from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger } from './utils';
+import { last, isInteger, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
@@ -70,8 +70,27 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
 }
 
+/**
+ * Recursively checks if an object graph contains any Temporal values.
+ * Used to auto-detect whether temporal mode should be enabled for patching.
+ */
+function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (obj == null || typeof obj !== 'object') return false;
+  if (isTemporal(obj)) return true;
+  if (seen.has(obj)) return false;
+  seen.add(obj);
+  for (const v of Object.values(obj)) {
+    if (hasTemporal(v, seen)) return true;
+  }
+  return false;
+}
+
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
+
+  // Auto-detect Temporal in the updated JS object so that the internal
+  // toJS() diff uses Temporal objects when the user provides them.
+  const useTemporal = hasTemporal(updated);
 
   // Compute the Document's end position from its children so that
   // offset-based position updates in applyWrites start from the correct
@@ -86,7 +105,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     }
   }
 
-  const existing_js = toJS(items);
+  const existing_js = toJS(items, '', 'asNeeded', useTemporal);
   const existing_document: Document = {
     type: NodeType.Document,
     loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
@@ -103,7 +122,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
   // stripped) are consistently absent from both sides of the diff. 
-  const updated_js = toJS(updated_document.items);
+  const updated_js = toJS(updated_document.items, '', 'asNeeded', useTemporal);
   const changes = reorder(diff(existing_js, updated_js));
 
   if (changes.length === 0) {
@@ -113,7 +132,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -181,14 +200,23 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     // Analyze the original raw format and create a properly formatted replacement
     const originalRaw = existing.raw;
     const newValue = replacement.value;
-    
-    // Create a new date with the original format preserved
-    const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
-    
-    // Update the replacement with the properly formatted date
-    replacement.value = formattedDate;
-    replacement.raw = formattedDate.toISOString();
-    replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+
+    if (isTemporal(newValue)) {
+      // Temporal objects preserve their own type — no format conversion needed.
+      // Use temporalToTomlString to get the TOML-compatible representation
+      // (strips IANA annotations from ZonedDateTime, normalizes +00:00 to Z).
+      replacement.raw = temporalToTomlString(newValue);
+      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+      // Keep the Temporal object as the value — it will serialize correctly.
+    } else {
+      // Create a new date with the original format preserved
+      const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
+
+      // Update the replacement with the properly formatted date
+      replacement.value = formattedDate;
+      replacement.raw = formattedDate.toISOString();
+      replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+    }
   }
   
   // Preserve array trailing comma format
@@ -233,7 +261,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -266,7 +294,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // regenerate a fresh TableArray from the JS value.
       if (is_table_array && !isTableArray(child)) {
         const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
-        const updated_js = toJS(updated.items);
+        const updated_js = toJS(updated.items, '', 'asNeeded', temporal);
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
@@ -450,7 +478,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // node and `replacement` (from the updated document) may be an InlineItem or KV that does
         // not carry the full scope. Simply splicing it into the Document would lose the scope.
         // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
-        const updated_js = toJS(updated.items);
+        const updated_js = toJS(updated.items, '', 'asNeeded', temporal);
         let jsValue: any = updated_js;
         for (const key of change.path) {
           jsValue = jsValue?.[key];

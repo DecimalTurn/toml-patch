@@ -16,6 +16,7 @@ export class TomlDocument {
   private _currentTomlString: string;
   private _format: TomlFormat;
   private _integersAsBigInt: IntegersAsBigInt;
+  private _temporal: boolean;
 
   /**
   * Initializes the TomlDocument with TOML source, parsing it into a CST.
@@ -26,6 +27,7 @@ export class TomlDocument {
    * @param tomlSource - The TOML source to parse (string or raw UTF-8 bytes)
    * @param options - Optional parse options
    * @param options.integersAsBigInt - Controls bigint vs number for TOML integers
+   * @param options.temporal - When true, returns Temporal objects for date/time values
    */
   constructor(tomlSource: string | Uint8Array, options?: ParseOptions) {
     const sourceString = typeof tomlSource === 'string'
@@ -36,6 +38,7 @@ export class TomlDocument {
     this._currentTomlString = tomlString;
     this._cst = Array.from(parseTOML(tomlString));
     this._integersAsBigInt = options?.integersAsBigInt ?? 'asNeeded';
+    this._temporal = options?.temporal ?? false;
     // Auto-detect formatting preferences from the original TOML string
     this._format = TomlFormat.autoDetectFormatWithCst(sourceString, this._cst);
   }
@@ -48,8 +51,12 @@ export class TomlDocument {
    * Returns the JavaScript object representation of the TOML document.
    */
   get toJsObject(): any {
-    const jsObject = toJS(this._cst, this._currentTomlString, this._integersAsBigInt);
-    // Convert custom date classes to regular JavaScript Date objects
+    const jsObject = toJS(this._cst, this._currentTomlString, this._integersAsBigInt, this._temporal);
+    // When temporal is enabled, Temporal objects are already returned — no conversion needed.
+    // When temporal is disabled, convert custom date classes to regular JavaScript Date objects.
+    if (this._temporal) {
+      return jsObject;
+    }
     return convertCustomDateClasses(jsObject);
   }
 
