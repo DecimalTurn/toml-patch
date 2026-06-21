@@ -270,6 +270,13 @@ describe('patch() with Temporal', () => {
     expect(result).toBe('z = 2025-06-01');
   });
 
+  it('preserves space separator when patching with Temporal', () => {
+    const existing = 'z = 2024-01-15 10:30:00+05:30\n';
+    const updated = { z: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[+05:30]') };
+    const result = patch(existing, updated, FMT);
+    expect(result).toBe('z = 2025-06-01 12:00:00+05:30');
+  });
+
   // -- ZonedDateTime with different IANA zones but same offset should not diff --
 
   it('ZonedDateTime with IANA annotation throws a clear error', () => {

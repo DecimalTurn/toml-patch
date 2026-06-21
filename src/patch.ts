@@ -203,9 +203,12 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 
     if (isTemporal(newValue)) {
       // Temporal objects preserve their own type — no format conversion needed.
-      // Use temporalToTomlString to get the TOML-compatible representation
-      // (strips IANA annotations from ZonedDateTime, normalizes +00:00 to Z).
-      replacement.raw = temporalToTomlString(newValue);
+      let raw = temporalToTomlString(newValue);
+      // Preserve the original separator style (T vs space) from the existing TOML.
+      if (originalRaw.includes(' ') && raw.includes('T')) {
+        raw = raw.replace('T', ' ');
+      }
+      replacement.raw = raw;
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
       // Keep the Temporal object as the value — it will serialize correctly.
     } else {
