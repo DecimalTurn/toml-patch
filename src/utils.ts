@@ -138,9 +138,10 @@ export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {
 }
 
 export function datesEqual(a: any, b: any): boolean {
-  // Temporal objects: compare via toString() (returns ISO string)
+  // Temporal objects: compare via temporalToTomlString() so that
+  // ZonedDateTime values with identical TOML output compare equal.
   if (isTemporal(a) && isTemporal(b)) {
-    return a.toString() === b.toString();
+    return temporalToTomlString(a) === temporalToTomlString(b);
   }
   // Custom Date subclasses: compare via toISOString()
   if (isDate(a) && isDate(b)) {
@@ -159,8 +160,8 @@ export function stableStringify(object: any): string {
   } else if (Array.isArray(object)) {
     return `[${object.map(stableStringify).join(',')}]`;
   } else if (isTemporal(object)) {
-    // Temporal objects use toString() for a stable ISO representation
-    return JSON.stringify(object.toString());
+    // Use temporalToTomlString for consistency with TOML output.
+    return JSON.stringify(temporalToTomlString(object));
   } else if (isDate(object)) {
     // Custom Date subclasses use toISOString()
     return JSON.stringify(object.toISOString());
