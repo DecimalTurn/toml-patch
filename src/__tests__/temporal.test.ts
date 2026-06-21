@@ -269,6 +269,20 @@ describe('patch() with Temporal', () => {
     const result = patch(existing, updated, FMT);
     expect(result).toBe('z = 2025-06-01');
   });
+
+  // -- ZonedDateTime with different IANA zones but same offset should not diff --
+
+  it('ZonedDateTime with different IANA zones but same offset → no change', () => {
+    const existing = 'z = 2024-01-15T10:30:00+05:30\n';
+    const updated = {
+      z: Temporal.ZonedDateTime.from('2024-01-15T10:30:00+05:30[Asia/Kolkata]')
+    };
+    const result = patch(existing, updated, FMT);
+    // The existing TOML is parsed as a ZonedDateTime with offset timezone.
+    // The updated has the same instant but with an IANA annotation.
+    // After stripping the annotation, the values are identical → no change.
+    expect(result).toBe('z = 2024-01-15T10:30:00+05:30');
+  });
 });
 
 // ---------------------------------------------------------------------------
