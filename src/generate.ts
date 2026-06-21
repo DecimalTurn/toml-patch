@@ -433,16 +433,16 @@ export function generateTemporalDateTime(
   let raw: string;
 
   if (isPlainDate) {
-    raw = value.toString();
+    raw = temporalToTomlString(value);
   } else if (isPlainTime) {
-    raw = value.toString();
+    raw = temporalToTomlString(value);
   } else if (isPlainDateTime) {
     // Optionally truncate zero time components to date-only
     if (truncateZeroTimeInDates) {
       const T = (globalThis as any).Temporal;
       const plainDate = T.PlainDate.from(value.toString().split('T')[0]);
       if (plainDate.toString() + 'T00:00:00' === value.toString().slice(0, 19)) {
-        raw = plainDate.toString();
+        raw = temporalToTomlString(plainDate);
         return {
           type: NodeType.DateTime,
           loc: { start: zero(), end: { line: 1, column: raw.length } },
@@ -451,13 +451,13 @@ export function generateTemporalDateTime(
         };
       }
     }
-    raw = value.toString();
+    raw = temporalToTomlString(value);
   } else if (isZonedDateTime) {
     // TOML only supports offset, not IANA timezone names.
     raw = temporalToTomlString(value);
   } else {
-    // Unknown Temporal type — fall back to toString()
-    raw = value.toString();
+    // Unknown Temporal type — fall back to temporalToTomlString()
+    raw = temporalToTomlString(value);
   }
 
   return {
