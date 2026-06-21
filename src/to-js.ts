@@ -91,10 +91,9 @@ function dateValueToTemporal(value: Date): any {
     const offset = offsetMatch ? offsetMatch[1] : 'Z';
     // Strip offset suffix to get the plain datetime
     const plainIso = iso.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
-    // ZonedDateTime.from requires an IANA timezone, not just an offset.
-    // For a plain offset, we use the offset itself as the timezone annotation,
-    // except for Z/UTC which must be "UTC".
-    const tz = offset === 'Z' ? 'UTC' : offset;
+    // ZonedDateTime.from requires a timezone. Use the offset itself so the
+    // resulting object has an offset timezone (not IANA), which TOML can represent.
+    const tz = offset === 'Z' ? '+00:00' : offset;
     return T.ZonedDateTime.from(`${plainIso}${offset}[${tz}]`);
   }
   // Fallback: native Date or unrecognized Date subclass → Temporal.PlainDateTime

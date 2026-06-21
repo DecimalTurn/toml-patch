@@ -110,14 +110,14 @@ describe('stringify() with Temporal input', () => {
     expect(out).toBe('dt = 2024-01-15T10:30:00');
   });
 
-  it('serializes Temporal.ZonedDateTime → TOML offset datetime (no IANA)', () => {
-    const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+05:30[Asia/Kolkata]');
+  it('serializes Temporal.ZonedDateTime → TOML offset datetime', () => {
+    const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+05:30[+05:30]');
     const out = stringify({ z }, FMT);
     expect(out).toBe('z = 2024-01-15T10:30:00+05:30');
   });
 
   it('serializes Temporal.ZonedDateTime with Z offset', () => {
-    const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00Z[UTC]');
+    const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
     const out = stringify({ z }, FMT);
     expect(out).toBe('z = 2024-01-15T10:30:00Z');
   });
@@ -177,7 +177,7 @@ describe('roundtrip with Temporal', () => {
 
   it('date-only → ZonedDateTime survives roundtrip', () => {
     const toml = 'd = 2024-01-15\n';
-    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[Asia/Kolkata]') };
+    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[+05:30]') };
     const patched = patch(toml, updated, FMT);
     const reparsed = parse(patched, { temporal: true });
     expect(reparsed.d).toBeInstanceOf(Temporal.ZonedDateTime);
@@ -224,7 +224,7 @@ describe('patch() with Temporal', () => {
 
   it('patches a ZonedDateTime value preserving offset format', () => {
     const existing = 'z = 2024-01-15T10:30:00+05:30\n';
-    const updated = { z: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[Asia/Kolkata]') };
+    const updated = { z: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[+05:30]') };
     const result = patch(existing, updated, FMT);
     expect(result).toBe('z = 2025-06-01T12:00:00+05:30');
   });
@@ -251,7 +251,7 @@ describe('patch() with Temporal', () => {
 
   it('upgrades date-only → ZonedDateTime when new value carries offset', () => {
     const existing = 'd = 2024-01-15\n';
-    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[Asia/Kolkata]') };
+    const updated = { d: Temporal.ZonedDateTime.from('2025-06-01T12:00:00+05:30[+05:30]') };
     const result = patch(existing, updated, FMT);
     expect(result).toBe('d = 2025-06-01T12:00:00+05:30');
   });
@@ -272,16 +272,14 @@ describe('patch() with Temporal', () => {
 
   // -- ZonedDateTime with different IANA zones but same offset should not diff --
 
-  it('ZonedDateTime with different IANA zones but same offset → no change', () => {
+  it('ZonedDateTime with IANA annotation throws a clear error', () => {
     const existing = 'z = 2024-01-15T10:30:00+05:30\n';
     const updated = {
       z: Temporal.ZonedDateTime.from('2024-01-15T10:30:00+05:30[Asia/Kolkata]')
     };
-    const result = patch(existing, updated, FMT);
-    // The existing TOML is parsed as a ZonedDateTime with offset timezone.
-    // The updated has the same instant but with an IANA annotation.
-    // After stripping the annotation, the values are identical → no change.
-    expect(result).toBe('z = 2024-01-15T10:30:00+05:30');
+    expect(() => patch(existing, updated, FMT)).toThrow(
+      'cannot be represented in TOML'
+    );
   });
 });
 

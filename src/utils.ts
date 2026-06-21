@@ -74,11 +74,17 @@ export function temporalToTomlString(value: any): string {
   const name: string = value.constructor?.name ?? '';
 
   if (name === 'Temporal.ZonedDateTime' || name === 'ZonedDateTime') {
-    // Strip IANA annotation, keep only offset
-    let raw: string = value.toString({ timeZoneName: 'never', offset: 'auto' });
+    // Reject IANA timezone annotations — TOML only supports offsets.
+    const full = value.toString();
+    const bracketMatch = full.match(/\[(.+)\]$/);
+    if (bracketMatch && !/^[+-]\d{2}:\d{2}$/.test(bracketMatch[1])) {
+      throw new Error(
+        `ZonedDateTime with IANA timezone "${full}" cannot be represented in TOML. ` +
+        'TOML only supports offset-based timezones (+05:30, Z).'
+      );
+    }
     // Normalize +00:00 to Z
-    raw = raw.replace('+00:00', 'Z');
-    return raw;
+    return full.replace(/\[.*\]$/, '').replace('+00:00', 'Z');
   }
 
   return value.toString();
@@ -138,10 +144,10 @@ export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {
 }
 
 export function datesEqual(a: any, b: any): boolean {
-  // Temporal objects: compare via temporalToTomlString() so that
-  // ZonedDateTime values with identical TOML output compare equal.
+  // Temporal objects: compare via toString(). Two ZonedDateTime values
+  // with different IANA zones are NOT the same even if their offsets match.
   if (isTemporal(a) && isTemporal(b)) {
-    return temporalToTomlString(a) === temporalToTomlString(b);
+    return a.toString() === b.toString();
   }
   // Custom Date subclasses: compare via toISOString()
   if (isDate(a) && isDate(b)) {
@@ -160,8 +166,8 @@ export function stableStringify(object: any): string {
   } else if (Array.isArray(object)) {
     return `[${object.map(stableStringify).join(',')}]`;
   } else if (isTemporal(object)) {
-    // Use temporalToTomlString for consistency with TOML output.
-    return JSON.stringify(temporalToTomlString(object));
+    // Temporal objects use toString() for a stable ISO representation
+    return JSON.stringify(object.toString());
   } else if (isDate(object)) {
     // Custom Date subclasses use toISOString()
     return JSON.stringify(object.toISOString());
