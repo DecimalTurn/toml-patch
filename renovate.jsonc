@@ -11,7 +11,7 @@
   "packageRules": [
     {
       "description": "Auto-merge packageManager minor/patch updates",
-      "matchManagers": ["npm"],
+      "matchManagers": ["pnpm"],
       "matchDepTypes": ["packageManager"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
