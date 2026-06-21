@@ -368,11 +368,15 @@ describe('fixture roundtrip with temporal: true', () => {
 describe('Temporal error handling', () => {
 
   it('throws a clear error when temporal: true but Temporal is not available', () => {
-    // We can't easily test this since @js-temporal/polyfill is loaded.
-    // But we can verify the error path by checking the Temporal check exists.
-    // (Covered by unit test of dateValueToTemporal or the runtime check in toValue)
-    // This test documents the expected behavior.
-    expect(true).toBe(true); // Placeholder — the error path is exercised in code
+    const saved = (globalThis as any).Temporal;
+    try {
+      delete (globalThis as any).Temporal;
+      expect(() => parse('d = 2024-01-15\n', { temporal: true })).toThrow(
+        'Temporal API is not available'
+      );
+    } finally {
+      (globalThis as any).Temporal = saved;
+    }
   });
 });
 
