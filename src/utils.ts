@@ -59,7 +59,9 @@ const TEMPORAL_TYPE_NAMES = new Set([
 export function isTemporal(value: any): boolean {
   return value != null
     && typeof value === 'object'
-    && TEMPORAL_TYPE_NAMES.has(value.constructor?.name);
+    && TEMPORAL_TYPE_NAMES.has(value.constructor?.name)
+    && typeof (value as any).getISOFields === 'function'
+    && typeof (value as any).equals === 'function';
 }
 
 /**
