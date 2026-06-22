@@ -29,7 +29,10 @@
         ], 
 
       
-      "matchUpdateTypes": ["minor", "patch"]
+      "matchUpdateTypes": ["minor", "patch"],
+      // Force group-style commit message even when only one dep is updated,
+      // avoiding the single-dep template that appends "to vX.Y.Z".
+      "commitMessageTopic": "all non-major devDependencies"
     }
   ]
 }
