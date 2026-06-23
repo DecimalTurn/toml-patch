@@ -440,6 +440,12 @@ export function generateTemporalDateTime(
     // Optionally truncate zero time components to date-only
     if (truncateZeroTimeInDates) {
       const T = (globalThis as any).Temporal;
+      if (!T) {
+        throw new Error(
+          'Temporal API is not available in this runtime. ' +
+          'Set temporal: false or use a runtime with Temporal support.'
+        );
+      }
       const plainDate = T.PlainDate.from(value.toString().split('T')[0]);
       if (plainDate.toString() + 'T00:00:00' === value.toString().slice(0, 19)) {
         raw = temporalToTomlString(plainDate);
