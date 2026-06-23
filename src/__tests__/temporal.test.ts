@@ -67,6 +67,13 @@ describe('parse() with temporal: true', () => {
     expect(obj.z).toBeInstanceOf(Temporal.ZonedDateTime);
   });
 
+  it('roundtrips space-separated offset datetime', () => {
+    const obj = parse('z = 2024-01-15 10:30:00-05:00\n', { temporal: true });
+    const out = stringify(obj, FMT);
+    const obj2 = parse(out, { temporal: true });
+    expect(obj2.z).toBeInstanceOf(Temporal.ZonedDateTime);
+  });
+
   it('default (temporal: false) still returns Date subclasses', () => {
     const obj = parse('d = 2024-01-15\n');
     expect(obj.d).toBeInstanceOf(Date);
@@ -377,6 +384,13 @@ describe('Temporal error handling', () => {
     } finally {
       (globalThis as any).Temporal = saved;
     }
+  });
+
+  it('rejects non-ISO calendar annotations on Temporal values', () => {
+    const d = Temporal.PlainDate.from('2024-01-15[u-ca=persian]');
+    expect(() => stringify({ d }, FMT)).toThrow(
+      'unsupported annotation'
+    );
   });
 });
 
