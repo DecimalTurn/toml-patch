@@ -83,11 +83,20 @@ export function temporalToTomlString(value: any): string {
         'TOML only supports offset-based timezones (+05:30, Z).'
       );
     }
-    // Normalize +00:00 to Z
-    return full.replace(/\[.*\]$/, '').replace('+00:00', 'Z');
+    // Strip bracket annotation, then normalize +00:00 offset suffix to Z
+    return full.replace(/\[.*\]$/, '').replace(/(\+00:00)$/, 'Z');
   }
 
-  return value.toString();
+  const raw = value.toString();
+  // Reject bracket annotations on non-ZonedDateTime types too
+  // (non-ISO calendars like [u-ca=...] are not valid TOML).
+  if (/\[.*\]/.test(raw)) {
+    throw new Error(
+      `Temporal value contains unsupported annotation: "${raw}". ` +
+      'TOML only supports ISO 8601 calendar.'
+    );
+  }
+  return raw;
 }
 
 export function isObject(value: any): boolean {
