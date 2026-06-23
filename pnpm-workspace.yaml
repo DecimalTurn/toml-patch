@@ -9,6 +9,6 @@ overrides:
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/42
   picomatch: "^4.0.4"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/56
-  js-yaml: ">=4.2.0"
+  js-yaml: "^4.2.0"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/57
   tar: ">=7.5.16"
