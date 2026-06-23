@@ -81,18 +81,18 @@ function dateValueToTemporal(value: Date): any {
   }
   // LocalDateTime → Temporal.PlainDateTime
   if (value instanceof LocalDateTime) {
-    return T.PlainDateTime.from(value.toISOString());
+    // toISOString() uses a space separator when the original TOML did
+    // (useSpaceSeparator flag). Temporal.from() requires T.
+    return T.PlainDateTime.from(value.toISOString().replace(' ', 'T'));
   }
   // OffsetDateTime → Temporal.ZonedDateTime
   if (value instanceof OffsetDateTime) {
-    const iso = value.toISOString();
-    // Extract offset: e.g. "2024-01-15T10:30:00+05:30" or "2024-01-15T10:30:00Z"
+    // Same: toISOString() uses a space separator when the original TOML did.
+    // Normalize to T before extracting the offset and calling .from().
+    const iso = value.toISOString().replace(' ', 'T');
     const offsetMatch = iso.match(/([+-]\d{2}:\d{2}|Z)$/);
     const offset = offsetMatch ? offsetMatch[1] : 'Z';
-    // Strip offset suffix to get the plain datetime
     const plainIso = iso.replace(/([+-]\d{2}:\d{2}|Z)$/, '');
-    // ZonedDateTime.from requires a timezone. Use the offset itself so the
-    // resulting object has an offset timezone (not IANA), which TOML can represent.
     const tz = offset === 'Z' ? '+00:00' : offset;
     return T.ZonedDateTime.from(`${plainIso}${offset}[${tz}]`);
   }
