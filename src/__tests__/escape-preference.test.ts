@@ -97,4 +97,16 @@ describe('escapeStringContent', () => {
     const result = escapeStringContent('col1\tcol2', '\\t', 'multiline-basic');
     expect(result).toBe('col1\\tcol2');
   });
+
+  test('singleline-basic: preferred \\xHH escape preserved for matching characters', () => {
+    // \x41 decodes to 'A'. If the original raw uses \x41, the output should preserve it.
+    const result = escapeStringContent('Hey A', '\\x41', 'singleline-basic');
+    expect(result).toBe('Hey \\x41');
+  });
+
+  test('multiline-basic: preferred \\xHH escape preserved for matching characters', () => {
+    // Same as above but in multiline mode — \x41 should survive.
+    const result = escapeStringContent('Hey A', '\\x41', 'multiline-basic');
+    expect(result).toBe('Hey \\x41');
+  });
 });

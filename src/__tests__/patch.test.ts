@@ -4128,6 +4128,18 @@ describe('basic string escape preservation', () => {
     // recorded by collectPreferredEscapes; the leading literal ☺ has no effect.
     expect(patch(existing, obj)).toEqual('msg = "' + '\\u263A' + ' updated"\n');
   });
+
+  test('should preserve \\xHH escape (TOML 1.1) in basic string value after patching', () => {
+    // \x41 decodes to 'A'. After parse→patch the short hex escape must survive.
+    const existing = 'key = "\\x41"\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('A');
+
+    obj.key = 'A+';
+
+    expect(patch(existing, obj)).toEqual('key = "\\x41+"\n');
+  });
 });
 
 describe('multi-line basic string escape preservation', () => {
@@ -4173,6 +4185,18 @@ describe('multi-line basic string escape preservation', () => {
     expect(patch(existing, obj)).toEqual(dedent`
       msg = """Three quotes: ""\""""
     ` + '\n');
+  });
+
+  test('should preserve \\xHH escape (TOML 1.1) in multiline basic string value after patching', () => {
+    // \\x41 decodes to 'A'. In MLBS \\x is optional but if the author chose it, preserve it.
+    const existing = 'key = """\\x41"""\n';
+
+    const obj = parse(existing);
+    expect(obj.key).toEqual('A');
+
+    obj.key = 'A updated';
+
+    expect(patch(existing, obj)).toEqual('key = """\\x41 updated"""\n');
   });
 });
 
