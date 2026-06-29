@@ -38,11 +38,12 @@ jobs:
           name: dist
           path: dist/
       - run: npm install @js-temporal/polyfill --no-save
+      - run: cp dist/toml-patch.js dist/toml-patch.cjs
       - run: |
           node --input-type=commonjs -e "
           const { Temporal } = require('@js-temporal/polyfill');
           globalThis.Temporal = Temporal;
-          const { parse, stringify, patch } = require('./dist/toml-patch.js');
+          const { parse, stringify, patch } = require('./dist/toml-patch.cjs');
           const FMT = { trailingNewline: 0 };
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
           console.assert(obj.d.constructor.name.includes('PlainDate'));
@@ -72,9 +73,10 @@ jobs:
         with:
           name: dist
           path: dist/
+      - run: cp dist/toml-patch.js dist/toml-patch.cjs
       - run: |
           node --harmony-temporal --input-type=commonjs -e "
-          const { parse, stringify } = require('./dist/toml-patch.js');
+          const { parse, stringify } = require('./dist/toml-patch.cjs');
           const FMT = { trailingNewline: 0 };
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
           console.assert(obj.d.constructor.name.includes('PlainDate'));
