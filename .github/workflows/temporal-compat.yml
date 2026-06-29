@@ -13,7 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24]
+        include:
+          - node-version: 14
+            pnpm-version: 8
+          - node-version: 16
+            pnpm-version: 8
+          - node-version: 18
+            pnpm-version: 8
+          - node-version: 20
+          - node-version: 22
+          - node-version: 24
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -26,6 +35,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
+          version: ${{ matrix.pnpm-version }}
           run_install: false
 
       - name: Install
@@ -81,7 +91,16 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24]
+        include:
+          - node-version: 14
+            pnpm-version: 8
+          - node-version: 16
+            pnpm-version: 8
+          - node-version: 18
+            pnpm-version: 8
+          - node-version: 20
+          - node-version: 22
+          - node-version: 24
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -94,6 +113,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
+          version: ${{ matrix.pnpm-version }}
           run_install: false
 
       - name: Install
