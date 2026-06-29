@@ -25,8 +25,8 @@ jobs:
   polyfill:
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         node-version: [14, 16, 18, 20, 22, 24]
     steps:
@@ -39,7 +39,10 @@ jobs:
           name: dist
           path: dist/
       - run: npm install @js-temporal/polyfill --no-save
-      - run: |
+      - name: Smoke test
+        id: smoke
+        continue-on-error: true
+        run: |
           node --input-type=commonjs -e "
           const { Temporal } = require('@js-temporal/polyfill');
           globalThis.Temporal = Temporal;
@@ -56,12 +59,24 @@ jobs:
           console.assert(obj3.d instanceof Date);
           console.log('OK');
           "
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          status="${{ steps.smoke.outcome }}"
+          echo "$status" > results/polyfill-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: polyfill-result-${{ matrix.node-version }}
+          path: results/polyfill-${{ matrix.node-version }}.txt
 
   harmony:
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         node-version: [14, 16, 18, 20, 22, 24]
     steps:
@@ -73,11 +88,63 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: |
+      - name: Smoke test
+        id: smoke
+        continue-on-error: true
+        run: |
           node --harmony-temporal --input-type=commonjs -e "
           const { parse, stringify } = require('./dist/toml-patch.js');
           const FMT = { trailingNewline: 0 };
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
+          console.assert(obj.d.constructor.name.includes('PlainDate'));
+          console.assert(obj.d.toString() === '2024-01-15');
+          const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
+          console.assert(stringify({ z }, FMT).includes('Z'));
+          const obj2 = parse('d = 2024-01-15\\n');
+          console.assert(obj2.d instanceof Date);
+          console.log('OK');
+          "
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          status="${{ steps.smoke.outcome }}"
+          echo "$status" > results/harmony-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: harmony-result-${{ matrix.node-version }}
+          path: results/harmony-${{ matrix.node-version }}.txt
+
+  report:
+    needs: [polyfill, harmony]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: '*-result-*'
+          path: results
+      - name: Generate summary
+        shell: bash
+        run: |
+          echo "## Temporal Compatibility" >> $GITHUB_STEP_SUMMARY
+          for mode in polyfill harmony; do
+            row="| $mode "
+            for v in 14 16 18 20 22 24; do
+              f="results/${mode}-result-${v}/${mode}-${v}.txt"
+              if [ -f "$f" ]; then
+                s=$(cat "$f" | tr -d '[:space:]')
+                icon="$([ "$s" = "success" ] && echo '✅' || echo '❌')"
+                row="$row | $icon"
+              else
+                row="$row | -"
+              fi
+            done
+            row="$row |"
+            echo "$row" >> $GITHUB_STEP_SUMMARY
+          done
           console.assert(obj.d.constructor.name.includes('PlainDate'));
           console.assert(obj.d.toString() === '2024-01-15');
           const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
