@@ -100,15 +100,9 @@ jobs:
           pattern: '*-result-*'
           path: results
           merge-multiple: true
-      - name: Debug
-        shell: bash
-        run: |
-          echo "Available result files:"
-          find results -type f 2>/dev/null || echo "(none)"
       - name: Write summary
         shell: bash
         run: |
-          set -x
           echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           FAILED=0
@@ -120,7 +114,6 @@ jobs:
                 echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
               else
                 echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
-                echo "Missing/failed: $f (exists: $(test -f "$f" && echo yes || echo no), content: $(cat "$f" 2>/dev/null || echo 'n/a'))"
                 if [ "$v" -ge 18 ]; then FAILED=1; fi
               fi
             done
