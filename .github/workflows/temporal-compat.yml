@@ -39,7 +39,7 @@ jobs:
           path: dist/
       - run: npm install @js-temporal/polyfill --no-save
       - run: |
-          node -e "
+          node --input-type=commonjs -e "
           const { Temporal } = require('@js-temporal/polyfill');
           globalThis.Temporal = Temporal;
           const { parse, stringify, patch } = require('./dist/toml-patch.js');
@@ -73,7 +73,7 @@ jobs:
           name: dist
           path: dist/
       - run: |
-          node --harmony-temporal -e "
+          node --harmony-temporal --input-type=commonjs -e "
           const { parse, stringify } = require('./dist/toml-patch.js');
           const FMT = { trailingNewline: 0 };
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
