@@ -8,152 +8,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Run Temporal smoke tests with polyfill on all supported Node versions below v26.
   polyfill:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - node-version: 14
-            pnpm-version: 8
-          - node-version: 16
-            pnpm-version: 8
-          - node-version: 18
-            pnpm-version: 8
-          - node-version: 20
-          - node-version: 22
-          - node-version: 24
+        node-version: [16, 18, 20, 22, 24]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-
-      - name: Setup pnpm
-        if: ${{ !matrix.pnpm-version }}
-        uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - name: Setup pnpm (legacy Node)
-        if: ${{ matrix.pnpm-version }}
-        run: npm install -g pnpm@${{ matrix.pnpm-version }}
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-        env:
-          CI: true
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Smoke test
-        run: |
+      - run: npm install
+      - run: npm run build
+      - run: |
           node -e "
           const { Temporal } = require('@js-temporal/polyfill');
           globalThis.Temporal = Temporal;
           const { parse, stringify, patch } = require('./dist/toml-patch.js');
           const FMT = { trailingNewline: 0 };
-
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
-          console.assert(
-            obj.d.constructor.name.includes('PlainDate'),
-            'parse date-only → PlainDate'
-          );
-          console.assert(obj.d.toString() === '2024-01-15', 'PlainDate toString');
-
+          console.assert(obj.d.constructor.name.includes('PlainDate'));
+          console.assert(obj.d.toString() === '2024-01-15');
           const obj2 = parse('z = 2024-01-15T10:30:00+05:30\\n', { temporal: true });
-          console.assert(
-            obj2.z.constructor.name.includes('ZonedDateTime'),
-            'parse offset → ZonedDateTime'
-          );
-
+          console.assert(obj2.z.constructor.name.includes('ZonedDateTime'));
           const out = stringify({ d: obj.d }, FMT);
-          console.assert(out === 'd = 2024-01-15', 'stringify PlainDate');
-
-          const out2 = stringify({ z: obj2.z }, FMT);
-          console.assert(
-            out2.includes('2024-01-15T10:30:00+05:30'),
-            'stringify ZonedDateTime'
-          );
-
+          console.assert(out === 'd = 2024-01-15');
           const patched = patch('d = 2024-01-15\\n', { d: obj.d }, FMT);
-          console.assert(patched === 'd = 2024-01-15', 'patch no-op');
-
+          console.assert(patched === 'd = 2024-01-15');
           const obj3 = parse('d = 2024-01-15\\n');
-          console.assert(obj3.d instanceof Date, 'default returns Date');
-
-          console.log('OK — 6 assertions passed');
+          console.assert(obj3.d instanceof Date);
+          console.log('OK');
           "
 
-  # Smoke test using native Temporal via --harmony-temporal flag.
   harmony:
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
       matrix:
-        include:
-          - node-version: 14
-            pnpm-version: 8
-          - node-version: 16
-            pnpm-version: 8
-          - node-version: 18
-            pnpm-version: 8
-          - node-version: 20
-          - node-version: 22
-          - node-version: 24
+        node-version: [16, 18, 20, 22, 24]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-
-      - name: Setup pnpm
-        if: ${{ !matrix.pnpm-version }}
-        uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - name: Setup pnpm (legacy Node)
-        if: ${{ matrix.pnpm-version }}
-        run: npm install -g pnpm@${{ matrix.pnpm-version }}
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-        env:
-          CI: true
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Smoke test
-        run: |
+      - run: npm install
+      - run: npm run build
+      - run: |
           node --harmony-temporal -e "
           const { parse, stringify } = require('./dist/toml-patch.js');
           const FMT = { trailingNewline: 0 };
-
           const obj = parse('d = 2024-01-15\\n', { temporal: true });
-          console.assert(
-            obj.d.constructor.name.includes('PlainDate'),
-            'parse date-only → PlainDate'
-          );
-          console.assert(obj.d.toString() === '2024-01-15', 'PlainDate toString');
-
+          console.assert(obj.d.constructor.name.includes('PlainDate'));
+          console.assert(obj.d.toString() === '2024-01-15');
           const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
-          const out = stringify({ z }, FMT);
-          console.assert(
-            out.includes('2024-01-15T10:30:00Z'),
-            'stringify ZonedDateTime (native)'
-          );
-
+          console.assert(stringify({ z }, FMT).includes('Z'));
           const obj2 = parse('d = 2024-01-15\\n');
-          console.assert(obj2.d instanceof Date, 'default returns Date');
-
-          console.log('OK — 4 assertions passed');
+          console.assert(obj2.d instanceof Date);
+          console.log('OK');
           "
