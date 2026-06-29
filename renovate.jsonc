@@ -12,7 +12,9 @@
   "packageRules": [
     {
       "description": "Auto-merge packageManager minor/patch updates",
-      "matchManagers": ["pnpm"],
+      // The packageManager field (even for pnpm) is extracted by the npm manager,
+      // not a separate "pnpm" manager. See https://docs.renovatebot.com/modules/manager/npm/#dependency-types
+      "matchManagers": ["npm"],
       "matchDepTypes": ["packageManager"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
