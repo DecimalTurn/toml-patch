@@ -33,10 +33,14 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Setup pnpm
+        if: ${{ !matrix.pnpm-version }}
         uses: pnpm/action-setup@v6
         with:
-          version: ${{ matrix.pnpm-version }}
           run_install: false
+
+      - name: Setup pnpm (legacy Node)
+        if: ${{ matrix.pnpm-version }}
+        run: npm install -g pnpm@${{ matrix.pnpm-version }}
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -111,10 +115,14 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Setup pnpm
+        if: ${{ !matrix.pnpm-version }}
         uses: pnpm/action-setup@v6
         with:
-          version: ${{ matrix.pnpm-version }}
           run_install: false
+
+      - name: Setup pnpm (legacy Node)
+        if: ${{ matrix.pnpm-version }}
+        run: npm install -g pnpm@${{ matrix.pnpm-version }}
 
       - name: Install
         run: pnpm install --frozen-lockfile
