@@ -42,44 +42,7 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        shell: bash
-        run: |
-          if [ "${{ matrix.node-version }}" -le 16 ]; then
-            # Node 14/16: use ESM import (require() + "type":"module" doesn't work)
-            node --input-type=module -e "
-            const { Temporal } = await import('@js-temporal/polyfill');
-            globalThis.Temporal = Temporal;
-            const { parse, stringify, patch } = await import('./dist/toml-patch.js');
-            const FMT = { trailingNewline: 0 };
-            const obj = parse('d = 2024-01-15\\n', { temporal: true });
-            console.assert(obj.d.constructor.name.includes('PlainDate'));
-            console.assert(obj.d.toString() === '2024-01-15');
-            const obj2 = parse('z = 2024-01-15T10:30:00+05:30\\n', { temporal: true });
-            console.assert(obj2.z.constructor.name.includes('ZonedDateTime'));
-            console.assert(stringify({ d: obj.d }, FMT) === 'd = 2024-01-15');
-            console.assert(patch('d = 2024-01-15\\n', { d: obj.d }, FMT) === 'd = 2024-01-15');
-            const obj3 = parse('d = 2024-01-15\\n');
-            console.assert(obj3.d instanceof Date);
-            console.log('OK');
-            "
-          else
-            node --input-type=commonjs -e "
-            const { Temporal } = require('@js-temporal/polyfill');
-            globalThis.Temporal = Temporal;
-            const { parse, stringify, patch } = require('./dist/toml-patch.js');
-            const FMT = { trailingNewline: 0 };
-            const obj = parse('d = 2024-01-15\\n', { temporal: true });
-            console.assert(obj.d.constructor.name.includes('PlainDate'));
-            console.assert(obj.d.toString() === '2024-01-15');
-            const obj2 = parse('z = 2024-01-15T10:30:00+05:30\\n', { temporal: true });
-            console.assert(obj2.z.constructor.name.includes('ZonedDateTime'));
-            console.assert(stringify({ d: obj.d }, FMT) === 'd = 2024-01-15');
-            console.assert(patch('d = 2024-01-15\\n', { d: obj.d }, FMT) === 'd = 2024-01-15');
-            const obj3 = parse('d = 2024-01-15\\n');
-            console.assert(obj3.d instanceof Date);
-            console.log('OK');
-            "
-          fi
+        run: node scripts/smoke-temporal-polyfill.mjs
       - name: Record result
         if: always()
         shell: bash
@@ -112,19 +75,7 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: >
-          node --harmony-temporal --input-type=commonjs -e "
-          const { parse, stringify } = require('./dist/toml-patch.js');
-          const FMT = { trailingNewline: 0 };
-          const obj = parse('d = 2024-01-15\\n', { temporal: true });
-          console.assert(obj.d.constructor.name.includes('PlainDate'));
-          console.assert(obj.d.toString() === '2024-01-15');
-          const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
-          console.assert(stringify({ z }, FMT).includes('Z'));
-          const obj2 = parse('d = 2024-01-15\\n');
-          console.assert(obj2.d instanceof Date);
-          console.log('OK');
-          "
+        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs
       - name: Record result
         if: always()
         shell: bash
