@@ -112,7 +112,7 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: |
+        run: >
           node --harmony-temporal --input-type=commonjs -e "
           const { parse, stringify } = require('./dist/toml-patch.js');
           const FMT = { trailingNewline: 0 };
