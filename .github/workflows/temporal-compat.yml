@@ -8,18 +8,36 @@ on:
   workflow_dispatch:
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
   polyfill:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [16, 18, 20, 22, 24]
+        node-version: [14, 16, 18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm install
-      - run: npm run build
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - run: npm install @js-temporal/polyfill --no-save
       - run: |
           node -e "
           const { Temporal } = require('@js-temporal/polyfill');
@@ -31,28 +49,29 @@ jobs:
           console.assert(obj.d.toString() === '2024-01-15');
           const obj2 = parse('z = 2024-01-15T10:30:00+05:30\\n', { temporal: true });
           console.assert(obj2.z.constructor.name.includes('ZonedDateTime'));
-          const out = stringify({ d: obj.d }, FMT);
-          console.assert(out === 'd = 2024-01-15');
-          const patched = patch('d = 2024-01-15\\n', { d: obj.d }, FMT);
-          console.assert(patched === 'd = 2024-01-15');
+          console.assert(stringify({ d: obj.d }, FMT) === 'd = 2024-01-15');
+          console.assert(patch('d = 2024-01-15\\n', { d: obj.d }, FMT) === 'd = 2024-01-15');
           const obj3 = parse('d = 2024-01-15\\n');
           console.assert(obj3.d instanceof Date);
           console.log('OK');
           "
 
   harmony:
+    needs: build
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
       matrix:
-        node-version: [16, 18, 20, 22, 24]
+        node-version: [14, 16, 18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm install
-      - run: npm run build
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
       - run: |
           node --harmony-temporal -e "
           const { parse, stringify } = require('./dist/toml-patch.js');
