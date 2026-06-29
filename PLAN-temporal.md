@@ -231,7 +231,7 @@ export function generateTemporalDateTime(
 }
 ```
 
-> **Note for `ZonedDateTime`:** `toString()` returns something like `"2024-01-15T10:30:00+05:30[Asia/Kolkata]"`. The `[Asia/Kolkata]` IANA annotation is not valid TOML. Use `toString({ timeZoneName: 'never' })` to suppress it, giving `"2024-01-15T10:30:00+05:30"` which is valid TOML offset date-time.
+> **Note for `ZonedDateTime`:** IANA timezone annotations (e.g. `[Asia/Kolkata]`) are not valid TOML. The library throws an error for such values. Only offset-based timezones (`[+05:30]`, `[+00:00]`) are accepted.
 
 Also update the `toJSON()` helper in `parse-js.ts` — skip Temporal objects (don't call `.toJSON()` on them, they already represent themselves):
 
@@ -385,5 +385,5 @@ Temporal is available in recent V8/Node.js versions. Tests may need to check `ty
 1. **`temporal` is opt-in (default `false`).** This avoids a breaking change. In a future major version it could become opt-out or the default once Temporal reaches Baseline.
 2. **Temporal detection in serialize path is automatic.** If a user has a Temporal object in their JS, we want it to serialize correctly without extra configuration.
 3. **Duck-typing for Temporal detection** rather than `instanceof` checks, because Temporal objects may come from different realms (e.g., iframes, vm contexts).
-4. **For `ZonedDateTime` with IANA timezone**, we strip the IANA annotation and keep only the offset in TOML output. TOML does not support IANA timezone names.
+4. **For `ZonedDateTime` with IANA timezone**, the library throws an error. TOML does not support IANA timezone names — only offset-based timezones are accepted.
 5. **`patch()` auto-detects Temporal** in the `updated` object to enable temporal mode for the internal `toJS` diffs, avoiding a change to the `patch()` signature.

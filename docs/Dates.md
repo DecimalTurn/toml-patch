@@ -39,7 +39,12 @@ const obj = parse(
 
 ### Runtime requirements
 
-Temporal is Stage 4 and available in modern browsers. For runtimes without native support (including Node.js 24 and earlier), use [`@js-temporal/polyfill`](https://www.npmjs.com/package/@js-temporal/polyfill) and set it on `globalThis` before parsing:
+Temporal is a Stage 4 proposal.
+
+- **Node.js >= v26**: native support.
+- **Node.js < v26**: enable with `--harmony-temporal` flag.
+- **Modern browsers**: native support.
+- **Other runtimes**: use [`@js-temporal/polyfill`](https://www.npmjs.com/package/@js-temporal/polyfill) and set it on `globalThis` before parsing:
 
 ```js
 import { Temporal } from '@js-temporal/polyfill';
@@ -69,7 +74,7 @@ patch('d = 2024-01-15\n', {
 // d = 2025-06-01T12:00:00
 ```
 
-> **Note:** TOML only supports timezone offsets (`+05:30`, `Z`), not IANA timezone names. When a `Temporal.ZonedDateTime` with an IANA annotation (e.g. `[Asia/Kolkata]`) is serialized, only the offset portion is kept.
+> **Note:** TOML only supports timezone offsets (`+05:30`, `Z`), not IANA timezone names. Passing a `Temporal.ZonedDateTime` with an IANA annotation (e.g. `[Asia/Kolkata]`) will throw an error. Use offset-based timezones (`[+05:30]`, `[+00:00]`) instead.
 
 ## Format transitions
 

@@ -1,8 +1,9 @@
 /**
  * Tests for Temporal API support.
  *
- * Uses @js-temporal/polyfill because Node.js 24 does not yet ship
- * Temporal natively (Stage 4 spec, expected in a future release).
+ * Uses @js-temporal/polyfill so tests run on all Node.js versions.
+ * Node.js v26+ has native Temporal; v24 supports it via
+ * --harmony-temporal. Only v22 requires the polyfill.
  * The polyfill is set on globalThis so the library code can access it
  * the same way it would access the native Temporal global.
  */

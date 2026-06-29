@@ -13,8 +13,11 @@ export interface ParseOptions {
    * (Temporal.PlainDate, Temporal.PlainTime, Temporal.PlainDateTime,
    * Temporal.ZonedDateTime) instead of custom Date subclasses.
    *
-   * The Temporal API must be available in the runtime (it is Stage 4
-   * and shipping in modern browsers and Node.js).
+   * The Temporal API must be available in the runtime.
+   * - Node.js >= v26: full native support.
+   * - Node.js < v26: enable with the `--harmony-temporal` flag.
+   * - Modern browsers: native support.
+   * - Other runtimes: use @js-temporal/polyfill.
    *
    * Default: false (returns custom Date subclasses for backward compatibility).
    */
