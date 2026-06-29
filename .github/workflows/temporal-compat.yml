@@ -130,21 +130,26 @@ jobs:
         shell: bash
         run: |
           echo "## Temporal Compatibility" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          FAILED=0
           for mode in polyfill harmony; do
-            row="| $mode "
+            echo -n "| $mode |" >> $GITHUB_STEP_SUMMARY
             for v in 14 16 18 20 22 24; do
               f="results/${mode}-result-${v}/${mode}-${v}.txt"
-              if [ -f "$f" ]; then
-                s=$(cat "$f" | tr -d '[:space:]')
-                icon="$([ "$s" = "success" ] && echo '✅' || echo '❌')"
-                row="$row | $icon"
+              if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
+                echo -n " ✅ |" >> $GITHUB_STEP_SUMMARY
               else
-                row="$row | -"
+                echo -n " ❌ |" >> $GITHUB_STEP_SUMMARY
+                if [ "$v" -ge 18 ]; then FAILED=1; fi
               fi
             done
-            row="$row |"
-            echo "$row" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           done
+          if [ "$FAILED" = "1" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Temporal support is required for Node >= 18." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
           console.assert(obj.d.constructor.name.includes('PlainDate'));
           console.assert(obj.d.toString() === '2024-01-15');
           const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
