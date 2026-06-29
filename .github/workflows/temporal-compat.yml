@@ -94,21 +94,32 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Check polyfill results
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: '*-result-*'
+          path: results
+          merge-multiple: true
+      - name: Write summary
         shell: bash
         run: |
+          echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           FAILED=0
-          for v in 18 20 22 24; do
-            echo "polyfill Node $v: ${{ needs.polyfill.result }}"
+          for mode in polyfill harmony; do
+            echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
+            for v in 14 16 18 20 22 24; do
+              f="results/${mode}-${v}.txt"
+              if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
+                echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$v" -ge 18 ]; then FAILED=1; fi
+              fi
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
           done
-          for v in 18 20 22 24; do
-            echo "harmony Node $v: ${{ needs.harmony.result }}"
-          done
-          console.assert(obj.d.constructor.name.includes('PlainDate'));
-          console.assert(obj.d.toString() === '2024-01-15');
-          const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
-          console.assert(stringify({ z }, FMT).includes('Z'));
-          const obj2 = parse('d = 2024-01-15\\n');
-          console.assert(obj2.d instanceof Date);
-          console.log('OK');
-          "
+          if [ "$FAILED" = "1" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Temporal support is required for Node &gt;= 18." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
