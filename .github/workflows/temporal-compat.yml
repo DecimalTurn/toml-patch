@@ -1,0 +1,131 @@
+name: Temporal Compatibility
+
+on:
+  push:
+    branches:
+      - latest
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Run Temporal smoke tests with polyfill on all supported Node versions below v26.
+  polyfill:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [14, 16, 18, 20, 22, 24]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        env:
+          CI: true
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Smoke test
+        run: |
+          node -e "
+          const { Temporal } = require('@js-temporal/polyfill');
+          globalThis.Temporal = Temporal;
+          const { parse, stringify, patch } = require('./dist/toml-patch.js');
+          const FMT = { trailingNewline: 0 };
+
+          const obj = parse('d = 2024-01-15\\n', { temporal: true });
+          console.assert(
+            obj.d.constructor.name.includes('PlainDate'),
+            'parse date-only → PlainDate'
+          );
+          console.assert(obj.d.toString() === '2024-01-15', 'PlainDate toString');
+
+          const obj2 = parse('z = 2024-01-15T10:30:00+05:30\\n', { temporal: true });
+          console.assert(
+            obj2.z.constructor.name.includes('ZonedDateTime'),
+            'parse offset → ZonedDateTime'
+          );
+
+          const out = stringify({ d: obj.d }, FMT);
+          console.assert(out === 'd = 2024-01-15', 'stringify PlainDate');
+
+          const out2 = stringify({ z: obj2.z }, FMT);
+          console.assert(
+            out2.includes('2024-01-15T10:30:00+05:30'),
+            'stringify ZonedDateTime'
+          );
+
+          const patched = patch('d = 2024-01-15\\n', { d: obj.d }, FMT);
+          console.assert(patched === 'd = 2024-01-15', 'patch no-op');
+
+          const obj3 = parse('d = 2024-01-15\\n');
+          console.assert(obj3.d instanceof Date, 'default returns Date');
+
+          console.log('OK — 6 assertions passed');
+          "
+
+  # Smoke test using native Temporal via --harmony-temporal flag.
+  harmony:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        node-version: [14, 16, 18, 20, 22, 24]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        env:
+          CI: true
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Smoke test
+        run: |
+          node --harmony-temporal -e "
+          const { parse, stringify } = require('./dist/toml-patch.js');
+          const FMT = { trailingNewline: 0 };
+
+          const obj = parse('d = 2024-01-15\\n', { temporal: true });
+          console.assert(
+            obj.d.constructor.name.includes('PlainDate'),
+            'parse date-only → PlainDate'
+          );
+          console.assert(obj.d.toString() === '2024-01-15', 'PlainDate toString');
+
+          const z = Temporal.ZonedDateTime.from('2024-01-15T10:30:00+00:00[+00:00]');
+          const out = stringify({ z }, FMT);
+          console.assert(
+            out.includes('2024-01-15T10:30:00Z'),
+            'stringify ZonedDateTime (native)'
+          );
+
+          const obj2 = parse('d = 2024-01-15\\n');
+          console.assert(obj2.d instanceof Date, 'default returns Date');
+
+          console.log('OK — 4 assertions passed');
+          "
