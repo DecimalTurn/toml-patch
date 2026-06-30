@@ -2,12 +2,14 @@
  * Smoke test: native Temporal + toml-patch.
  *
  * Requires --harmony-temporal flag.
- * Uses CJS require since the polyfill is not needed.
+ * Uses dynamic import() to load ESM dist from CJS (works on Node 13.2+).
  *
  * Usage: node --harmony-temporal scripts/smoke-temporal-harmony.cjs
  */
 
-const { parse, stringify } = require('../dist/toml-patch.js');
+(async () => {
+
+const { parse, stringify } = await import('../dist/toml-patch.js');
 
 const FMT = { trailingNewline: 0 };
 
@@ -32,3 +34,5 @@ if (ok) {
 }
 console.error('FAILED');
 process.exit(1);
+
+})().catch(e => { console.error(e); process.exit(1); });
