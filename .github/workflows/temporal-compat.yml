@@ -75,7 +75,7 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs
+        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1
       - name: Record result
         if: always()
         shell: bash
