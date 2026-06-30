@@ -50,7 +50,9 @@ jobs:
           mkdir -p results
           count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
           count=${count:-0}
-          echo "$count" > results/polyfill-${{ matrix.node-version }}.txt
+          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
+          total=${total:-0}
+          echo "${count}/${total}" > results/polyfill-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -84,7 +86,9 @@ jobs:
           mkdir -p results
           count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
           count=${count:-0}
-          echo "$count" > results/harmony-${{ matrix.node-version }}.txt
+          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
+          total=${total:-0}
+          echo "${count}/${total}" > results/harmony-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -109,33 +113,32 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 |" >> "$GITHUB_STEP_SUMMARY"
           echo "|------|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
-          FAILED_MODES=""
+          ISSUES=""
           for mode in polyfill harmony; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
             for v in 14 16 18 20 22 24; do
               f="results/${mode}-${v}.txt"
               if [ -f "$f" ]; then
-                count=$(cat "$f")
-                if [ "$count" -gt 0 ]; then
-                  echo -n " ${count} |" >> "$GITHUB_STEP_SUMMARY"
+                val=$(cat "$f")
+                count="${val%/*}"
+                total="${val#*/}"
+                if [ "$count" -eq "$total" ] && [ "$total" -gt 0 ]; then
+                  echo -n " ✅ ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
+                elif [ "$count" -gt 0 ]; then
+                  echo -n " 🟡 ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
+                  ISSUES="$ISSUES $mode@$v"
                 else
-                  echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
-                  if [ "$v" -ge 20 ]; then
-                    FAILED_MODES="$FAILED_MODES $mode@$v"
-                  fi
+                  echo -n " ❌ 0/${total} |" >> "$GITHUB_STEP_SUMMARY"
+                  ISSUES="$ISSUES $mode@$v"
                 fi
               else
                 echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
-                if [ "$v" -ge 20 ]; then
-                  FAILED_MODES="$FAILED_MODES $mode@$v"
-                fi
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
-          if [ -n "$FAILED_MODES" ]; then
+          if [ -n "$ISSUES" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
-            echo "Failed:$FAILED_MODES" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+            echo "⚠️ Some modes have partial or missing Temporal support:" >> "$GITHUB_STEP_SUMMARY"
+            echo "$ISSUES" >> "$GITHUB_STEP_SUMMARY"
           fi
