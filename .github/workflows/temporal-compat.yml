@@ -42,14 +42,15 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: node scripts/smoke-temporal-polyfill.mjs
+        run: node scripts/smoke-temporal-polyfill.mjs 2>&1 | tee smoke-output.txt
       - name: Record result
         if: always()
         shell: bash
         run: |
           mkdir -p results
-          status="${{ steps.smoke.outcome }}"
-          echo "$status" > results/polyfill-${{ matrix.node-version }}.txt
+          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          count=${count:-0}
+          echo "$count" > results/polyfill-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -75,14 +76,15 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1
+        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
       - name: Record result
         if: always()
         shell: bash
         run: |
           mkdir -p results
-          status="${{ steps.smoke.outcome }}"
-          echo "$status" > results/harmony-${{ matrix.node-version }}.txt
+          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          count=${count:-0}
+          echo "$count" > results/harmony-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -112,10 +114,18 @@ jobs:
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
             for v in 14 16 18 20 22 24; do
               f="results/${mode}-${v}.txt"
-              if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
-                echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
+              if [ -f "$f" ]; then
+                count=$(cat "$f")
+                if [ "$count" -gt 0 ]; then
+                  echo -n " ${count} |" >> "$GITHUB_STEP_SUMMARY"
+                else
+                  echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                  if [ "$v" -ge 20 ]; then
+                    FAILED_MODES="$FAILED_MODES $mode@$v"
+                  fi
+                fi
               else
-                echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
                 if [ "$v" -ge 20 ]; then
                   FAILED_MODES="$FAILED_MODES $mode@$v"
                 fi

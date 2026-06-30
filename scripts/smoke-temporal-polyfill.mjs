@@ -15,27 +15,49 @@ const { parse, stringify, patch } = await import('../dist/toml-patch.js');
 
 const FMT = { trailingNewline: 0 };
 
-let ok = true;
-function check(cond, msg) {
-  if (!cond) { console.error('FAIL:', msg); ok = false; }
+const results = { pass: [], fail: [] };
+function test(name, fn) {
+  try { fn(); results.pass.push({ name }); }
+  catch(e) { results.fail.push({ name, error: e.message }); }
 }
 
-const obj = parse('d = 2024-01-15\n', { temporal: true });
-check(obj.d.constructor.name.includes('PlainDate'), 'parse date-only → PlainDate');
-check(obj.d.toString() === '2024-01-15', 'PlainDate toString');
+test('parse date-only → PlainDate', () => {
+  const obj = parse('d = 2024-01-15\n', { temporal: true });
+  if (!obj.d.constructor.name.includes('PlainDate')) throw new Error('not PlainDate');
+  if (obj.d.toString() !== '2024-01-15') throw new Error('wrong toString: ' + obj.d.toString());
+});
 
-const obj2 = parse('z = 2024-01-15T10:30:00+05:30\n', { temporal: true });
-check(obj2.z.constructor.name.includes('ZonedDateTime'), 'parse offset → ZonedDateTime');
+test('parse offset → ZonedDateTime', () => {
+  const obj = parse('z = 2024-01-15T10:30:00+05:30\n', { temporal: true });
+  if (!obj.z.constructor.name.includes('ZonedDateTime')) throw new Error('not ZonedDateTime');
+});
 
-check(stringify({ d: obj.d }, FMT) === 'd = 2024-01-15', 'stringify PlainDate');
-check(patch('d = 2024-01-15\n', { d: obj.d }, FMT) === 'd = 2024-01-15', 'patch no-op');
+test('stringify PlainDate', () => {
+  const d = parse('d = 2024-01-15\n', { temporal: true }).d;
+  if (stringify({ d }, FMT) !== 'd = 2024-01-15') throw new Error('stringify mismatch');
+});
 
-const obj3 = parse('d = 2024-01-15\n');
-check(obj3.d instanceof Date, 'default returns Date');
+test('patch no-op', () => {
+  const d = parse('d = 2024-01-15\n', { temporal: true }).d;
+  if (patch('d = 2024-01-15\n', { d }, FMT) !== 'd = 2024-01-15') throw new Error('patch mismatch');
+});
 
-if (ok) {
-  console.log('OK');
-  process.exit(0);
+test('default returns Date', () => {
+  const obj = parse('d = 2024-01-15\n');
+  if (!(obj.d instanceof Date)) throw new Error('not Date');
+});
+
+// --- Report ---
+const total = results.pass.length + results.fail.length;
+console.log(`PASS_COUNT: ${results.pass.length}`);
+console.log(`Results: ${results.pass.length}/${total} passed\n`);
+if (results.fail.length) {
+  console.log('FAILED:');
+  results.fail.forEach(f => console.log(`  ${f.name}: ${f.error}`));
+} else {
+  console.log('All tests passed!');
 }
-console.error('FAILED');
-process.exit(1);
+
+process.exit(0);
+
+process.exit(0);

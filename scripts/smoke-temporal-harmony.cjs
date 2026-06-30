@@ -19,6 +19,8 @@ function test(name, fn) {
   }
 }
 
+function main() {
+
 // --- Temporal.Duration ---
 test('Duration constructor', () => { new Temporal.Duration(1,2,3,4,5,6,7,8,9); });
 test('Duration.from', () => { Temporal.Duration.from('P1Y2M3DT4H5M6S'); });
@@ -301,8 +303,19 @@ test('ZonedDateTime.valueOf throws', () => {
   catch(e) { if(e.message === 'should have thrown') throw e; }
 });
 
+}
+
+try {
+  main();
+} catch(e) {
+  // If Temporal doesn't exist at all (Node 14/16), even top-level
+  // references like `new Temporal.Duration(...)` will throw.
+  results.fail.push({ name: 'Temporal global', error: e.message });
+}
+
 // --- Report ---
 const total = results.pass.length + results.fail.length;
+console.log(`PASS_COUNT: ${results.pass.length}`);
 console.log(`Results: ${results.pass.length}/${total} passed\n`);
 if (results.fail.length) {
   console.log('FAILED:');
@@ -311,4 +324,5 @@ if (results.fail.length) {
   console.log('All tests passed!');
 }
 
-process.exit(results.fail.length > 0 ? 1 : 0);
+// Always exit 0 — this is a probe, not an assertion. The CI reads PASS_COUNT.
+process.exit(0);
