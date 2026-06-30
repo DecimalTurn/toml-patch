@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24]
+        node-version: [14, 16, 18, 20, 22, 24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24]
+        node-version: [14, 16, 18, 20, 22, 24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -78,7 +78,12 @@ jobs:
       - name: Smoke test
         id: smoke
         continue-on-error: true
-        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
+        shell: bash
+        run: |
+          FLAG=""
+          MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
+          [ "$MAJOR" -ge 18 ] && FLAG="--harmony-temporal"
+          node $FLAG scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
       - name: Record result
         if: always()
         shell: bash
@@ -95,8 +100,44 @@ jobs:
           name: harmony-result-${{ matrix.node-version }}
           path: results/harmony-${{ matrix.node-version }}.txt
 
+  native:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [14, 16, 18, 20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - name: Smoke test
+        id: smoke
+        continue-on-error: true
+        run: node scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          count=${count:-0}
+          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
+          total=${total:-0}
+          echo "${count}/${total}" > results/native-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-result-${{ matrix.node-version }}
+          path: results/native-${{ matrix.node-version }}.txt
+
   report:
-    needs: [polyfill, harmony]
+    needs: [polyfill, harmony, native]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -111,24 +152,27 @@ jobs:
         run: |
           echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|------|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
           ISSUES=""
-          for mode in polyfill harmony; do
+          for mode in polyfill harmony native; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
-            for v in 14 16 18 20 22 24; do
+            for v in 14 16 18 20 22 24 26; do
               f="results/${mode}-${v}.txt"
               if [ -f "$f" ]; then
                 val=$(cat "$f")
                 count="${val%/*}"
                 total="${val#*/}"
-                if [ "$count" -eq "$total" ] && [ "$total" -gt 0 ]; then
-                  echo -n " ✅ ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$total" -eq 0 ]; then
+                  echo -n " 🔴 |" >> "$GITHUB_STEP_SUMMARY"
+                  ISSUES="$ISSUES $mode@$v"
+                elif [ "$count" -eq "$total" ]; then
+                  echo -n " 🟢 ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
                 elif [ "$count" -gt 0 ]; then
                   echo -n " 🟡 ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
                   ISSUES="$ISSUES $mode@$v"
                 else
-                  echo -n " ❌ 0/${total} |" >> "$GITHUB_STEP_SUMMARY"
+                  echo -n " 🔴 0/${total} |" >> "$GITHUB_STEP_SUMMARY"
                   ISSUES="$ISSUES $mode@$v"
                 fi
               else
