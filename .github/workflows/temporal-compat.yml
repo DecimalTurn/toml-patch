@@ -105,6 +105,8 @@ jobs:
         run: |
           echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
           FAILED_MODES=""
           for mode in polyfill harmony; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
