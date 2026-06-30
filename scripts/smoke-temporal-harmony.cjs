@@ -19,13 +19,17 @@ function test(name, fn) {
   }
 }
 
+function safe(fn) {
+  try { return fn(); } catch(e) { return null; }
+}
+
 function main() {
 
 // --- Temporal.Duration ---
 test('Duration constructor', () => { new Temporal.Duration(1,2,3,4,5,6,7,8,9); });
 test('Duration.from', () => { Temporal.Duration.from('P1Y2M3DT4H5M6S'); });
 test('Duration.compare', () => { Temporal.Duration.compare(new Temporal.Duration(0,0,0,1), new Temporal.Duration(0,0,0,2)); });
-const dur = new Temporal.Duration(1,2,3,4,5,6,7,8,9);
+const dur = safe(() => new Temporal.Duration(1,2,3,4,5,6,7,8,9));
 test('Duration.years', () => { if(dur.years !== 1) throw new Error('wrong value'); });
 test('Duration.months', () => { if(dur.months !== 2) throw new Error('wrong value'); });
 test('Duration.weeks', () => { if(dur.weeks !== 3) throw new Error('wrong value'); });
@@ -54,7 +58,7 @@ test('Duration.valueOf throws', () => {
 });
 
 // --- Temporal.Instant ---
-const inst = Temporal.Instant.from('2024-01-15T12:00:00Z');
+const inst = safe(() => Temporal.Instant.from('2024-01-15T12:00:00Z'));
 test('Instant constructor', () => { new Temporal.Instant(0n); });
 test('Instant.from', () => { Temporal.Instant.from('2024-01-15T12:00:00Z'); });
 test('Instant.fromEpochMilliseconds', () => { Temporal.Instant.fromEpochMilliseconds(0); });
@@ -86,7 +90,7 @@ test('Now.plainTimeISO', () => { Temporal.Now.plainTimeISO(); });
 test('Now.zonedDateTimeISO', () => { Temporal.Now.zonedDateTimeISO(); });
 
 // --- Temporal.PlainDate ---
-const pd = Temporal.PlainDate.from('2024-01-15');
+const pd = safe(() => Temporal.PlainDate.from('2024-01-15'));
 test('PlainDate constructor', () => { new Temporal.PlainDate(2024, 1, 15); });
 test('PlainDate.from', () => { Temporal.PlainDate.from('2024-01-15'); });
 test('PlainDate.compare', () => { Temporal.PlainDate.compare(pd, pd); });
@@ -126,7 +130,7 @@ test('PlainDate.valueOf throws', () => {
 });
 
 // --- Temporal.PlainTime ---
-const pt = Temporal.PlainTime.from('12:30:45.123456789');
+const pt = safe(() => Temporal.PlainTime.from('12:30:45.123456789'));
 test('PlainTime constructor', () => { new Temporal.PlainTime(12, 30); });
 test('PlainTime.from', () => { Temporal.PlainTime.from('12:30:00'); });
 test('PlainTime.compare', () => { Temporal.PlainTime.compare(pt, pt); });
@@ -152,7 +156,7 @@ test('PlainTime.valueOf throws', () => {
 });
 
 // --- Temporal.PlainDateTime ---
-const pdt = Temporal.PlainDateTime.from('2024-01-15T12:30:45');
+const pdt = safe(() => Temporal.PlainDateTime.from('2024-01-15T12:30:45'));
 test('PlainDateTime constructor', () => { new Temporal.PlainDateTime(2024, 1, 15, 12, 30); });
 test('PlainDateTime.from', () => { Temporal.PlainDateTime.from('2024-01-15T12:30:45'); });
 test('PlainDateTime.compare', () => { Temporal.PlainDateTime.compare(pdt, pdt); });
@@ -199,7 +203,7 @@ test('PlainDateTime.valueOf throws', () => {
 });
 
 // --- Temporal.PlainYearMonth ---
-const pym = Temporal.PlainYearMonth.from('2024-01');
+const pym = safe(() => Temporal.PlainYearMonth.from('2024-01'));
 test('PlainYearMonth constructor', () => { new Temporal.PlainYearMonth(2024, 1); });
 test('PlainYearMonth.from', () => { Temporal.PlainYearMonth.from('2024-01'); });
 test('PlainYearMonth.compare', () => { Temporal.PlainYearMonth.compare(pym, pym); });
@@ -229,7 +233,7 @@ test('PlainYearMonth.valueOf throws', () => {
 });
 
 // --- Temporal.PlainMonthDay ---
-const pmd = Temporal.PlainMonthDay.from('01-15');
+const pmd = safe(() => Temporal.PlainMonthDay.from('01-15'));
 test('PlainMonthDay constructor', () => { new Temporal.PlainMonthDay(1, 15); });
 test('PlainMonthDay.from', () => { Temporal.PlainMonthDay.from('01-15'); });
 test('PlainMonthDay.monthCode', () => { pmd.monthCode; });
@@ -247,7 +251,7 @@ test('PlainMonthDay.valueOf throws', () => {
 });
 
 // --- Temporal.ZonedDateTime ---
-const zdt = Temporal.ZonedDateTime.from('2024-01-15T12:30:45+00:00[UTC]');
+const zdt = safe(() => Temporal.ZonedDateTime.from('2024-01-15T12:30:45+00:00[UTC]'));
 test('ZonedDateTime constructor', () => { new Temporal.ZonedDateTime(0n, 'UTC'); });
 test('ZonedDateTime.from', () => { Temporal.ZonedDateTime.from('2024-01-15T12:30:45+00:00[UTC]'); });
 test('ZonedDateTime.compare', () => { Temporal.ZonedDateTime.compare(zdt, zdt); });
