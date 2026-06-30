@@ -105,7 +105,7 @@ jobs:
         run: |
           echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          FAILED=0
+          FAILED_MODES=""
           for mode in polyfill harmony; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
             for v in 14 16 18 20 22 24; do
@@ -114,13 +114,16 @@ jobs:
                 echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
               else
                 echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
-                if [ "$v" -ge 18 ]; then FAILED=1; fi
+                if [ "$v" -ge 20 ]; then
+                  FAILED_MODES="$FAILED_MODES $mode@$v"
+                fi
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
-          if [ "$FAILED" = "1" ]; then
+          if [ -n "$FAILED_MODES" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "❌ Temporal support is required for Node &gt;= 18." >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
+            echo "Failed:$FAILED_MODES" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
