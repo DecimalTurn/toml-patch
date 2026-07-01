@@ -1,0 +1,258 @@
+name: Temporal Compatibility
+
+on:
+  push:
+    branches:
+      - latest
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  polyfill:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [14, 16, 18, 20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - run: npm install @js-temporal/polyfill --no-save
+      - name: Smoke test (comprehensive)
+        id: smoke
+        continue-on-error: true
+        run: node scripts/smoke-temporal-polyfill.mjs 2>&1 | tee smoke-output.txt
+      - name: Record result (comprehensive)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'Results: \d+/\K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/polyfill-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node scripts/smoke-temporal-polyfill-toml.mjs
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          printf '%s' "$status" > results/polyfill-toml-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: polyfill-result-${{ matrix.node-version }}
+          path: |
+            results/polyfill-${{ matrix.node-version }}.txt
+            results/polyfill-toml-${{ matrix.node-version }}.txt
+
+  harmony:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [14, 16, 18, 20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - name: Smoke test (comprehensive)
+        id: smoke
+        continue-on-error: true
+        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
+      - name: Record result (comprehensive)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'Results: \d+/\K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/harmony-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node --harmony-temporal scripts/smoke-temporal-harmony-toml.cjs 2>&1
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          printf '%s' "$status" > results/harmony-toml-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: harmony-result-${{ matrix.node-version }}
+          path: |
+            results/harmony-${{ matrix.node-version }}.txt
+            results/harmony-toml-${{ matrix.node-version }}.txt
+
+  native:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - name: Smoke test (comprehensive)
+        id: smoke
+        continue-on-error: true
+        run: node scripts/smoke-temporal-native.cjs 2>&1 | tee smoke-output.txt
+      - name: Record result (comprehensive)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/native-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node scripts/smoke-temporal-native-toml.cjs 2>&1
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          printf '%s' "$status" > results/native-toml-${{ matrix.node-version }}.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-result-${{ matrix.node-version }}
+          path: |
+            results/native-${{ matrix.node-version }}.txt
+            results/native-toml-${{ matrix.node-version }}.txt
+
+  report:
+    needs: [polyfill, harmony, native]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          pattern: '*-result-*'
+          path: results
+          merge-multiple: true
+      - name: Write summary
+        shell: bash
+        run: |
+          echo "## TOML Smoke Tests (toml-patch parse/stringify/patch)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          TOML_FAILED=""
+          for label in polyfill harmony native; do
+            echo -n "| $label |" >> "$GITHUB_STEP_SUMMARY"
+            for v in 14 16 18 20 22 24 26; do
+              f="results/${label}-toml-${v}.txt"
+              if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
+                echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                # per-mode thresholds: polyfill=all, harmony=v20+, native=v26+
+                case "$label" in
+                  polyfill) [ "$v" -ge 14 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                  harmony)  [ "$v" -ge 20 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                  native)   [ "$v" -ge 26 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                esac
+              fi
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## General Temporal Compat (full API surface)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          GEN_FAILED=""
+          for mode in polyfill harmony native; do
+            echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
+            for v in 14 16 18 20 22 24 26; do
+              f="results/${mode}-${v}.txt"
+              if [ -f "$f" ]; then
+                val=$(cat "$f")
+                pass=${val%/*}
+                total=${val#*/}
+                pass=${pass:-0}
+                total=${total:-0}
+                if [ "$pass" -eq "$total" ] && [ "$pass" -gt 0 ]; then
+                  echo -n " ✅ $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
+                elif [ "$pass" -gt 0 ]; then
+                  echo -n " 🟡 $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
+                  GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
+                else
+                  echo -n " ❌ 0 |" >> "$GITHUB_STEP_SUMMARY"
+                  case "$mode" in
+                    polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                    harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                    native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                  esac
+                fi
+              else
+                echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
+                case "$mode" in
+                  polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                  harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                  native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                esac
+              fi
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          done
+          FAILED=""
+          [ -n "$TOML_FAILED" ] && FAILED="$FAILED TOML:$TOML_FAILED"
+          [ -n "$GEN_FAILED" ] && FAILED="$FAILED GEN:$GEN_FAILED"
+          if [ -n "$FAILED" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "Failed:$FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "Failed:$FAILED"
+            exit 1
+          fi

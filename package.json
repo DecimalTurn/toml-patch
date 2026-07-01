@@ -57,7 +57,7 @@
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",
-    "build": "rimraf dist && rollup -c",
+    "build": "rimraf dist && node scripts/build.mjs",
     "build:demo": "node scripts/build-demo.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
@@ -67,6 +67,7 @@
   },
   "devDependencies": {
     "@decimalturn/toml-patch": "npm:@decimalturn/toml-patch@2.0.0",
+    "@js-temporal/polyfill": "^0.5.1",
     "@playwright/test": "^1.59.1",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",

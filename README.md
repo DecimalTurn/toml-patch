@@ -32,6 +32,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
+- [Date/Time Handling & Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
   - [TomlFormat Class](#tomlformat-class)
   - [Basic Usage](#basic-usage)
@@ -162,6 +163,7 @@ Parses a TOML string (or raw UTF-8 bytes) into a JavaScript object.
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead of custom `Date` subclasses. Default: `false`. See [Date/Time Handling](#datetime-handling--temporal).
 
 **Returns:** `any` - The parsed JavaScript object
 
@@ -250,6 +252,7 @@ Initializes the TomlDocument with TOML source, parsing it into an internal repre
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects. Default: `false`. See [Date/Time Handling](#datetime-handling--temporal).
 
 ##### Basic Usage Example
 
@@ -374,6 +377,12 @@ doc.update(updatedToml);
 
 console.log(doc.toJsObject.server.port); // 3000
 ```
+
+## Date/Time Handling & Temporal
+
+TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
+
+See **[docs/Dates.md](docs/Dates.md)** for details and examples.
 
 ## Formatting
 
