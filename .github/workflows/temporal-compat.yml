@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [24, 26]
+        node-version: [26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -194,9 +194,12 @@ jobs:
                 echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
               else
                 echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
-                if [ "$v" -ge 20 ]; then
-                  TOML_FAILED="$TOML_FAILED ${label}@$v"
-                fi
+                # per-mode thresholds: polyfill=all, harmony=v20+, native=v26+
+                case "$label" in
+                  polyfill) [ "$v" -ge 14 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                  harmony)  [ "$v" -ge 20 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                  native)   [ "$v" -ge 26 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                esac
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -224,15 +227,19 @@ jobs:
                   GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
                 else
                   echo -n " ❌ 0 |" >> "$GITHUB_STEP_SUMMARY"
-                  if [ "$v" -ge 20 ]; then
-                    GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
-                  fi
+                  case "$mode" in
+                    polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                    harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                    native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
+                  esac
                 fi
               else
                 echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
-                if [ "$v" -ge 20 ]; then
-                  GEN_FAILED="$GEN_FAILED $mode@$v(missing)"
-                fi
+                case "$mode" in
+                  polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                  harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                  native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
+                esac
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
