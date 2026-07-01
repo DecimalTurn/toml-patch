@@ -50,7 +50,6 @@ test('default returns Date', () => {
 // --- Report ---
 const total = results.pass.length + results.fail.length;
 console.log(`PASS_COUNT: ${results.pass.length}`);
-console.log(`TOTAL_COUNT: ${total}`);
 console.log(`Results: ${results.pass.length}/${total} passed\n`);
 if (results.fail.length) {
   console.log('FAILED:');

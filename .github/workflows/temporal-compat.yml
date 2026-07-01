@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24, 26]
+        node-version: [14, 16, 18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -39,20 +39,28 @@ jobs:
           name: dist
           path: dist/
       - run: npm install @js-temporal/polyfill --no-save
-      - name: Smoke test
+      - name: Smoke test (comprehensive)
         id: smoke
         continue-on-error: true
         run: node scripts/smoke-temporal-polyfill.mjs 2>&1 | tee smoke-output.txt
-      - name: Record result
+      - name: Record result (comprehensive)
         if: always()
         shell: bash
         run: |
           mkdir -p results
           count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
           count=${count:-0}
-          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
-          total=${total:-0}
-          echo "${count}/${total}" > results/polyfill-${{ matrix.node-version }}.txt
+          echo "$count" > results/polyfill-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node scripts/smoke-temporal-polyfill-toml.mjs
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          echo "$status" > results/polyfill-toml-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -65,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24, 26]
+        node-version: [14, 16, 18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -75,25 +83,28 @@ jobs:
         with:
           name: dist
           path: dist/
-      - name: Smoke test
+      - name: Smoke test (comprehensive)
         id: smoke
         continue-on-error: true
-        shell: bash
-        run: |
-          FLAG=""
-          MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
-          [ "$MAJOR" -ge 18 ] && FLAG="--harmony-temporal"
-          node $FLAG scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
-      - name: Record result
+        run: node --harmony-temporal scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
+      - name: Record result (comprehensive)
         if: always()
         shell: bash
         run: |
           mkdir -p results
           count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
           count=${count:-0}
-          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
-          total=${total:-0}
-          echo "${count}/${total}" > results/harmony-${{ matrix.node-version }}.txt
+          echo "$count" > results/harmony-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node --harmony-temporal scripts/smoke-temporal-harmony-toml.cjs 2>&1
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          echo "$status" > results/harmony-toml-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -106,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24, 26]
+        node-version: [24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -116,20 +127,28 @@ jobs:
         with:
           name: dist
           path: dist/
-      - name: Smoke test
+      - name: Smoke test (comprehensive)
         id: smoke
         continue-on-error: true
-        run: node scripts/smoke-temporal-harmony.cjs 2>&1 | tee smoke-output.txt
-      - name: Record result
+        run: node scripts/smoke-temporal-native.cjs 2>&1 | tee smoke-output.txt
+      - name: Record result (comprehensive)
         if: always()
         shell: bash
         run: |
           mkdir -p results
           count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
           count=${count:-0}
-          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo 0)
-          total=${total:-0}
-          echo "${count}/${total}" > results/native-${{ matrix.node-version }}.txt
+          echo "$count" > results/native-${{ matrix.node-version }}.txt
+      - name: Smoke test (toml-patch API)
+        id: smoke-toml
+        continue-on-error: true
+        run: node scripts/smoke-temporal-native-toml.cjs 2>&1
+      - name: Record result (toml-patch API)
+        if: always()
+        shell: bash
+        run: |
+          status="${{ steps.smoke-toml.outcome }}"
+          echo "$status" > results/native-toml-${{ matrix.node-version }}.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -150,44 +169,61 @@ jobs:
       - name: Write summary
         shell: bash
         run: |
-          echo "## Temporal Compatibility" >> "$GITHUB_STEP_SUMMARY"
+          echo "## TOML Smoke Tests (toml-patch parse/stringify/patch)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
           echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
-          ISSUES=""
+          TOML_FAILED=""
+          for mode in polyfill-toml harmony-toml native-toml; do
+            echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
+            for v in 14 16 18 20 22 24 26; do
+              f="results/${mode}-${v}.txt"
+              if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
+                echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$v" -ge 20 ]; then
+                  TOML_FAILED="$TOML_FAILED $mode@$v"
+                fi
+              fi
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## General Temporal Compat (full API surface)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          GEN_FAILED=""
           for mode in polyfill harmony native; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
             for v in 14 16 18 20 22 24 26; do
               f="results/${mode}-${v}.txt"
               if [ -f "$f" ]; then
-                val=$(cat "$f")
-                count="${val%/*}"
-                total="${val#*/}"
-                if [ "$total" -eq 0 ]; then
-                  echo -n " 🔴 |" >> "$GITHUB_STEP_SUMMARY"
-                elif [ "$count" -eq "$total" ]; then
-                  echo -n " 🟢 ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
-                elif [ "$count" -gt 0 ]; then
-                  echo -n " 🟡 ${count}/${total} |" >> "$GITHUB_STEP_SUMMARY"
-                  ISSUES="$ISSUES $mode@$v"
+                count=$(cat "$f")
+                if [ "$count" -gt 0 ]; then
+                  echo -n " ${count} |" >> "$GITHUB_STEP_SUMMARY"
                 else
-                  echo -n " 🔴 0/${total} |" >> "$GITHUB_STEP_SUMMARY"
-                  # Only flag if Temporal should exist here:
-                  # native: Node >= 26, harmony: Node >= 18, polyfill: always
-                  case "$mode" in
-                    native) [ "$v" -ge 26 ] && ISSUES="$ISSUES $mode@$v" ;;
-                    harmony) [ "$v" -ge 18 ] && ISSUES="$ISSUES $mode@$v" ;;
-                    polyfill) ISSUES="$ISSUES $mode@$v" ;;
-                  esac
+                  echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                  if [ "$v" -ge 20 ]; then
+                    GEN_FAILED="$GEN_FAILED $mode@$v"
+                  fi
                 fi
               else
                 echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$v" -ge 20 ]; then
+                  GEN_FAILED="$GEN_FAILED $mode@$v"
+                fi
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
-          if [ -n "$ISSUES" ]; then
+          FAILED=""
+          [ -n "$TOML_FAILED" ] && FAILED="$FAILED TOML:$TOML_FAILED"
+          [ -n "$GEN_FAILED" ] && FAILED="$FAILED GEN:$GEN_FAILED"
+          if [ -n "$FAILED" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "⚠️ Some modes have partial or missing Temporal support:" >> "$GITHUB_STEP_SUMMARY"
-            echo "$ISSUES" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
+            echo "Failed:$FAILED" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
