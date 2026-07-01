@@ -65,7 +65,9 @@ jobs:
         if: always()
         with:
           name: polyfill-result-${{ matrix.node-version }}
-          path: results/polyfill-${{ matrix.node-version }}.txt
+          path: |
+            results/polyfill-${{ matrix.node-version }}.txt
+            results/polyfill-toml-${{ matrix.node-version }}.txt
 
   harmony:
     needs: build
@@ -109,7 +111,9 @@ jobs:
         if: always()
         with:
           name: harmony-result-${{ matrix.node-version }}
-          path: results/harmony-${{ matrix.node-version }}.txt
+          path: |
+            results/harmony-${{ matrix.node-version }}.txt
+            results/harmony-toml-${{ matrix.node-version }}.txt
 
   native:
     needs: build
@@ -153,7 +157,9 @@ jobs:
         if: always()
         with:
           name: native-result-${{ matrix.node-version }}
-          path: results/native-${{ matrix.node-version }}.txt
+          path: |
+            results/native-${{ matrix.node-version }}.txt
+            results/native-toml-${{ matrix.node-version }}.txt
 
   report:
     needs: [polyfill, harmony, native]
@@ -174,16 +180,16 @@ jobs:
           echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
           echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
           TOML_FAILED=""
-          for mode in polyfill-toml harmony-toml native-toml; do
-            echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
+          for label in polyfill harmony native; do
+            echo -n "| $label |" >> "$GITHUB_STEP_SUMMARY"
             for v in 14 16 18 20 22 24 26; do
-              f="results/${mode}-${v}.txt"
+              f="results/${label}-toml-${v}.txt"
               if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
                 echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
               else
                 echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
                 if [ "$v" -ge 20 ]; then
-                  TOML_FAILED="$TOML_FAILED $mode@$v"
+                  TOML_FAILED="$TOML_FAILED ${label}@$v"
                 fi
               fi
             done
