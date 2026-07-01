@@ -48,9 +48,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p results
-          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
-          count=${count:-0}
-          echo "$count" > results/polyfill-${{ matrix.node-version }}.txt
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'Results: \d+/\K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/polyfill-${{ matrix.node-version }}.txt
       - name: Smoke test (toml-patch API)
         id: smoke-toml
         continue-on-error: true
@@ -94,9 +96,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p results
-          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
-          count=${count:-0}
-          echo "$count" > results/harmony-${{ matrix.node-version }}.txt
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'Results: \d+/\K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/harmony-${{ matrix.node-version }}.txt
       - name: Smoke test (toml-patch API)
         id: smoke-toml
         continue-on-error: true
@@ -140,9 +144,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p results
-          count=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
-          count=${count:-0}
-          echo "$count" > results/native-${{ matrix.node-version }}.txt
+          pass=$(grep -oP 'PASS_COUNT: \K\d+' smoke-output.txt || echo 0)
+          pass=${pass:-0}
+          total=$(grep -oP 'TOTAL_COUNT: \K\d+' smoke-output.txt || echo "$pass")
+          total=${total:-$pass}
+          echo "$pass/$total" > results/native-${{ matrix.node-version }}.txt
       - name: Smoke test (toml-patch API)
         id: smoke-toml
         continue-on-error: true
@@ -206,19 +212,26 @@ jobs:
             for v in 14 16 18 20 22 24 26; do
               f="results/${mode}-${v}.txt"
               if [ -f "$f" ]; then
-                count=$(cat "$f")
-                if [ "$count" -gt 0 ]; then
-                  echo -n " ${count} |" >> "$GITHUB_STEP_SUMMARY"
+                val=$(cat "$f")
+                pass=${val%/*}
+                total=${val#*/}
+                pass=${pass:-0}
+                total=${total:-0}
+                if [ "$pass" -eq "$total" ] && [ "$pass" -gt 0 ]; then
+                  echo -n " ✅ $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
+                elif [ "$pass" -gt 0 ]; then
+                  echo -n " 🟡 $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
+                  GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
                 else
-                  echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
+                  echo -n " ❌ 0 |" >> "$GITHUB_STEP_SUMMARY"
                   if [ "$v" -ge 20 ]; then
-                    GEN_FAILED="$GEN_FAILED $mode@$v"
+                    GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
                   fi
                 fi
               else
                 echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
                 if [ "$v" -ge 20 ]; then
-                  GEN_FAILED="$GEN_FAILED $mode@$v"
+                  GEN_FAILED="$GEN_FAILED $mode@$v(missing)"
                 fi
               fi
             done
@@ -230,6 +243,9 @@ jobs:
           if [ -n "$FAILED" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
             echo "Failed:$FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "Failed:$FAILED"
             exit 1
           fi
