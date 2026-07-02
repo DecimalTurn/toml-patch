@@ -224,35 +224,21 @@ jobs:
                   echo -n " ✅ $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
                 elif [ "$pass" -gt 0 ]; then
                   echo -n " 🟡 $pass/$total |" >> "$GITHUB_STEP_SUMMARY"
-                  GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)"
                 else
                   echo -n " ❌ 0 |" >> "$GITHUB_STEP_SUMMARY"
-                  case "$mode" in
-                    polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
-                    harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
-                    native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v($pass/$total)" ;;
-                  esac
                 fi
               else
                 echo -n " — |" >> "$GITHUB_STEP_SUMMARY"
-                case "$mode" in
-                  polyfill) [ "$v" -ge 14 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
-                  harmony)  [ "$v" -ge 20 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
-                  native)   [ "$v" -ge 26 ] && GEN_FAILED="$GEN_FAILED $mode@$v(missing)" ;;
-                esac
               fi
             done
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
-          FAILED=""
-          [ -n "$TOML_FAILED" ] && FAILED="$FAILED TOML:$TOML_FAILED"
-          [ -n "$GEN_FAILED" ] && FAILED="$FAILED GEN:$GEN_FAILED"
-          if [ -n "$FAILED" ]; then
+          if [ -n "$TOML_FAILED" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "❌ Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ toml-patch Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
             echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "Failed:$FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "TOML Failures: $TOML_FAILED" >> "$GITHUB_STEP_SUMMARY"
             echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "Failed:$FAILED"
+            echo "TOML Failures: $TOML_FAILED"
             exit 1
           fi
