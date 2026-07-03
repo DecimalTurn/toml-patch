@@ -6,6 +6,9 @@
  * track V8's evolving implementation across Node releases.
  *
  * Usage: node --harmony-temporal scripts/smoke-temporal-harmony.cjs
+ * 
+ * Reference: https://gist.github.com/blue2cat/513ad5790fefd77551c02428f59e527e
+ * See also: https://github.com/mdn/browser-compat-data/pull/29612
  */
 
 const results = { pass: [], fail: [] };
