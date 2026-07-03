@@ -208,6 +208,11 @@ function preserveFormatting(existing: Value, replacement: Value): void {
       if (originalRaw.includes(' ') && raw.includes('T')) {
         raw = raw.replace('T', ' ');
       }
+      // Preserve +00:00 / -00:00 vs Z offset format
+      if (/(?:\+00:00|-00:00)/.test(originalRaw) && raw.endsWith('Z')) {
+        const offset = originalRaw.match(/([+-]00:00)/)![1];
+        raw = raw.replace(/Z$/, offset);
+      }
       replacement.raw = raw;
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
       // Keep the Temporal object as the value — it will serialize correctly.
