@@ -32,6 +32,7 @@ import {
 import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
 import traverse from './traverse';
+import { throwError } from './throw-error';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -75,7 +76,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
 
     const index = parent.items.indexOf(existing);
     if (index < 0) {
-      throw new Error(`Item not found in parent for replace`);
+      throwError(`Item not found in parent for replace`);
     }
 
     parent.items.splice(index, 1, replacement);
@@ -87,7 +88,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     
     const index = parent.value.items.indexOf(existing as InlineTableItem);
     if (index < 0) {
-      throw new Error(`Item not found in parent for replace`);
+      throwError(`Item not found in parent for replace`);
     } 
     parent.value.items.splice(index, 1, replacement as InlineTableItem);
 
@@ -104,7 +105,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
     }
 
   } else {
-    throw new Error(`Unsupported parent type "${parent.type}" for replace`);
+    throwError(`Unsupported parent type "${parent.type}" for replace`);
   }
 
   // Shift the replacement node into the same start position as existing
@@ -136,7 +137,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  */
 export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean) {
   if (!hasItems(parent)) {
-    throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
+    throwError(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
 
   index = (index != null && typeof index === 'number') ? index : parent.items.length; 
@@ -201,7 +202,7 @@ function insertOnNewLine(
 ): { shift: Span; offset: Span } {
 
   if (!isBlock(child)) {
-    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
+    throwError(`Incompatible child type "${(child as TreeNode).type}"`);
   }
 
   const previous = parent.items[index - 1];
@@ -376,7 +377,7 @@ function insertInline(
   index: number
 ): { shift: Span; offset: Span } {
   if (!isInlineItem(child)) {
-    throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
+    throwError(`Incompatible child type "${(child as TreeNode).type}"`);
   }
 
   // Store preceding node and insert
@@ -445,7 +446,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   // c = 3
   // -> Remove element 2 and apply -1,0 offset to 1
   if (!hasItems(parent)) {
-    throw new Error(`Unsupported parent type "${parent.type}" for remove`);
+    throwError(`Unsupported parent type "${parent.type}" for remove`);
   }
 
   let index = parent.items.indexOf(node);
@@ -454,7 +455,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     index = parent.items.findIndex(item => hasItem(item) && item.item === node);
 
     if (index < 0) {
-      throw new Error('Node not found in parent for removal');
+      throwError('Node not found in parent for removal');
     }
 
     node = parent.items[index];
@@ -802,7 +803,7 @@ export function applyWrites(root: TreeNode) {
         shiftEnd(node);
         break;
       default:
-        throw new Error(`Unrecognized node type "${(node as any).type}"`);
+        throwError(`Unrecognized node type "${(node as any).type}"`);
     }
   }
 

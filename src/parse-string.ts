@@ -1,4 +1,5 @@
 import { SINGLE_QUOTE, DOUBLE_QUOTE } from './tokenizer';
+import { throwError } from './throw-error';
 
 const TRIPLE_DOUBLE_QUOTE = `"""`;
 const TRIPLE_SINGLE_QUOTE = `'''`;
@@ -62,7 +63,7 @@ function unescapeBasicString(value: string, multiline: boolean): string {
     if (i > start) parts.push(value.slice(start, i));
 
     i++; // advance past backslash
-    if (i >= len) throw new Error('Trailing backslash');
+    if (i >= len) throwError('Trailing backslash');
 
     const esc = value[i];
     switch (esc) {
@@ -78,11 +79,11 @@ function unescapeBasicString(value: string, multiline: boolean): string {
       case 'u': {
         // \uXXXX — 4 hex digits
         if (i + 4 > len || !isHex(value[i+1]) || !isHex(value[i+2]) || !isHex(value[i+3]) || !isHex(value[i+4])) {
-          throw new Error(`Invalid Unicode escape: \\u${value.slice(i + 1, i + 5)}`);
+          throwError(`Invalid Unicode escape: \\u${value.slice(i + 1, i + 5)}`);
         }
         const cp = hexVal4(value, i + 1);
         if (cp >= 0xD800 && cp <= 0xDFFF) {
-          throw new Error(`Invalid \\u${value.slice(i + 1, i + 5)}: surrogates not allowed`);
+          throwError(`Invalid \\u${value.slice(i + 1, i + 5)}: surrogates not allowed`);
         }
         parts.push(String.fromCharCode(cp));
         i += 4;
@@ -92,11 +93,11 @@ function unescapeBasicString(value: string, multiline: boolean): string {
       case 'U': {
         // \UXXXXXXXX — 8 hex digits
         if (i + 8 > len) {
-          throw new Error(`Invalid Unicode escape: \\U${value.slice(i + 1, i + 9)}`);
+          throwError(`Invalid Unicode escape: \\U${value.slice(i + 1, i + 9)}`);
         }
         for (let j = 1; j <= 8; j++) {
           if (!isHex(value[i + j])) {
-            throw new Error(`Invalid Unicode escape: \\U${value.slice(i + 1, i + 9)}`);
+            throwError(`Invalid Unicode escape: \\U${value.slice(i + 1, i + 9)}`);
           }
         }
         const cp = parseInt(value.slice(i + 1, i + 9), 16);
@@ -108,7 +109,7 @@ function unescapeBasicString(value: string, multiline: boolean): string {
       case 'x': {
         // \xHH — 2 hex digits (TOML 1.1.0)
         if (i + 2 > len || !isHex(value[i+1]) || !isHex(value[i+2])) {
-          throw new Error(`Invalid hex escape: \\x${value.slice(i + 1, i + 3)}`);
+          throwError(`Invalid hex escape: \\x${value.slice(i + 1, i + 3)}`);
         }
         const cp = (HEX_VAL[value.charCodeAt(i + 1)] << 4) | HEX_VAL[value.charCodeAt(i + 2)];
         parts.push(String.fromCharCode(cp));
@@ -130,12 +131,12 @@ function unescapeBasicString(value: string, multiline: boolean): string {
           }
           if (!hasNewline) {
             // No newline found — not a valid line-ending backslash
-            throw new Error(`Invalid escape sequence: \\${esc}`);
+            throwError(`Invalid escape sequence: \\${esc}`);
           }
           i = j - 1; // will be incremented by the for loop
           break;
         }
-        throw new Error(`Invalid escape sequence: \\${esc}`);
+        throwError(`Invalid escape sequence: \\${esc}`);
     }
 
     start = i + 1;

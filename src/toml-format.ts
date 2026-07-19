@@ -287,7 +287,7 @@ export function validateFormatObject(format: any): any {
     console.warn(`toml-patch: Ignoring unsupported format properties: ${unsupported.join(', ')}. Supported properties are: ${Object.keys(schema).join(', ')}`);
   }
   if (invalid.length > 0) {
-    throw new TypeError(`Invalid types for format properties: ${invalid.join(', ')}`);
+    throw new TypeError(`toml-patch: Invalid types for format properties: ${invalid.join(', ')}`);
   }
 
   return validatedFormat;

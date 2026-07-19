@@ -13,6 +13,7 @@ import {
 } from './generate';
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
+import { throwError } from './throw-error';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
@@ -55,10 +56,10 @@ function walkValue(value: any, format: TomlFormat): Value {
   const minimumDecimals = format.minimumDecimals ?? 0;
 
   if (value === null) {
-    throw new Error('"null" values are not supported');
+    throwError('"null" values are not supported');
   }
   if (value === undefined) {
-    throw new Error('"undefined" values are not supported inside arrays');
+    throwError('"undefined" values are not supported inside arrays');
   }
 
   if (isString(value)) {

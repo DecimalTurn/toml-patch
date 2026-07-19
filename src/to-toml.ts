@@ -23,6 +23,7 @@ import { Location } from './location';
 import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';
 import { isIterable } from './utils';
+import { throwError } from './throw-error';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -147,7 +148,7 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
         // Preserve original behavior: throw on unrecognized node types
         // to catch bugs when new node types are added or invalid nodes appear.
         const type = (node as any).type;
-        throw new Error(`toTOML: Unrecognized node type: ${String(type)}`);
+        throwError(`toTOML: Unrecognized node type: ${String(type)}`);
             }
     }
   }
@@ -225,7 +226,7 @@ function write(lines: string[], loc: Location, raw: string) {
   const expected_lines = loc.end.line - loc.start.line + 1;
 
   if (raw_lines.length !== expected_lines) {
-    throw new Error(
+    throwError(
       `Mismatch between location and raw string, expected ${expected_lines} lines for "${raw}"`
     );
   }

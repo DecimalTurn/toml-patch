@@ -30,6 +30,7 @@ import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString} from './utils';
+import { throwError } from './throw-error';
 
 /**
  * Generates a new TOML document node.
@@ -201,7 +202,7 @@ function generateStringKeepFormatting(value: string, existingRaw: string): Strin
   }
 
   // existingRaw is misformatted. This should be impossible
-  throw new Error(`Existing raw string value is not valid: ${existingRaw}`);
+  throwError(`Existing raw string value is not valid: ${existingRaw}`);
 }
 
 function generateBasicString(value: string, existingRaw?: string): String {

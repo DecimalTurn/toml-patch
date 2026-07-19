@@ -20,6 +20,7 @@ import {
   InlineItem
 } from './cst';
 import { isIterable } from './utils';
+import { throwError } from './throw-error';
 
 export type Visit<TNode = TreeNode> = (node: TNode, parent: TNode | null) => void;
 export type EnterExit<TNode = TreeNode> = { enter?: Visit<TNode>; exit?: Visit<TNode> };
@@ -117,7 +118,7 @@ export default function traverse(cst: CST | TreeNode, visitor: Visitor) {
         break;
 
       default:
-        throw new Error(`Unrecognized node type "${node.type}"`);
+        throwError(`Unrecognized node type "${node.type}"`);
     }
 
     if (visit && (visit as EnterExit).exit) {

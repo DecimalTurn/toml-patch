@@ -1,5 +1,6 @@
 import { TreeNode, isKeyValue, isTable, isTableArray, isDocument, hasItems, isInlineItem, Document, Table, TableArray, Block } from './cst';
 import { arraysEqual, stableStringify } from './utils';
+import { throwError } from './throw-error';
 
 export type Path = Array<string | number>;
 
@@ -94,7 +95,7 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
   }
 
   if (!found) {
-    throw new Error(`Node not found at ${path.join('.')}`);
+    throwError(`Node not found at ${path.join('.')}`);
   }
 
   return found;
@@ -160,7 +161,7 @@ function findByPathInAotScope(
     }
   }
 
-  throw new Error(`Node not found at (aot scope) ${remainingPath.join('.')}`);
+  throwError(`Node not found at (aot scope) ${remainingPath.join('.')}`);
 }
 
 
@@ -179,7 +180,7 @@ export function findParent(node: TreeNode, path: Path): TreeNode {
   }
 
   if (!parent) {
-    throw new Error(`Parent not found for ${path.join('.')}`);
+    throwError(`Parent not found for ${path.join('.')}`);
   }
 
   return parent;
