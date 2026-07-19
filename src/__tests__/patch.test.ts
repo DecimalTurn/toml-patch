@@ -4546,4 +4546,93 @@ describe('implicit intermediate key removal (dotted table keys)', () => {
     expect(patched).toContain('[references.VBIDE]');
     expect(patched).toContain('version = "5.3"');
   });
+
+  test('should remove multiple tables sharing the same implicit parent prefix', () => {
+    // When multiple dotted tables share the same implicit parent, removing that
+    // parent should remove all of them.
+    const existing = dedent`
+      [references.VBIDE]
+      version = "5.3"
+
+      [references.other]
+      value = 42
+    ` + '\n';
+
+    const patched = patch(existing, {});
+
+    expect(patched).not.toContain('[references.VBIDE]');
+    expect(patched).not.toContain('version');
+    expect(patched).not.toContain('[references.other]');
+    expect(patched).not.toContain('value');
+  });
+
+  test('should remove at an intermediate level of a deeply dotted key', () => {
+    // Table key is ["x", "y", "z"]. Removing at path ['x', 'y'] should still
+    // match and remove the table — neither ['x'] nor ['x','y'] has its own node.
+    const existing = dedent`
+      [x.y.z]
+      value = 1
+    ` + '\n';
+
+    const patched = patch(existing, {});
+
+    expect(patched).not.toContain('x');
+    expect(patched).not.toContain('value');
+  });
+
+  test('should remove a table array whose key starts with the implicit parent path', () => {
+    // [[products.variants]] creates a TableArray with key ["products", "variants"].
+    // Removing at path ['products'] should find it via prefix match.
+    const existing = dedent`
+      title = "Catalog"
+
+      [[products.variants]]
+      sku = 123
+    ` + '\n';
+
+    const patched = patch(existing, { title: 'Catalog' });
+
+    expect(patched).toContain('title = "Catalog"');
+    expect(patched).not.toContain('[[products.variants]]');
+    expect(patched).not.toContain('sku');
+  });
+
+  test('should remove table arrays with an implicitly-keyed parent alongside other removals', () => {
+    // Combined scenario: edit a root KV, remove a simple table section, and
+    // remove an implicitly-keyed table array in a single patch.
+    const existing = dedent`
+      title = "original"
+      version = 1
+
+      [server]
+      host = "localhost"
+
+      [[products.variants]]
+      sku = 999
+    ` + '\n';
+
+    const patched = patch(existing, { title: 'updated' });
+
+    expect(patched).toContain('title = "updated"');
+    expect(patched).not.toContain('version');
+    expect(patched).not.toContain('[server]');
+    expect(patched).not.toContain('[[products.variants]]');
+    expect(patched).not.toContain('sku');
+  });
+
+  test('should remove everything via empty patch when both simple and dotted tables exist', () => {
+    const existing = dedent`
+      name = "app"
+      [server]
+      host = "localhost"
+      [references.VBIDE]
+      version = "5.3"
+      [[products.variants]]
+      sku = 123
+    ` + '\n';
+
+    const patched = patch(existing, {});
+
+    expect(patched.trim()).toBe('');
+  });
 });
