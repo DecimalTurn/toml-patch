@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Patching: prevent error during implicit intermediate key/table removal for dotted table keys
+
+
 ## [2.0.0] - 2026-05-31
 
 ### Changed
