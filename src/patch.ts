@@ -28,7 +28,7 @@ import {
 } from './cst';
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger } from './utils';
+import { last, isInteger, arraysEqual } from './utils';
 import { insert, replace, remove, applyWrites } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
@@ -516,8 +516,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             remove(original, original, entry);
           }
         } else {
-          // Not a table array — let findByPath throw the descriptive error.
-          findByPath(original, change.path);
+          // The path might be an implicit intermediate key — a key that is a
+          // prefix of a dotted table key but has no CST node of its own.
+          // For example, [references.VBIDE] creates a Table with key
+          // ["references", "VBIDE"], so a Remove at path ["references"] has
+          // no exact node match. Find all document-level items whose key
+          // starts with the change path and remove them.
+          const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+          if (prefixNodes.length > 0) {
+            for (const prefixNode of prefixNodes) {
+              remove(original, original, prefixNode);
+            }
+          } else {
+            // Not a table array or implicit key — let findByPath throw the descriptive error.
+            findByPath(original, change.path);
+          }
         }
       } else {
         let parent = findParent(original, change.path);
@@ -699,4 +712,32 @@ function findEnclosingInlineTableRowContext(
       return { container, row: candidate };
     }
   }
+}
+
+/**
+ * Finds all Document-level items whose key path starts with the given prefix.
+ * This handles implicit intermediate keys — keys that are a prefix of a dotted
+ * table key but have no CST node of their own (e.g. path ["references"] when
+ * only ["references", "VBIDE"] exists in the document).
+ */
+function findDocumentItemsByKeyPrefix(
+  document: Document,
+  pathPrefix: Array<string | number>
+): Block[] {
+  const matchingNodes: Block[] = [];
+  for (const item of document.items) {
+    let key: string[] | undefined;
+    if (isKeyValue(item)) {
+      key = item.key.value;
+    } else if (isTable(item)) {
+      key = item.key.item.value;
+    } else if (isTableArray(item)) {
+      key = item.key.item.value;
+    }
+
+    if (key && arraysEqual(key.slice(0, pathPrefix.length), pathPrefix)) {
+      matchingNodes.push(item);
+    }
+  }
+  return matchingNodes;
 }
