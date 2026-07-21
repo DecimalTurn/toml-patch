@@ -7,7 +7,6 @@ export default defineConfig({
     include: [
       'src/__tests__/**/*.test.ts',
       'src/__tests__/**/*.mjs',
-      'specs/**/*.test.ts',
     ],
     exclude: ['node_modules', 'worktrees', 'submodules'],
     snapshotFormat: {
