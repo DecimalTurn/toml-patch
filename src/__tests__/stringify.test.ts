@@ -656,7 +656,6 @@ test('should handle strings with triple quotes when stringifying JS objects', ()
   expect(result).toBe('text = "Three quotes: \\"\\"\\\""\n');
   
   // The result should be parseable
-  const { parse } = require('../');
   const parsed = parse(result);
   expect(parsed.text).toBe('Three quotes: """');
 });
@@ -672,7 +671,6 @@ test('should handle strings with four consecutive quotes when stringifying JS ob
   expect(result).toBe('text = "Four quotes: \\"\\"\\"\\\""\n');
   
   // The result should be parseable
-  const { parse } = require('../');
   const parsed = parse(result);
   expect(parsed.text).toBe('Four quotes: """"');
 });
@@ -689,7 +687,6 @@ test('should handle strings with backslashes and quotes when stringifying JS obj
   expect(result).toContain('\\"'); // escaped quotes
   
   // The result should be parseable
-  const { parse } = require('../');
   const parsed = parse(result);
   expect(parsed.text).toBe('Backslash then quotes: \\"""');
 });
@@ -705,7 +702,6 @@ test('should stringify emoji as raw character (not unicode escape) from fresh JS
   expect(result).toContain('text = "hello ☺"');
   expect(result).not.toContain('\\u263A');
 
-  const { parse } = require('../');
   const parsed = parse(result);
   expect(parsed.text).toBe('hello ☺');
 });
