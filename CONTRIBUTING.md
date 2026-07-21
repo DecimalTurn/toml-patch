@@ -56,7 +56,7 @@ The build outputs are:
 
 ### Testing
 
-#### Running All Tests
+#### Running Tests
 
 To run the main test suite:
 
@@ -64,17 +64,8 @@ To run the main test suite:
 pnpm test
 ```
 
-This executes all tests in the `src/__tests__/` directory using Jest.
-
-#### Running JavaScript Tests
-
-To test the built JavaScript output:
-
-```bash
-pnpm run test:js
-```
-
-This ensures the compiled JavaScript works correctly.
+This executes all unit and integration tests in the `src/__tests__/` directory using [Vitest](https://vitest.dev/).
+It includes both TypeScript tests and JavaScript integration tests (which verify the built output works for plain JS consumers).
 
 #### Running All Tests Together
 
@@ -82,7 +73,7 @@ This ensures the compiled JavaScript works correctly.
 pnpm run test:all
 ```
 
-This runs both the TypeScript and JavaScript test suites.
+This runs the Vitest test suite followed by Playwright browser tests.
 
 #### TOML Specification Compliance
 
