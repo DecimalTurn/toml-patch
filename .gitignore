@@ -18,3 +18,7 @@ benchmark-*.md
 
 test-results/
 playwright-report/
+
+# Ignore worktrees (embedded git repos)
+worktrees/
+submodules/confbox.worktrees/
