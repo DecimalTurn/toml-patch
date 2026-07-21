@@ -9,6 +9,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "src/**/*", "vitest.config.ts"],
+  "include": ["*.ts", "src/**/*", "vitest.config.ts", "vitest.specs.config.ts"],
   "exclude": ["node_modules"]
 }

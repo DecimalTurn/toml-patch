@@ -51,7 +51,7 @@
     "playwright:install": "playwright install --with-deps chromium",
     "test:all": "pnpm run test && pnpm run test:playwright",
     "typecheck": "tsc",
-    "specs": "vitest run specs/specs.test.ts",
+    "specs": "vitest run --config vitest.specs.config.ts",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
