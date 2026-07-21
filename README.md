@@ -32,6 +32,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
+- [Date/Time Handling & Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
   - [TomlFormat Class](#tomlformat-class)
   - [Basic Usage](#basic-usage)
@@ -162,6 +163,7 @@ Parses a TOML string (or raw UTF-8 bytes) into a JavaScript object.
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead of custom `Date` subclasses. Default: `false`. Requires Temporal in the runtime (Node 26+ native, Node 20–24 with `--harmony-temporal`, or [@js-temporal/polyfill](https://www.npmjs.com/package/@js-temporal/polyfill) on any version). See [Date/Time Handling](#datetime-handling--temporal).
 
 **Returns:** `any` - The parsed JavaScript object
 
@@ -250,6 +252,7 @@ Initializes the TomlDocument with TOML source, parsing it into an internal repre
     - `'asNeeded'` *(default)* — integers within the JS safe-integer range are `number`; larger values are `bigint` to preserve precision
     - `true` — all integers are returned as `bigint`
     - `false` — all integers are returned as `number` (large values lose precision)
+  - `temporal?: boolean` — When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects. Default: `false`. Requires Temporal in the runtime (Node 26+ native, Node 20–24 with `--harmony-temporal`, or [@js-temporal/polyfill](https://www.npmjs.com/package/@js-temporal/polyfill) on any version). See [Date/Time Handling](#datetime-handling--temporal).
 
 ##### Basic Usage Example
 
@@ -374,6 +377,38 @@ doc.update(updatedToml);
 
 console.log(doc.toJsObject.server.port); // 3000
 ```
+
+## Date/Time Handling & Temporal
+
+TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
+
+### Enabling Temporal
+
+The `temporal: true` option requires `Temporal` to be available in the runtime:
+
+| Runtime | How to enable |
+|---|---|
+| **Node.js 26+** | Built-in — enable with `temporal: true` |
+| **Node.js 20–24** | `node --harmony-temporal` flag |
+| **Node.js 14–26** | [@js-temporal/polyfill](https://www.npmjs.com/package/@js-temporal/polyfill) |
+
+```js
+import * as TOML from '@decimalturn/toml-patch';
+
+// Node 26+ (native) or Node 20–24 with --harmony-temporal:
+const obj = TOML.parse('d = 2024-01-15\n', { temporal: true });
+// obj.d → Temporal.PlainDate
+
+// All Node versions with the polyfill:
+import { Temporal } from '@js-temporal/polyfill';
+globalThis.Temporal = Temporal;
+const obj2 = TOML.parse('d = 2024-01-15\n', { temporal: true });
+// obj2.d → PlainDate (polyfill)
+```
+
+> **Note:** Only offset-based timezones (`+05:30`, `Z`) are supported in TOML. IANA timezone annotations (e.g., `[Asia/Kolkata]`) will throw an error.
+
+See **[docs/Dates.md](docs/Dates.md)** for details and examples.
 
 ## Formatting
 

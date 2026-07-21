@@ -9,6 +9,7 @@ export default defineConfig({
       'src/__tests__/**/*.mjs',
     ],
     exclude: ['node_modules/**', 'worktrees/**', 'submodules/**'],
+    setupFiles: ['src/__tests__/setup.ts'],
     snapshotFormat: {
       escapeString: true,
       printBasicPrototype: true,

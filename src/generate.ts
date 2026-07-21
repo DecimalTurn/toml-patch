@@ -29,7 +29,7 @@ import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
-import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString} from './utils';
+import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString} from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -395,6 +395,76 @@ export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean =
   // Custom date classes have their own toISOString() implementations
   // that return the properly formatted strings for each TOML date/time type
   const raw = value.toISOString();
+
+  return {
+    type: NodeType.DateTime,
+    loc: { start: zero(), end: { line: 1, column: raw.length } },
+    raw,
+    value
+  };
+}
+
+/**
+ * Generates a DateTime CST node from a Temporal API object.
+ *
+ * Each Temporal type serializes to the corresponding TOML date/time format:
+ * - Temporal.PlainDate      → "2024-01-15"
+ * - Temporal.PlainTime      → "10:30:00.123"
+ * - Temporal.PlainDateTime  → "2024-01-15T10:30:00.123"
+ * - Temporal.ZonedDateTime  → "2024-01-15T10:30:00.123+05:30" (no IANA annotation)
+ *
+ * @param value - A Temporal object (PlainDate, PlainTime, PlainDateTime, or ZonedDateTime).
+ * @param truncateZeroTimeInDates - If true, a PlainDateTime with all-zero time is
+ *   downgraded to a PlainDate (date-only output). Has no effect on other Temporal types.
+ */
+export function generateTemporalDateTime(
+  value: any,
+  truncateZeroTimeInDates: boolean = false
+): DateTime {
+  const constructorName: string = value.constructor?.name ?? '';
+
+  // Detect the Temporal type from the constructor name.
+  // Supports both native ("Temporal.PlainDate") and polyfill ("PlainDate") naming.
+  const isPlainDate = constructorName === 'Temporal.PlainDate' || constructorName === 'PlainDate';
+  const isPlainTime = constructorName === 'Temporal.PlainTime' || constructorName === 'PlainTime';
+  const isPlainDateTime = constructorName === 'Temporal.PlainDateTime' || constructorName === 'PlainDateTime';
+  const isZonedDateTime = constructorName === 'Temporal.ZonedDateTime' || constructorName === 'ZonedDateTime';
+
+  let raw: string;
+
+  if (isPlainDate) {
+    raw = temporalToTomlString(value);
+  } else if (isPlainTime) {
+    raw = temporalToTomlString(value);
+  } else if (isPlainDateTime) {
+    // Optionally truncate zero time components to date-only
+    if (truncateZeroTimeInDates) {
+      const T = (globalThis as any).Temporal;
+      if (!T) {
+        throw new Error(
+          'Temporal API is not available in this runtime. ' +
+          'Set temporal: false or use a runtime with Temporal support.'
+        );
+      }
+      const plainDate = T.PlainDate.from(value.toString().split('T')[0]);
+      if (plainDate.toString() + 'T00:00:00' === value.toString().slice(0, 19)) {
+        raw = temporalToTomlString(plainDate);
+        return {
+          type: NodeType.DateTime,
+          loc: { start: zero(), end: { line: 1, column: raw.length } },
+          raw,
+          value: plainDate
+        };
+      }
+    }
+    raw = temporalToTomlString(value);
+  } else if (isZonedDateTime) {
+    // TOML only supports offset, not IANA timezone names.
+    raw = temporalToTomlString(value);
+  } else {
+    // Unknown Temporal type — fall back to temporalToTomlString()
+    raw = temporalToTomlString(value);
+  }
 
   return {
     type: NodeType.DateTime,

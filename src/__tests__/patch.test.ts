@@ -4636,3 +4636,58 @@ describe('implicit intermediate key removal (dotted table keys)', () => {
     expect(patched.trim()).toBe('');
   });
 });
+
+
+
+
+describe('Temporal.ZonedDateTime handling', () => {
+
+    test('should preserve zero offset after editing date', () => {
+    const existing = dedent`
+      date = 2023-01-01T00:00:00Z
+    ` + '\n';
+   
+    const parsed = parse(existing, { temporal: true });
+    expect(parsed.date).toBeInstanceOf(Temporal.ZonedDateTime);
+    parsed.date = parsed.date.add({ days: 1 });
+
+    const patched = patch(existing, parsed);
+
+    expect(patched).toEqual(dedent`
+      date = 2023-01-02T00:00:00Z
+    ` + '\n');
+  });
+
+  test('should preserve zero offset after editing date', () => {
+    const existing = dedent`
+      date = 2023-01-01T00:00:00+00:00
+    ` + '\n';
+   
+    const parsed = parse(existing, { temporal: true });
+    expect(parsed.date).toBeInstanceOf(Temporal.ZonedDateTime);
+    parsed.date = parsed.date.add({ days: 1 });
+
+    const patched = patch(existing, parsed);
+
+    expect(patched).toEqual(dedent`
+      date = 2023-01-02T00:00:00+00:00
+    ` + '\n');
+  });
+
+    test('should preserve negative zero offset after editing date', () => {
+    const existing = dedent`
+      date = 2023-01-01T00:00:00-00:00
+    ` + '\n';
+   
+    const parsed = parse(existing, { temporal: true });
+    expect(parsed.date).toBeInstanceOf(Temporal.ZonedDateTime);
+    parsed.date = parsed.date.add({ days: 1 });
+
+    const patched = patch(existing, parsed);
+
+    expect(patched).toEqual(dedent`
+      date = 2023-01-02T00:00:00-00:00
+    ` + '\n');
+  });
+
+});

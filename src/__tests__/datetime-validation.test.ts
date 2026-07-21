@@ -108,3 +108,73 @@ describe('DateTime validation for years 0-99', () => {
     });
   });
 });
+
+describe('Offset on local time or local date must be rejected', () => {
+  describe('local time with offset', () => {
+    it('should reject local time with Z offset', () => {
+      const toml = 't = 07:32:00Z';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+
+    it('should reject local time with numeric offset', () => {
+      const toml = 't = 07:32:00-07:00';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+
+    it('should reject local time with positive offset', () => {
+      const toml = 't = 08:30:00+05:30';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+  });
+
+  describe('local date with offset', () => {
+    it('should reject local date with Z offset', () => {
+      const toml = 'd = 1979-05-27Z';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+
+    it('should reject local date with numeric offset (no T)', () => {
+      const toml = 'd = 1979-05-27-07:00';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+
+    it('should reject local date with positive offset (no T)', () => {
+      const toml = 'd = 1979-05-27+02:00';
+      expect(() => Array.from(parseTOML(toml))).toThrow(ParseError);
+    });
+  });
+
+  describe('offset datetime should still work', () => {
+    it('should accept offset datetime with T separator', () => {
+      const toml = 'dt = 1979-05-27T07:32:00-07:00';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+
+    it('should accept offset datetime with space separator', () => {
+      const toml = 'dt = 1979-05-27 07:32:00+02:00';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+
+    it('should accept offset datetime with Z', () => {
+      const toml = 'dt = 1979-05-27T07:32:00Z';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+  });
+
+  describe('bare local time and local date should still work', () => {
+    it('should accept bare local time', () => {
+      const toml = 't = 07:32:00';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+
+    it('should accept bare local date', () => {
+      const toml = 'd = 1979-05-27';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+
+    it('should accept local datetime without offset', () => {
+      const toml = 'dt = 1979-05-27T07:32:00';
+      expect(() => Array.from(parseTOML(toml))).not.toThrow();
+    });
+  });
+});

@@ -8,12 +8,13 @@ import {
   generateFloat,
   generateBoolean,
   generateDateTime,
+  generateTemporalDateTime,
   generateInlineArray,
   generateInlineTable
 } from './generate';
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
-import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate } from './utils';
+import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma } from './writer';
 
 /**
@@ -71,6 +72,8 @@ function walkValue(value: any, format: TomlFormat): Value {
     return generateFloat(value, Math.max(minimumDecimals, 1));
   } else if (isBoolean(value)) {
     return generateBoolean(value);
+  } else if (isTemporal(value)) {
+    return generateTemporalDateTime(value, format.truncateZeroTimeInDates);
   } else if (isDate(value)) {
     return generateDateTime(value, format.truncateZeroTimeInDates);
   } else if (Array.isArray(value)) {
@@ -126,6 +129,11 @@ function toJSON(value: any): any {
   
   // Skip Date objects (they have special handling)
   if (isDate(value)) {
+    return value;
+  }
+
+  // Skip Temporal objects (they represent themselves, don't call toJSON())
+  if (isTemporal(value)) {
     return value;
   }
   
