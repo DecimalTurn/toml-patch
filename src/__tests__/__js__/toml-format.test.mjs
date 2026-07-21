@@ -6,7 +6,7 @@
  * ensuring proper backward compatibility and constructor behavior.
  */
 
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import { TomlFormat, patch } from "../../../dist/toml-patch.js";
 
 describe('TomlFormat JavaScript Integration', () => {
@@ -165,7 +165,7 @@ cache = true
     });
 
     it('should work with objects containing methods', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };

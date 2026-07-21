@@ -1,4 +1,4 @@
-import { stringify } from '../';
+import { stringify, parse } from '../';
 import dedent from 'dedent';
 import parseTOML from '../parse-toml';
 import parseJS from '../parse-js';
