@@ -4,6 +4,7 @@
   "extends": ["config:recommended"],
   "minimumReleaseAge": "2 days",
   "schedule": ["before 9am on Wednesday"],
+  "updateNotScheduled": false,
   "git-submodules": {
     "enabled": true
   },

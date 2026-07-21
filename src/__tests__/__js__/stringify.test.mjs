@@ -14,7 +14,7 @@
  * - JavaScript-specific object behaviors (duck typing, prototypes, etc.)
  */
 
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import { stringify, TomlFormat, parse } from "../../../dist/toml-patch.js";
 
 describe('stringify() Function JavaScript Integration', () => {
@@ -93,7 +93,7 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should work with objects containing extra properties', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const format = {
@@ -161,7 +161,7 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should work with objects containing methods', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const format = {
@@ -264,7 +264,7 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should ignore extra properties and methods in format objects', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const formatWithExtras = {
@@ -417,7 +417,7 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should handle format objects with circular references', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const formatWithCircular = { bracketSpacing: false };
@@ -434,7 +434,7 @@ describe('stringify() Function JavaScript Integration', () => {
     });
 
     it('should handle format objects with toString/valueOf overrides', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const formatWithOverrides = {

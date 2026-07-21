@@ -3,12 +3,12 @@
     "strict": true,
     "target": "es2025",
     "moduleResolution": "bundler",
-    "types": ["jest", "node"],
+    "types": ["node", "vitest/globals"],
     "lib": ["es2025"],
     "esModuleInterop": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "src/**/*"],
+  "include": ["*.ts", "src/**/*", "vitest.config.ts", "vitest.specs.config.ts"],
   "exclude": ["node_modules"]
 }

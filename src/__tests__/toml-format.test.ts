@@ -632,7 +632,7 @@ describe('validateFormatObject', () => {
 
   describe('warns about unsupported properties', () => {
     test('warns and ignores unknown own properties', () => {
-      const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = validateFormatObject({ newLine: '\n', bogus: true });
       expect(result).toEqual({ newLine: '\n' });
       expect(spy).toHaveBeenCalledWith(expect.stringContaining('bogus'));
@@ -640,7 +640,7 @@ describe('validateFormatObject', () => {
     });
 
     test('does not warn about inherited (prototype) unsupported properties', () => {
-      const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const proto = { inherited: true };
       const obj = Object.create(proto);
       obj.newLine = '\n';

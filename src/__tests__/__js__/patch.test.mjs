@@ -15,7 +15,7 @@
  * 
  */
 
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import { patch, TomlFormat } from "../../../dist/toml-patch.js";
 
 describe('patch() Function JavaScript Integration', () => {
@@ -90,7 +90,7 @@ cache = true
     });
 
     it('should work with objects containing extra properties', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };
@@ -173,7 +173,7 @@ cache = true
     });
 
     it('should work with objects containing methods', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };
@@ -316,7 +316,7 @@ cache = true
     });
 
     it('should ignore extra properties and methods in format objects', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };
@@ -581,7 +581,7 @@ port = 5432
     });
 
     it('should handle format objects with circular references', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };
@@ -616,7 +616,7 @@ port = 5432
     });
 
     it('should handle format objects with toString/valueOf overrides', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
       try {
         const updatedObject = { ...baseUpdatedObject };

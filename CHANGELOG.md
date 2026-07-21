@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parsing: New `temporal` option in `ParseOptions`. When `true`, TOML date/time values are returned as [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects (`Temporal.PlainDate`, `Temporal.PlainTime`, `Temporal.PlainDateTime`, `Temporal.ZonedDateTime`) instead of custom `Date` subclasses.
 - Stringify: Auto-detect Temporal objects in the input JS and serialize them to the correct TOML date/time type. Note that `ZonedDateTime` with IANA timezone annotations will throws an error (TOML only supports numerical offsets).
 
+## [2.0.1] - 2026-07-19
+
+### Fixed
+- Patching: prevent error during implicit intermediate key/table removal for dotted table keys
+
+
 ## [2.0.0] - 2026-05-31
 
 ### Changed
