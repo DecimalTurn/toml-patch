@@ -10,7 +10,9 @@ overrides:
   picomatch: "^4.0.4"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/56
   js-yaml: "^4.2.0"
-  # https://github.com/DecimalTurn/toml-patch/security/dependabot/57
-  tar: ">=7.5.16"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/58
   sigstore: "^4.1.1"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/66
+  "tar": "^7.5.18"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/62
+  "shell-quote": "^1.9.0"
