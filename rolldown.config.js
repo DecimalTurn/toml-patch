@@ -12,7 +12,7 @@ export default defineConfig({
     entryFileNames: 'toml-patch.js',
     format: 'esm',
     banner,
+    minify: true,
   },
-  minify: true,
   plugins: [bundleAnalyzerPlugin()],
 });
