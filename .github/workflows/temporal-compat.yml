@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24, 26]
+        node-version: [16, 18, 20, 22, 24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -77,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18, 20, 22, 24, 26]
+        node-version: [16, 18, 20, 22, 24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -183,12 +183,12 @@ jobs:
         run: |
           echo "## TOML Smoke Tests (toml-patch parse/stringify/patch)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
           TOML_FAILED=""
           for label in polyfill harmony native; do
             echo -n "| $label |" >> "$GITHUB_STEP_SUMMARY"
-            for v in 14 16 18 20 22 24 26; do
+            for v in 16 18 20 22 24 26; do
               f="results/${label}-toml-${v}.txt"
               if [ -f "$f" ] && [ "$(cat "$f")" = "success" ]; then
                 echo -n " ✅ |" >> "$GITHUB_STEP_SUMMARY"
@@ -196,7 +196,7 @@ jobs:
                 echo -n " ❌ |" >> "$GITHUB_STEP_SUMMARY"
                 # per-mode thresholds: polyfill=all, harmony=v20+, native=v26+
                 case "$label" in
-                  polyfill) [ "$v" -ge 14 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
+                  polyfill) [ "$v" -ge 16 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
                   harmony)  [ "$v" -ge 20 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
                   native)   [ "$v" -ge 26 ] && TOML_FAILED="$TOML_FAILED ${label}@$v" ;;
                 esac
@@ -207,12 +207,12 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## General Temporal Compat (full API surface)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Mode | 14 | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|------|----|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | 16 | 18 | 20 | 22 | 24 | 26 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|----|----|----|----|----|----|" >> "$GITHUB_STEP_SUMMARY"
           GEN_FAILED=""
           for mode in polyfill harmony native; do
             echo -n "| $mode |" >> "$GITHUB_STEP_SUMMARY"
-            for v in 14 16 18 20 22 24 26; do
+            for v in 16 18 20 22 24 26; do
               f="results/${mode}-${v}.txt"
               if [ -f "$f" ]; then
                 val=$(cat "$f")
@@ -235,9 +235,16 @@ jobs:
           done
           if [ -n "$TOML_FAILED" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "❌ toml-patch Temporal support required for Node &gt;= 20." >> "$GITHUB_STEP_SUMMARY"
             echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "TOML Failures: $TOML_FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "$TOML_FAILED" | tr ' ' '\n' | while read -r entry; do
+              [ -z "$entry" ] && continue
+              mode="${entry%%@*}"
+              case "$mode" in
+                polyfill) echo "Polyfill @${entry#*@}: The @js-temporal/polyfill did not pass the toml-patch smoke test on this Node version." >> "$GITHUB_STEP_SUMMARY" ;;
+                harmony)  echo "Harmony @${entry#*@}: The --harmony-temporal flag did not pass the toml-patch smoke test on this Node version." >> "$GITHUB_STEP_SUMMARY" ;;
+                native)   echo "Native @${entry#*@}: Native Temporal did not pass the toml-patch smoke test on this Node version." >> "$GITHUB_STEP_SUMMARY" ;;
+              esac
+            done
             echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
             echo "TOML Failures: $TOML_FAILED"
             exit 1

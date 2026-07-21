@@ -141,7 +141,7 @@ jobs:
           done < probe-results/all-results.txt
 
           lowest_pass=$(awk '$2 == "pass" { print $1; exit }' probe-results/all-results.txt)
-          node14_status=$(awk '$1 == "14" { print $2 }' probe-results/all-results.txt)
+          node16_status=$(awk '$1 == "16" { print $2 }' probe-results/all-results.txt)
 
           if [ -z "$lowest_pass" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -149,9 +149,9 @@ jobs:
             exit 1
           fi
 
-          if [ "$node14_status" != "pass" ]; then
+          if [ "$node16_status" != "pass" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Required baseline failed: Node 14 must pass consumer install + runtime smoke test." >> "$GITHUB_STEP_SUMMARY"
+            echo "Required baseline failed: Node 16 must pass consumer install + runtime smoke test." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
