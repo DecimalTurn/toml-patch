@@ -14,6 +14,5 @@ export default defineConfig({
       escapeString: true,
       printBasicPrototype: true,
     },
-    testPathIgnorePatterns: ['worktrees', 'submodules'],
   },
 });

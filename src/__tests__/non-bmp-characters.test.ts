@@ -23,7 +23,7 @@ describe('Non-BMP character handling', () => {
     
     try {
       Array.from(parseTOML(invalidToml));
-      fail('Should have thrown an error');
+      expect.unreachable('Should have thrown an error');
     } catch (error: any) {
       // The error should point to column 3 (1-indexed: a=1, 😀=2, :=3)
       // because we now count code points, not UTF-16 code units
@@ -39,7 +39,7 @@ describe('Non-BMP character handling', () => {
     
     try {
 Array.from(parseTOML(invalidToml));
-      fail('Should have thrown an error');
+      expect.unreachable('Should have thrown an error');
     } catch (error: any) {
       // The colon should cause an error (not valid separator for bare values)
       // We're testing that the location tracking works correctly after the emoji key
@@ -54,7 +54,7 @@ name = "value"
     
     try {
       Array.from(parseTOML(invalidToml));
-      fail('Should have thrown an error');
+      expect.unreachable('Should have thrown an error');
     } catch (error: any) {
       // Error on line 3 - the bare 'x' is not a valid value
       expect(error.message).toContain('(3,');
@@ -68,7 +68,7 @@ name = "value"
     
     try {
       Array.from(parseTOML(invalidToml));
-      fail('Should have thrown an error');
+      expect.unreachable('Should have thrown an error');
     } catch (error: any) {
       // Error should reference the invalid escape sequence
       expect(error.message).toContain('Invalid escape sequence');
@@ -83,7 +83,7 @@ name = "value"
     
     try {
       Array.from(parseTOML(invalidToml));
-      fail('Should have thrown an error');
+      expect.unreachable('Should have thrown an error');
     } catch (error: any) {
       // Colon is at code point index 7, so column should be 8 (1-indexed)
       expect(error.message).toContain('(1, 8)');

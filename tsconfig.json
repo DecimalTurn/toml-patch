@@ -3,7 +3,7 @@
     "strict": true,
     "target": "es2025",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "lib": ["es2025"],
     "esModuleInterop": true,
     "noEmit": true,
