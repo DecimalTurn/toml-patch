@@ -8,7 +8,7 @@ export default defineConfig({
       'src/__tests__/**/*.test.ts',
       'src/__tests__/**/*.mjs',
     ],
-    exclude: ['node_modules', 'worktrees', 'submodules'],
+    exclude: ['node_modules/**', 'worktrees/**', 'submodules/**'],
     snapshotFormat: {
       escapeString: true,
       printBasicPrototype: true,
