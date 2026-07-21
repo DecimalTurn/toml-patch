@@ -83,8 +83,6 @@
     "oxlint": "^1.55.0",
     "rimraf": "^6.0.0",
     "rolldown": "^1.2.0",
-    "rolldown-plugin-dts": "^0.27.12",
-    "rollup-plugin-dts": "^6.2.1",
     "smol-toml": "^1.6.1",
     "tslib": "^2.0.0",
     "typescript": "6.0.3",
