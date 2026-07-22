@@ -8,7 +8,7 @@ overrides:
   brace-expansion: ^5.0.7
   picomatch: ^4.0.4
   js-yaml: ^4.3.0
-  sigstore: ^4.1.1
+  sigstore: ^5.0.0
   tar: ^7.5.18
   shell-quote: ^1.9.0
 
@@ -647,10 +647,6 @@ packages:
 
   jsbi@4.3.2:
     resolution: {integrity: sha512-9fqMSQbhJykSeii05nxKl4m6Eqn2P6rOlYiS+C5Dr/HPIU/7yZxu5qzbs40tgaFORiw2Amd0mirjxatXYMkIew==}
-
-  json-parse-even-better-errors@3.0.2:
-    resolution: {integrity: sha512-fi0NG4bPjCHunUJffmLd0gxssIgkNmArMvis4iNah6Owg1MCJjWhEcDLmsK6iGkJq3tHwbDkTlce70/tmXN4cQ==}
-    engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
   json-parse-even-better-errors@6.0.0:
     resolution: {integrity: sha512-2/8adwnK1/+Fdjyts4r6wSpfANWw8zdNhU9U/Llk59c6O+DjSisPWPykwoL8gZmocP9Dy64S7oie2g+Mia123A==}
@@ -1461,8 +1457,6 @@ snapshots:
       argparse: 2.0.1
 
   jsbi@4.3.2: {}
-
-  json-parse-even-better-errors@3.0.2: {}
 
   json-parse-even-better-errors@6.0.0: {}
 
