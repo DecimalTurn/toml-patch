@@ -9,6 +9,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "src/**/*", "*.config.ts", "*.config.js"],
+  "include": ["*.ts", "src/**/*", "tsdown.config.ts"],
   "exclude": ["node_modules"]
 }
