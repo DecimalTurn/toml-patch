@@ -38,9 +38,11 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: |
-          rm -rf node_modules pnpm-lock.yaml
-          npm install @js-temporal/polyfill --no-save
+      - name: Install @js-temporal/polyfill
+        run: |
+          cd $(mktemp -d)
+          npm install @js-temporal/polyfill
+          cp -r node_modules "$GITHUB_WORKSPACE"
       - name: Smoke test (comprehensive)
         id: smoke
         continue-on-error: true
