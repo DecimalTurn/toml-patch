@@ -38,10 +38,9 @@ jobs:
         with:
           name: dist
           path: dist/
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-      - run: pnpm add @js-temporal/polyfill
+      - run: |
+          rm -rf node_modules pnpm-lock.yaml
+          npm install @js-temporal/polyfill --no-save
       - name: Smoke test (comprehensive)
         id: smoke
         continue-on-error: true
