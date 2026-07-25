@@ -19,6 +19,8 @@ import {
   isInlineItem,
   isString,
   isComment,
+  isFloat,
+  Float as FloatNode,
   hasItem,
   hasItems,
   InlineItem,
@@ -242,6 +244,17 @@ function preserveFormatting(existing: Value, replacement: Value): void {
       replacement.value = formattedDate;
       replacement.raw = formattedDate.toISOString();
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
+    }
+  }
+  
+  // Preserve float NaN sign format
+  if (isFloat(existing) && isFloat(replacement)
+      && Number.isNaN(existing.value) && Number.isNaN(replacement.value)) {
+    const existingFloat = existing as FloatNode;
+    const replacementFloat = replacement as FloatNode;
+    if (existingFloat.nanSign) {
+      replacementFloat.nanSign = existingFloat.nanSign;
+      replacementFloat.raw = existingFloat.nanSign + 'nan';
     }
   }
   

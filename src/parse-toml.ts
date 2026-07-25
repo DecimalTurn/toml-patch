@@ -871,7 +871,29 @@ function float(cursor: Cursor<Token>, input: string): Float {
   if (IS_INF.test(raw)) {
     value = raw.startsWith('-') ? -Infinity : Infinity;
   } else if (IS_NAN.test(raw)) {
-    value = NaN;
+    // Create NaN with sign bit matching the raw text for round-trip fidelity.
+    // +nan/nan → canonical NaN,  -nan → negative NaN (IEEE 754 sign bit set)
+    const buf = new Float64Array(1);
+    const view = new DataView(buf.buffer);
+    if (raw.startsWith('-')) {
+      view.setUint32(0, 0x00000000, true); // low 32 bits (little-endian)
+      view.setUint32(4, 0xFFF80000, true); // high 32 bits with sign + quiet NaN
+    } else {
+      view.setUint32(0, 0x00000000, true);
+      view.setUint32(4, 0x7FF80000, true);
+    }
+    value = buf[0];
+    const sign: '+' | '-' | undefined =
+      raw.startsWith('+') ? '+' :
+      raw.startsWith('-') ? '-' :
+      undefined;
+    return {
+      type: NodeType.Float,
+      loc,
+      raw,
+      value,
+      nanSign: sign
+    };
   } else if (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     const start = loc.start;
     

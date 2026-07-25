@@ -60,6 +60,12 @@ export default function diff(before: any, after: any, path: Path = []): Change[]
     return [];
   }
 
+  // Both NaN — treat as equal since NaN !== NaN in JS
+  if (typeof before === 'number' && typeof after === 'number'
+      && Number.isNaN(before) && Number.isNaN(after)) {
+    return [];
+  }
+
   if (Array.isArray(before) && Array.isArray(after)) {
     return compareArrays(before, after, path);
   } else if (isObject(before) && isObject(after)) {

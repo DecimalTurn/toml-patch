@@ -5075,16 +5075,21 @@ describe('lone surrogate handling in stringify', () => {
 
 describe('identity round-trip normalizations', () => {
 
-  test.skip('should preserve +nan sign in round-trip', () => {
+  test('should preserve +nan sign in round-trip', () => {
     const result = patch('a = +nan\n', parse('a = +nan\n'));
     expect(result).toBe('a = +nan\n');
   });
 
-  test.skip('should preserve -nan sign through parse and round-trip', () => {
-    // `-nan` should parse to a value distinguishable from `nan` via Object.is
+  test('should preserve -nan sign through parse and round-trip', () => {
+    // `-nan` should parse to a negative NaN distinguishable via IEEE 754 bit pattern
     const parsed = parse('a = -nan\n');
-    expect(Object.is(parsed.a, NaN)).toBe(true);
-    expect(1 / parsed.a).toBe(Number.NEGATIVE_INFINITY); // sign check
+    expect(Number.isNaN(parsed.a)).toBe(true);
+
+    // Verify it's negative NaN by checking the IEEE 754 sign bit
+    const buf = new Float64Array([parsed.a]);
+    const view = new DataView(buf.buffer);
+    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
+    expect(highBits & 0x80000000).not.toBe(0); // sign bit set
 
     // And round-trip should preserve the `-nan` spelling
     const result = patch('a = -nan\n', parsed);

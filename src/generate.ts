@@ -325,13 +325,20 @@ export function generateInteger(value: number | bigint): Integer {
 
 export function generateFloat(value: number, minimumDecimals: number = 1): Float {
   let raw: string;
+  let nanSign: '+' | '-' | undefined;
   
   if (value === Infinity) {
     raw = 'inf';
   } else if (value === -Infinity) {
     raw = '-inf';
   } else if (Number.isNaN(value)) {
-    raw = 'nan';
+    // Detect negative NaN via its IEEE 754 bit pattern
+    const buf = new Float64Array([value]);
+    const view = new DataView(buf.buffer);
+    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
+    const isNegative = (highBits & 0x80000000) !== 0;
+    nanSign = isNegative ? '-' : undefined;
+    raw = isNegative ? '-nan' : 'nan';
   } else if (Object.is(value, -0)) {
     raw = '-0.' + '0'.repeat(Math.max(minimumDecimals, 1));
   } else {
@@ -368,7 +375,8 @@ export function generateFloat(value: number, minimumDecimals: number = 1): Float
     type: NodeType.Float,
     loc: { start: zero(), end: { line: 1, column: raw.length } },
     raw,
-    value
+    value,
+    ...(nanSign !== undefined ? { nanSign } : {})
   };
 }
 
