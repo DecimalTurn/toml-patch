@@ -63,10 +63,8 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
       }
       case NodeType.TableKey: {
         const tk = node as TableKey;
-        const { start, end } = tk.loc;
-        writeSingle(lines, start.line, start.column, '[');
-        writeSingle(lines, end.line, end.column - 1, ']');
-        emitNode(tk.item);
+        // Emit "[key]" in one write instead of three (bracket, key, bracket).
+        write(lines, tk.loc, '[' + tk.item.raw + ']');
         break;
       }
 
@@ -78,10 +76,8 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
       }
       case NodeType.TableArrayKey: {
         const tak = node as TableArrayKey;
-        const { start, end } = tak.loc;
-        writeChars(lines, start.line, start.column, start.column + 2, '[[');
-        writeChars(lines, end.line, end.column - 2, end.column, ']]');
-        emitNode(tak.item);
+        // Emit "[[key]]" in one write instead of three.
+        write(lines, tak.loc, '[[' + tak.item.raw + ']]');
         break;
       }
 

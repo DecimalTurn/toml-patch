@@ -62,7 +62,13 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     remove(document, document, node);
 
     if (isInlineTable(node.value)) {
-      insert(document, document, formatTable(node));
+      // Fast path: empty inline tables don't need the full formatTable
+      // machinery (inline table copy, insert loop, applyWrites).
+      if ((node.value as InlineTable).items.length === 0) {
+        insert(document, document, generateTable(node.key.value));
+      } else {
+        insert(document, document, formatTable(node));
+      }
     } else {
       formatTableArray(node).forEach(table_array => {
         insert(document, document, table_array);

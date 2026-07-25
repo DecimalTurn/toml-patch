@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING**: Raise minimum supported Node.js version from `>=14` to `>=16`.
+- Improve stringification performance
 
 ### Added
 
