@@ -43,5 +43,6 @@
   "globals": {},
   "ignorePatterns": [
     "submodules/**",
+    "scripts/**"
   ]
 }
