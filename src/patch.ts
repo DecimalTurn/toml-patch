@@ -29,7 +29,7 @@ import {
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -655,11 +655,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   let hasTightened = false;
   traverse(original, {
     InlineTable: (node) => {
-      if ((node as any).__tightenEnd && node.items.length > 0) {
+      if (hasInlineTableNeedingTighten(node) && node.items.length > 0) {
         const lastItem = node.items[node.items.length - 1];
         node.loc.end.column = lastItem.loc.end.column + 1;
-        delete (node as any).__tightenEnd;
-        applyBracketSpacing(original, node, true);
+        deleteInlineTableNeedingTighten(node);
+        applyBracketSpacing(original, node, format.bracketSpacing);
         hasTightened = true;
       }
     }

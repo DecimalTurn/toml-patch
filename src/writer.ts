@@ -55,6 +55,16 @@ const dirty_roots: WeakSet<Root> = new WeakSet();
 const emptiedByRemove: WeakMap<TreeNode, boolean> = new WeakMap();
 const hadNonLastRemoval: WeakSet<TreeNode> = new WeakSet();
 
+// Track single-line InlineTables whose only item was removed, so the
+// caller can tighten the closing bracket and reapply bracket spacing.
+const inlineTablesNeedingTighten: Set<TreeNode> = new Set();
+export function hasInlineTableNeedingTighten(node: TreeNode): boolean {
+  return inlineTablesNeedingTighten.has(node);
+}
+export function deleteInlineTableNeedingTighten(node: TreeNode): void {
+  inlineTablesNeedingTighten.delete(node);
+}
+
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {
@@ -549,7 +559,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     // so the caller can tighten the closing bracket later. The exit offset
     // that carried the `}` spacing was on the removed item and is now lost.
     if (isInlineTable(parent) && parent.loc.end.line === parent.loc.start.line) {
-      (parent as any).__tightenEnd = true;
+      inlineTablesNeedingTighten.add(parent);
     }
 
     // When a Table or TableArray becomes completely empty, mark it.
