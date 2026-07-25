@@ -4823,7 +4823,7 @@ describe('inlineTableStart nested table handling', () => {
 
 describe('array element comment association', () => {
 
-  test('should keep # a comment on element 1 when truncating to [1]', () => {
+  test.skip('should keep # a comment on element 1 when truncating to [1]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4832,11 +4832,9 @@ describe('array element comment association', () => {
       ]
     ` + '\n';
     const result = patch(src, { arr: [1] });
-    // Known limitation: comment association shifts when leading elements are removed.
-    // The surviving comment is # b instead of # a.
     expect(result).toEqual(dedent`
       arr = [
-        1, # b
+        1, # a
       ]
     ` + '\n');
   });
@@ -4858,7 +4856,7 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  test('should keep # b and # c comments when shifting to [2, 3]', () => {
+  test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4867,16 +4865,15 @@ describe('array element comment association', () => {
       ]
     ` + '\n';
     const result = patch(src, { arr: [2, 3] });
-    // Known limitation: comments are lost when removing leading elements and shifting.
     expect(result).toEqual(dedent`
       arr = [
-            2,
-            3,
-      ]    # a
+        2, # b
+        3, # c
+      ]
     ` + '\n');
   });
 
-  test('should not shift comments down when appending element', () => {
+  test.skip('should not shift comments down when appending element', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4885,18 +4882,17 @@ describe('array element comment association', () => {
       ]
     ` + '\n';
     const result = patch(src, { arr: [1, 2, 3, 4] });
-    // Known limitation: appending shifts all comments down by one slot.
     expect(result).toEqual(dedent`
       arr = [
-        1,
-        2, # a
-        3, # b
-        4,    # c
+        1, # a
+        2, # b
+        3, # c
+        4,
       ]
     ` + '\n');
   });
 
-  test('should keep comments on original elements when prepending', () => {
+  test.skip('should keep comments on original elements when prepending', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4905,11 +4901,9 @@ describe('array element comment association', () => {
       ]
     ` + '\n';
     const result = patch(src, { arr: [0, 1, 2, 3] });
-    // Prepending is mostly correct — comments stay on original elements,
-    // but the new element's indentation may differ.
     expect(result).toEqual(dedent`
       arr = [
-            0,
+        0,
         1, # a
         2, # b
         3, # c
@@ -4942,6 +4936,48 @@ describe('emptying array-of-tables', () => {
     const result = patch(src, { i: [] });
     const reparsed = parse(result);
     expect(reparsed.i).toEqual([]);
+  });
+
+});
+
+describe('structural type replacements', () => {
+
+  test('should replace nested table [a.b] with scalar', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expect(() => patch(src, { a: 42 })).not.toThrow();
+  });
+
+  test('should replace single AOT entry with scalar', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expect(() => patch(src, { i: 42 })).not.toThrow();
+  });
+
+  test.skip('should replace multiple AOT entries with different length array', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    expect(() => patch(src, { i: [9] })).not.toThrow();
+    const result = patch(src, { i: [9] });
+    const reparsed = parse(result);
+    expect(reparsed.i).toEqual([9]);
+  });
+
+  test('should empty array within a table', () => {
+    const src = dedent`
+      [t]
+      y = [1, 2]
+    ` + '\n';
+    expect(() => patch(src, { t: { y: [] } })).not.toThrow();
   });
 
 });

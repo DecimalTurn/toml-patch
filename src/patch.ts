@@ -155,8 +155,10 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 }
 
 function reorder(changes: Change[]): Change[] {
-  //Reorder deletions among themselves to avoid index issues
-  // We want the path to be looking at the last item in the array first and go down from there
+  //Reorder deletions among themselves to avoid index issues when removing
+  // multiple array elements. Remove higher indices first so earlier indices
+  // remain valid after each removal. Compare the last path element (the index)
+  // and the prefix (everything before it) to group related removes.
 
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
@@ -164,8 +166,15 @@ function reorder(changes: Change[]): Change[] {
       let j = i + 1;
       while (j < changes.length) {
         const next_change = changes[j];
-        if (isRemove(next_change) && next_change.path[0] === change.path[0]  && 
-            next_change.path[1] > change.path[1]) {
+        if (!isRemove(next_change)) { j++; continue; }
+
+        const aIdx = last(change.path);
+        const bIdx = last(next_change.path);
+        const aPrefix = change.path.slice(0, -1);
+        const bPrefix = next_change.path.slice(0, -1);
+
+        // Same array context AND higher index should come first
+        if (arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
           // We reset i to -1 so that after the for-loop's i++ the next iteration
@@ -452,8 +461,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
     } else if (isEdit(change)) {
-      let existing = findByPath(original, change.path);
+      let existing = tryFindByPath(original, change.path);
       let replacement = findByPath(updated, change.path);
+
+      // When the existing node can't be found, this is likely a structural
+      // type change (e.g. table→scalar, AOT→scalar, array→empty).
+      // Handle by removing old nodes and inserting fresh KV.
+      if (!existing) {
+        handleStructuralEdit(original, updated, change, format, temporal);
+        return; // skip generic edit handling
+      }
+
       let parent;
       const containerParent = tryFindByPath(original, change.path.slice(0, -1));
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
@@ -712,6 +730,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   replaceEmptiedTableArrays(original, emptiedAotKeys, format);
 
   return original;
+}
+
+/**
+ * Handles structural edits where findByPath can't resolve the existing CST node
+ * because the structure type has changed (e.g. table→scalar, AOT→scalar, array→empty).
+ * Removes old structural nodes and inserts a fresh key-value.
+ */
+function handleStructuralEdit(
+  original: Document,
+  updated: Document,
+  change: Change,
+  format: TomlFormat,
+  temporal: boolean
+): void {
+  const updated_js = toJS(updated.items, '', { temporal });
+  let jsValue: any = updated_js;
+  for (const key of change.path) {
+    jsValue = jsValue?.[key];
+  }
+
+  if (jsValue === undefined) return;
+
+  const lastName = change.path[change.path.length - 1] as string;
+
+  // Remove old nodes matching the key prefix
+  const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+  for (const prefixNode of prefixNodes) {
+    remove(original, original, prefixNode);
+  }
+
+  // Generate fresh KV and insert
+  const freshDoc = parseJS({ [lastName]: jsValue }, format);
+  const freshKV = freshDoc.items[0] as KeyValue;
+  insert(original, original, freshKV, undefined);
 }
 
 /**
