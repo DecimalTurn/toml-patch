@@ -29,7 +29,7 @@ import {
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
-import { insert, replace, remove, applyWrites } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -45,6 +45,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import traverse from './traverse';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -647,6 +648,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
 
   applyWrites(original);
+
+  // Fix up InlineTables that lost their only item to remove(). The exit
+  // offset that carried the closing-bracket space was on the removed item
+  // and is now lost. Tighten the end column and reapply bracket spacing.
+  let hasTightened = false;
+  traverse(original, {
+    InlineTable: (node) => {
+      if ((node as any).__tightenEnd && node.items.length > 0) {
+        const lastItem = node.items[node.items.length - 1];
+        node.loc.end.column = lastItem.loc.end.column + 1;
+        delete (node as any).__tightenEnd;
+        applyBracketSpacing(original, node, true);
+        hasTightened = true;
+      }
+    }
+  });
+  if (hasTightened) applyWrites(original);
+
   return original;
 }
 

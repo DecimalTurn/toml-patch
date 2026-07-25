@@ -50,6 +50,11 @@ type Offsets = WeakMap<TreeNode, Span>;
 // Track which roots have pending offsets to avoid unnecessary applyWrites traversals
 const dirty_roots: WeakSet<Root> = new WeakSet();
 
+// Track Tables/TableArrays whose last item was removed via remove(), so that
+// insertOnNewLine can skip the extra blank-line offset when the first new item
+// is inserted. This prevents doubled blank lines between sections.
+const emptiedByRemove: WeakSet<TreeNode> = new WeakSet();
+
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {
@@ -245,9 +250,18 @@ function insertOnNewLine(
   // new child's physical line count plus one newline separator. The existing
   // items' original leading-lines budget is already encoded in their loc.start.line
   // values, so we only need to account for the space the new child occupies.
+  //
+  // When inserting the first item into a Table/TableArray that was previously
+  // emptied by remove(), skip the extra blank line in the offset. The original
+  // blank-line separator between sections is already correctly positioned.
+  const wasEmptied = previous === undefined
+    && (isTable(parent) || isTableArray(parent))
+    && emptiedByRemove.has(parent);
+  if (wasEmptied) emptiedByRemove.delete(parent);
+  const offset_leading = wasEmptied ? -child_span.lines : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
-    : child_span.lines + (leading_lines - 1);
+    : child_span.lines + offset_leading;
   const offset = {
     lines: offset_lines,
     columns: child_span.columns
@@ -519,6 +533,19 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   ) {
     offset.lines = 0;
     offset.columns = 0;
+
+    // When the only item is removed from a single-line InlineTable, mark it
+    // so the caller can tighten the closing bracket later. The exit offset
+    // that carried the `}` spacing was on the removed item and is now lost.
+    if (isInlineTable(parent) && parent.loc.end.line === parent.loc.start.line) {
+      (parent as any).__tightenEnd = true;
+    }
+
+    // When a Table or TableArray becomes completely empty, mark it so that
+    // the next insert doesn't add an extra blank-line offset.
+    if (isTable(parent) || isTableArray(parent)) {
+      emptiedByRemove.add(parent);
+    }
   }
 
   // Offset for comma and remove comma that appear in front of the element (if-needed)
