@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- TomlDocument: New `parseDocument` function that parses a TOML string into a `TomlDocument`
+
 ## [2.1.0] - 2026-07-21
 
 ### Added

@@ -245,6 +245,8 @@ new TomlDocument(tomlSource: string | Uint8Array, options?: ParseOptions)
 
 Initializes the TomlDocument with TOML source, parsing it into an internal representation (CST). When bytes are provided they are decoded as UTF-8 in fatal mode, rejecting invalid sequences before parsing.
 
+> **Tip:** `parseDocument(value, options)` is a convenience alternative to `new TomlDocument(value, options)`.
+
 **Parameters:**
 - `tomlSource: string | Uint8Array` - The TOML source to parse
 - `options?: ParseOptions` - Optional parse options

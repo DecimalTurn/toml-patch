@@ -5,6 +5,7 @@ import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
 import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { TomlDocument } from './toml-document';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
 
@@ -100,3 +101,16 @@ export { TomlFormat } from './toml-format';
  * TomlDocument encapsulates a TOML CST and provides methods to interact with it.
  */
 export { TomlDocument } from './toml-document';
+
+/**
+ * Parses a TOML string or raw UTF-8 bytes into a {@link TomlDocument}.
+ *
+ * This is a convenience alternative to `new TomlDocument(value, options)`.
+ *
+ * @param value - TOML source as a string or raw UTF-8 bytes
+ * @param options - Optional parse options
+ * @returns A {@link TomlDocument} representing the parsed TOML
+ */
+export function parseDocument(value: string | Uint8Array, options?: ParseOptions): TomlDocument {
+  return new TomlDocument(value, options);
+}
