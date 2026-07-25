@@ -5080,6 +5080,17 @@ describe('identity round-trip normalizations', () => {
     expect(result).toBe('a = +nan\n');
   });
 
+  test.skip('should preserve -nan sign through parse and round-trip', () => {
+    // `-nan` should parse to a value distinguishable from `nan` via Object.is
+    const parsed = parse('a = -nan\n');
+    expect(Object.is(parsed.a, NaN)).toBe(true);
+    expect(1 / parsed.a).toBe(Number.NEGATIVE_INFINITY); // sign check
+
+    // And round-trip should preserve the `-nan` spelling
+    const result = patch('a = -nan\n', parsed);
+    expect(result).toBe('a = -nan\n');
+  });
+
   test.skip('should preserve mixed EOL in round-trip', () => {
     const result = patch('a = 1\n[t]\r\nx = 2\n', parse('a = 1\n[t]\r\nx = 2\n'));
     expect(result).toBe('a = 1\n[t]\r\nx = 2\n');
