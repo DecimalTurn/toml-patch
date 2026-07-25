@@ -302,9 +302,13 @@ test('should swap keys from inline table converted to full table by inlineTableS
   // inlineTableStart only converts newly added inline tables during patching,
   // not existing ones. Verify the swap still works correctly with it set.
   const result = patch(input, value, { inlineTableStart: 2 });
-  expect(result).toContain('E = "valueE"');
-  expect(result).toContain('port = 8080');
-  expect(result).toContain('server = { host = "localhost", B = "valueB" }');
+  expect(result).toEqual(dedent`
+    [A]
+    E = "valueE"
+
+    server = { host = "localhost", B = "valueB" }
+    port = 8080
+  `);
 });
 
 test('should swap keys when inlineTableStart converts nested inline table after swap', () => {
@@ -328,15 +332,16 @@ test('should swap keys when inlineTableStart converts nested inline table after 
   value.A.Y = yValue;
   value.C.nested.B = bValue;
 
-  // inlineTableStart=1 converts root-level inline tables,
-  // but nested is inside [C] so it stays inline at depth 1
   const result = patch(input, value, { inlineTableStart: 1 });
 
-  expect(result).toContain('[A]');
-  expect(result).toContain('Y = "yValue"');
-  expect(result).toContain('[C]');
-  expect(result).toContain('D = "valueD"');
-  expect(result).toContain('nested = { X = "xValue", B = "valueB" }');
+  expect(result).toEqual(dedent`
+    [A]
+    Y = "yValue"
+
+    [C]
+    D = "valueD"
+    nested = { X = "xValue", B = "valueB" }
+  `);
 });
 
 test('should swap keys with inlineTableStart=0 keeping all inline', () => {
@@ -360,10 +365,14 @@ test('should swap keys with inlineTableStart=0 keeping all inline', () => {
   value.A.name = nameValue;
   value.C.info.B = bValue;
 
-  // inlineTableStart=0 means all tables stay inline
   const result = patch(input, value, { inlineTableStart: 0 });
 
-  // info should remain as an inline table
-  expect(result).toContain('info = { version = 2, B = "valueB" }');
-  expect(result).toContain('name = "test"');
+  expect(result).toEqual(dedent`
+    [A]
+    name = "test"
+
+    [C]
+    D = "valueD"
+    info = { version = 2, B = "valueB" }
+  `);
 });
