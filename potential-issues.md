@@ -13,15 +13,15 @@ All issues are in the **`patch`** path. `stringify`/`parse` came out clean acros
 | 2 | Emptying a commented multiline array mangles the value | Invalid output | ✅ Fixed |
 | 3 | Table→scalar relocates the key into the preceding section | Wrong semantics | ✅ Fixed |
 | 4 | `patch` throws on any document containing a >2^53 integer | Blocking throw | ✅ Fixed |
-| 5 | `inlineTableStart >= 2` silently drops new nested tables | Data loss | |
-| 6 | Array element comments mis-associated when length changes | Comment loss | |
-| 7 | Emptying an array-of-tables drops the key entirely | Data loss | |
-| 8 | `Node not found` on several structural replacements | Throw | |
-| 9 | Internal `TypeError`s instead of meaningful errors | Throw | |
-| 10 | Blank lines accumulate when deleting tables | Cosmetic | |
-| 11 | Comment outlives the section it described | Design question | |
-| 12 | `stringify` emits `\uD800` for lone surrogates | Invalid output (niche) | |
-| 13 | Identity round-trip normalizations | Fidelity | |
+| 5 | `inlineTableStart >= 2` silently drops new nested tables | Data loss | ✅ Already fixed on main |
+| 6 | Array element comments mis-associated when length changes | Comment loss | ⏸️ Skipped (deep structural fix needed) |
+| 7 | Emptying an array-of-tables drops the key entirely | Data loss | ✅ Fixed |
+| 8 | `Node not found` on several structural replacements | Throw | ✅ Partially fixed (3/4 cases, 1 skipped) |
+| 9 | Internal `TypeError`s instead of meaningful errors | Throw | ⏸️ Skipped |
+| 10 | Blank lines accumulate when deleting tables | Cosmetic | ⏸️ Skipped |
+| 11 | Comment outlives the section it described | Design question | ⏸️ Skipped |
+| 12 | `stringify` emits `\uD800` for lone surrogates | Invalid output (niche) | ⏸️ Skipped |
+| 13 | Identity round-trip normalizations | Fidelity | ⏸️ Skipped |
 
 ---
 

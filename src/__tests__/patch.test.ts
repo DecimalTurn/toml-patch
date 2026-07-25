@@ -1,5 +1,5 @@
 import patch from '../patch';
-import { parse } from '../';
+import { parse, stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
@@ -4978,6 +4978,111 @@ describe('structural type replacements', () => {
       y = [1, 2]
     ` + '\n';
     expect(() => patch(src, { t: { y: [] } })).not.toThrow();
+  });
+
+});
+
+describe('meaningful error messages', () => {
+
+  test.skip('should give meaningful error when emptying a commented array document', () => {
+    const src = dedent`
+      arr = [
+        1, # one
+      ]
+    ` + '\n';
+    // Should not throw internal TypeError 'reading substring of undefined'
+    expect(() => patch(src, {})).toThrow(/Node not found|Cannot remove/i);
+  });
+
+  test.skip('should give meaningful error when deleting AOT while adding unrelated key', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    // Should not throw internal TypeError 'reading length of undefined'
+    expect(() => patch(src, { other: 1 })).toThrow(/Node not found|Cannot remove/i);
+  });
+
+});
+
+describe('blank line accumulation on table deletion', () => {
+
+  test.skip('should not accumulate blank lines when deleting tables one at a time', () => {
+    let s = dedent`
+      [a]
+      x = 1
+
+      [b]
+      y = 2
+
+      [c]
+      z = 3
+
+      [d]
+      w = 4
+    ` + '\n';
+
+    for (const k of ['a', 'b', 'c']) {
+      const o = parse(s);
+      delete o[k];
+      s = patch(s, o);
+    }
+
+    expect(s).toEqual(dedent`
+      [d]
+      w = 4
+    ` + '\n');
+  });
+
+});
+
+describe('comment removal with section', () => {
+
+  test.skip('should remove comment that precedes a deleted table section', () => {
+    const src = dedent`
+      [a]
+      x = 1
+
+      # section about b
+      [b]
+      z = 3
+    ` + '\n';
+
+    const o = parse(src);
+    delete o.b;
+    const result = patch(src, o);
+
+    expect(result).toEqual(dedent`
+      [a]
+      x = 1
+    ` + '\n');
+  });
+
+});
+
+describe('lone surrogate handling in stringify', () => {
+
+  test.skip('should reject lone surrogates instead of emitting invalid TOML', () => {
+    // Lone surrogates are not valid Unicode scalar values.
+    // stringify should throw rather than emit \\uD800.
+    expect(() => stringify({ s: '\ud800' })).toThrow();
+  });
+
+});
+
+describe('identity round-trip normalizations', () => {
+
+  test.skip('should preserve +nan sign in round-trip', () => {
+    const result = patch('a = +nan\n', parse('a = +nan\n'));
+    expect(result).toBe('a = +nan\n');
+  });
+
+  test.skip('should preserve mixed EOL in round-trip', () => {
+    const result = patch('a = 1\n[t]\r\nx = 2\n', parse('a = 1\n[t]\r\nx = 2\n'));
+    expect(result).toBe('a = 1\n[t]\r\nx = 2\n');
   });
 
 });
