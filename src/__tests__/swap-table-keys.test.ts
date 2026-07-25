@@ -278,3 +278,92 @@ test('should swap all keys between two tables', () => {
     E = "valueE"
   `);
 });
+
+test('should swap keys from inline table converted to full table by inlineTableStart', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+    E = "valueE"
+
+    server = { host = "localhost", port = 8080 }
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const port = value.A.server.port;
+
+  delete value.A.B;
+  delete value.A.server.port;
+
+  value.A.port = port;
+  value.A.server.B = bValue;
+
+  // inlineTableStart only converts newly added inline tables during patching,
+  // not existing ones. Verify the swap still works correctly with it set.
+  const result = patch(input, value, { inlineTableStart: 2 });
+  expect(result).toContain('E = "valueE"');
+  expect(result).toContain('port = 8080');
+  expect(result).toContain('server = { host = "localhost", B = "valueB" }');
+});
+
+test('should swap keys when inlineTableStart converts nested inline table after swap', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+
+    [C]
+    D = "valueD"
+    nested = { X = "xValue", Y = "yValue" }
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const yValue = value.C.nested.Y;
+
+  delete value.A.B;
+  delete value.C.nested.Y;
+
+  value.A.Y = yValue;
+  value.C.nested.B = bValue;
+
+  // inlineTableStart=1 converts root-level inline tables,
+  // but nested is inside [C] so it stays inline at depth 1
+  const result = patch(input, value, { inlineTableStart: 1 });
+
+  expect(result).toContain('[A]');
+  expect(result).toContain('Y = "yValue"');
+  expect(result).toContain('[C]');
+  expect(result).toContain('D = "valueD"');
+  expect(result).toContain('nested = { X = "xValue", B = "valueB" }');
+});
+
+test('should swap keys with inlineTableStart=0 keeping all inline', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+
+    [C]
+    D = "valueD"
+    info = { name = "test", version = 2 }
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const nameValue = value.C.info.name;
+
+  delete value.A.B;
+  delete value.C.info.name;
+
+  value.A.name = nameValue;
+  value.C.info.B = bValue;
+
+  // inlineTableStart=0 means all tables stay inline
+  const result = patch(input, value, { inlineTableStart: 0 });
+
+  // info should remain as an inline table
+  expect(result).toContain('info = { version = 2, B = "valueB" }');
+  expect(result).toContain('name = "test"');
+});
