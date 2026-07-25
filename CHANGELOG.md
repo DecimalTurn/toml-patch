@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher.
+- Patching: prevent whitespace errors when swaping keys between tables.
 
 ## [2.1.0] - 2026-07-21
 

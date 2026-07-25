@@ -50,6 +50,21 @@ type Offsets = WeakMap<TreeNode, Span>;
 // Track which roots have pending offsets to avoid unnecessary applyWrites traversals
 const dirty_roots: WeakSet<Root> = new WeakSet();
 
+// Track Tables/TableArrays whose last item was removed via remove().
+// Also track whether a non-last removal occurred (multiple items removed).
+const emptiedByRemove: WeakMap<TreeNode, boolean> = new WeakMap();
+const hadNonLastRemoval: WeakSet<TreeNode> = new WeakSet();
+
+// Track single-line InlineTables whose only item was removed, so the
+// caller can tighten the closing bracket and reapply bracket spacing.
+const inlineTablesNeedingTighten: Set<TreeNode> = new Set();
+export function hasInlineTableNeedingTighten(node: TreeNode): boolean {
+  return inlineTablesNeedingTighten.has(node);
+}
+export function deleteInlineTableNeedingTighten(node: TreeNode): void {
+  inlineTablesNeedingTighten.delete(node);
+}
+
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {
@@ -245,15 +260,35 @@ function insertOnNewLine(
   // new child's physical line count plus one newline separator. The existing
   // items' original leading-lines budget is already encoded in their loc.start.line
   // values, so we only need to account for the space the new child occupies.
+  //
+  // When inserting the first item into a Table/TableArray that was previously
+  // emptied by remove(), decide based on whether multiple items were removed:
+  // - Single item: skip the extra blank line (the original separator is intact).
+  // - Multiple items: use normal offset (compensates accumulated removal shifts).
+  const wasEmptied = previous === undefined
+    && (isTable(parent) || isTableArray(parent))
+    && emptiedByRemove.has(parent);
+  const wasSingleRemoval = wasEmptied && !hadNonLastRemoval.has(parent);
+  if (wasEmptied) {
+    emptiedByRemove.delete(parent);
+    hadNonLastRemoval.delete(parent);
+  }
+
+  // When multiple items were removed from a table, the first removal's
+  // exit offset (-1) shifts everything up during applyWrites. Compensate
+  // by positioning the new child one line lower. Also skip the blank-line
+  // offset (like the single-removal case) to avoid doubled blank lines.
+  const needsCompensation = wasEmptied && !wasSingleRemoval;
+  const offset_leading = (wasSingleRemoval || needsCompensation) ? -child_span.lines : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
-    : child_span.lines + (leading_lines - 1);
+    : child_span.lines + offset_leading;
   const offset = {
     lines: offset_lines,
     columns: child_span.columns
   };
 
-  return { shift, offset };
+  return { shift: { lines: shift.lines + (needsCompensation ? 1 : 0), columns: shift.columns }, offset };
 }
 
 /**
@@ -519,6 +554,25 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   ) {
     offset.lines = 0;
     offset.columns = 0;
+
+    // When the only item is removed from a single-line InlineTable, mark it
+    // so the caller can tighten the closing bracket later. The exit offset
+    // that carried the `}` spacing was on the removed item and is now lost.
+    if (isInlineTable(parent) && parent.loc.end.line === parent.loc.start.line) {
+      inlineTablesNeedingTighten.add(parent);
+    }
+
+    // When a Table or TableArray becomes completely empty, mark it.
+    if (isTable(parent) || isTableArray(parent)) {
+      emptiedByRemove.set(parent, true);
+    }
+  }
+
+  // Track non-last removals from Tables/TableArrays so insertOnNewLine
+  // knows whether multiple items were removed (needs compensation).
+  if (!(previous === undefined && next === undefined)
+      && (isTable(parent) || isTableArray(parent))) {
+    hadNonLastRemoval.add(parent);
   }
 
   // Offset for comma and remove comma that appear in front of the element (if-needed)
