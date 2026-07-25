@@ -245,9 +245,21 @@ function insertOnNewLine(
   // new child's physical line count plus one newline separator. The existing
   // items' original leading-lines budget is already encoded in their loc.start.line
   // values, so we only need to account for the space the new child occupies.
+  //
+  // When inserting the first item into a Table or TableArray that was previously
+  // empty, skip the extra blank line in the offset. The original document already
+  // provides separation between sections; adding another blank line here doubles
+  // it up when keys are swapped between tables.
+  const isFirstInTable = previous === undefined
+    && (isTable(parent) || isTableArray(parent))
+    && parent.items.length === 1;
+  // When inserting the first item into a previously empty table, don't shift
+  // subsequent document-level items down. The original formatting already
+  // provides the blank-line separator between sections.
+  const offset_leading = isFirstInTable ? -child_span.lines : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
-    : child_span.lines + (leading_lines - 1);
+    : child_span.lines + offset_leading;
   const offset = {
     lines: offset_lines,
     columns: child_span.columns

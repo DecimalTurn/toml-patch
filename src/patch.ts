@@ -29,7 +29,7 @@ import {
 import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
-import { insert, replace, remove, applyWrites } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing } from './writer';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -45,6 +45,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import traverse from './traverse';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -640,6 +641,39 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
 
   applyWrites(original);
+
+  // Reapply bracket spacing to inline tables and arrays after all changes.
+  // When items are removed from and added to inline containers, the exit offset
+  // that carries the closing-bracket space is lost, and trailing whitespace
+  // from removed items may remain. Tighten the closing bracket to the last
+  // item, then reapply consistent bracket spacing.
+  if (format.bracketSpacing) {
+    traverse(original, {
+      InlineTable: (node) => {
+        // Tighten end to last item + 1 for the closing space.
+        // bracketSpacing will add the enter offset (opening space)
+        // and exit offset on the last item.
+        if (node.items.length > 0) {
+          const lastItem = node.items[node.items.length - 1];
+          node.loc.end.column = lastItem.loc.end.column + 1;
+        } else {
+          node.loc.end.column = node.loc.start.column + 1;
+        }
+        applyBracketSpacing(original, node, true);
+      },
+      InlineArray: (node) => {
+        if (node.items.length > 0) {
+          const lastItem = node.items[node.items.length - 1];
+          node.loc.end.column = lastItem.loc.end.column + 1;
+        } else {
+          node.loc.end.column = node.loc.start.column + 1;
+        }
+        applyBracketSpacing(original, node, true);
+      }
+    });
+    applyWrites(original);
+  }
+
   return original;
 }
 
