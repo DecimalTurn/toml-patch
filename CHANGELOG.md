@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Raise minimum supported Node.js version from `>=14` to `>=16`.
+
 ### Added
 
 - TomlDocument: New `parseDocument` function that parses a TOML string into a `TomlDocument`
