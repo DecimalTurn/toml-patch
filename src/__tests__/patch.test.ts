@@ -4820,3 +4820,101 @@ describe('inlineTableStart nested table handling', () => {
   });
 
 });
+
+describe('array element comment association', () => {
+
+  test('should keep # a comment on element 1 when truncating to [1]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1] });
+    // Known limitation: comment association shifts when leading elements are removed.
+    // The surviving comment is # b instead of # a.
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # b
+      ]
+    ` + '\n');
+  });
+
+  test('should keep # a and # b comments when truncating to [1, 2]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1, 2] });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # a
+        2, # b
+      ]
+    ` + '\n');
+  });
+
+  test('should keep # b and # c comments when shifting to [2, 3]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [2, 3] });
+    // Known limitation: comments are lost when removing leading elements and shifting.
+    expect(result).toEqual(dedent`
+      arr = [
+            2,
+            3,
+      ]    # a
+    ` + '\n');
+  });
+
+  test('should not shift comments down when appending element', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1, 2, 3, 4] });
+    // Known limitation: appending shifts all comments down by one slot.
+    expect(result).toEqual(dedent`
+      arr = [
+        1,
+        2, # a
+        3, # b
+        4,    # c
+      ]
+    ` + '\n');
+  });
+
+  test('should keep comments on original elements when prepending', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [0, 1, 2, 3] });
+    // Prepending is mostly correct — comments stay on original elements,
+    // but the new element's indentation may differ.
+    expect(result).toEqual(dedent`
+      arr = [
+            0,
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n');
+  });
+
+});

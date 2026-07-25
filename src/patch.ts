@@ -735,6 +735,8 @@ function cleanupOrphanedComments(doc: Document): void {
   });
 }
 
+
+
 /**
  * Converts nested inline tables to separate table sections based on the inlineTableStart depth setting.
  * This function recursively processes a table and extracts any inline tables within it,
