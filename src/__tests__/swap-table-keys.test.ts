@@ -376,3 +376,39 @@ test('should swap keys with inlineTableStart=0 keeping all inline', () => {
     info = { version = 2, B = "valueB" }
   `);
 });
+
+test('should swap keys at depth 1 with inlineTableStart=2', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+
+    [C]
+    D = "valueD"
+    settings = { debug = true, timeout = 5000 }
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const debugValue = value.C.settings.debug;
+
+  delete value.A.B;
+  delete value.C.settings.debug;
+
+  value.A.debug = debugValue;
+  value.C.settings.B = bValue;
+
+  // inlineTableStart=2 converts tables at depth < 2.
+  // settings is inside [C] at depth 1, so it would be converted if newly
+  // added. Since it already exists, it stays inline. The swap should work.
+  const result = patch(input, value, { inlineTableStart: 2 });
+
+  expect(result).toEqual(dedent`
+    [A]
+    debug = true
+
+    [C]
+    D = "valueD"
+    settings = { timeout = 5000, B = "valueB" }
+  `);
+});
