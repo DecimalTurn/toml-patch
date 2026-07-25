@@ -4725,3 +4725,19 @@ describe('BigInt handling', () => {
   });
 
 });
+
+describe('commented multiline array edge cases', () => {
+
+  test('should preserve closing bracket when adding new key after commented multiline array', () => {
+    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
+    const result = patch(src, { arr: [1, 2], z: 1 });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # one
+        2, # two
+      ]
+      z = 1
+    ` + '\n');
+  });
+
+});
