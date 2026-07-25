@@ -4740,4 +4740,15 @@ describe('commented multiline array edge cases', () => {
     ` + '\n');
   });
 
+  test('should correctly empty a commented multiline array', () => {
+    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
+    const result = patch(src, { arr: [] });
+    // Should produce valid TOML, not mangled output
+    expect(() => parse(result)).not.toThrow();
+    // Should contain the key with an empty array
+    expect(result).toContain('arr');
+    expect(result).toContain('[');
+    expect(result).toContain(']');
+  });
+
 });

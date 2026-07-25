@@ -18,6 +18,7 @@ import {
   isInlineTable,
   isInlineItem,
   isString,
+  isComment,
   hasItem,
   hasItems,
   InlineItem,
@@ -666,7 +667,54 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) applyWrites(original);
 
+  // Clean up extracted comments that were orphaned when an inline array or
+  // inline table was emptied. Comments inside multiline inline containers are
+  // extracted to the Document level by the parser, but when the container is
+  // emptied, those comments are no longer meaningful and must be removed.
+  cleanupOrphanedComments(original);
+
   return original;
+}
+
+/**
+ * Removes Comment nodes that were extracted from inside an InlineArray
+ * when that array has been emptied.
+ * 
+ * When a multiline inline array has interior comments (e.g. `arr = [\n  1, # one\n  2, # two\n]`),
+ * the parser extracts the comments to the parent Document level as siblings of the KeyValue.
+ * If the array is later emptied, these comments become orphaned and must be removed
+ * to produce valid TOML output.
+ * 
+ * This does NOT apply to InlineTables, where interior comments are meaningful
+ * section-level comments that should be preserved even when the table is empty.
+ */
+function cleanupOrphanedComments(doc: Document): void {
+  traverse(doc, {
+    KeyValue: (kv) => {
+      const value = kv.value;
+      // Only clean up inline arrays, not inline tables
+      if (!isInlineArray(value)) return;
+      if (value.items.length > 0) return;
+
+      // Find the parent container (Document or Table) that holds this KeyValue
+      const parentContainer = findParent(doc, [kv.key.value[0]]);
+      if (!parentContainer || !hasItems(parentContainer)) return;
+
+      const kvStartLine = kv.loc.start.line;
+      const kvEndLine = kv.loc.end.line;
+
+      // Remove any Comment nodes in the parent that fall within the KeyValue's range
+      const items = (parentContainer as WithItems).items as TreeNode[];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (!isComment(item)) continue;
+        const commentLine = item.loc.start.line;
+        if (commentLine >= kvStartLine && commentLine <= kvEndLine) {
+          items.splice(i, 1);
+        }
+      }
+    }
+  });
 }
 
 /**
