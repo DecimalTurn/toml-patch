@@ -316,7 +316,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.trailingNewline ?? fallbackFormat.trailingNewline,
         validatedFormat.trailingComma ?? fallbackFormat.trailingComma,
         validatedFormat.bracketSpacing ?? fallbackFormat.bracketSpacing,
-        validatedFormat.inlineTableStart !== undefined ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
+        'inlineTableStart' in validatedFormat ? validatedFormat.inlineTableStart : fallbackFormat.inlineTableStart,
         validatedFormat.truncateZeroTimeInDates ?? fallbackFormat.truncateZeroTimeInDates,
         validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
         validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
