@@ -137,5 +137,51 @@ for (const filename of files) {
   console.log(`  ratio:         ${(tpTime / smolTime).toFixed(1)}x slower`);
 }
 
+// ── Phase 4: Stringify CPU profile ──────────────────────────────────────────
+console.log('\n\n');
+console.log('═'.repeat(80));
+console.log('  V8 CPU PROFILE — stringify hot paths');
+console.log('═'.repeat(80));
+
+const sfData = readFileSync(join(benchDir, '0C-scaling-table-inline-1000.toml'), 'utf8');
+const sfObj = smolToml.parse(sfData);
+
+const sfSession = new Session();
+sfSession.connect();
+
+await sfSession.post('Profiler.enable');
+await sfSession.post('Profiler.start');
+
+console.log('\n  Profiling stringify (2000 iterations)...');
+for (let i = 0; i < 2000; i++) tomlPatch.stringify(sfObj);
+
+const { profile: sfProfile } = await sfSession.post('Profiler.stop');
+
+const sfTimes = new Map();
+for (const node of sfProfile.nodes) {
+  const { functionName, url, lineNumber } = node.callFrame;
+  if (!url.includes('toml-patch')) continue;
+  const hitCount = node.hitCount || 0;
+  if (hitCount === 0) continue;
+  const fn = functionName || '(anonymous)';
+  const key = `${fn} (${basename(url)}:${lineNumber + 1})`;
+  sfTimes.set(key, (sfTimes.get(key) || 0) + hitCount);
+}
+
+const sfSorted = [...sfTimes.entries()].sort((a, b) => b[1] - a[1]);
+const sfTotal = sfSorted.reduce((sum, [, h]) => sum + h, 0);
+
+console.log(`\n  Top functions by CPU self-time (${sfTotal} total samples):\n`);
+console.log(`  ${'Function'.padEnd(58)} Samples      %`);
+console.log('  ' + '─'.repeat(74));
+for (const [fn, hits] of sfSorted.slice(0, 30)) {
+  const pct = ((hits / sfTotal) * 100).toFixed(1).padStart(5);
+  console.log(`  ${fn.padEnd(58)} ${String(hits).padStart(7)}  ${pct}%`);
+}
+
+writeFileSync(join(__dirname, 'cpu-profile-stringify.cpuprofile'), JSON.stringify(sfProfile));
+console.log('\n  Full profile saved to benchmark/cpu-profile-stringify.cpuprofile');
+sfSession.disconnect();
+
 session.disconnect();
 console.log('\nDone.');
