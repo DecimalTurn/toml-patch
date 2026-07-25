@@ -169,8 +169,8 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, detailed, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
-  boolean: ['help', 'sample', 'detailed', 'output'],
+const { help, sample, detailed, package: packageIndex, file, versions, output, self, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
+  boolean: ['help', 'sample', 'detailed', 'output', 'self'],
   string: ['file', 'versions'],
   number: ['package']
 });
@@ -184,6 +184,7 @@ Options:
   --sample           Run curated sample of 10 representative benchmarks
   --detailed         Run detailed profiling of stringify process
   --package <index>  Only run benchmark for the given implementation (0-based index)
+  --self             Shorthand for --package 0 (toml-patch current only)
   --file <pattern>   Run benchmarks matching the file pattern
   --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
   --output           Write results to output-<commit-hash>.md
@@ -191,6 +192,7 @@ Options:
 Examples:
   npm run benchmark:stringify
   npm run benchmark:stringify -- --sample
+  npm run benchmark:stringify -- --sample --self
   npm run benchmark:stringify -- --detailed
   npm run benchmark:stringify -- --file hard
   npm run benchmark:stringify -- --package 0
@@ -251,8 +253,8 @@ if (versions) {
 }
 
 // Determine which implementations to run
-const implementationsToRun = packageIndex !== undefined ? 
-  [TOML_IMPLEMENTATIONS[packageIndex]] :
+const implementationsToRun = self ? [TOML_IMPLEMENTATIONS[0]] :
+  packageIndex !== undefined ? [TOML_IMPLEMENTATIONS[packageIndex]] :
   TOML_IMPLEMENTATIONS;
 
 // Collect results across implementations for global comparison
