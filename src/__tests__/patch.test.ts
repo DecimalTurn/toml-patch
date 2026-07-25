@@ -4787,3 +4787,36 @@ describe('table to scalar replacement', () => {
   });
 
 });
+
+describe('inlineTableStart nested table handling', () => {
+
+  test('should preserve nested tables with inlineTableStart >= 2', () => {
+    const src = dedent`
+      [project]
+      name = "my-app"
+    ` + '\n';
+    const value = parse(src);
+    value.tool = { ruff: { line_length: 88 } };
+    const result = patch(src, value, { inlineTableStart: 2 });
+    // Re-parse should see the nested table structure
+    const reparsed = parse(result);
+    expect(reparsed.tool).toBeDefined();
+    expect(reparsed.tool.ruff).toBeDefined();
+    expect(reparsed.tool.ruff.line_length).toBe(88);
+  });
+
+  test('should preserve nested tables with inlineTableStart = 3', () => {
+    const src = dedent`
+      [project]
+      name = "my-app"
+    ` + '\n';
+    const value = parse(src);
+    value.tool = { ruff: { line_length: 88 } };
+    const result = patch(src, value, { inlineTableStart: 3 });
+    const reparsed = parse(result);
+    expect(reparsed.tool).toBeDefined();
+    expect(reparsed.tool.ruff).toBeDefined();
+    expect(reparsed.tool.ruff.line_length).toBe(88);
+  });
+
+});
