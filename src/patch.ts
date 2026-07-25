@@ -116,7 +116,13 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
   // convert all nested tables to multiline, which is not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
-  const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: undefined}, format);
+  // Only strip inlineTableStart when it's a positive value (i.e. would cause formatNestedTablesMultiline
+  // to split nested inline tables). When it's 0 or undefined, formatNestedTablesMultiline is a no-op
+  // and we should pass it through so that the AST shape matches what applyChanges expects.
+  const diffing_inlineTableStart = (format.inlineTableStart != null && format.inlineTableStart > 0)
+    ? undefined
+    : format.inlineTableStart;
+  const diffing_fmt = resolveTomlFormat({...format, inlineTableStart: diffing_inlineTableStart}, format);
   const updated_document = parseJS(updated, diffing_fmt);
 
   // Diff against the JS representation rather than
