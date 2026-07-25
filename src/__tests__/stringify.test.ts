@@ -315,21 +315,19 @@ test('should handle empty nested objects with inlineTableStart', () => {
   const jsObject = {
     project: {
       name: "Test",
+      empty_config: {},
       settings: {
         debug: true
-      },
-      empty_config: {}
+      }
     }
   };
 
-  // Use a different order to avoid the ordering bug for now
-  // TODO: Fix the bug where content gets lost when empty objects come before non-empty objects
   const result = stringify(jsObject, { inlineTableStart: 1 });
   const expected = dedent`
     [project]
     name = "Test"
-    settings = { debug = true }
     empty_config = {}
+    settings = { debug = true }
     ` + '\n';
 
   expect(result).toEqual(expected);
@@ -372,8 +370,6 @@ test('should handle table arrays with nested objects', () => {
 });
 
 test('should handle mixed formatting preferences', () => {
-  // TODO: There's a bug where content can get lost when processing multiple tables with nested objects
-  // For now, test with a simpler case that avoids the bug
   const jsObject = {
     app: {
       name: "TestApp"

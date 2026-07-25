@@ -1641,13 +1641,16 @@ test('should respect inlineTableStart setting when creating new top-level object
   
   expect(patchedMixed).toEqual(expectedMixed);
 
-  // Test with inlineTableStart = 2 (should create sections for project and target, but currently has a bug)
-  // TODO: Fix the patch function to properly handle deep section creation from scratch
+  // Test with inlineTableStart = 2 (should create sections for project and target)
   const patchedSections = patch(existing, newObject, { inlineTableStart: 2 });
   const expectedSections = dedent`
     name = "Simple"
 
     [project]
+
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
     ` + '\n';
   
   expect(patchedSections).toEqual(expectedSections);
@@ -1697,13 +1700,22 @@ test('should respect inlineTableStart setting with deeply nested structures', ()
   
   expect(patchedMixed).toEqual(expectedMixed);
 
-  // Test with inlineTableStart = 3 (should create separate sections for all levels, but currently has a bug)
-  // TODO: Fix patch function for deep section creation from scratch
+  // Test with inlineTableStart = 3 (should create separate sections for all levels)
   const patchedSections = patch(existing, newObject, { inlineTableStart: 3 });
   const expectedSections = dedent`
     name = "Simple"
 
     [project]
+
+    [project.build]
+
+    [project.build.config]
+    mode = "release"
+    optimization = true
+
+    [project.build.target]
+    type = "xlsm"
+    path = "targets/xlsm"
     ` + '\n';
   
   expect(patchedSections).toEqual(expectedSections);
@@ -1818,13 +1830,16 @@ test('should respect inlineTableStart setting for deeply nested objects', () => 
   
   expect(patchedInline).toEqual(expectedInline);
 
-  // Test with inlineTableStart = 2 (should create sections for project and target, but currently has a bug)
-  // TODO: Fix the patch function to properly handle creation of multiple nested sections from scratch
+  // Test with inlineTableStart = 2 (should create sections for project and target)
   const patchedSections = patch(existing, newObject, { inlineTableStart: 2 });
   const expectedSections = dedent`
     name = "Simple"
 
     [project]
+
+    [project.target]
+    type = "xlsm"
+    path = "targets/xlsm"
     ` + '\n';
   
   expect(patchedSections).toEqual(expectedSections);
