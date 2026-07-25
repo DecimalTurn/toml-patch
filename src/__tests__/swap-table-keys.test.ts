@@ -136,3 +136,145 @@ test('should swap keys between nested tables', () => {
     B = "valueB"
   `);
 });
+
+test('should swap a key between two tables that have other keys', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+    E = "valueE"
+
+    [C]
+    D = "valueD"
+    F = "valueF"
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const dValue = value.C.D;
+
+  delete value.A.B;
+  delete value.C.D;
+
+  value.A.D = dValue;
+  value.C.B = bValue;
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [A]
+    E = "valueE"
+    D = "valueD"
+
+    [C]
+    F = "valueF"
+    B = "valueB"
+  `);
+});
+
+test('should swap the last key between two multi-key tables', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+    E = "valueE"
+
+    [C]
+    D = "valueD"
+    F = "valueF"
+  `;
+
+  const value = parse(input);
+
+  const eValue = value.A.E;
+  const fValue = value.C.F;
+
+  delete value.A.E;
+  delete value.C.F;
+
+  value.A.F = fValue;
+  value.C.E = eValue;
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [A]
+    B = "valueB"
+    F = "valueF"
+
+    [C]
+    D = "valueD"
+    E = "valueE"
+  `);
+});
+
+test('should swap keys between an inline table and a regular table with other keys', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+    E = "valueE"
+
+    C = { D = "valueD", F = "valueF" }
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const dValue = value.A.C.D;
+
+  delete value.A.B;
+  delete value.A.C.D;
+
+  value.A.D = dValue;
+  value.A.C.B = bValue;
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [A]
+    E = "valueE"
+    D = "valueD"
+
+    C = { F = "valueF", B = "valueB" }
+  `);
+});
+
+test('should swap all keys between two tables', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+    E = "valueE"
+
+    [C]
+    D = "valueD"
+    F = "valueF"
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const eValue = value.A.E;
+  const dValue = value.C.D;
+  const fValue = value.C.F;
+
+  delete value.A.B;
+  delete value.A.E;
+  delete value.C.D;
+  delete value.C.F;
+
+  value.A.D = dValue;
+  value.A.F = fValue;
+  value.C.B = bValue;
+  value.C.E = eValue;
+
+  const result = patch(input, value);
+
+  expect(result).toEqual(dedent`
+    [A]
+    D = "valueD"
+    F = "valueF"
+
+    [C]
+    B = "valueB"
+    E = "valueE"
+  `);
+});
