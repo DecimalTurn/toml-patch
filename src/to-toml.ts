@@ -263,19 +263,6 @@ function writeSingle(lines: string[], lineNum: number, column: number, char: str
 }
 
 /**
- * Fast path for writing a short string (e.g. '[[', ']]') at a known single-line span.
- * Avoids creating temporary Location objects.
- */
-function writeChars(lines: string[], lineNum: number, startCol: number, endCol: number, chars: string) {
-  const line = getLine(lines, lineNum);
-  const before = line.length < startCol
-    ? line.padEnd(startCol, SPACE)
-    : line.substring(0, startCol);
-  const after = line.substring(endCol);
-  lines[lineNum - 1] = before + chars + after;
-}
-
-/**
  * Safely retrieves a line from the lines array, initializing empty lines as needed.
  * 
  * This helper function handles the conversion between 1-indexed line numbers (used in locations)
