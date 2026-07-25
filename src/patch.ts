@@ -516,8 +516,26 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             insert(original, newTable, freshKV, 0);
             replace(original, tableParent, existing, newTable);
           } else {
-            // Single-segment table [w] — KV belongs directly in the Document
+            // Single-segment table [w] — KV belongs directly in the Document.
+            // Replace the table with the KV, then reposition the KV to before
+            // the first table header so it lands in the implicit root table
+            // rather than inside a preceding section.
             replace(original, tableParent, existing, freshKV);
+
+            // If there's a table header before this KV in the items array,
+            // the KV visually falls inside the wrong section. Remove and
+            // re-insert it at the correct position (before the first table).
+            const document = original as Document;
+            const kvIndex = document.items.indexOf(freshKV);
+            if (kvIndex >= 0) {
+              const firstTableIndex = document.items.findIndex(
+                item => isTable(item) || isTableArray(item)
+              );
+              if (firstTableIndex !== -1 && firstTableIndex < kvIndex) {
+                remove(original, tableParent, freshKV);
+                insert(original, tableParent, freshKV, firstTableIndex);
+              }
+            }
           }
           return; // handled; skip the generic replace() below
         }

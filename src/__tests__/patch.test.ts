@@ -4752,3 +4752,38 @@ describe('commented multiline array edge cases', () => {
   });
 
 });
+
+describe('table to scalar replacement', () => {
+
+  test('should hoist scalar above preceding table section when replacing a table', () => {
+    const src = dedent`
+      [s]
+      k = "v"
+
+      [u]
+      m = 3
+    ` + '\n';
+    const result = patch(src, { s: { k: 'v' }, u: false });
+    // Re-parsing should give u as a top-level key, not nested under s
+    const reparsed = parse(result);
+    expect(reparsed.u).toBe(false);
+    expect(reparsed.s).toEqual({ k: 'v' });
+    // The output should not nest u under s
+    expect(result).not.toMatch(/\[s\][\s\S]*u = false/);
+  });
+
+  test('should correctly handle table-to-scalar when table is first', () => {
+    const src = dedent`
+      [u]
+      m = 3
+
+      [s]
+      k = "v"
+    ` + '\n';
+    const result = patch(src, { u: false, s: { k: 'v' } });
+    const reparsed = parse(result);
+    expect(reparsed.u).toBe(false);
+    expect(reparsed.s).toEqual({ k: 'v' });
+  });
+
+});

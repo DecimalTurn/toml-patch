@@ -7,21 +7,21 @@ verbatim output, shown as JSON-escaped strings so whitespace is unambiguous.
 All issues are in the **`patch`** path. `stringify`/`parse` came out clean across
 4000 randomized round-trips (see [What passed](#what-passed)).
 
-| # | Issue | Severity |
-|---|---|---|
-| 1 | New key added to doc with commented multiline array loses closing `]` | Invalid output |
-| 2 | Emptying a commented multiline array mangles the value | Invalid output |
-| 3 | Table→scalar relocates the key into the preceding section | Wrong semantics |
-| 4 | `patch` throws on any document containing a >2^53 integer | Blocking throw |
-| 5 | `inlineTableStart >= 2` silently drops new nested tables | Data loss |
-| 6 | Array element comments mis-associated when length changes | Comment loss |
-| 7 | Emptying an array-of-tables drops the key entirely | Data loss |
-| 8 | `Node not found` on several structural replacements | Throw |
-| 9 | Internal `TypeError`s instead of meaningful errors | Throw |
-| 10 | Blank lines accumulate when deleting tables | Cosmetic |
-| 11 | Comment outlives the section it described | Design question |
-| 12 | `stringify` emits `\uD800` for lone surrogates | Invalid output (niche) |
-| 13 | Identity round-trip normalizations | Fidelity |
+| # | Issue | Severity | Status |
+|---|---|---|---|
+| 1 | New key added to doc with commented multiline array loses closing `]` | Invalid output | ✅ Fixed |
+| 2 | Emptying a commented multiline array mangles the value | Invalid output | ✅ Fixed |
+| 3 | Table→scalar relocates the key into the preceding section | Wrong semantics | ✅ Fixed |
+| 4 | `patch` throws on any document containing a >2^53 integer | Blocking throw | ✅ Fixed |
+| 5 | `inlineTableStart >= 2` silently drops new nested tables | Data loss | |
+| 6 | Array element comments mis-associated when length changes | Comment loss | |
+| 7 | Emptying an array-of-tables drops the key entirely | Data loss | |
+| 8 | `Node not found` on several structural replacements | Throw | |
+| 9 | Internal `TypeError`s instead of meaningful errors | Throw | |
+| 10 | Blank lines accumulate when deleting tables | Cosmetic | |
+| 11 | Comment outlives the section it described | Design question | |
+| 12 | `stringify` emits `\uD800` for lone surrogates | Invalid output (niche) | |
+| 13 | Identity round-trip normalizations | Fidelity | |
 
 ---
 
