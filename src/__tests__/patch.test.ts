@@ -4706,3 +4706,22 @@ describe('Temporal.ZonedDateTime handling', () => {
   });
 
 });
+
+describe('BigInt handling', () => {
+
+  test('should not throw on document containing integer outside safe range', () => {
+    const src = 'id = 9223372036854775807\n';
+    expect(() => patch(src, parse(src))).not.toThrow();
+  });
+
+  test('should not throw on unrelated edit with bigint in document', () => {
+    const src = 'id = 9223372036854775807\nname = "x"\n';
+    const o = parse(src);
+    o.name = 'y';
+    expect(() => patch(src, o)).not.toThrow();
+    const result = patch(src, o);
+    expect(result).toContain('name = "y"');
+    expect(result).toContain('id = 9223372036854775807');
+  });
+
+});

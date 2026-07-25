@@ -180,6 +180,8 @@ export function stableStringify(object: any): string {
   } else if (isDate(object)) {
     // Custom Date subclasses use toISOString()
     return JSON.stringify(object.toISOString());
+  } else if (typeof object === 'bigint') {
+    return object.toString() + 'n';
   } else {
     return JSON.stringify(object);
   }
