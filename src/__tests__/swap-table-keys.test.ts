@@ -24,8 +24,6 @@ test('should swap keys between two tables', () => {
 
   const result = patch(input, value);
 
-  // Note: patch preserves the original blank line between sections and also
-  // preserves the line where the removed key was, resulting in a doubled blank line.
   expect(result).toEqual(dedent`
     [A]
     D = "valueD"
@@ -127,7 +125,6 @@ test('should swap keys between nested tables', () => {
 
   const result = patch(input, value);
 
-  // Same doubled-blank-line behavior as the simple table swap
   expect(result).toEqual(dedent`
     [A.X]
     D = "valueD"
