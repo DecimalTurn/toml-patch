@@ -279,6 +279,8 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * ```
  */
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
+  // Track AOT keys whose entries were all removed so we can insert empty arrays.
+  const emptiedAotKeys = new Set<string>();
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -578,6 +580,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             remove(original, original, entry);
           }
+          // After removing all AOT entries, insert an empty inline array
+          // key-value so the key isn't lost (e.g. b = []).
+          const key = change.path[change.path.length - 1] as string;
+          emptiedAotKeys.add(key);
         } else {
           // The path might be an implicit intermediate key — a key that is a
           // prefix of a dotted table key but has no CST node of its own.
@@ -619,6 +625,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
 
         remove(original, parent, node);
+
+        // Track AOT keys whose entries may have been fully removed
+        if (isTableArray(node)) {
+          const aotKey = (node as TableArray).key.item.value;
+          const aotPath = change.path.slice(0, -1);
+          const stillExists = tryFindByPath(original, aotPath.concat(0));
+          if (!stillExists) {
+            emptiedAotKeys.add(aotKey.join('.'));
+          }
+        }
       }
     } else if (isMove(change)) {
       let parent = tryFindByPath(original, change.path);
@@ -691,6 +707,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // emptied, those comments are no longer meaningful and must be removed.
   cleanupOrphanedComments(original);
 
+  // Replace emptied TableArrays (array-of-tables) with inline empty arrays
+  // so keys aren't silently lost (e.g. b = [] instead of disappearing).
+  replaceEmptiedTableArrays(original, emptiedAotKeys, format);
+
   return original;
 }
 
@@ -735,7 +755,18 @@ function cleanupOrphanedComments(doc: Document): void {
   });
 }
 
-
+/**
+ * Replaces emptied TableArrays with inline empty array key-values so that
+ * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
+ */
+function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Set<string>, format: TomlFormat): void {
+  for (const key of emptiedKeys) {
+    const emptyArrayDoc = parseJS({ [key]: [] }, format);
+    const emptyKV = emptyArrayDoc.items[0] as KeyValue;
+    insert(doc, doc, emptyKV, undefined);
+  }
+  if (emptiedKeys.size > 0) applyWrites(doc);
+}
 
 /**
  * Converts nested inline tables to separate table sections based on the inlineTableStart depth setting.

@@ -4918,3 +4918,30 @@ describe('array element comment association', () => {
   });
 
 });
+
+describe('emptying array-of-tables', () => {
+
+  test('should degrade to inline empty array when emptying a single AOT entry', () => {
+    const src = dedent`
+      [[b]]
+      n = 1
+    ` + '\n';
+    const result = patch(src, { b: [] });
+    const reparsed = parse(result);
+    expect(reparsed.b).toEqual([]);
+  });
+
+  test('should degrade to inline empty array when emptying multiple AOT entries', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    const result = patch(src, { i: [] });
+    const reparsed = parse(result);
+    expect(reparsed.i).toEqual([]);
+  });
+
+});
