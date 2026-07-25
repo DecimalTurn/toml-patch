@@ -232,9 +232,9 @@ test('should swap keys between an inline table and a regular table with other ke
   expect(result).toEqual(dedent`
     [A]
     E = "valueE"
-    D = "valueD"
 
     C = { F = "valueF", B = "valueB" }
+    D = "valueD"
   `);
 });
 
