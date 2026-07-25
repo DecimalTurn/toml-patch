@@ -412,3 +412,43 @@ test('should swap keys at depth 1 with inlineTableStart=2', () => {
     settings = { timeout = 5000, B = "valueB" }
   `);
 });
+
+test('should swap keys and convert a newly added inline table with inlineTableStart', () => {
+  const input = dedent`
+    [A]
+    B = "valueB"
+
+    [C]
+    D = "valueD"
+  `;
+
+  const value = parse(input);
+
+  const bValue = value.A.B;
+  const dValue = value.C.D;
+
+  delete value.A.B;
+  delete value.C.D;
+
+  value.A.D = dValue;
+  value.C.B = bValue;
+
+  // Add a new inline table that inlineTableStart should convert
+  value.C.config = { host: "localhost", port: 8080 };
+
+  // inlineTableStart=2 converts new inline tables at depth < 2.
+  // config is inside [C] at depth 1, so it becomes [C.config].
+  const result = patch(input, value, { inlineTableStart: 2 });
+
+  expect(result).toEqual(dedent`
+    [A]
+    D = "valueD"
+
+    [C]
+    B = "valueB"
+
+    [C.config]
+    host = "localhost"
+    port = 8080
+  `);
+});
