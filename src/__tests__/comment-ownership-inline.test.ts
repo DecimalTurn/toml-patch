@@ -87,10 +87,7 @@ describe('inline table item removal', () => {
     ` + '\n');
   });
 
-  test('KNOWN GAP: a leading own-line comment does not travel with its key', () => {
-    // Own-line comments inside an inline table are not associated with the
-    // following key at all yet -- they simply stay pinned at their line and
-    // end up mislabeling whichever key survives in that spot.
+  test('a leading comment in an inline table is dropped with its key', () => {
     const input = dedent`
       t = {
         # doc for a
@@ -105,7 +102,6 @@ describe('inline table item removal', () => {
 
     expect(patch(input, value)).toEqual(dedent`
       t = {
-        # doc for a
         b = 2,
       }
       y = 9
