@@ -436,3 +436,280 @@ describe('inline array item removal', () => {
     });
   });
 });
+
+// Everything above operates on a ROOT-level `xs = [...]`/`t = {...}`, where the moved/removed
+// element's own comments live directly in Document.items. moveInlineElement()'s and
+// removeMember()'s host-container resolution (findHostContainer/resolveInlineElementSlots) was
+// only ever validated against that root case. See docs/bug-notes/
+// inline-array-nested-container-regression.md for the full investigation: once the array lives
+// inside a [table] or [[array-of-tables]] -- i.e. hostContainer !== root -- the same Move path
+// either corrupts the array outright or misplaces/loses comments. These are regressions
+// introduced by the comment-ownership-for-inline-elements work (they reproduce correctly on
+// root-level arrays), not pre-existing gaps, so they are NOT skipped: fixing the
+// nested-host-container case is the next priority.
+describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tables]] (regression)', () => {
+  describe('middle-element removal corrupts the array', () => {
+    test('array nested in a [table] loses its opening bracket -- output is not valid TOML', () => {
+      const input = dedent`
+        [sec]
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.sec.xs.splice(1, 1);
+
+      // Currently produces `xs = # one\n  1,\n  3,\n]\ny = 9`, which fails to re-parse --
+      // the opening `[` is destroyed rather than merely relocating comments.
+      expect(patch(input, value)).toEqual(dedent`
+        [sec]
+        xs = [
+          1, # one
+          3,
+        ]
+        y = 9
+      ` + '\n');
+    });
+
+    test('array nested in a [[array-of-tables]] loses its opening bracket -- output is not valid TOML', () => {
+      const input = dedent`
+        [[aot]]
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ]
+      ` + '\n';
+
+      const value = parse(input);
+      value.aot[0].xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        [[aot]]
+        xs = [
+          1, # one
+          3,
+        ]
+      ` + '\n');
+    });
+  });
+
+  describe('first-element removal misplaces the surviving element\'s own comment', () => {
+    // The root-level equivalent of this test (above) correctly lands `# two` trailing
+    // `2,`. Nested in a table, it lands on the bracket line instead: currently
+    // `xs = [  # two\n     2,\n     3,\n]`. The 5-space indent on survivor rows is the
+    // same pre-existing, unrelated quirk noted on the root-level test above (see also
+    // patch.test.ts's skipped 'should indent a relocated first element...' test) --
+    // kept as-is here so this test isolates the comment-placement regression alone.
+    test('array nested in a [table] attaches the comment to the bracket line instead of its element', () => {
+      const input = dedent`
+        [sec]
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.sec.xs.splice(0, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        [sec]
+        xs = [
+             2, # two
+             3,
+        ]
+        y = 9
+      ` + '\n');
+    });
+
+    test('array nested in a [[array-of-tables]] attaches the comment to the bracket line instead of its element', () => {
+      const input = dedent`
+        [[aot]]
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ]
+      ` + '\n';
+
+      const value = parse(input);
+      value.aot[0].xs.splice(0, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        [[aot]]
+        xs = [
+             2, # two
+             3,
+        ]
+      ` + '\n');
+    });
+  });
+
+  describe('multiple non-trailing removals in one patch', () => {
+    test('root-level array loses a surviving element entirely (data loss)', () => {
+      const input = dedent`
+        xs = [
+          1, # one
+          2, # two
+          3, # three
+          4,
+        ]
+      ` + '\n';
+
+      const value = parse(input);
+      value.xs.splice(0, 1);
+      value.xs.splice(0, 1);
+
+      // Currently produces `xs = [\n     3,\n     # onethree\n]` -- element `4` is
+      // gone entirely and `# one`/`# three` are concatenated into one token.
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+             3, # three
+             4,
+        ]
+      ` + '\n');
+    });
+
+    test('array nested in a [table] escapes a surviving comment up to the table header', () => {
+      const input = dedent`
+        [sec]
+        xs = [
+          1, # one
+          2, # two
+          3, # three
+          4,
+        ]
+      ` + '\n';
+
+      const value = parse(input);
+      value.sec.xs.splice(0, 1);
+      value.sec.xs.splice(0, 1);
+
+      // Currently produces `[sec]   # three\nxs = [\n     3,\n     4,\n]` -- no data
+      // loss here, but `# three` escapes the array entirely onto the [sec] line.
+      expect(patch(input, value)).toEqual(dedent`
+        [sec]
+        xs = [
+             3, # three
+             4,
+        ]
+      ` + '\n');
+    });
+  });
+});
+
+// These nested-in-a-table shapes were also probed while investigating the regression above,
+// and -- unlike the plain-value array cases -- they currently produce the correct output
+// already (modulo the same pre-existing indentation quirk). Kept as passing coverage so a
+// future fix to the regression above doesn't accidentally break them.
+describe('nested inside a [table] -- shapes that are NOT regressed', () => {
+  test('inline-table key removal nested in a [table] still drops only its own comment', () => {
+    const input = dedent`
+      [sec]
+      t = {
+        a = 1, # one
+        b = 2, # two
+        c = 3,
+      }
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.sec.t.a;
+
+    expect(patch(input, value)).toEqual(dedent`
+      [sec]
+      t = {
+        b = 2, # two
+        c = 3,
+      }
+    ` + '\n');
+  });
+
+  test('array-of-inline-tables element removal nested in a [table] still drops only its own comment', () => {
+    const input = dedent`
+      [sec]
+      xs = [
+        { a = 1 }, # one
+        { a = 2 },
+        { a = 3 },
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.sec.xs.splice(0, 1);
+
+    expect(patch(input, value)).toEqual(dedent`
+      [sec]
+      xs = [
+           { a = 2 },
+           { a = 3 },
+      ]
+    ` + '\n');
+  });
+
+  test('a leading own-line comment on a REMOVED element inside a nested array is still dropped correctly', () => {
+    const input = dedent`
+      [sec]
+      xs = [
+        # about one
+        1,
+        2,
+        3,
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.sec.xs.splice(0, 1);
+
+    expect(patch(input, value)).toEqual(dedent`
+      [sec]
+      xs = [
+           2,
+           3,
+      ]
+    ` + '\n');
+  });
+});
+
+// Unlike the Move-path regression above, this gap is pre-existing (same output before and
+// after the comment-ownership-for-inline-elements work landed) and is a different root cause:
+// findHostContainer() doesn't resolve through an InlineTable's own KeyValue entries, so an
+// array that is itself the value of a multiline inline table's key falls back to the old,
+// comment-oblivious remove()+insert() path entirely. Not part of "these regressions" --
+// tracked separately (see docs/bug-notes/inline-array-nested-container-regression.md, item 2)
+// and left skipped rather than failing, matching this repo's convention for known-but-deferred
+// gaps (c.f. patch.test.ts's skipped first-element-indentation test).
+describe.skip('nested inside a multiline inline table (known gap, unrelated to the regression above)', () => {
+  test('array element removal drops the comment instead of leaving it stray near the closing bracket', () => {
+    const input = dedent`
+      t = {
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ],
+      }
+    ` + '\n';
+
+    const value = parse(input);
+    value.t.xs.splice(1, 1);
+
+    // Currently produces `t = {\n  xs = [\n    1,\n    3,\n       # two\n  ],\n}` --
+    // `# two` survives, stray, instead of being dropped with its removed element.
+    expect(patch(input, value)).toEqual(dedent`
+      t = {
+        xs = [
+          1,
+          3,
+        ],
+      }
+    ` + '\n');
+  });
+});
