@@ -5075,8 +5075,18 @@ describe('lone surrogate handling in stringify', () => {
 
 describe('identity round-trip normalizations', () => {
 
-  test('should preserve +nan sign in round-trip', () => {
+  test('should preserve +nan sign through parse and round-trip', () => {
     const result = patch('a = +nan\n', parse('a = +nan\n'));
+    expect(result).toBe('a = +nan\n');
+  });
+
+  test('should preserve existing +nan style when updated to another NaN value', () => {
+    // Original TOML has +nan, patched object has NaN (e.g. from computation).
+    // The existing formatting style (+nan) should be preserved.
+    const src = 'a = +nan\n';
+    const parsed = parse(src);
+    parsed.a = NaN; // different NaN value, but still NaN
+    const result = patch(src, parsed);
     expect(result).toBe('a = +nan\n');
   });
 
