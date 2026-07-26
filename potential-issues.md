@@ -21,7 +21,7 @@ All issues are in the **`patch`** path. `stringify`/`parse` came out clean acros
 | 10 | Blank lines accumulate when deleting tables | Cosmetic | ⏸️ Skipped |
 | 11 | Comment outlives the section it described | Design question | ⏸️ Skipped |
 | 12 | `stringify` emits `\uD800` for lone surrogates | Invalid output (niche) | ⏸️ Skipped |
-| 13 | Identity round-trip normalizations | Fidelity | ⏸️ Skipped |
+| 13 | Identity round-trip normalizations | Fidelity | ✅ Fixed (nan sign) + rest by design |
 
 ---
 
@@ -364,6 +364,13 @@ Most of these are reasonable normalizations and possibly intended; the `a . b`
 one is the odd one, since dropping the whitespace and then re-adding it in a
 different place is a net change either way. Trailing-whitespace stripping is
 probably desirable. Listed mainly so the intended behavior is explicit.
+
+**Resolution:** The `+nan` / `-nan` sign is now preserved through parse and
+round-trip via a `nanSign` field on the Float CST node. The mixed EOL
+unification is by design — `detectNewline` picks the dominant line ending and
+normalizes the document to it (see tests at `patch.test.ts` lines 1515-1543).
+Tabs, trailing whitespace, and `a . b` spacing are cosmetic normalizations
+that don't affect semantics.
 
 ---
 
