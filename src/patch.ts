@@ -176,8 +176,9 @@ function reorder(changes: Change[]): Change[] {
         const aPrefix = change.path.slice(0, -1);
         const bPrefix = next_change.path.slice(0, -1);
 
-        // Same array context AND higher index should come first
-        if (aIdx !== undefined && bIdx !== undefined && arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
+        // Same array context AND higher index should come first.
+        // Only reorder numeric array indices (skip string keys).
+        if (typeof aIdx === 'number' && typeof bIdx === 'number' && arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
           // We reset i to -1 so that after the for-loop's i++ the next iteration
