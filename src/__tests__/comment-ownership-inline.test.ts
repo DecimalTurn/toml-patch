@@ -10,159 +10,387 @@ import { parse, patch } from '../index';
 // correctly takes its own comment along, where that comment was hoisted by the parser out
 // of the inline container into the enclosing Document/Table (Background, case 4).
 //
-// Same-line trailing comments on inline table keys are, today, correctly dropped with
-// their key at any position -- object key removal is always a plain Remove diff change,
-// which already takes the working single-remove() path. Same-line trailing comments on
-// inline array elements are correctly dropped ONLY when removing the trailing element;
-// removing any other element requires a Move (compareArrays re-matches by value across
-// the whole array), and Move corrupts rather than carries the comment -- see the plan doc
-// for why. Leading own-line comments are not associated with anything at this level at
-// all yet, in either container type: they simply stay at their line regardless of which
-// key/element is removed.
+// This file specifies the DESIRED, exhaustive behaviour -- the element-level model does not
+// exist yet (only resolveSlots()/removeMember() for Document/Table/TableArray members has
+// been built), so most tests below currently FAIL. That is expected: this is the target for
+// the work described in the plan doc, not a report of what patch() does today. The only
+// exceptions are the "same-line trailing comment" groups, which already pass -- table key
+// removal is always a plain Remove diff change (object keys are addressed by name, not
+// position), and array trailing-element removal is also a plain Remove; both already take
+// the working single-remove() path in writer.ts.
+//
+// Array element removal at any position OTHER than the trailing one requires a Move
+// (compareArrays re-matches surviving elements by value across the whole array), and Move
+// does not carry an element's own comment along -- see the "non-trailing removal" group and
+// the plan doc for why this can actively misplace a comment rather than merely leave it
+// stale. There is no R6 (commented-out-entry) analogue for array elements: they are bare
+// values, not `key = value` entries, so the shape test that matters at the top level is
+// meaningless here.
 
 describe('inline table item removal', () => {
-  test('drops a same-line trailing comment when the FIRST key is removed', () => {
-    const input = dedent`
-      t = {
-        a = 1, # one
-        b = 2, # two
-        c = 3,
-      }
-      y = 9
-    ` + '\n';
+  describe('same-line trailing comment (R1 analogue) -- already passes', () => {
+    test('drops it when the FIRST key is removed', () => {
+      const input = dedent`
+        t = {
+          a = 1, # one
+          b = 2, # two
+          c = 3,
+        }
+        y = 9
+      ` + '\n';
 
-    const value = parse(input);
-    delete value.t.a;
+      const value = parse(input);
+      delete value.t.a;
 
-    expect(patch(input, value)).toEqual(dedent`
-      t = {
-        b = 2, # two
-        c = 3,
-      }
-      y = 9
-    ` + '\n');
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          b = 2, # two
+          c = 3,
+        }
+        y = 9
+      ` + '\n');
+    });
+
+    test('drops it when a MIDDLE key is removed', () => {
+      const input = dedent`
+        t = {
+          a = 1, # one
+          b = 2, # two
+          c = 3,
+        }
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      delete value.t.b;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          a = 1, # one
+          c = 3,
+        }
+        y = 9
+      ` + '\n');
+    });
+
+    test('drops it when the LAST key is removed', () => {
+      const input = dedent`
+        t = {
+          a = 1, # one
+          b = 2, # two
+          c = 3,
+        }
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      delete value.t.c;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          a = 1, # one
+          b = 2, # two
+        }
+        y = 9
+      ` + '\n');
+    });
   });
 
-  test('drops a same-line trailing comment when a MIDDLE key is removed', () => {
-    const input = dedent`
-      t = {
-        a = 1, # one
-        b = 2, # two
-        c = 3,
-      }
-      y = 9
-    ` + '\n';
+  describe('leading own-line comment (R2 analogue) -- not yet implemented', () => {
+    test('a single leading comment is dropped with its key', () => {
+      const input = dedent`
+        t = {
+          # doc for a
+          a = 1,
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
 
-    const value = parse(input);
-    delete value.t.b;
+      const value = parse(input);
+      delete value.t.a;
 
-    expect(patch(input, value)).toEqual(dedent`
-      t = {
-        a = 1, # one
-        c = 3,
-      }
-      y = 9
-    ` + '\n');
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          b = 2,
+        }
+        y = 9
+      ` + '\n');
+    });
+
+    test('a multi-line leading run is dropped in full with its key', () => {
+      const input = dedent`
+        t = {
+          # one
+          # two
+          a = 1,
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      delete value.t.a;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          b = 2,
+        }
+        y = 9
+      ` + '\n');
+    });
+
+    test('a leading comment plus a same-line trailing comment are both dropped together', () => {
+      const input = dedent`
+        t = {
+          # doc for a
+          a = 1, # inline a
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      delete value.t.a;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          b = 2,
+        }
+        y = 9
+      ` + '\n');
+    });
+
+    test('a leading comment survives when a DIFFERENT key is removed', () => {
+      const input = dedent`
+        t = {
+          # doc for a
+          a = 1,
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      delete value.t.b;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          # doc for a
+          a = 1,
+        }
+        y = 9
+      ` + '\n');
+    });
   });
 
-  test('drops a same-line trailing comment when the LAST key is removed', () => {
-    const input = dedent`
-      t = {
-        a = 1, # one
-        b = 2, # two
-        c = 3,
-      }
-      y = 9
-    ` + '\n';
+  describe('blank line severs ownership (R3 analogue) -- not yet implemented', () => {
+    test('a banner separated by a blank line is not dropped with the key below it', () => {
+      const input = dedent`
+        t = {
+          # banner
 
-    const value = parse(input);
-    delete value.t.c;
+          # doc for a
+          a = 1,
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
 
-    expect(patch(input, value)).toEqual(dedent`
-      t = {
-        a = 1, # one
-        b = 2, # two
-      }
-      y = 9
-    ` + '\n');
+      const value = parse(input);
+      delete value.t.a;
+
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          # banner
+
+          b = 2,
+        }
+        y = 9
+      ` + '\n');
+    });
   });
 
-  test('a leading comment in an inline table is dropped with its key', () => {
-    const input = dedent`
-      t = {
-        # doc for a
-        a = 1,
-        b = 2,
-      }
-      y = 9
-    ` + '\n';
+  describe('commented-out key is not owned (R6 analogue) -- not yet implemented', () => {
+    test('a commented-out key directly above a real key is not dropped with it', () => {
+      const input = dedent`
+        t = {
+          # old = 1
+          a = 1,
+          b = 2,
+        }
+        y = 9
+      ` + '\n';
 
-    const value = parse(input);
-    delete value.t.a;
+      const value = parse(input);
+      delete value.t.a;
 
-    expect(patch(input, value)).toEqual(dedent`
-      t = {
-        b = 2,
-      }
-      y = 9
-    ` + '\n');
+      expect(patch(input, value)).toEqual(dedent`
+        t = {
+          # old = 1
+          b = 2,
+        }
+        y = 9
+      ` + '\n');
+    });
   });
 });
 
 describe('inline array item removal', () => {
-  test('drops a same-line trailing comment when the LAST element is removed', () => {
-    const input = dedent`
-      xs = [
-        1, # one
-        2, # two
-        3,
-      ]
-      y = 9
-    ` + '\n';
+  describe('same-line trailing comment (R1 analogue) -- already passes for the trailing element', () => {
+    test('drops it when the LAST element is removed', () => {
+      const input = dedent`
+        xs = [
+          1, # one
+          2, # two
+          3,
+        ]
+        y = 9
+      ` + '\n';
 
-    const value = parse(input);
-    value.xs.splice(2, 1);
+      const value = parse(input);
+      value.xs.splice(2, 1);
 
-    expect(patch(input, value)).toEqual(dedent`
-      xs = [
-        1, # one
-        2, # two
-      ]
-      y = 9
-    ` + '\n');
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          1, # one
+          2, # two
+        ]
+        y = 9
+      ` + '\n');
+    });
   });
 
-  test('KNOWN GAP: a leading own-line comment does not travel with its element', () => {
-    const input = dedent`
-      xs = [
-        # doc for one
-        1,
-        2,
-      ]
-      y = 9
-    ` + '\n';
+  describe('leading own-line comment (R2 analogue) -- not yet implemented', () => {
+    // Scoped to the TRAILING element throughout this group, so a failure here is
+    // isolated to "the ownership model doesn't exist" rather than conflated with
+    // the separate Move-corruption bug covered below.
 
-    const value = parse(input);
-    value.xs.splice(1, 1);
+    test('a single leading comment is dropped with its element', () => {
+      const input = dedent`
+        xs = [
+          1,
+          # doc for two
+          2,
+        ]
+        y = 9
+      ` + '\n';
 
-    expect(patch(input, value)).toEqual(dedent`
-      xs = [
-        # doc for one
-        1,
-      ]
-      y = 9
-    ` + '\n');
+      const value = parse(input);
+      value.xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          1,
+        ]
+        y = 9
+      ` + '\n');
+    });
+
+    test('a multi-line leading run is dropped in full with its element', () => {
+      const input = dedent`
+        xs = [
+          1,
+          # one
+          # two
+          2,
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          1,
+        ]
+        y = 9
+      ` + '\n');
+    });
+
+    test('a leading comment plus a same-line trailing comment are both dropped together', () => {
+      const input = dedent`
+        xs = [
+          1,
+          # doc for two
+          2, # inline two
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          1,
+        ]
+        y = 9
+      ` + '\n');
+    });
+
+    test('a leading comment survives when a DIFFERENT element is removed', () => {
+      const input = dedent`
+        xs = [
+          # doc for one
+          1,
+          2,
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          # doc for one
+          1,
+        ]
+        y = 9
+      ` + '\n');
+    });
   });
 
-  describe('non-trailing removal (Move) - corrupts today, not yet fixed', () => {
-    // Removing anything but the trailing element requires compareArrays to
-    // emit a Move (to re-slot surviving elements by value), and Move does
-    // not carry an element's own comment along -- worse, it can misplace it
-    // onto an unrelated line entirely. These describe the CORRECT behaviour
-    // once "Comment-preserving Move" is built (see the plan doc); they are
-    // not what patch() produces today.
+  describe('blank line severs ownership (R3 analogue) -- not yet implemented', () => {
+    test('a banner separated by a blank line is not dropped with the element below it', () => {
+      // Exact blank-line/trailing-comma bookkeeping around the removed run is a
+      // best-effort guess pending real implementation -- the load-bearing
+      // assertion is that "# banner" survives and "# doc for two" does not.
+      const input = dedent`
+        xs = [
+          1,
+          # banner
 
-    test.skip('should drop only the removed element\'s own comment when removing the FIRST element', () => {
+          # doc for two
+          2,
+        ]
+        y = 9
+      ` + '\n';
+
+      const value = parse(input);
+      value.xs.splice(1, 1);
+
+      expect(patch(input, value)).toEqual(dedent`
+        xs = [
+          1,
+          # banner
+
+        ]
+        y = 9
+      ` + '\n');
+    });
+  });
+
+  describe('non-trailing removal (Move) -- not yet implemented, actively corrupts today', () => {
+    // Removing anything but the trailing element requires compareArrays to emit a
+    // Move (to re-slot surviving elements by value), and Move does not carry an
+    // element's own comment along -- it can misplace it onto an unrelated line
+    // entirely (see the plan doc for the exact mechanism). These assert the
+    // correct end state once "Comment-preserving Move" is built.
+
+    test('drops only the removed element\'s own comment when removing the FIRST element', () => {
       const input = dedent`
         xs = [
           1, # one
@@ -184,7 +412,7 @@ describe('inline array item removal', () => {
       ` + '\n');
     });
 
-    test.skip('should drop only the removed element\'s own comment when removing a MIDDLE element', () => {
+    test('drops only the removed element\'s own comment when removing a MIDDLE element', () => {
       const input = dedent`
         xs = [
           1, # one
