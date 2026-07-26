@@ -95,6 +95,33 @@ test('should move elements in inline array', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
+test.skip('should indent a relocated first element to match its sibling rows', () => {
+  // Known limitation, unrelated to comment ownership: removing a non-last
+  // element of an already-multi-line array requires a Move (compareArrays
+  // re-matches surviving elements by value), and relocating an element to
+  // become the array's new first item makes insert() fall back to using the
+  // array's OWN opening-bracket column, rather than matching the indentation
+  // convention of the array's other rows. Reproducible with zero comments
+  // involved. See docs/PLAN-Comment-Ownership.md, "Scoping - what shipped".
+  const input = dedent`
+    xs = [
+      1,
+      2,
+      3,
+    ]
+  ` + '\n';
+
+  const value = parse(input);
+  value.xs.splice(0, 1);
+
+  expect(patch(input, value)).toEqual(dedent`
+    xs = [
+      2,
+      3,
+    ]
+  ` + '\n');
+});
+
 test('should rename key-value in table', () => {
   const value = parse(example);
   delete value.products[1].color;
