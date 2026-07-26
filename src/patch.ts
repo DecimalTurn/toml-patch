@@ -34,6 +34,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
+import { removeMember } from './comment-ownership';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -308,6 +309,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
+
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -614,7 +616,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (first) {
           let entry: TreeNode | undefined;
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
-            remove(original, original, entry);
+            removeMember(original, original, entry);
           }
           // After removing all AOT entries, insert an empty inline array
           // key-value so the key isn't lost (e.g. b = []).
@@ -630,7 +632,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
           if (prefixNodes.length > 0) {
             for (const prefixNode of prefixNodes) {
-              remove(original, original, prefixNode);
+              removeMember(original, original, prefixNode);
             }
           } else {
             // Not a table array or implicit key — let findByPath throw the descriptive error.
@@ -660,7 +662,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = original;
         }
 
-        remove(original, parent, node);
+        removeMember(original, parent, node);
 
         // Track AOT keys whose entries may have been fully removed
         if (isTableArray(node)) {

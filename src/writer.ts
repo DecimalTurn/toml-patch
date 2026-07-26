@@ -699,6 +699,38 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   }
 }
 
+/**
+ * Recalculates a container's end position as the max of its key (for Table/
+ * TableArray) and all its children's ends. Necessary because the offset-based
+ * shiftEnd approach can produce wrong container ends when a block-level child
+ * is removed: the column offset for the removed line bleeds into the previous
+ * sibling's line after the line-count shift, causing the container end to
+ * shrink below its remaining children.
+ */
+export function recalcContainerEnd(container: Document | Table | TableArray) {
+  let endLine = container.loc.start.line;
+  let endCol = container.loc.start.column;
+
+  // Include the key for Table and TableArray
+  if ('key' in container) {
+    const ke = (container as Table | TableArray).key.loc.end;
+    if (ke.line > endLine || (ke.line === endLine && ke.column > endCol)) {
+      endLine = ke.line;
+      endCol = ke.column;
+    }
+  }
+
+  for (let i = 0; i < container.items.length; i++) {
+    const e = container.items[i].loc.end;
+    if (e.line > endLine || (e.line === endLine && e.column > endCol)) {
+      endLine = e.line;
+      endCol = e.column;
+    }
+  }
+
+  container.loc.end = { line: endLine, column: endCol };
+}
+
 export function applyBracketSpacing(
   root: Root,
   node: InlineArray | InlineTable,
@@ -753,37 +785,6 @@ export function applyWrites(root: TreeNode) {
   // Inline shift helpers — access loc directly to keep V8 ICs monomorphic
   // (the generic traverse version passes many node shapes through the same
   //  function, causing megamorphic inline caches)
-
-  // After all children have been visited and their positions updated, recalculate
-  // the container's end position as the max of all its children's ends.
-  //
-  // This is necessary because the offset-based shiftEnd approach can produce wrong
-  // container ends when a block-level child is removed: the column offset for the
-  // removed line bleeds into the previous sibling's line after the line-count shift,
-  // causing the container end to shrink below its remaining children.
-  function recalcContainerEnd(container: Document | Table | TableArray) {
-    let endLine = container.loc.start.line;
-    let endCol  = container.loc.start.column;
-
-    // Include the key for Table and TableArray
-    if ('key' in container) {
-      const ke = (container as Table | TableArray).key.loc.end;
-      if (ke.line > endLine || (ke.line === endLine && ke.column > endCol)) {
-        endLine = ke.line;
-        endCol  = ke.column;
-      }
-    }
-
-    for (let i = 0; i < container.items.length; i++) {
-      const e = container.items[i].loc.end;
-      if (e.line > endLine || (e.line === endLine && e.column > endCol)) {
-        endLine = e.line;
-        endCol  = e.column;
-      }
-    }
-
-    container.loc.end = { line: endLine, column: endCol };
-  }
 
   function visitNode(node: TreeNode) {
     switch (node.type) {
