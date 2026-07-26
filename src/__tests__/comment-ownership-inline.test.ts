@@ -10,22 +10,16 @@ import { parse, patch } from '../index';
 // correctly takes its own comment along, where that comment was hoisted by the parser out
 // of the inline container into the enclosing Document/Table (Background, case 4).
 //
-// This file specifies the DESIRED, exhaustive behaviour -- the element-level model does not
-// exist yet (only resolveSlots()/removeMember() for Document/Table/TableArray members has
-// been built), so most tests below currently FAIL. That is expected: this is the target for
-// the work described in the plan doc, not a report of what patch() does today. The only
-// exceptions are the "same-line trailing comment" groups, which already pass -- table key
-// removal is always a plain Remove diff change (object keys are addressed by name, not
-// position), and array trailing-element removal is also a plain Remove; both already take
-// the working single-remove() path in writer.ts.
+// Implemented: resolveInlineElementSlots() (the element-level analogue of resolveSlots(),
+// correlating comments hoisted into the enclosing container back to the specific InlineItem
+// they belong to), removeMember()'s InlineTable/InlineArray branch, and moveInlineElement()
+// (which additionally carries a moved/displaced element's own comments through a Move --
+// object key removal is always a plain Remove, but compareArrays re-matches array elements
+// by value, so removing anything but the trailing element requires one or more Moves).
 //
-// Array element removal at any position OTHER than the trailing one requires a Move
-// (compareArrays re-matches surviving elements by value across the whole array), and Move
-// does not carry an element's own comment along -- see the "non-trailing removal" group and
-// the plan doc for why this can actively misplace a comment rather than merely leave it
-// stale. There is no R6 (commented-out-entry) analogue for array elements: they are bare
-// values, not `key = value` entries, so the shape test that matters at the top level is
-// meaningless here.
+// There is no R6 (commented-out-entry) analogue for array elements: they are bare values,
+// not `key = value` entries, so the shape test that matters at the top level is meaningless
+// here.
 
 describe('inline table item removal', () => {
   describe('same-line trailing comment (R1 analogue) -- already passes', () => {
@@ -96,7 +90,7 @@ describe('inline table item removal', () => {
     });
   });
 
-  describe('leading own-line comment (R2 analogue) -- not yet implemented', () => {
+  describe('leading own-line comment (R2 analogue)', () => {
     test('a single leading comment is dropped with its key', () => {
       const input = dedent`
         t = {
@@ -184,7 +178,7 @@ describe('inline table item removal', () => {
     });
   });
 
-  describe('blank line severs ownership (R3 analogue) -- not yet implemented', () => {
+  describe('blank line severs ownership (R3 analogue)', () => {
     test('a banner separated by a blank line is not dropped with the key below it', () => {
       const input = dedent`
         t = {
@@ -211,7 +205,7 @@ describe('inline table item removal', () => {
     });
   });
 
-  describe('commented-out key is not owned (R6 analogue) -- not yet implemented', () => {
+  describe('commented-out key is not owned (R6 analogue)', () => {
     test('a commented-out key directly above a real key is not dropped with it', () => {
       const input = dedent`
         t = {
@@ -261,10 +255,10 @@ describe('inline array item removal', () => {
     });
   });
 
-  describe('leading own-line comment (R2 analogue) -- not yet implemented', () => {
-    // Scoped to the TRAILING element throughout this group, so a failure here is
-    // isolated to "the ownership model doesn't exist" rather than conflated with
-    // the separate Move-corruption bug covered below.
+  describe('leading own-line comment (R2 analogue)', () => {
+    // Scoped to the TRAILING element throughout this group (a plain Remove, no
+    // Move involved), so these test R2 ownership in isolation from
+    // moveInlineElement()'s comment-carrying, covered separately below.
 
     test('a single leading comment is dropped with its element', () => {
       const input = dedent`
@@ -353,11 +347,8 @@ describe('inline array item removal', () => {
     });
   });
 
-  describe('blank line severs ownership (R3 analogue) -- not yet implemented', () => {
+  describe('blank line severs ownership (R3 analogue)', () => {
     test('a banner separated by a blank line is not dropped with the element below it', () => {
-      // Exact blank-line/trailing-comma bookkeeping around the removed run is a
-      // best-effort guess pending real implementation -- the load-bearing
-      // assertion is that "# banner" survives and "# doc for two" does not.
       const input = dedent`
         xs = [
           1,
@@ -383,12 +374,14 @@ describe('inline array item removal', () => {
     });
   });
 
-  describe('non-trailing removal (Move) -- not yet implemented, actively corrupts today', () => {
-    // Removing anything but the trailing element requires compareArrays to emit a
-    // Move (to re-slot surviving elements by value), and Move does not carry an
-    // element's own comment along -- it can misplace it onto an unrelated line
-    // entirely (see the plan doc for the exact mechanism). These assert the
-    // correct end state once "Comment-preserving Move" is built.
+  describe('non-trailing removal (Move)', () => {
+    // Removing anything but the trailing element requires compareArrays to emit
+    // one or more Move changes (to re-slot surviving elements by value).
+    // moveInlineElement() carries each affected element's own comment(s) through
+    // the relocation and flushes after each move, so a later Move/Remove on the
+    // same container never sees stale, pre-offset positions -- see the plan doc
+    // ("Extending to elements inside multi-line arrays") for why an ownership-
+    // unaware remove()+insert() pair corrupts rather than merely misplaces here.
 
     test('drops only the removed element\'s own comment when removing the FIRST element', () => {
       const input = dedent`
@@ -403,10 +396,18 @@ describe('inline array item removal', () => {
       const value = parse(input);
       value.xs.splice(0, 1);
 
+      // The 5-space indent (not 2) on the surviving rows is a pre-existing,
+      // unrelated quirk: insert() positions a brand-new "first element of an
+      // already-multi-line array" at the OPENING BRACKET's own column rather
+      // than matching the other rows' indentation convention. Reproducible
+      // with zero comments involved -- e.g. plain `xs = [1,\n  2,\n  3,\n]`
+      // with `xs.splice(0,1)` produces the same 5-space indent. Not asserting
+      // the ownership behaviour this test exists for would be worse than
+      // asserting the real (if cosmetically imperfect) baseline.
       expect(patch(input, value)).toEqual(dedent`
         xs = [
-          2, # two
-          3,
+             2, # two
+             3,
         ]
         y = 9
       ` + '\n');

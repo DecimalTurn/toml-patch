@@ -34,7 +34,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
-import { removeMember } from './comment-ownership';
+import { removeMember, moveInlineElement } from './comment-ownership';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -682,8 +682,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         const node = (parent as WithItems).items[change.from];
 
-        remove(original, parent, node);
-        insert(original, parent, node, change.to);
+        moveInlineElement(original, parent, node, change.to);
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
