@@ -349,6 +349,81 @@ the comment body with the real tokenizer rather than a regex, at the cost of a p
 
 ---
 
+## Extending to elements inside multi-line arrays (not yet built)
+
+The Non-goals section originally below said comment ownership inside inline arrays was "already handled by
+R1 as hoisted comments of the owning key-value" — true for *deleting the whole array*, but concrete testing
+found it false for **deleting one element while the array survives**. This is a real, currently-shipping
+corruption bug, verified against `src/comment-ownership.ts`@`46476c5` (no code changed to produce these):
+
+```toml
+xs = [
+  1, # one
+  2, # two
+  3,
+]
+```
+
+| Mutation | Result |
+|---|---|
+| `xs.splice(2, 1)` — drop the **last** element | Correct: `1, # one` / `2, # two` survive untouched. |
+| `xs.splice(1, 1)` — drop the **middle** element | `# two` (owned by the deleted `2`) survives, misindented, floating mid-array before the closing bracket. |
+| `xs.splice(0, 1)` — drop the **first** element | `# one` (owned by the deleted `1`) survives on the **same line as the closing `]`** — a different node's line, not even adjacent to where `1` used to be. |
+
+### Root cause: this is the same Move-doesn't-carry-comments gap, one level deeper
+
+`compareObjects` (table/inline-table keys) never emits `Move` — a JS object key is removed with a plain
+`Remove`, regardless of position, so it always takes the single-`remove()` path, whose existing
+`isMultilineInlineContainer` handling (`src/writer.ts`, in `remove()`) already drops or pre-compensates a
+hoisted interior comment correctly. That path was never broken; it just isn't exercised by object keys
+having any other shape of change.
+
+`compareArrays`, in contrast, re-matches surviving elements by stable value across the *whole* array
+(`src/diff.ts:163-175`), so removing anything but the trailing element(s) decomposes into one or more `Move`
+changes (relocating survivors into their new slots) plus a trailing `Remove`. `Move`'s handler
+(`src/patch.ts`, `isMove` branch) is `remove()` immediately followed by `insert()` on the same node — and
+`remove()`'s orphaned-comment cleanup identifies "the comment to drop" by **matching an absolute line
+number** (`commentLine === removedLine`, plus a pre-compensation branch for comments before it). That
+matching is only sound for the *first* structural change touching a given multi-line inline container in a
+patch, because `insert()` immediately calls `shiftNode()` on the node it just placed — but a comment
+hoisted to the *enclosing* container is never the direct subject of any of these calls, so its `loc` stays
+at its original parsed position until the single deferred `applyWrites()` at the very end. By the time a
+*second* `Move` (or the trailing `Remove`) touches the same array, the line-number heuristic is comparing
+against a container whose internal arrangement has already changed once, and a comment can be matched
+against the wrong line, or against no line at all — which is what produces the misplaced output above,
+rather than merely "comment survives in the wrong place."
+
+### What a fix needs
+
+1. **An element-level slot concept for `InlineArray`/`InlineTable`.** Unlike `resolveSlots`, an inline
+   container's own `.items` can never hold a `Comment` (`InlineArrayItem`/`InlineTableItem` are both
+   `InlineItem<...>`, no `Comment` variant) — the comments to correlate live in the *enclosing* Document/
+   Table's `.items`, hoisted out by the parser (Background, case 4). So this needs a variant that scans the
+   enclosing container's comments and buckets each one against the nearest `InlineItem` by line-range
+   containment (R1: `comment.start.line <= element.loc.end.line`; R2 adjacency to the *next* element for a
+   comment on its own line between elements) rather than reusing `resolveSlots` directly.
+2. **`Move` needs to carry (or correctly drop) an element's own comment.** This is not a new problem to
+   solve from scratch — it is the exact **Comment-preserving Move** gap already named in Follow-ups below
+   for table-array entries, just now shown to matter for plain inline arrays too, and to actively corrupt
+   output rather than merely strand a comment in a stale-but-plausible position. A fix likely wants to
+   resolve the element's owned comment(s) *before* `remove()`+`insert()` run, and either move them along with
+   `shiftNode` (mirroring the member) or delete them outright if the element is being genuinely dropped by
+   the trailing `Remove`, rather than relying on `remove()`'s absolute-line matching at all once more than
+   one structural change touches the same container in a patch.
+3. **R6 doesn't apply the same way.** Array elements are bare values, not `key = value` entries, so
+   "commented-out entry" detection is meaningless at this level (it can still fire *inside* an element that
+   is itself an inline table, but that is ordinary R1/R6 on that nested table, not a new rule here).
+
+### Scoping the fix, once built
+
+Mirror the precedent already set for table-array entries in this codebase: **trailing-element removal
+(no `Move` involved) already works today** and should be locked in with a test rather than touched. Removal
+of a non-trailing element should either be fixed properly (element-level ownership plus comment-carrying
+Move) or explicitly left as a documented, tested-as-broken limitation — never partially patched in a way
+that fixes the "middle" case while leaving the "first" case corrupted differently, or vice versa.
+
+---
+
 ## Non-goals
 
 **Not in scope for this module:**
@@ -356,9 +431,13 @@ the comment body with the real tokenizer rather than a regex, at the cost of a p
 - ~~Changing what `writer.remove()` does with the same-line comment it currently deletes~~ — **this decision
   was made** (see Status above): `removeMember()` now does it, `swap-table-keys.test.ts` was updated to
   match, and `writer.remove()` itself is untouched so every other caller keeps its current behaviour.
-- Comment ownership *inside* single-line inline tables and arrays. Those containers cannot hold `Comment`
-  nodes at all (`InlineTableItem = InlineItem<KeyValue>[]`), and their interior comments are already
-  handled by R1 as hoisted comments of the owning key-value.
+- ~~Comment ownership *inside* single-line inline tables and arrays. Those containers cannot hold `Comment`
+  nodes at all... and their interior comments are already handled by R1 as hoisted comments of the owning
+  key-value.~~ — **Half of this held up, half didn't.** Still true for genuinely single-line containers (no
+  interior comments are possible there at all) and for deleting a *whole* multi-line array/table (R1 already
+  handles that correctly). Shown false for deleting one *element* of a surviving multi-line array — see
+  "Extending to elements inside multi-line arrays" above, now tracked as real, unbuilt scope rather than a
+  non-goal.
 - Re-flowing or re-aligning comments. `normalizeInlineCommentAlignmentInString`
   (`src/comment-alignment.ts`) already owns that and stays untouched.
 
@@ -625,14 +704,18 @@ suite stayed in `pnpm test`'s scope above rather than needing a dedicated additi
   not because it happens to share a line with whatever `remove()` was told to delete. `writer.remove()`
   itself is unchanged.
 - **Comment-preserving Move.** The remaining half of the original `writer.remove()` follow-up: a `Move`
-  (e.g. the `swap-table-keys.test.ts` swap, or a table-array entry relocated by removing an earlier sibling)
-  still relocates a node via plain `remove()`+`insert()` and does not carry its owned comments along. This
-  is exactly what `docs/PLAN-Update-Order.md` needs for `updateOrder` and designs for throughout — the
-  AOT-entry test here was deliberately reshaped to avoid triggering a Move, to keep this phase to deletion
-  only. That doc's own Step 1 (§3.3) calls `normalizeSectionComments(document)` as a one-time pre-pass too;
-  whether that's safe there depends on the reorder pass immediately relocating the affected lines afterward
-  (unlike here, where deletion may leave them exactly where the parser put them) — worth re-checking against
-  the roundtrip invariant before relying on it.
+  (e.g. the `swap-table-keys.test.ts` swap, a table-array entry relocated by removing an earlier sibling, or
+  — see "Extending to elements inside multi-line arrays" above — removing any non-trailing element of a
+  commented inline array) still relocates a node via plain `remove()`+`insert()` and does not carry its owned
+  comments along. For blocks and table-array entries this strands a comment in a stale-but-plausible spot;
+  for inline array elements it actively corrupts output (misplaces the comment onto an unrelated line) once
+  more than one `Move` touches the same container in a patch — see that section for why. This is exactly
+  what `docs/PLAN-Update-Order.md` needs for `updateOrder` and designs for throughout — the AOT-entry test
+  here was deliberately reshaped to avoid triggering a Move, to keep this phase to deletion only. That doc's
+  own Step 1 (§3.3) calls `normalizeSectionComments(document)` as a one-time pre-pass too; whether that's
+  safe there depends on the reorder pass immediately relocating the affected lines afterward (unlike here,
+  where deletion may leave them exactly where the parser put them) — worth re-checking against the
+  roundtrip invariant before relying on it.
 - **`updateOrder`** — the reason this exists. See `docs/PLAN-Update-Order.md`.
 - **Comment-preserving key rename / table rename** — same slot machinery.
 - **Unit-level test coverage** described in §Tests but not built: direct `Slot`-composition assertions
