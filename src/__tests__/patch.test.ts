@@ -5041,7 +5041,7 @@ describe('blank line accumulation on table deletion', () => {
 
 describe('comment removal with section', () => {
 
-  test.skip('should remove comment that precedes a deleted table section', () => {
+  test('should remove comment that precedes a deleted table section', () => {
     const src = dedent`
       [a]
       x = 1
