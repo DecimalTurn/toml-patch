@@ -54,7 +54,10 @@ describe('R1 - right-side ownership', () => {
     // The leading blank line here is a pre-existing quirk of removing the
     // first document block (reproducible even with no comment involved at
     // all) — unrelated to comment ownership, not asserted as desirable.
-    expect(patch(input, value)).toEqual('\n[b]\nz = 3\n');
+    expect(patch(input, value)).toEqual('\n' + dedent`
+      [b]
+      z = 3
+    ` + '\n');
   });
 
   test('removes comments hoisted out of a multiline inline table with their key', () => {
@@ -656,6 +659,13 @@ describe('combinations', () => {
     // that sits directly before another, with nothing re-inserted afterward
     // (reproducible with a single plain key and no comment at all) —
     // unrelated to comment ownership, not asserted as desirable.
-    expect(patch(input, value)).toEqual('# doc for t\n[t]\n\n\n[u]\nz = 9\n');
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      
+      
+      [u]
+      z = 9
+    ` + '\n');
   });
 });
