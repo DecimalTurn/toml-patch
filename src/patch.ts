@@ -26,6 +26,7 @@ import {
   InlineItem,
   CST,
   Table,
+  TableArray,
   Value,
   isDateTime
 } from './cst';
@@ -176,7 +177,7 @@ function reorder(changes: Change[]): Change[] {
         const bPrefix = next_change.path.slice(0, -1);
 
         // Same array context AND higher index should come first
-        if (arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
+        if (aIdx !== undefined && bIdx !== undefined && arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
           // We reset i to -1 so that after the for-loop's i++ the next iteration
