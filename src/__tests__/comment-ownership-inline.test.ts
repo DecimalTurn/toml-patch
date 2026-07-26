@@ -683,7 +683,7 @@ describe('nested inside a [table] -- shapes that are NOT regressed', () => {
 // findHostContainer() doesn't resolve through an InlineTable's own KeyValue entries, so an
 // array that is itself the value of a multiline inline table's key falls back to the old,
 // comment-oblivious remove()+insert() path entirely. Not part of "these regressions" --
-// tracked separately (see docs/bug-notes/inline-array-nested-container-regression.md, item 2)
+// tracked separately (see docs/bug-notes/inline-array-nested-container-regression.md, "Still open")
 // and left skipped rather than failing, matching this repo's convention for known-but-deferred
 // gaps (c.f. patch.test.ts's skipped first-element-indentation test).
 describe.skip('nested inside a multiline inline table (known gap, unrelated to the regression above)', () => {
