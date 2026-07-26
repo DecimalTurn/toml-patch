@@ -149,7 +149,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param index - The index at which to insert the child (optional)
  * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[]) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -186,17 +186,26 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 
   // Handle orphaned comments for multiline inline table inserts (analogous to the
   // remove case below). When a new item is added on a new line inside a multiline
-  // inline table, the exit offset on the inserted child bleeds to Document-level
-  // comments that were extracted from inside the inline table by the parser.
+  // inline table, the exit offset on the inserted child bleeds to comments that were
+  // extracted from inside the inline table into the enclosing Document/Table's own
+  // items (`hostItems` — defaults to `root.items`, correct only when the inline table
+  // is itself root-level; pass the real enclosing container's `.items` otherwise).
   // Pre-compensate comments that appear before the insertion line so the bleedthrough
   // leaves them at their original position.
-  if (isInlineTable(parent) && offset.lines !== 0 && hasItems(root) && root !== parent) {
+  //
+  // Bounded to comments physically within `parent`'s own line span: `hostItems` (be it
+  // root.items or a nested host container's items) can hold many OTHER comments with no
+  // relation to this inline table at all (prose between sibling keys, another key's own
+  // trailing comment) — blindly shifting every comment in that array by line number alone
+  // corrupts unrelated ones the moment a document has more than the hoisted comments in it.
+  if (isInlineTable(parent) && offset.lines !== 0 && (hostItems || hasItems(root)) && root !== parent) {
     const insertionLine = child.loc.start.line;
-    const rootItems = (root as WithItems).items;
-    for (let i = 0; i < rootItems.length; i++) {
-      const item = rootItems[i];
+    const commentHostItems = hostItems ?? (root as WithItems).items;
+    for (let i = 0; i < commentHostItems.length; i++) {
+      const item = commentHostItems[i];
       if (!isComment(item)) continue;
       const commentLine = (item as Comment).loc.start.line;
+      if (commentLine < parent.loc.start.line || commentLine > parent.loc.end.line) continue;
       if (commentLine < insertionLine) {
         (item as Comment).loc.start.line -= offset.lines;
         (item as Comment).loc.end.line -= offset.lines;
@@ -482,7 +491,7 @@ function insertInlineAtRoot(
   return result;
 }
 
-export function remove(root: Root, parent: TreeNode, node: TreeNode) {
+export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?: TreeNode[]) {
   // Remove an element from the parent's items
   // (supports Document, Table, TableArray, InlineTable, and InlineArray
   //
@@ -655,32 +664,45 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
   target_offsets.set(target, offset);
   dirty_roots.add(root);
 
-  // Handle orphaned comments for multiline inline tables.
+  // Handle orphaned comments for multiline inline tables/arrays.
   //
-  // When a TOML 1.1 multiline inline table is parsed, comments inside it are emitted into
-  // root.items (the Document/Table level) rather than into InlineTable.items. The line-count
-  // offset placed above (on `target`) bleeds through the rest of the Document traversal in
-  // applyWrites, shifting every subsequent root-level item by `offset.lines`. That is correct
-  // for comments AFTER the deleted line (they should shift up), but wrong for comments BEFORE
-  // the deleted line (they must stay put), and comments ON the deleted line must be removed.
+  // When a TOML 1.1 multiline inline container is parsed, comments inside it are emitted into
+  // the enclosing Document/Table's own items (`hostItems` — the container whose `.items` the
+  // parser actually filed them under, which is `root.items` only when the inline container is
+  // itself a ROOT-level key; a nested `[table]`'s array instead files them into that Table's
+  // own items) rather than into the InlineTable/InlineArray's own items. The line-count offset
+  // placed above (on `target`) bleeds through the rest of that container's traversal in
+  // applyWrites, shifting every subsequent sibling item by `offset.lines`. That is correct for
+  // comments AFTER the deleted line (they should shift up), but wrong for comments BEFORE the
+  // deleted line (they must stay put), and comments ON the deleted line must be removed.
   //
-  // Fix: for root-level comments that sit before the removed line, pre-shift them in the
+  // Fix: for host-level comments that sit before the removed line, pre-shift them in the
   // opposite direction so that the bleedthrough restores them to their original position.
-  // Comments on the deleted line are removed from root.items entirely.
+  // Comments on the deleted line are removed from `hostItems` entirely.
+  //
+  // `hostItems` defaults to `root.items` (the historical behavior, correct only when the
+  // inline container is root-level); callers that know the real enclosing container — e.g.
+  // comment-ownership.ts's findHostContainer() — should pass its `.items` explicitly so this
+  // scans the array the comments actually live in, not always literally the document root.
   //
   // Scope: only multiline inline tables. For single-line inline tables the parser does NOT
-  // extract comments into root — any comment after `{ ... }` on the same line stays as a
-  // root-level item but is NOT associated with the inline table's items, so the
+  // extract comments into the host — any comment after `{ ... }` on the same line stays as a
+  // host-level item but is NOT associated with the inline table's items, so the
   // `commentLine === removedLine` drop would incorrectly delete it.
-  if (isMultilineInlineContainer && hasItems(root) && root !== parent) {
+  //
+  // Bounded to comments physically within `parent`'s own line span — see the identical note
+  // on the insert() side above; `hostItems` can hold many comments with no relation to this
+  // specific inline container at all.
+  if (isMultilineInlineContainer && (hostItems || hasItems(root)) && root !== parent) {
     const removedLine = node.loc.start.line;
-    const rootItems = (root as WithItems).items;
+    const commentHostItems = hostItems ?? (root as WithItems).items;
     const toRemove: number[] = [];
 
-    for (let i = 0; i < rootItems.length; i++) {
-      const item = rootItems[i];
+    for (let i = 0; i < commentHostItems.length; i++) {
+      const item = commentHostItems[i];
       if (!isComment(item)) continue;
       const commentLine = (item as Comment).loc.start.line;
+      if (commentLine < parent.loc.start.line || commentLine > parent.loc.end.line) continue;
       if (commentLine === removedLine) {
         // Comment was on the same line as the removed item — drop it.
         toRemove.push(i);
@@ -694,7 +716,7 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode) {
     }
 
     for (let i = toRemove.length - 1; i >= 0; i--) {
-      rootItems.splice(toRemove[i], 1);
+      commentHostItems.splice(toRemove[i], 1);
     }
   }
 }

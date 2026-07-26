@@ -54,46 +54,6 @@ function isMultilineInlineContainer(node: TreeNode): node is InlineTable | Inlin
   return (isInlineTable(node) || isInlineArray(node)) && node.loc.end.line > node.loc.start.line;
 }
 
-/**
- * Works around a latent bug in writer.ts's legacy per-container "orphaned
- * comment" cleanup (inside both remove() and insert()), which unconditionally
- * scans `root.items` — always the top-level Document — for comments to drop
- * or pre-compensate, regardless of how deeply the multiline inline container
- * being touched is actually nested. Its assumption ("the relevant hoisted
- * comments live in root.items") only holds when the container is a ROOT-level
- * key; when it's nested inside a [table] (hostContainer !== root), the real
- * hoisted comments live in hostContainer.items instead, and any Comment found
- * directly in root.items is unrelated — yet the legacy scan's blind
- * "commentLine < removedLine" rule shifts it anyway, corrupting a document-
- * level comment that may be lines or pages away from the actual removal.
- *
- * Sidesteps this without touching the shared primitive: when hostContainer
- * isn't root itself, every Comment directly in root.items is, by definition,
- * unrelated to a removal happening inside a nested container — temporarily
- * detach all of them before `fn` runs (so the legacy scan finds nothing to
- * misfire on), then restore them completely unchanged.
- */
-function withUnrelatedRootCommentsProtected<T>(root: Document, hostContainer: TreeNode, fn: () => T): T {
-  if (hostContainer === root) return fn();
-
-  const rootItems = root.items as TreeNode[];
-  const detached: Array<[number, TreeNode]> = [];
-  for (let i = rootItems.length - 1; i >= 0; i--) {
-    if (isComment(rootItems[i])) {
-      detached.unshift([i, rootItems[i]]);
-      rootItems.splice(i, 1);
-    }
-  }
-
-  const result = fn();
-
-  for (const [index, comment] of detached) {
-    rootItems.splice(Math.min(index, rootItems.length), 0, comment);
-  }
-
-  return result;
-}
-
 export interface Slot {
   kind: 'member' | 'pinned';
   /** The orderable child: KeyValue | Table | TableArray. Absent for pinned runs. */
@@ -446,7 +406,18 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
           member.loc.end = last(slot.items)!.loc.end;
         }
 
-        withUnrelatedRootCommentsProtected(root, hostContainer, () => remove(root, parent, member));
+        remove(root, parent, member, hostContainer.items as TreeNode[]);
+
+        // Flush immediately, matching moveInlineElement's identical discipline (see
+        // its docstring): writer.remove()'s own orphaned-comment compensation above
+        // mutates surviving comments' `.loc` as a PRE-compensation for an offset that
+        // only actually resolves once applyWrites runs. If a SECOND removeMember (or
+        // moveInlineElement) call on this same container ran before that offset were
+        // resolved, resolveInlineElementSlots would read those pre-compensated,
+        // not-yet-restored positions as if they were final — misattributing or
+        // losing ownership. Flushing here keeps every subsequent call in this patch
+        // starting from a fully-resolved, non-stale state.
+        applyWrites(root);
         return;
       }
     }
@@ -510,10 +481,8 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
-      withUnrelatedRootCommentsProtected(root, hostContainer, () => {
-        remove(root, parent, node);
-        insert(root, parent, node, toIndex);
-      });
+      remove(root, parent, node, hostContainer.items as TreeNode[]);
+      insert(root, parent, node, toIndex, undefined, hostContainer.items as TreeNode[]);
 
       // Flush before reading anything back out below. Every other element's
       // own loc (an untouched sibling that nonetheless shifted because this
