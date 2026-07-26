@@ -20,13 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher.
 - Patching: prevent whitespace errors when swaping keys between tables.
-- `patch` no longer throws `TypeError: Do not know how to serialize a BigInt` on documents containing integers outside the JS safe range.
-- `patch` no longer loses the closing `]` of a commented multiline array when adding a new key to the document.
-- `patch` no longer produces mangled/invalid TOML when emptying a commented multiline array.
-- `patch` no longer silently nests a table-to-scalar replacement inside a preceding table section; the scalar is now correctly hoisted before the first table header.
-- `patch` no longer silently drops the key when emptying an array-of-tables; an inline empty array (`b = []`) is emitted instead.
-- `patch` no longer throws `Node not found` on several structural type replacements (nested table to scalar, single AOT to scalar, empty array within a table).
-- `patch` and `stringify` now preserve the `+nan` / `-nan` sign through parse and round-trip. Negative NaN is also preserved as a distinguishable IEEE 754 value at parse time.
+- Patching: handle BigInt values in documents without throwing.
+- Patching: handle commented multiline arrays correctly when adding keys or emptying them.
+- Patching: fix wrong section nesting when replacing a table with a scalar value.
+- Patching: preserve key with inline empty array when emptying an array-of-tables.
+- Patching: fix `Node not found` errors on structural type replacements like nested table-to-scalar and AOT-to-scalar.
+- Patching: preserve `+nan` / `-nan` sign through parse and round-trip.
 
 ## [2.1.0] - 2026-07-21
 
