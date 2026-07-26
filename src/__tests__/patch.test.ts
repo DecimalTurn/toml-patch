@@ -4969,23 +4969,126 @@ describe('emptying array-of-tables', () => {
 
 describe('structural type replacements', () => {
 
-  test('should replace nested table [a.b] with scalar', () => {
+  // ── helper ──────────────────────────────────────────────────────────
+
+  /**
+   * Asserts that patching `src` with `updated` does not throw, produces
+   * parseable TOML, and that the parsed result deep-equals `expected`.
+   */
+  function expectPatchResult(
+    src: string,
+    updated: Record<string, any>,
+    expected: Record<string, any>,
+  ) {
+    let result: string;
+    expect(() => { result = patch(src, updated); }).not.toThrow();
+    const reparsed = parse(result!);
+    expect(reparsed).toEqual(expected);
+  }
+
+  // ── Table → scalar ──────────────────────────────────────────────────
+  // These trigger handleStructuralEdit because the Table key (e.g.
+  // ['a','b']) is longer than the change path (['a']).
+
+  test('[a.b] → a = 42', () => {
     const src = dedent`
       [a.b]
       x = 1
     ` + '\n';
-    expect(() => patch(src, { a: 42 })).not.toThrow();
+    expectPatchResult(src, { a: 42 }, { a: 42 });
   });
 
-  test('should replace single AOT entry with scalar', () => {
+  test('[a.b.c] → a = 42 (deep nested table)', () => {
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test.skip('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
+    // TODO: handleStructuralEdit throws TypeError when removing multiple
+    // sibling nodes. The prefix collection + removal loop needs to handle
+    // offset accumulation across consecutive remove() calls.
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [a.c]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test.skip('[a.b] → a = 42 with preceding section (hoist check)', () => {
+    // TODO: the replacement KV lands after the preceding [s] section,
+    // causing a to be parsed as nested under s. Need to hoist before
+    // any remaining table headers.
+    const src = dedent`
+      [s]
+      k = "v"
+
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { s: { k: 'v' }, a: 42 }, { s: { k: 'v' }, a: 42 });
+  });
+
+  // ── Table → array ───────────────────────────────────────────────────
+
+  test('[a.b] → a = [1, 2, 3]', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [1, 2, 3] }, { a: [1, 2, 3] });
+  });
+
+  test('[a.b.c] → a = [true, false] (deep nested → array)', () => {
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [true, false] }, { a: [true, false] });
+  });
+
+  // ── Table → object ──────────────────────────────────────────────────
+
+  test.skip('[a.b] → a = { x: 1 } (table to inline object)', () => {
+    // TODO: the outer key 'a' is lost; output is 'x = 1' instead of
+    // 'a = { x = 1 }'. The KV from parseJS round-trip loses its key
+    // during insert() into the emptied document.
+    const src = dedent`
+      [a.b]
+      old = "gone"
+    ` + '\n';
+    expectPatchResult(src, { a: { x: 1 } }, { a: { x: 1 } });
+  });
+
+  test.skip('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
+    // Same root cause as above.
+    const src = dedent`
+      [a.b.c]
+      old = "gone"
+    ` + '\n';
+    expectPatchResult(src, { a: { d: 'hi' } }, { a: { d: 'hi' } });
+  });
+
+  // ── AOT → scalar ────────────────────────────────────────────────────
+  // These also trigger handleStructuralEdit because TableArray keys
+  // include the array index (e.g. ['i',0]) and are longer than the path.
+
+  test('[[i]] (single entry) → i = 42', () => {
     const src = dedent`
       [[i]]
       n = 1
     ` + '\n';
-    expect(() => patch(src, { i: 42 })).not.toThrow();
+    expectPatchResult(src, { i: 42 }, { i: 42 });
   });
 
-  test.skip('should replace multiple AOT entries with different length array', () => {
+  test.skip('[[i]] × 2 (multiple entries) → i = 42', () => {
+    // TODO: same TypeError as [a.b]+[a.c] case — removing multiple
+    // sibling AOT entries causes offset corruption.
     const src = dedent`
       [[i]]
       n = 1
@@ -4993,11 +5096,229 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expect(() => patch(src, { i: [9] })).not.toThrow();
-    const result = patch(src, { i: [9] });
-    const reparsed = parse(result);
-    expect(reparsed.i).toEqual([9]);
+    expectPatchResult(src, { i: 42 }, { i: 42 });
   });
+
+  test('[[a.b]] (nested single entry) → a = 42', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test.skip('[[a.b]] × 2 → a = 42', () => {
+    // TODO: same multi-sibling TypeError.
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test('[[a.b.c]] → a = 42 (deep nested AOT)', () => {
+    const src = dedent`
+      [[a.b.c]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  // ── AOT → array ─────────────────────────────────────────────────────
+
+  test.skip('[[i]] → i = [9] (AOT to different-length array)', () => {
+    // TODO: "Node not found at i.1" — the removal of multiple AOT
+    // entries via findDocumentItemsByKeyPrefix + remove doesn't clean
+    // up indexed sub-paths correctly.
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    expectPatchResult(src, { i: [9] }, { i: [9] });
+  });
+
+  test.skip('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
+    // TODO: "Incompatible child type InlineItem" — the replacement
+    // KV from parseJS is an InlineItem, not a KeyValue, when the
+    // value is an array.
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: [1, 2, 3] }, { i: [1, 2, 3] });
+  });
+
+  test('[[a.b]] → a = [1, 2] (nested AOT to array)', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [1, 2] }, { a: [1, 2] });
+  });
+
+  // ── AOT → object ────────────────────────────────────────────────────
+
+  test('[[i]] → i = { x: 1 } (AOT to inline object)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: { x: 1 } }, { i: { x: 1 } });
+  });
+
+  test.skip('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
+    // TODO: same outer-key-loss issue as table→object cases.
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { c: 3 } }, { a: { c: 3 } });
+  });
+
+  // ── Mixed / complex ─────────────────────────────────────────────────
+
+  test.skip('[a.b] + [[a.c]] → a = 42 (mixed Table + AOT siblings)', () => {
+    // TODO: multi-sibling TypeError.
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [[a.c]]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test.skip('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
+    // TODO: multi-sibling TypeError.
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [a.c.d]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test.skip('multiple AOT sequences + table siblings → scalar', () => {
+    // TODO: multi-sibling TypeError.
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      x = 2
+
+      [a.c]
+      y = 3
+
+      [[a.d]]
+      z = 4
+    ` + '\n';
+    expectPatchResult(src, { a: 99 }, { a: 99 });
+  });
+
+  // ── Intermediate-path replacements (deeper than root) ───────────────
+  // When the change path has 2+ segments but is still shorter than the
+  // existing Table/TableArray key.
+
+  test.skip('[a.b.c] → a.b = 42 (intermediate path)', () => {
+    // TODO: handleStructuralEdit inserts b = 42 at document level
+    // instead of nesting under [a]. Need to generate the full key
+    // hierarchy when the change path has multiple segments.
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 42 } }, { a: { b: 42 } });
+  });
+
+  test.skip('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
+    // Same issue as above.
+    const src = dedent`
+      [[a.b.c]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 42 } }, { a: { b: 42 } });
+  });
+
+  // ── Edge: change path matches existing KV key length ─────────────────
+  // These do NOT go through handleStructuralEdit (existing is found), but
+  // verify they still work correctly.
+
+  test('[a] → a = 42 (single-segment table, isTable handler)', () => {
+    const src = dedent`
+      [a]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, { a: 42 });
+  });
+
+  test('[a.b] → a.b = 99 (path matches table key, isTable handler)', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 99 } }, { a: { b: 99 } });
+  });
+
+  test('[[i]] → i = 99 (single-segment AOT, handleStructuralEdit)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: 99 }, { i: 99 });
+  });
+
+  // ── Safeguard: unrelated content preserved ──────────────────────────
+
+  test.skip('unrelated tables survive the structural replacement', () => {
+    // TODO: hoisting issue — the replacement KV lands after [keep],
+    // nesting a under keep instead of keeping it at root.
+    const src = dedent`
+      [keep]
+      v = 1
+
+      [a.b]
+      x = 2
+
+      [other]
+      w = 3
+    ` + '\n';
+    expectPatchResult(
+      src,
+      { keep: { v: 1 }, a: 42, other: { w: 3 } },
+      { keep: { v: 1 }, a: 42, other: { w: 3 } },
+    );
+  });
+
+  test.skip('unrelated AOT entries survive', () => {
+    // TODO: same outer-key-loss issue as table→object cases.
+    const src = dedent`
+      [[keep]]
+      n = 1
+
+      [[a.b]]
+      x = 1
+
+      [[other]]
+      m = 2
+    ` + '\n';
+    expectPatchResult(
+      src,
+      { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] },
+      { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] },
+    );
+  });
+
+  // ── Existing (kept) ─────────────────────────────────────────────────
 
   test('should empty array within a table', () => {
     const src = dedent`

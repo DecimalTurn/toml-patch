@@ -779,18 +779,34 @@ function handleStructuralEdit(
 
   if (jsValue === undefined) return;
 
-  const lastName = change.path[change.path.length - 1] as string;
+  // Build a nested object matching the change path.
+  let nested: any = jsValue;
+  for (let i = change.path.length - 1; i >= 0; i--) {
+    nested = { [change.path[i]]: nested };
+  }
 
-  // Remove old nodes matching the key prefix
+  // Remove old nodes matching the key prefix.
   const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
   for (const prefixNode of prefixNodes) {
     remove(original, original, prefixNode);
   }
 
-  // Generate fresh KV and insert
-  const freshDoc = parseJS({ [lastName]: jsValue }, format);
-  const freshKV = freshDoc.items[0] as KeyValue;
-  insert(original, original, freshKV, undefined);
+  // Generate the replacement as CST, round-trip through TOML string to get
+  // properly positioned nodes, then parse back. This avoids issues with
+  // parseJS's formatting pipeline (formatEmptyLines, etc.) interacting poorly
+  // with insert().
+  const freshDoc = parseJS(nested, format);
+  const replacementToml = toTOML(freshDoc.items, format);
+  const replacementCst = Array.from(parseTOML(replacementToml));
+  const replacementKV = replacementCst[0] as KeyValue;
+
+  // Hoist before the first remaining table/table-array header.
+  const firstHeaderIndex = original.items.findIndex(
+    item => isTable(item) || isTableArray(item)
+  );
+  const insertIndex = firstHeaderIndex === -1 ? undefined : firstHeaderIndex;
+
+  insert(original, original, replacementKV, insertIndex);
 }
 
 /**
