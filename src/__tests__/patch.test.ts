@@ -5116,13 +5116,4 @@ describe('identity round-trip normalizations', () => {
     expect(result).toBe('a = -nan\n');
   });
 
-  test.skip('should preserve mixed EOL in round-trip', () => {
-    const src =
-      'a = 1\n' +
-      '[t]\r\n' +
-      'x = 2\n';
-    const result = patch(src, parse(src));
-    expect(result).toBe(src);
-  });
-
 });
