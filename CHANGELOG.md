@@ -18,8 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher.
-- Patching: prevent whitespace errors when swaping keys between tables.
+- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher. ([#255])
+- Patching: prevent whitespace errors when swaping keys between tables. ([#255])
+- Patching: handle BigInt values in documents without throwing. ([#255])
+- Patching: handle commented multiline arrays correctly when adding keys or emptying them. ([#255])
+- Patching: fix wrong section nesting when replacing a table with a scalar value. ([#255])
+- Patching: preserve key with inline empty array when emptying an array-of-tables. ([#255])
+- Patching: fix `Node not found` errors on structural type replacements like nested table-to-scalar and AOT-to-scalar. ([#255])
+- Patching: preserve `+nan` / `-nan` sign through parse and round-trip. ([#255])
 
 ## [2.1.0] - 2026-07-21
 
@@ -311,3 +317,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#187]: https://github.com/DecimalTurn/toml-patch/pull/187
 [#189]: https://github.com/DecimalTurn/toml-patch/pull/189
 [#198]: https://github.com/DecimalTurn/toml-patch/pull/198
+[#255]: https://github.com/DecimalTurn/toml-patch/pull/255

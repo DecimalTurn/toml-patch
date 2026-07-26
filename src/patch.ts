@@ -18,11 +18,15 @@ import {
   isInlineTable,
   isInlineItem,
   isString,
+  isComment,
+  isFloat,
+  Float as FloatNode,
   hasItem,
   hasItems,
   InlineItem,
   CST,
   Table,
+  TableArray,
   Value,
   isDateTime
 } from './cst';
@@ -154,8 +158,10 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 }
 
 function reorder(changes: Change[]): Change[] {
-  //Reorder deletions among themselves to avoid index issues
-  // We want the path to be looking at the last item in the array first and go down from there
+  //Reorder deletions among themselves to avoid index issues when removing
+  // multiple array elements. Remove higher indices first so earlier indices
+  // remain valid after each removal. Compare the last path element (the index)
+  // and the prefix (everything before it) to group related removes.
 
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
@@ -163,8 +169,16 @@ function reorder(changes: Change[]): Change[] {
       let j = i + 1;
       while (j < changes.length) {
         const next_change = changes[j];
-        if (isRemove(next_change) && next_change.path[0] === change.path[0]  && 
-            next_change.path[1] > change.path[1]) {
+        if (!isRemove(next_change)) { j++; continue; }
+
+        const aIdx = last(change.path);
+        const bIdx = last(next_change.path);
+        const aPrefix = change.path.slice(0, -1);
+        const bPrefix = next_change.path.slice(0, -1);
+
+        // Same array context AND higher index should come first.
+        // Only reorder numeric array indices (skip string keys).
+        if (typeof aIdx === 'number' && typeof bIdx === 'number' && arraysEqual(aPrefix, bPrefix) && bIdx > aIdx) {
           changes.splice(j, 1);
           changes.splice(i, 0, next_change);
           // We reset i to -1 so that after the for-loop's i++ the next iteration
@@ -235,6 +249,20 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     }
   }
   
+  // Preserve float NaN sign format
+  if (isFloat(existing) && isFloat(replacement)
+      && Number.isNaN(existing.value) && Number.isNaN(replacement.value)) {
+    const existingFloat = existing as FloatNode;
+    const replacementFloat = replacement as FloatNode;
+    if (existingFloat.nanSign) {
+      // Existing had a sign (+ or -), replacement has none (canonical NaN).
+      // Preserve the signed style: always use '+' for positive/unsigned.
+      replacementFloat.nanSign = '+';
+      replacementFloat.raw = '+nan';
+    }
+    // If existing had no sign and replacement has no sign, leave as-is (nan)
+  }
+  
   // Preserve array trailing comma format
   if (isInlineArray(existing) && isInlineArray(replacement)) {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
@@ -278,6 +306,8 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * ```
  */
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
+  // Track AOT keys whose entries were all removed so we can insert empty arrays.
+  const emptiedAotKeys = new Set<string>();
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -449,8 +479,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
     } else if (isEdit(change)) {
-      let existing = findByPath(original, change.path);
+      let existing = tryFindByPath(original, change.path);
       let replacement = findByPath(updated, change.path);
+
+      // When the existing node can't be found, this is likely a structural
+      // type change (e.g. table→scalar, AOT→scalar, array→empty).
+      // Handle by removing old nodes and inserting fresh KV.
+      if (!existing) {
+        handleStructuralEdit(original, updated, change, format, temporal);
+        return; // skip generic edit handling
+      }
+
       let parent;
       const containerParent = tryFindByPath(original, change.path.slice(0, -1));
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
@@ -515,8 +554,26 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             insert(original, newTable, freshKV, 0);
             replace(original, tableParent, existing, newTable);
           } else {
-            // Single-segment table [w] — KV belongs directly in the Document
+            // Single-segment table [w] — KV belongs directly in the Document.
+            // Replace the table with the KV, then reposition the KV to before
+            // the first table header so it lands in the implicit root table
+            // rather than inside a preceding section.
             replace(original, tableParent, existing, freshKV);
+
+            // If there's a table header before this KV in the items array,
+            // the KV visually falls inside the wrong section. Remove and
+            // re-insert it at the correct position (before the first table).
+            const document = original as Document;
+            const kvIndex = document.items.indexOf(freshKV);
+            if (kvIndex >= 0) {
+              const firstTableIndex = document.items.findIndex(
+                item => isTable(item) || isTableArray(item)
+              );
+              if (firstTableIndex !== -1 && firstTableIndex < kvIndex) {
+                remove(original, tableParent, freshKV);
+                insert(original, tableParent, freshKV, firstTableIndex);
+              }
+            }
           }
           return; // handled; skip the generic replace() below
         }
@@ -559,6 +616,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             remove(original, original, entry);
           }
+          // After removing all AOT entries, insert an empty inline array
+          // key-value so the key isn't lost (e.g. b = []).
+          const key = change.path[change.path.length - 1] as string;
+          emptiedAotKeys.add(key);
         } else {
           // The path might be an implicit intermediate key — a key that is a
           // prefix of a dotted table key but has no CST node of its own.
@@ -600,6 +661,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
 
         remove(original, parent, node);
+
+        // Track AOT keys whose entries may have been fully removed
+        if (isTableArray(node)) {
+          const aotKey = (node as TableArray).key.item.value;
+          const aotPath = change.path.slice(0, -1);
+          const stillExists = tryFindByPath(original, aotPath.concat(0));
+          if (!stillExists) {
+            emptiedAotKeys.add(aotKey.join('.'));
+          }
+        }
       }
     } else if (isMove(change)) {
       let parent = tryFindByPath(original, change.path);
@@ -666,7 +737,105 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) applyWrites(original);
 
+  // Clean up extracted comments that were orphaned when an inline array or
+  // inline table was emptied. Comments inside multiline inline containers are
+  // extracted to the Document level by the parser, but when the container is
+  // emptied, those comments are no longer meaningful and must be removed.
+  cleanupOrphanedComments(original);
+
+  // Replace emptied TableArrays (array-of-tables) with inline empty arrays
+  // so keys aren't silently lost (e.g. b = [] instead of disappearing).
+  replaceEmptiedTableArrays(original, emptiedAotKeys, format);
+
   return original;
+}
+
+/**
+ * Handles structural edits where findByPath can't resolve the existing CST node
+ * because the structure type has changed (e.g. table→scalar, AOT→scalar, array→empty).
+ * Removes old structural nodes and inserts a fresh key-value.
+ */
+function handleStructuralEdit(
+  original: Document,
+  updated: Document,
+  change: Change,
+  format: TomlFormat,
+  temporal: boolean
+): void {
+  const updated_js = toJS(updated.items, '', { temporal });
+  let jsValue: any = updated_js;
+  for (const key of change.path) {
+    jsValue = jsValue?.[key];
+  }
+
+  if (jsValue === undefined) return;
+
+  const lastName = change.path[change.path.length - 1] as string;
+
+  // Remove old nodes matching the key prefix
+  const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+  for (const prefixNode of prefixNodes) {
+    remove(original, original, prefixNode);
+  }
+
+  // Generate fresh KV and insert
+  const freshDoc = parseJS({ [lastName]: jsValue }, format);
+  const freshKV = freshDoc.items[0] as KeyValue;
+  insert(original, original, freshKV, undefined);
+}
+
+/**
+ * Removes Comment nodes that were extracted from inside an InlineArray
+ * when that array has been emptied.
+ * 
+ * When a multiline inline array has interior comments (e.g. `arr = [\n  1, # one\n  2, # two\n]`),
+ * the parser extracts the comments to the parent Document level as siblings of the KeyValue.
+ * If the array is later emptied, these comments become orphaned and must be removed
+ * to produce valid TOML output.
+ * 
+ * This does NOT apply to InlineTables, where interior comments are meaningful
+ * section-level comments that should be preserved even when the table is empty.
+ */
+function cleanupOrphanedComments(doc: Document): void {
+  traverse(doc, {
+    KeyValue: (kv) => {
+      const value = kv.value;
+      // Only clean up inline arrays, not inline tables
+      if (!isInlineArray(value)) return;
+      if (value.items.length > 0) return;
+
+      // Find the parent container (Document or Table) that holds this KeyValue
+      const parentContainer = findParent(doc, [kv.key.value[0]]);
+      if (!parentContainer || !hasItems(parentContainer)) return;
+
+      const kvStartLine = kv.loc.start.line;
+      const kvEndLine = kv.loc.end.line;
+
+      // Remove any Comment nodes in the parent that fall within the KeyValue's range
+      const items = (parentContainer as WithItems).items as TreeNode[];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (!isComment(item)) continue;
+        const commentLine = item.loc.start.line;
+        if (commentLine >= kvStartLine && commentLine <= kvEndLine) {
+          items.splice(i, 1);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Replaces emptied TableArrays with inline empty array key-values so that
+ * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
+ */
+function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Set<string>, format: TomlFormat): void {
+  for (const key of emptiedKeys) {
+    const emptyArrayDoc = parseJS({ [key]: [] }, format);
+    const emptyKV = emptyArrayDoc.items[0] as KeyValue;
+    insert(doc, doc, emptyKV, undefined);
+  }
+  if (emptiedKeys.size > 0) applyWrites(doc);
 }
 
 /**

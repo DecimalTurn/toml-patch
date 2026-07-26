@@ -37,11 +37,14 @@ test('spec example: edit value in deeply nested implicit table x.y.z.w', () => {
 
   const result = patch(input, value);
 
+  // w = 9 should be hoisted above the first table header so it doesn't
+  // end up nested inside [table.subtable]
   expect(result).toEqual(dedent`
+    w = 9
+
     [table.subtable]
     key = "another value"
 
-    w = 9
 
     [table.inline]
     name = { first = "Tom", last = "Preston-Werner" }

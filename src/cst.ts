@@ -205,6 +205,8 @@ export interface Float extends TreeNode {
   type: NodeType.Float;
   raw: string;
   value: number;
+  /** Sign prefix for NaN values: '+' for +nan, '-' for -nan, undefined for nan */
+  nanSign?: '+' | '-';
 }
 export function isFloat(node: TreeNode): node is Float {
   return node.type === NodeType.Float;

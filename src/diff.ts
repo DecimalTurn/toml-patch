@@ -60,6 +60,21 @@ export default function diff(before: any, after: any, path: Path = []): Change[]
     return [];
   }
 
+  // Both NaN — treat as equal only if they have the same sign bit.
+  // -NaN and NaN are distinguishable via IEEE 754, so a sign change
+  // from negative NaN to canonical NaN should trigger an edit.
+  if (typeof before === 'number' && typeof after === 'number'
+      && Number.isNaN(before) && Number.isNaN(after)) {
+    const bufBefore = new Float64Array([before]);
+    const bufAfter = new Float64Array([after]);
+    const viewBefore = new DataView(bufBefore.buffer);
+    const viewAfter = new DataView(bufAfter.buffer);
+    const signBefore = viewBefore.getUint32(4, true) & 0x80000000;
+    const signAfter = viewAfter.getUint32(4, true) & 0x80000000;
+    if (signBefore === signAfter) return [];
+    // Sign differs — fall through to produce an Edit
+  }
+
   if (Array.isArray(before) && Array.isArray(after)) {
     return compareArrays(before, after, path);
   } else if (isObject(before) && isObject(after)) {

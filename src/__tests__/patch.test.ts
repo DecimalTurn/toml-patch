@@ -1,5 +1,5 @@
 import patch from '../patch';
-import { parse } from '../';
+import { parse, stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
@@ -4703,6 +4703,417 @@ describe('Temporal.ZonedDateTime handling', () => {
     expect(patched).toEqual(dedent`
       date = 2023-01-02T00:00:00-00:00
     ` + '\n');
+  });
+
+});
+
+describe('BigInt handling', () => {
+
+  test('should not throw on document containing integer outside safe range', () => {
+    const src = 'id = 9223372036854775807\n';
+    expect(() => patch(src, parse(src))).not.toThrow();
+  });
+
+  test('should not throw on unrelated edit with bigint in document', () => {
+    const src = 'id = 9223372036854775807\nname = "x"\n';
+    const o = parse(src);
+    o.name = 'y';
+    expect(() => patch(src, o)).not.toThrow();
+    const result = patch(src, o);
+    expect(result).toContain('name = "y"');
+    expect(result).toContain('id = 9223372036854775807');
+  });
+
+});
+
+describe('commented multiline array edge cases', () => {
+
+  test('should preserve closing bracket when adding new key after commented multiline array', () => {
+    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
+    const result = patch(src, { arr: [1, 2], z: 1 });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # one
+        2, # two
+      ]
+      z = 1
+    ` + '\n');
+  });
+
+  test('should correctly empty a commented multiline array', () => {
+    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
+    const result = patch(src, { arr: [] });
+    // Should produce valid TOML, not mangled output
+    expect(() => parse(result)).not.toThrow();
+    // Should contain the key with an empty array
+    expect(result).toContain('arr');
+    expect(result).toContain('[');
+    expect(result).toContain(']');
+  });
+
+});
+
+describe('table to scalar replacement', () => {
+
+  test('should hoist scalar above preceding table section when replacing a table', () => {
+    const src = dedent`
+      [s]
+      k = "v"
+
+      [u]
+      m = 3
+    ` + '\n';
+    const result = patch(src, { s: { k: 'v' }, u: false });
+    // Re-parsing should give u as a top-level key, not nested under s
+    const reparsed = parse(result);
+    expect(reparsed.u).toBe(false);
+    expect(reparsed.s).toEqual({ k: 'v' });
+    // The output should not nest u under s
+    expect(result).not.toMatch(/\[s\][\s\S]*u = false/);
+  });
+
+  test('should correctly handle table-to-scalar when table is first', () => {
+    const src = dedent`
+      [u]
+      m = 3
+
+      [s]
+      k = "v"
+    ` + '\n';
+    const result = patch(src, { u: false, s: { k: 'v' } });
+    const reparsed = parse(result);
+    expect(reparsed.u).toBe(false);
+    expect(reparsed.s).toEqual({ k: 'v' });
+  });
+
+});
+
+describe('inlineTableStart nested table handling', () => {
+
+  test('should preserve nested tables with inlineTableStart >= 2', () => {
+    const src = dedent`
+      [project]
+      name = "my-app"
+    ` + '\n';
+    const value = parse(src);
+    value.tool = { ruff: { line_length: 88 } };
+    const result = patch(src, value, { inlineTableStart: 2 });
+    // Re-parse should see the nested table structure
+    const reparsed = parse(result);
+    expect(reparsed.tool).toBeDefined();
+    expect(reparsed.tool.ruff).toBeDefined();
+    expect(reparsed.tool.ruff.line_length).toBe(88);
+  });
+
+  test('should preserve nested tables with inlineTableStart = 3', () => {
+    const src = dedent`
+      [project]
+      name = "my-app"
+    ` + '\n';
+    const value = parse(src);
+    value.tool = { ruff: { line_length: 88 } };
+    const result = patch(src, value, { inlineTableStart: 3 });
+    const reparsed = parse(result);
+    expect(reparsed.tool).toBeDefined();
+    expect(reparsed.tool.ruff).toBeDefined();
+    expect(reparsed.tool.ruff.line_length).toBe(88);
+  });
+
+});
+
+describe('array element comment association', () => {
+
+  test.skip('should keep # a comment on element 1 when truncating to [1]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1] });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # a
+      ]
+    ` + '\n');
+  });
+
+  test('should keep # a and # b comments when truncating to [1, 2]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1, 2] });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # a
+        2, # b
+      ]
+    ` + '\n');
+  });
+
+  test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [2, 3] });
+    expect(result).toEqual(dedent`
+      arr = [
+        2, # b
+        3, # c
+      ]
+    ` + '\n');
+  });
+
+  test.skip('should not shift comments down when appending element', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [1, 2, 3, 4] });
+    expect(result).toEqual(dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+        4,
+      ]
+    ` + '\n');
+  });
+
+  test.skip('should keep comments on original elements when prepending', () => {
+    const src = dedent`
+      arr = [
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n';
+    const result = patch(src, { arr: [0, 1, 2, 3] });
+    expect(result).toEqual(dedent`
+      arr = [
+        0,
+        1, # a
+        2, # b
+        3, # c
+      ]
+    ` + '\n');
+  });
+
+});
+
+describe('emptying array-of-tables', () => {
+
+  test('should degrade to inline empty array when emptying a single AOT entry', () => {
+    const src = dedent`
+      [[b]]
+      n = 1
+    ` + '\n';
+    const result = patch(src, { b: [] });
+    const reparsed = parse(result);
+    expect(reparsed.b).toEqual([]);
+  });
+
+  test('should degrade to inline empty array when emptying multiple AOT entries', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    const result = patch(src, { i: [] });
+    const reparsed = parse(result);
+    expect(reparsed.i).toEqual([]);
+  });
+
+});
+
+describe('structural type replacements', () => {
+
+  test('should replace nested table [a.b] with scalar', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expect(() => patch(src, { a: 42 })).not.toThrow();
+  });
+
+  test('should replace single AOT entry with scalar', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expect(() => patch(src, { i: 42 })).not.toThrow();
+  });
+
+  test.skip('should replace multiple AOT entries with different length array', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    expect(() => patch(src, { i: [9] })).not.toThrow();
+    const result = patch(src, { i: [9] });
+    const reparsed = parse(result);
+    expect(reparsed.i).toEqual([9]);
+  });
+
+  test('should empty array within a table', () => {
+    const src = dedent`
+      [t]
+      y = [1, 2]
+    ` + '\n';
+    expect(() => patch(src, { t: { y: [] } })).not.toThrow();
+  });
+
+});
+
+describe('meaningful error messages', () => {
+
+  test.skip('should give meaningful error when emptying a commented array document', () => {
+    const src = dedent`
+      arr = [
+        1, # one
+      ]
+    ` + '\n';
+    // Should not throw internal TypeError 'reading substring of undefined'
+    expect(() => patch(src, {})).toThrow(/Node not found|Cannot remove/i);
+  });
+
+  test.skip('should give meaningful error when deleting AOT while adding unrelated key', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    // Should not throw internal TypeError 'reading length of undefined'
+    expect(() => patch(src, { other: 1 })).toThrow(/Node not found|Cannot remove/i);
+  });
+
+});
+
+describe('blank line accumulation on table deletion', () => {
+
+  test.skip('should not accumulate blank lines when deleting tables one at a time', () => {
+    let s = dedent`
+      [a]
+      x = 1
+
+      [b]
+      y = 2
+
+      [c]
+      z = 3
+
+      [d]
+      w = 4
+    ` + '\n';
+
+    for (const k of ['a', 'b', 'c']) {
+      const o = parse(s);
+      delete o[k];
+      s = patch(s, o);
+    }
+
+    expect(s).toEqual(dedent`
+      [d]
+      w = 4
+    ` + '\n');
+  });
+
+});
+
+describe('comment removal with section', () => {
+
+  test.skip('should remove comment that precedes a deleted table section', () => {
+    const src = dedent`
+      [a]
+      x = 1
+
+      # section about b
+      [b]
+      z = 3
+    ` + '\n';
+
+    const o = parse(src);
+    delete o.b;
+    const result = patch(src, o);
+
+    expect(result).toEqual(dedent`
+      [a]
+      x = 1
+    ` + '\n');
+  });
+
+});
+
+describe('lone surrogate handling in stringify', () => {
+
+  test.skip('should reject lone surrogates instead of emitting invalid TOML', () => {
+    // Lone surrogates are not valid Unicode scalar values.
+    // stringify should throw rather than emit \\uD800.
+    expect(() => stringify({ s: '\ud800' })).toThrow();
+  });
+
+});
+
+describe('identity round-trip normalizations', () => {
+
+  test('should preserve +nan sign through parse and round-trip', () => {
+    const result = patch('a = +nan\n', parse('a = +nan\n'));
+    expect(result).toBe('a = +nan\n');
+  });
+
+  test('should preserve existing +nan style when updated to another NaN value', () => {
+    // Original TOML has +nan, patched object has NaN (e.g. from computation).
+    // The existing formatting style (+nan) should be preserved.
+    const src = 'a = +nan\n';
+    const parsed = parse(src);
+    parsed.a = NaN; // different NaN value, but still NaN
+    const result = patch(src, parsed);
+    expect(result).toBe('a = +nan\n');
+  });
+
+  test('should preserve existing -nan style when updated to a non-negative NaN value', () => {
+    // Original TOML has -nan, patched object has regular NaN (no sign).
+    // The sign style should be preserved, flipping to +nan.
+    const src = 'a = -nan\n';
+    const parsed = parse(src);
+    parsed.a = NaN; // canonical NaN, no sign bit
+    const result = patch(src, parsed);
+    expect(result).toBe('a = +nan\n');
+  });
+
+  test('should preserve -nan sign through parse and round-trip', () => {
+    // `-nan` should parse to a negative NaN distinguishable via IEEE 754 bit pattern
+    const parsed = parse('a = -nan\n');
+    expect(Number.isNaN(parsed.a)).toBe(true);
+
+    // Verify it's negative NaN by checking the IEEE 754 sign bit
+    const buf = new Float64Array([parsed.a]);
+    const view = new DataView(buf.buffer);
+    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
+    expect(highBits & 0x80000000).not.toBe(0); // sign bit set
+
+    // And round-trip should preserve the `-nan` spelling
+    const result = patch('a = -nan\n', parsed);
+    expect(result).toBe('a = -nan\n');
   });
 
 });

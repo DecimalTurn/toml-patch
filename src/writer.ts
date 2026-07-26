@@ -229,12 +229,29 @@ function insertOnNewLine(
 
   parent.items.splice(index, 0, child);
 
-  // Set start location from previous item or start of array
-  // (previous is undefined for empty array or inserting at first item)
-  const start = previous
+  // Set start location from the item with the furthest end position among
+  // all preceding items (up to index). This handles extracted comments that
+  // appear after a KeyValue in the items array but are physically positioned
+  // before the KeyValue's closing bracket in the source.
+  let furthestPrevious: TreeNode | undefined;
+  if (previous !== undefined) {
+    let maxEndLine = -1;
+    let maxEndColumn = -1;
+    for (let i = 0; i < index; i++) {
+      const item = parent.items[i];
+      const end = item.loc.end;
+      if (end.line > maxEndLine || (end.line === maxEndLine && end.column > maxEndColumn)) {
+        maxEndLine = end.line;
+        maxEndColumn = end.column;
+        furthestPrevious = item;
+      }
+    }
+  }
+
+  const start = furthestPrevious
     ? {
-      line: previous.loc.end.line,
-      column: !isComment(previous) ? previous.loc.start.column : parent.loc.start.column
+      line: furthestPrevious.loc.end.line,
+      column: !isComment(furthestPrevious) ? furthestPrevious.loc.start.column : parent.loc.start.column
     }
     : clonePosition(parent.loc.start);
   
