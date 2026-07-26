@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher. ([#255])
-- Patching: prevent whitespace errors when swaping keys between tables. ([#255])
+- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher.
+- Patching: prevent whitespace errors when swaping keys between tables.
 - Patching: handle BigInt values in documents without throwing. ([#255])
 - Patching: handle commented multiline arrays correctly when adding keys or emptying them. ([#255])
 - Patching: fix wrong section nesting when replacing a table with a scalar value. ([#255])
