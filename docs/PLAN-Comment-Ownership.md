@@ -26,7 +26,42 @@ stay behind labelling the wrong keys.
 
 This document specifies a single, explicit ownership model and a module that implements it. It is a
 **prerequisite** for `updateOrder` (see `docs/PLAN-Update-Order.md`) but is designed to stand on its own:
-it introduces no user-visible behaviour change and is independently testable.
+independently testable, and — per a later decision, see Status below — also wired directly into deletion,
+so it does have one small, deliberate user-visible effect: entries removed via `patch()` now take their
+owned comments with them, rather than leaving them behind to label whatever ends up in that spot.
+
+---
+
+## Status: implemented for deletion, with two deviations from this plan
+
+R1–R6, `Slot`, and `resolveSlots()` are implemented exactly as specified below, in
+`src/comment-ownership.ts`, and wired into every genuine-deletion call site in `patch.ts`'s `isRemove`
+branch — not the Move/Rename/structural-edit call sites, which relocate or rebuild a node rather than
+delete it. 34 tests in `src/__tests__/comment-ownership.test.ts` cover every rule; full suite green.
+
+Two things described below no longer match what shipped:
+
+- **R5 is computed lazily, not via a `normalizeSectionComments` pre-pass.** The blanket pre-pass described
+  under "R5 in detail" was tried first and reverted: it re-parents a comment across containers in memory
+  without changing any text, so a document normalized this way permanently disagrees with a fresh re-parse
+  of its own output — for *every* patch, not just ones touching that comment (caught by
+  `roundtrip.patch-parse.test.ts`). Production code instead uses a private `trailingOwnedRun()` helper
+  inside `removeMember()`, computing the same R5 check only at the moment a specific section is actually
+  being deleted — so the tree only ever diverges from a fresh parse when the comment is genuinely gone.
+  `normalizeSectionComments()` is still exported, unused, and untested, as a general-purpose utility for a
+  future caller that won't round-trip through text before consuming the result (e.g. a reorder pass that's
+  about to rewrite those lines anyway).
+- **Deletion wiring happened here, not deferred.** The "Non-goals" section below said changing `remove()`'s
+  deletion behaviour was "a separate decision" left for later. That decision was made, at the point of use:
+  rather than modifying `writer.remove()` itself (which would have changed Move/Rename/structural-edit
+  behaviour too), a new `removeMember()` was added alongside it, called only from the three genuine-deletion
+  sites in `patch.ts`.
+
+Also not built: the unit-style tests this document originally specified (direct `Slot`-composition
+assertions, a standalone table-driven suite over `isCommentedOutEntry`, dedicated `normalizeSectionComments`
+tests, a `validate-cst.test.ts` integration). The shipped suite is integration-level instead — asserting
+`patch()` output strings — exercising user-visible behaviour directly, at the cost of the finer-grained
+coverage described in §Tests.
 
 ---
 
@@ -250,6 +285,10 @@ travelling with that block, which is the correct reading.
 R5 mutates the CST, so it is invoked **only by callers that need it** (the reorder pass). The default patch
 path's tree shape is untouched.
 
+> **Not how deletion actually does it.** See Status above — deletion computes this same check lazily via
+> `trailingOwnedRun()`, scoped to the one section being removed, rather than calling
+> `normalizeSectionComments` as a blanket pre-pass.
+
 ### R6 in detail — commented-out entries
 
 Position alone gets one case wrong. A commented-out entry sitting directly above a live one is *not*
@@ -314,9 +353,9 @@ the comment body with the real tokenizer rather than a regex, at the cost of a p
 
 **Not in scope for this module:**
 
-- Changing what `writer.remove()` does with the same-line comment it currently deletes
-  (`src/writer.ts:530-540`). Fixing that with this model is an obvious follow-up, but it changes existing
-  behaviour that `swap-table-keys.test.ts` pins, so it is a separate decision.
+- ~~Changing what `writer.remove()` does with the same-line comment it currently deletes~~ — **this decision
+  was made** (see Status above): `removeMember()` now does it, `swap-table-keys.test.ts` was updated to
+  match, and `writer.remove()` itself is untouched so every other caller keeps its current behaviour.
 - Comment ownership *inside* single-line inline tables and arrays. Those containers cannot hold `Comment`
   nodes at all (`InlineTableItem = InlineItem<KeyValue>[]`), and their interior comments are already
   handled by R1 as hoisted comments of the owning key-value.
@@ -359,8 +398,23 @@ export function resolveSlots(
   isEligibleForLeading?: (member: TreeNode) => boolean
 ): Slot[];
 
-/** R5. Mutates the tree; loc-preserving, so serialized output is unchanged. */
+/**
+ * R5. Mutates the tree; loc-preserving, so serialized output is unchanged. Exported for a future caller
+ * that consumes the mutated tree without round-tripping through text first — see Status above for why
+ * deletion does NOT use this (a blanket pre-pass call breaks the roundtrip invariant). Currently unused
+ * and untested.
+ */
 export function normalizeSectionComments(document: Document): void;
+
+/**
+ * Not in the original design — added when deletion wiring was pulled into this module's scope (see
+ * Status above). Removes `member` from `parent.items` along with every comment it owns: the leading run,
+ * right-side/trailing comments, and — for a [table]/[[array]] member — any trailing run the parser filed
+ * under the PRECEDING sibling table but which R5 assigns to `member` instead (computed lazily via a
+ * private `trailingOwnedRun()` helper, not `normalizeSectionComments`). Falls back to a plain `remove()`
+ * when `parent` isn't a container the ownership model applies to.
+ */
+export function removeMember(root: Root, parent: TreeNode, member: TreeNode): void;
 ```
 
 `key` uses the **first** key segment so that dotted keys (`hello.world`, `hello.moon`) and repeated
@@ -380,6 +434,9 @@ b = 2                 <- newly inserted; R2 would hand it the note
 
 A caller that knows `b` was just inserted passes a predicate excluding it, and the run stays pinned. Without
 this, merely adding a key would silently change which member owns an existing comment.
+
+> Unexercised so far: deletion (the only wired-in caller) never inserts, so `removeMember()` always uses
+> the default `() => true`. This parameter is for a future Add-path caller.
 
 ---
 
@@ -427,8 +484,11 @@ Two details that are easy to get wrong:
 - **A member's slot stays open** for subsequent R1 comments. Case 4 puts the hoisted comment after the
   key-value, so the scan must be able to append to the slot it just opened.
 
-`normalizeSectionComments` runs as a separate pass *before* `resolveSlots`, so the scan never has to reason
-across container boundaries.
+`resolveSlots` itself never reasons across container boundaries — it only ever sees one container's own
+`items`. As designed, `normalizeSectionComments` was meant to run as a separate pass *before* `resolveSlots`
+so cross-container cases (R5) never needed to exist by the time the scan ran. In production, cross-container
+reasoning instead lives entirely in `removeMember`'s `trailingOwnedRun()` helper, called only for the one
+sibling table actually adjacent to a section being deleted — see Status above.
 
 ---
 
@@ -436,12 +496,14 @@ across container boundaries.
 
 | # | File | Change |
 |---|---|---|
-| 1 | `src/comment-ownership.ts` | **New.** `Slot`, `resolveSlots()`, `normalizeSectionComments()`, the R6 dead-entry patterns. |
+| 1 | `src/comment-ownership.ts` | **New.** `Slot`, `resolveSlots()`, `normalizeSectionComments()` (unused, see Status), `removeMember()` (not originally planned — see Status), the R6 dead-entry patterns. |
 | 2 | `src/writer.ts` | Lift `recalcContainerEnd` out of the `applyWrites` closure (`src/writer.ts:764-786`) into a shared export; `applyWrites` calls the shared one. Needed by R5 to shrink a donor table. |
-| 3 | `src/__tests__/comment-ownership.test.ts` | **New.** Rule-by-rule coverage. |
-| 4 | `docs/PLAN-Update-Order.md` | Cross-reference this document as a prerequisite. |
+| 3 | `src/patch.ts` | **Not originally planned — see Status.** Swap the three genuine-deletion `remove()` calls in the `isRemove` branch for `removeMember()`. Move/Rename/structural-edit call sites untouched. |
+| 4 | `src/__tests__/comment-ownership.test.ts` | **New.** Integration-level coverage via `patch()` (see Status for the deviation from the originally-specified unit style). |
+| 5 | `src/__tests__/swap-table-keys.test.ts` | **Not originally planned.** One expectation updated: a swapped key's comments are now deleted along with it rather than stranded — see Non-goals. |
+| 6 | `docs/PLAN-Update-Order.md` | Cross-reference this document as a prerequisite. |
 
-No changes to `patch.ts`, `diff.ts`, `to-toml.ts`, or any existing behaviour.
+`diff.ts` and `to-toml.ts` are untouched, as planned.
 
 ### On the `recalcContainerEnd` refactor
 
@@ -469,19 +531,30 @@ section is written to be implementable against `resolveSlots` alone, before R5 e
 
 **Step 4 — `normalizeSectionComments()`.** Detach + re-parent + `recalcContainerEnd` on the donor. The
 critical assertion is that `toTOML(document.items, format)` is **byte-identical** before and after, for
-every fixture in `src/__fixtures__`.
+every fixture in `src/__fixtures__`. *(Implemented, but — see Status above — discovered unsuitable as a
+blanket pre-pass and left uncalled/untested; the fixture round-trip assertion was never written.)*
 
-**Step 5 — Wire into `updateOrder`.** Out of scope here; see `docs/PLAN-Update-Order.md`.
+**Step 5 — Wire into deletion.** Not originally planned as a step here at all (the Non-goals section called
+this "a separate decision" for later) — done anyway, per direct instruction, once the tests in Step 6 made
+the target behaviour concrete. `removeMember()` replaces `remove()` at the three genuine-deletion call sites
+in `patch.ts`; R5 is resolved via the lazy `trailingOwnedRun()` helper, not `normalizeSectionComments()`.
+
+**Step 6 — Wire into `updateOrder`.** Still out of scope; see `docs/PLAN-Update-Order.md`.
 
 ---
 
 ## Tests — `src/__tests__/comment-ownership.test.ts`
 
-Assert **slot composition** (which comment lands in which slot, and each slot's `startLine`/`endLine`),
-not output strings. Output-level assertions belong to the reorder suite.
+**As specified below:** assert **slot composition** (which comment lands in which slot, and each slot's
+`startLine`/`endLine`), not output strings, plus a standalone table-driven suite over `isCommentedOutEntry`.
+**As actually shipped** (see Status): every case is an integration-level assertion of `patch()` output —
+parse a fixture, delete a key, assert the resulting string. This exercises the real user-visible behaviour
+directly, but the unit-level table below was not transcribed into its own suite; use it as a design
+reference / case list, not as the shipped test names.
 
-The R6 match table in §R6 is a separate table-driven suite over `isCommentedOutEntry` alone — no CST, no
-fixtures. Every row of that table, both the ✅ and the ❌ cases, becomes an assertion.
+The R6 match table in §R6 was meant to be its own table-driven suite over `isCommentedOutEntry` alone — no
+CST, no fixtures — covering both the ✅ and the ❌ rows directly. Not built; instead a handful of its rows
+are covered indirectly, each via a full `patch()` integration test (see the `R6` `describe` block).
 
 | Case | Fixture | Expect |
 |---|---|---|
@@ -516,7 +589,10 @@ fixtures. Every row of that table, both the ✅ and the ❌ cases, becomes an as
 
 Plus, in `src/__tests__/validate-cst.test.ts`: after `normalizeSectionComments`, `expectConsistent` must
 still hold (`findPositionOverlaps` — every child contained in its parent — and `findInvertedLocations`),
-and `items` array order must still equal ascending line order for `Document.items`.
+and `items` array order must still equal ascending line order for `Document.items`. **Not added** —
+`normalizeSectionComments` has no caller to integrate against (see Status). The invariant itself held up in
+practice: it is exactly what the `roundtrip.patch-parse.test.ts` regressions caught when the pre-pass
+approach was tried and reverted, so it has empirical (if not dedicated-unit-test) coverage.
 
 > That last invariant is load-bearing beyond this module: `TomlDocument` stores `document.items` as its CST
 > (`src/toml-document.ts:89`) and `toJS` derives the whole JS object by walking array order
@@ -535,16 +611,31 @@ pnpm test                    # nothing else may change
 pnpm build && pnpm typecheck
 ```
 
-The strongest signal for Step 3: round-trip every file in `src/__fixtures__` through
-`parseTOML` → `normalizeSectionComments` → `toTOML` and assert byte-equality with the input.
+The strongest signal for Step 3 would be to round-trip every file in `src/__fixtures__` through
+`parseTOML` → `normalizeSectionComments` → `toTOML` and assert byte-equality with the input — not written
+(see Status). What actually caught the equivalent problem for the shipped deletion path was the pre-existing
+`roundtrip.patch-parse.test.ts` (`parse(patch(x))` must match the in-memory patched CST), which is why that
+suite stayed in `pnpm test`'s scope above rather than needing a dedicated addition here.
 
 ---
 
 ## Follow-ups enabled by this model
 
-- **`writer.remove()` dropping same-line comments** (`src/writer.ts:530-540`) — with ownership available,
-  removal can drop the comment *because it is owned*, rather than because it happens to share a line, and a
-  future `moveItem()` can carry it instead. Changes behaviour pinned by `swap-table-keys.test.ts`, so it
-  needs its own decision.
+- **Deletion dropping owned comments — done.** `removeMember()` now drops a comment *because it is owned*,
+  not because it happens to share a line with whatever `remove()` was told to delete. `writer.remove()`
+  itself is unchanged.
+- **Comment-preserving Move.** The remaining half of the original `writer.remove()` follow-up: a `Move`
+  (e.g. the `swap-table-keys.test.ts` swap, or a table-array entry relocated by removing an earlier sibling)
+  still relocates a node via plain `remove()`+`insert()` and does not carry its owned comments along. This
+  is exactly what `docs/PLAN-Update-Order.md` needs for `updateOrder` and designs for throughout — the
+  AOT-entry test here was deliberately reshaped to avoid triggering a Move, to keep this phase to deletion
+  only. That doc's own Step 1 (§3.3) calls `normalizeSectionComments(document)` as a one-time pre-pass too;
+  whether that's safe there depends on the reorder pass immediately relocating the affected lines afterward
+  (unlike here, where deletion may leave them exactly where the parser put them) — worth re-checking against
+  the roundtrip invariant before relying on it.
 - **`updateOrder`** — the reason this exists. See `docs/PLAN-Update-Order.md`.
 - **Comment-preserving key rename / table rename** — same slot machinery.
+- **Unit-level test coverage** described in §Tests but not built: direct `Slot`-composition assertions
+  against `resolveSlots()`, a standalone `isCommentedOutEntry` table-driven suite, dedicated
+  `normalizeSectionComments()` tests (including the fixture round-trip), and the `validate-cst.test.ts`
+  integration.
