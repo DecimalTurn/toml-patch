@@ -5092,12 +5092,12 @@ describe('identity round-trip normalizations', () => {
 
   test('should preserve existing -nan style when updated to a non-negative NaN value', () => {
     // Original TOML has -nan, patched object has regular NaN (no sign).
-    // The existing formatting style (-nan) should be preserved.
+    // The sign style should be preserved, flipping to +nan.
     const src = 'a = -nan\n';
     const parsed = parse(src);
     parsed.a = NaN; // canonical NaN, no sign bit
     const result = patch(src, parsed);
-    expect(result).toBe('a = -nan\n');
+    expect(result).toBe('a = +nan\n');
   });
 
   test('should preserve -nan sign through parse and round-trip', () => {

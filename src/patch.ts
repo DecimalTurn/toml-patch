@@ -253,9 +253,12 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const existingFloat = existing as FloatNode;
     const replacementFloat = replacement as FloatNode;
     if (existingFloat.nanSign) {
-      replacementFloat.nanSign = existingFloat.nanSign;
-      replacementFloat.raw = existingFloat.nanSign + 'nan';
+      // Existing had a sign (+ or -), replacement has none (canonical NaN).
+      // Preserve the signed style: always use '+' for positive/unsigned.
+      replacementFloat.nanSign = '+';
+      replacementFloat.raw = '+nan';
     }
+    // If existing had no sign and replacement has no sign, leave as-is (nan)
   }
   
   // Preserve array trailing comma format
