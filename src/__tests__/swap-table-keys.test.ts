@@ -57,15 +57,18 @@ test('should swap keys with comments preserved', () => {
 
   const result = patch(input, value);
 
-  // Comments are tied to the line they appear on, so they should be preserved
-  // in their original positions. The key movement should not orphan comments.
+  // A "swap" is Remove(B) + Add(D) as far as the diff is concerned, and both
+  // comments are OWNED by B: `# comment for B` by adjacency (R2) and
+  // `# inline B` by right-side ownership (R1). Deleting B therefore deletes
+  // them, rather than stranding `# comment for B` above the unrelated D.
+  // See docs/PLAN-Comment-Ownership.md.
+  // TODO: When updateOrder is implemented and we have a move operation for keys,
+  // we can preserve comments on moved keys.
   expect(result).toEqual(dedent`
     [A]
-    # comment for B
     D = "valueD"
 
     [C]
-    # comment for D
     B = "valueB"
   `);
 });

@@ -1790,9 +1790,10 @@ describe('TomlDocument', () => {
         // integers1: should not have trailing comma (preserve original format)
         expect(result).toContain('integers1 = [\n  1, 2, 3, 10\n]');
         
-        // integers2: should have trailing comma (preserve original format)
-        // Note: there might be spacing issues with comments, but trailing comma should be preserved
-        expect(result).toContain('integers2 = [\n  4,\n  5,\n  6,\n  11,    # this is ok and should be preserved\n]');
+        // integers2: should have trailing comma (preserve original format), and the
+        // trailing comment stays attached to the element it originally described (`6`)
+        // rather than drifting onto the newly-appended `11`.
+        expect(result).toContain('integers2 = [\n  4,\n  5,\n  6, # this is ok and should be preserved\n  11,\n]');
         
         // integers3: should not have trailing comma (preserve original format)  
         expect(result).toContain('integers3 = [\n  7,\n  8,\n  9,\n  12\n]');

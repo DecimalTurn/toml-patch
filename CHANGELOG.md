@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING**: Raise minimum supported Node.js version from `>=14` to `>=16`.
+- Patching: introducing explicit comment ownership. Comments describing a key, table, array-of-tables entry or an element inside a multi-line
+  array/inline table now travel with it when removed or reordered via `patch()`, instead of being left
+  behind to describe whatever ends up in that spot. See [docs/CommentOwnership.md](docs/CommentOwnership.md). ([#259])
 - Improve stringification performance
 
 ### Added
@@ -318,3 +321,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#189]: https://github.com/DecimalTurn/toml-patch/pull/189
 [#198]: https://github.com/DecimalTurn/toml-patch/pull/198
 [#255]: https://github.com/DecimalTurn/toml-patch/pull/255
+[#259]: https://github.com/DecimalTurn/toml-patch/pull/259

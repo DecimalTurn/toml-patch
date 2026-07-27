@@ -34,6 +34,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
+import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -308,6 +309,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
+
   // Potential Changes:
   //
   // Add: Add key-value to object, add item to array
@@ -395,6 +397,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // The comments hoisted out of a multiline InlineArray/InlineTable live in the
+      // nearest enclosing Document/Table/TableArray's own items, not necessarily
+      // `original.items` — resolve it once so insert() can compensate the array the
+      // hoisted comments actually live in, matching removeMember/moveInlineElement.
+      const inlineHostItems = (isInlineArray(parent) || isInlineTable(parent))
+        ? (findHostContainer(original, parent)?.items as TreeNode[] | undefined)
+        : undefined;
+
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
@@ -436,7 +446,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               resolvedIndex = rootTableEnd;
             }
           }
-          insert(original, parent, child, resolvedIndex);
+          insert(original, parent, child, resolvedIndex, undefined, inlineHostItems);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -447,9 +457,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const inlineItem = generateInlineItem(child);
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem);
+          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
         } else {
-          insert(original, parent, child);
+          insert(original, parent, child, undefined, undefined, inlineHostItems);
         }
       } else {
         // Check if we should convert inline tables to multiline tables when adding to existing tables
@@ -614,7 +624,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (first) {
           let entry: TreeNode | undefined;
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
-            remove(original, original, entry);
+            removeMember(original, original, entry);
           }
           // After removing all AOT entries, insert an empty inline array
           // key-value so the key isn't lost (e.g. b = []).
@@ -630,7 +640,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
           if (prefixNodes.length > 0) {
             for (const prefixNode of prefixNodes) {
-              remove(original, original, prefixNode);
+              removeMember(original, original, prefixNode);
             }
           } else {
             // Not a table array or implicit key — let findByPath throw the descriptive error.
@@ -660,7 +670,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = original;
         }
 
-        remove(original, parent, node);
+        removeMember(original, parent, node);
 
         // Track AOT keys whose entries may have been fully removed
         if (isTableArray(node)) {
@@ -680,8 +690,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         const node = (parent as WithItems).items[change.from];
 
-        remove(original, parent, node);
-        insert(original, parent, node, change.to);
+        moveInlineElement(original, parent, node, change.to);
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
