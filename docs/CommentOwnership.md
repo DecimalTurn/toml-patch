@@ -21,17 +21,20 @@ y = 2
 ```
 
 The same applies to `[table]` / `[[array-of-tables]]` blocks, and to elements inside a multi-line
-array or inline table:
+array or inline table — both a leading own-line comment and a trailing same-line one:
 
 ```toml
 fruits = [
-  "apple",  # crisp
+  "apple",
+  # crisp and tart
   "banana", # slippery
+  "cherry",
 ]
 ```
 
-Removing `"banana"` removes `# slippery` with it — `"apple"` and its own comment are untouched.
-Reordering array elements carries each moved element's own comment along too.
+Removing `"banana"` removes both `# crisp and tart` and `# slippery` with it — `"apple"` and
+`"cherry"` are untouched. Reordering array elements carries each moved element's own comment(s)
+along too.
 
 ## A blank line opts out
 
