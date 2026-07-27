@@ -5003,9 +5003,6 @@ describe('structural type replacements', () => {
   });
 
   test('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
-    // TODO: handleStructuralEdit throws TypeError when removing multiple
-    // sibling nodes. The prefix collection + removal loop needs to handle
-    // offset accumulation across consecutive remove() calls.
     const src = dedent`
       [a.b]
       x = 1
@@ -5017,9 +5014,6 @@ describe('structural type replacements', () => {
   });
 
   test('[a.b] → a = 42 with preceding section (hoist check)', () => {
-    // TODO: the replacement KV lands after the preceding [s] section,
-    // causing a to be parsed as nested under s. Need to hoist before
-    // any remaining table headers.
     const src = dedent`
       [s]
       k = "v"
@@ -5051,9 +5045,6 @@ describe('structural type replacements', () => {
   // ── Table → object ──────────────────────────────────────────────────
 
   test('[a.b] → a = { x: 1 } (table to inline object)', () => {
-    // TODO: the outer key 'a' is lost; output is 'x = 1' instead of
-    // 'a = { x = 1 }'. The KV from parseJS round-trip loses its key
-    // during insert() into the emptied document.
     const src = dedent`
       [a.b]
       old = "gone"
@@ -5062,7 +5053,6 @@ describe('structural type replacements', () => {
   });
 
   test('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
-    // Same root cause as above.
     const src = dedent`
       [a.b.c]
       old = "gone"
@@ -5083,8 +5073,6 @@ describe('structural type replacements', () => {
   });
 
   test('[[i]] × 2 (multiple entries) → i = 42', () => {
-    // TODO: same TypeError as [a.b]+[a.c] case — removing multiple
-    // sibling AOT entries causes offset corruption.
     const src = dedent`
       [[i]]
       n = 1
@@ -5104,7 +5092,6 @@ describe('structural type replacements', () => {
   });
 
   test('[[a.b]] × 2 → a = 42', () => {
-    // TODO: same multi-sibling TypeError.
     const src = dedent`
       [[a.b]]
       x = 1
@@ -5126,9 +5113,6 @@ describe('structural type replacements', () => {
   // ── AOT → array ─────────────────────────────────────────────────────
 
   test('[[i]] → i = [9] (AOT to different-length array)', () => {
-    // TODO: "Node not found at i.1" — the removal of multiple AOT
-    // entries via findDocumentItemsByKeyPrefix + remove doesn't clean
-    // up indexed sub-paths correctly.
     const src = dedent`
       [[i]]
       n = 1
@@ -5140,9 +5124,6 @@ describe('structural type replacements', () => {
   });
 
   test('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
-    // TODO: "Incompatible child type InlineItem" — the replacement
-    // KV from parseJS is an InlineItem, not a KeyValue, when the
-    // value is an array.
     const src = dedent`
       [[i]]
       n = 1
@@ -5169,7 +5150,6 @@ describe('structural type replacements', () => {
   });
 
   test('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
-    // TODO: same outer-key-loss issue as table→object cases.
     const src = dedent`
       [[a.b]]
       x = 1
@@ -5180,7 +5160,6 @@ describe('structural type replacements', () => {
   // ── Mixed / complex ─────────────────────────────────────────────────
 
   test('[a.b] + [[a.c]] → a = 42 (mixed Table + AOT siblings)', () => {
-    // TODO: multi-sibling TypeError.
     const src = dedent`
       [a.b]
       x = 1
@@ -5192,7 +5171,6 @@ describe('structural type replacements', () => {
   });
 
   test('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
-    // TODO: multi-sibling TypeError.
     const src = dedent`
       [a.b]
       x = 1
@@ -5204,7 +5182,6 @@ describe('structural type replacements', () => {
   });
 
   test('multiple AOT sequences + table siblings → scalar', () => {
-    // TODO: multi-sibling TypeError.
     const src = dedent`
       [[a.b]]
       x = 1
@@ -5226,9 +5203,6 @@ describe('structural type replacements', () => {
   // existing Table/TableArray key.
 
   test('[a.b.c] → a.b = 42 (intermediate path)', () => {
-    // TODO: handleStructuralEdit inserts b = 42 at document level
-    // instead of nesting under [a]. Need to generate the full key
-    // hierarchy when the change path has multiple segments.
     const src = dedent`
       [a.b.c]
       x = 1
@@ -5237,7 +5211,6 @@ describe('structural type replacements', () => {
   });
 
   test('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
-    // Same issue as above.
     const src = dedent`
       [[a.b.c]]
       x = 1
@@ -5276,8 +5249,6 @@ describe('structural type replacements', () => {
   // ── Safeguard: unrelated content preserved ──────────────────────────
 
   test('unrelated tables survive the structural replacement', () => {
-    // TODO: hoisting issue — the replacement KV lands after [keep],
-    // nesting a under keep instead of keeping it at root.
     const src = dedent`
       [keep]
       v = 1
@@ -5292,7 +5263,6 @@ describe('structural type replacements', () => {
   });
 
   test('unrelated AOT entries survive', () => {
-    // TODO: same outer-key-loss issue as table→object cases.
     const src = dedent`
       [[keep]]
       n = 1
