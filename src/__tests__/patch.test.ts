@@ -4832,6 +4832,64 @@ describe('table to scalar replacement', () => {
     expect(reparsed.s).toEqual({ k: 'v' });
   });
 
+  // BUG (reported via GitHub Copilot PR review on #260): a structural table->scalar edit
+  // regenerates a fresh KV/Table node via writer.ts's replace(), in-place at the original's
+  // position. When that same patch also reorders root entries (updateOrder: true),
+  // applyContainerMoves's isEligibleForLeading check (src/update-order.ts) keys R2 adjacency
+  // ownership off prePatchNodes identity -- so the fresh replacement node is wrongly treated
+  // as ineligible, same as a genuinely new (Added) entry. The leading comment above it gets
+  // left pinned at its old physical position instead of travelling with the entry to its new
+  // spot. Fixed by treating structural-replacement nodes as eligible too, not just
+  // pre-existing ones.
+  test('should carry the leading comment along when a table->scalar edit is combined with a reorder', () => {
+    const src = dedent`
+      # comment about w
+      [x.y.z.w]
+      a = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+
+    const result = patch(src, {
+      other: { b: 2 },
+      x: { y: { z: { w: 42 } } }
+    }, { updateOrder: true });
+
+    expect(result).toEqual(dedent`
+      [other]
+      b = 2
+
+      # comment about w
+      [x.y.z]
+      w = 42
+    ` + '\n');
+  });
+
+  // Same bug as above, but through the single-segment replace() call site (table becomes a
+  // root-level scalar directly, rather than a fresh nested table).
+  test('should carry the leading comment along when a single-segment table->scalar edit is combined with a reorder', () => {
+    const src = dedent`
+      foo = 1
+
+      # comment about w
+      [w]
+      a = 1
+    ` + '\n';
+
+    const result = patch(src, {
+      w: 42,
+      foo: 1
+    }, { updateOrder: true });
+
+    expect(result).toEqual(dedent`
+      # comment about w
+      w = 42
+
+      foo = 1
+    ` + '\n');
+  });
+
 });
 
 describe('inlineTableStart nested table handling', () => {
