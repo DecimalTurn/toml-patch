@@ -578,7 +578,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // type change (e.g. table→scalar, AOT→scalar, array→empty).
       // Handle by removing old nodes and inserting fresh KV.
       if (!existing) {
-        handleStructuralEdit(original, updated, change, format, temporal);
+        handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes);
         return; // skip generic edit handling
       }
 
@@ -657,20 +657,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
             commentEligibleNodes.add(freshKV);
 
-            // If there's a table header before this KV in the items array,
-            // the KV visually falls inside the wrong section. Remove and
-            // re-insert it at the correct position (before the first table).
-            const document = original as Document;
-            const kvIndex = document.items.indexOf(freshKV);
-            if (kvIndex >= 0) {
-              const firstTableIndex = document.items.findIndex(
-                item => isTable(item) || isTableArray(item)
-              );
-              if (firstTableIndex !== -1 && firstTableIndex < kvIndex) {
-                remove(original, tableParent, freshKV);
-                insert(original, tableParent, freshKV, firstTableIndex);
-              }
-            }
+            hoistRootKeyValueAboveTables(original, freshKV);
           }
           return; // handled; skip the generic replace() below
         }
@@ -859,16 +846,53 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 }
 
 /**
+ * Position of the first `[table]`/`[[array]]` header in `doc`, or -1 if there is none.
+ *
+ * A key-value that physically follows a section header belongs to that section, not to the
+ * root table. So any path that regenerates a root-level key has to land it above the first
+ * header — appending at the end of the document silently reparents it, and the value comes
+ * back under the wrong key on the next parse. See
+ * docs/bug-notes/comment-eligibility-on-structural-replace.md.
+ */
+function firstSectionHeaderIndex(doc: Document): number {
+  return doc.items.findIndex(item => isTable(item) || isTableArray(item));
+}
+
+/** Index to insert a regenerated root key-value at so it stays in the root table. */
+function rootKeyValueInsertIndex(doc: Document): number | undefined {
+  const firstTableIndex = firstSectionHeaderIndex(doc);
+  return firstTableIndex === -1 ? undefined : firstTableIndex;
+}
+
+/**
+ * Moves an already-inserted root-level key-value back above the first section header, for the
+ * paths that place it via `replace()` (which pins it to the replaced node's position) rather
+ * than choosing an index. Also tends to reunite the key with a leading comment left behind at
+ * its original position.
+ */
+function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
+  const kvIndex = doc.items.indexOf(kv);
+  if (kvIndex < 0) return;
+
+  const firstTableIndex = firstSectionHeaderIndex(doc);
+  if (firstTableIndex === -1 || firstTableIndex > kvIndex) return;
+
+  remove(doc, doc, kv);
+  insert(doc, doc, kv, firstTableIndex);
+}
+
+/**
  * Handles structural edits where findByPath can't resolve the existing CST node
  * because the structure type has changed (e.g. table→scalar, AOT→scalar, array→empty).
- * Removes old structural nodes and inserts a fresh key-value.
+ * Swaps the fresh key-value in for the old structural nodes.
  */
 function handleStructuralEdit(
   original: Document,
   updated: Document,
   change: Change,
   format: TomlFormat,
-  temporal: boolean
+  temporal: boolean,
+  commentEligibleNodes: WeakSet<TreeNode>
 ): void {
   const updated_js = toJS(updated.items, '', { temporal });
   let jsValue: any = updated_js;
@@ -880,16 +904,30 @@ function handleStructuralEdit(
 
   const lastName = change.path[change.path.length - 1] as string;
 
-  // Remove old nodes matching the key prefix
-  const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
-  for (const prefixNode of prefixNodes) {
-    remove(original, original, prefixNode);
-  }
-
-  // Generate fresh KV and insert
   const freshDoc = parseJS({ [lastName]: jsValue }, format);
   const freshKV = freshDoc.items[0] as KeyValue;
-  insert(original, original, freshKV, undefined);
+
+  const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+  if (prefixNodes.length === 0) {
+    insert(original, original, freshKV, rootKeyValueInsertIndex(original));
+    return;
+  }
+
+  // Swap the fresh key-value in for the first old node rather than removing everything and
+  // appending: replace() splices in place, so the key keeps its position, its blank-line
+  // budget, and its adjacency to any leading comment. Appending instead left the key at the
+  // end of the document, below section headers that then swallowed it.
+  replace(original, original, prefixNodes[0], freshKV);
+  for (let i = 1; i < prefixNodes.length; i++) {
+    remove(original, original, prefixNodes[i]);
+  }
+
+  // freshKV stands in for a pre-existing entry, so it keeps that entry's R2 eligibility.
+  commentEligibleNodes.add(freshKV);
+
+  // The old node may have sat below a section header (valid for a [table], not for the
+  // key-value replacing it).
+  hoistRootKeyValueAboveTables(original, freshKV);
 }
 
 /**
@@ -938,12 +976,14 @@ function cleanupOrphanedComments(doc: Document): void {
  * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
  */
 function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Set<string>, format: TomlFormat): void {
+  if (emptiedKeys.size === 0) return;
+
   for (const key of emptiedKeys) {
     const emptyArrayDoc = parseJS({ [key]: [] }, format);
     const emptyKV = emptyArrayDoc.items[0] as KeyValue;
-    insert(doc, doc, emptyKV, undefined);
+    insert(doc, doc, emptyKV, rootKeyValueInsertIndex(doc));
   }
-  if (emptiedKeys.size > 0) applyWrites(doc);
+  applyWrites(doc);
 }
 
 /**

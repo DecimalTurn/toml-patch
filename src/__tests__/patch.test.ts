@@ -5051,6 +5051,51 @@ describe('emptying array-of-tables', () => {
     expect(reparsed.i).toEqual([]);
   });
 
+  // A root key-value that physically follows a [table] header parses as a member of that
+  // section, not of the root table. replaceEmptiedTableArrays appended the empty-array KV at
+  // the very end of the document, so whenever any section existed the emptied key was silently
+  // reparented into it -- real data corruption, not just cosmetic placement. Reproduces with
+  // updateOrder off. See docs/bug-notes/comment-eligibility-on-structural-replace.md.
+  test('should keep an emptied AOT key at root level when a table section precedes it', () => {
+    const src = dedent`
+      [other]
+      b = 2
+
+      [[tasks]]
+      name = "a"
+    ` + '\n';
+    const result = patch(src, { other: { b: 2 }, tasks: [] });
+    expect(parse(result)).toEqual({ other: { b: 2 }, tasks: [] });
+  });
+
+  test('should keep an emptied AOT key at root level when it originally preceded a table section', () => {
+    const src = dedent`
+      [[tasks]]
+      name = "a"
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { tasks: [], other: { b: 2 } });
+    expect(parse(result)).toEqual({ tasks: [], other: { b: 2 } });
+  });
+
+  test('should keep multiple emptied AOT keys at root level, in order', () => {
+    const src = dedent`
+      [other]
+      b = 2
+
+      [[x]]
+      n = 1
+
+      [[y]]
+      m = 2
+    ` + '\n';
+    const result = patch(src, { other: { b: 2 }, x: [], y: [] });
+    expect(parse(result)).toEqual({ other: { b: 2 }, x: [], y: [] });
+    expect(result.indexOf('x = []')).toBeLessThan(result.indexOf('y = []'));
+  });
+
 });
 
 describe('structural type replacements', () => {
@@ -5091,6 +5136,38 @@ describe('structural type replacements', () => {
       y = [1, 2]
     ` + '\n';
     expect(() => patch(src, { t: { y: [] } })).not.toThrow();
+  });
+
+  // Same root cause as the emptied-AOT placement bug above: handleStructuralEdit appended the
+  // regenerated KV at the end of the document, so an existing section header swallowed it.
+  // The pre-existing no-throw test above only covers a document with no other sections, so it
+  // never caught this. See docs/bug-notes/comment-eligibility-on-structural-replace.md.
+  test('should keep an AOT->scalar replacement at root level when a table section follows it', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { i: 42, other: { b: 2 } });
+    expect(parse(result)).toEqual({ i: 42, other: { b: 2 } });
+  });
+
+  // Hoisting the KV back above the section header also reunites it with the leading comment
+  // that stayed behind at the top of the document when the old AOT node was removed.
+  test('should carry the leading comment with an AOT->scalar replacement hoisted above a section', () => {
+    const src = dedent`
+      # comment about i
+      [[i]]
+      n = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { i: 42, other: { b: 2 } });
+    expect(parse(result)).toEqual({ i: 42, other: { b: 2 } });
+    expect(result).toMatch(/# comment about i\r?\ni = 42/);
   });
 
 });

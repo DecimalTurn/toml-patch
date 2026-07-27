@@ -1,9 +1,13 @@
 # Comment eligibility for structurally-replaced entries
 
-**Status: partially fixed.** The core bug — a structural table→scalar edit losing its leading
-comment during an `updateOrder` reorder in the same patch — is fixed by commit `ce612c0` ("fix:
-keep structurally-replaced entries eligible for R2 leading comments"). Two related, out-of-scope
-gaps found during the investigation remain open and are tracked here.
+**Status: fixed.** Two rounds:
+
+1. `ce612c0` — the core bug: a structural table→scalar edit losing its leading comment during an
+   `updateOrder` reorder in the same patch.
+2. The two follow-ups that round 1 left open (see "Root-key placement" below) — both turned out to
+   share a single root cause and were fixed together, along with the comment-orphaning symptom.
+
+A pre-existing issue found while probing these, unrelated to both, is recorded under "Still open".
 
 Found while verifying a GitHub Copilot review comment on PR #260, which flagged the root cause
 precisely: [`resolveSlots`](../../src/comment-ownership.ts)'s `isEligibleForLeading` predicate
@@ -64,64 +68,72 @@ Two other node-replacement sites were checked and ruled out as unaffected:
   `KeyValue`'s `.key` sub-field, not the whole `KeyValue`. The outer node stays untouched and
   remains correctly present in the original snapshot.
 
+## Root-key placement: `handleStructuralEdit` and `replaceEmptiedTableArrays`
+
+Round 1 left these as two separate open items — one framed as comment orphaning, the other as
+misplacement. Probing them turned up a single shared cause, and **both corrupt data**, not just
+formatting.
+
+A key-value that physically follows a `[table]` header parses as a member of *that section*, not
+of the root table. Both paths appended their regenerated root key at the very end of the document
+via `insert(…, undefined)`, so whenever any section existed the key was silently reparented:
+
+| Input | Patched with | Reparsed as | Should be |
+|---|---|---|---|
+| `[[tasks]]` + `[other]` | `{tasks: [], other: {b: 2}}` | `{other: {b: 2, tasks: []}}` | `{tasks: [], other: {b: 2}}` |
+| `[[i]]` + `[other]` | `{i: 42, other: {b: 2}}` | `{other: {b: 2, i: 42}}` | `{i: 42, other: {b: 2}}` |
+
+The `isTable(existing)` branch already guarded against exactly this, with repositioning logic
+inlined after its `replace()`. The fix extracts that into `hoistRootKeyValueAboveTables()` /
+`rootKeyValueInsertIndex()` and applies it to all three sites:
+
+- **`replaceEmptiedTableArrays`** — inserts at `rootKeyValueInsertIndex(doc)` (just above the first
+  section header) instead of appending.
+- **`handleStructuralEdit`** — restructured to mirror the proven `isTable` pattern: `replace()` the
+  first old node in place, `remove()` any remaining ones, then hoist. Swapping in place rather than
+  remove-then-append matters twice over — it keeps the key's blank-line budget (appending produced
+  a doubled blank line, and a bare append-then-move tripped a `to-toml.ts` crash on stale `loc`
+  bookkeeping), and it keeps the key adjacent to its leading comment.
+
+That last point resolves the comment-orphaning symptom too: hoisting the key back above the section
+header lands it directly under the comment that stayed behind, so no separate `writer.remove()`
+work was needed after all. The related `writer.remove()`-drops-comments gap noted in
+[`PLAN-Update-Order.md`](../PLAN-Update-Order.md#8-open-questions--follow-ups) is genuinely a
+different code path (key swaps, pinned by `swap-table-keys.test.ts`) and remains open there.
+
+`handleStructuralEdit` also now receives `commentEligibleNodes` and registers its `freshKV`, for
+the same reason the `isTable` sites do — it is a replacement, not a new entry.
+
+Regression tests, all previously failing: `src/__tests__/patch.test.ts`, three in `emptying
+array-of-tables` and two in `structural type replacements`. The pre-existing tests missed this
+because they only ever exercised documents with no competing section (`should replace single AOT
+entry with scalar` asserts nothing beyond `not.toThrow()`).
+
 ## Still open
 
-### `handleStructuralEdit`'s `freshKV` can orphan a leading comment
+### Emptying an array-of-tables resurrects a key the caller deleted
 
-`handleStructuralEdit` (`patch.ts`) is a separate structural-edit path, reached when `tryFindByPath`
-can't locate `existing` at all (rather than finding a `Table`, as above). It removes the old
-node(s) via `remove()` and appends a fresh KV at the document's end via
-`insert(original, original, freshKV, undefined)` — not in place, unlike the `isTable(existing)`
-branch fixed above.
+Unrelated to the above and **pre-existing** — verified by running the same input against the
+pre-fix commit, which behaves identically apart from the placement bug already described.
 
-This is the same class of problem as the already-documented gap in
-[`PLAN-Update-Order.md`](../PLAN-Update-Order.md#8-open-questions--follow-ups): *"`writer.remove()`
-dropping same-line comments — fixable with the ownership model, but it changes behaviour pinned by
-`swap-table-keys.test.ts`."* `remove()` doesn't relocate a comment that physically precedes the
-node it strips, so a leading comment above the old entry is left as an orphan at its old physical
-position; simply marking `freshKV` "eligible" wouldn't fix this, since the entry it should be
-adjacent to no longer exists nearby for R2 to attach to. This needs the same treatment as the
-`writer.remove()` gap generally, not the narrower fix that shipped here.
+Removing an array-of-tables key *entirely* from the JS object still emits `key = []` in the output.
+Given `[[tasks]] / name = "a"` patched with `{ other: { b: 2 } }` — no `tasks` key at all — the
+result still contains `tasks = []`, so a re-`parse()` returns a key the caller asked to delete. The
+`isRemove` branch records the key in `emptiedAotKeys` when it removes the last entry, without
+distinguishing "emptied to `[]`" from "deleted outright", and `replaceEmptiedTableArrays` then
+re-materialises it.
 
-No dedicated regression test isolates this exact call site yet — `swap-table-keys.test.ts` pins the
-general `remove()`-drops-comments behavior for a different code path (key swaps).
+Adjacent to the two skipped tests in `meaningful error messages`
+(`src/__tests__/patch.test.ts`), which cover other AOT-removal edge cases. No test pins this one.
 
-### `replaceEmptiedTableArrays` can produce invalid TOML placement — independent of `updateOrder`
+### Blank-line residue when deleting the document's first section
 
-When every entry of an array-of-tables is removed, `replaceEmptiedTableArrays` (`patch.ts`) inserts
-an empty-array `KeyValue` (e.g. `tasks = []`) via `insert(doc, doc, emptyKV, undefined)`, which
-appends at the very end of `doc.items` — regardless of where other document items are.
+Also pre-existing and independent of everything above: deleting the first item of a document leaves
+its line slot behind. `[first] / a = 1` + `[other] / b = 2` patched with `{ other: { b: 2 } }`
+yields a leading blank line (`"\n[other]\nb = 2\n"`), identical before and after this fix. In the
+emptied-AOT case that residue compounds with the newly-hoisted key to give two blank lines rather
+than the usual one — placement is correct and the output parses correctly, only the spacing is off.
 
-If any `[table]` section already exists in the document, the emptied key lands physically *after*
-that section header, which makes it a member of that table rather than the root table — invalid
-placement, not just a cosmetic reordering issue. This reproduces **even with `updateOrder` off**,
-so it's unrelated to the `isEligibleForLeading` bug above; it was only found as a side effect of
-probing candidate test cases for this investigation.
-
-```toml
-[[tasks]]
-name = "a"
-
-[other]
-b = 2
-```
-
-patched with `{ tasks: [], other: { b: 2 } }` (no `updateOrder`) produces:
-
-```toml
-
-[other]
-b = 2
-tasks = []
-```
-
-— `tasks = []` now reads as a member of `[other]`, and a re-`parse()` would return
-`{ other: { b: 2, tasks: [] } }` rather than the intended `{ other: { b: 2 }, tasks: [] }`. The
-`isTable(existing)` branch already has repositioning logic for exactly this hazard (see
-`patch.ts`'s single-segment case: after `replace()`, it checks whether a table header now precedes
-the fresh KV and, if so, moves the KV back before the first table). `replaceEmptiedTableArrays`
-has no equivalent check.
-
-Not documented anywhere before this note, and not covered by the existing `emptying
-array-of-tables` tests (`src/__tests__/patch.test.ts`), which only exercise a lone AOT with no
-competing sibling key. No regression test has been added for it yet either.
+This is the already-known gap pinned by the skipped test `should not accumulate blank lines when
+deleting tables one at a time` (`blank line accumulation on table deletion`). Fixing it means
+touching `writer.ts`'s removal bookkeeping, which is why it stayed out of scope here.
