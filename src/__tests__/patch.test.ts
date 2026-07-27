@@ -4969,23 +4969,135 @@ describe('emptying array-of-tables', () => {
 
 describe('structural type replacements', () => {
 
-  test('should replace nested table [a.b] with scalar', () => {
+  // ── helper ──────────────────────────────────────────────────────────
+
+  /**
+   * Asserts that patching `src` with `updated` does not throw, produces the
+   * exact `expectedToml` string, and that reparsing it deep-equals `updated`
+   * (a sanity check that `expectedToml` itself round-trips correctly).
+   */
+  function expectPatchResult(src: string, updated: Record<string, any>, expectedToml: string) {
+    let result: string;
+    expect(() => { result = patch(src, updated); }).not.toThrow();
+    expect(result!).toBe(expectedToml);
+    const reparsed = parse(result!);
+    expect(reparsed).toEqual(updated);
+  }
+
+  // ── Table → scalar ──────────────────────────────────────────────────
+  // These trigger handleStructuralEdit because the Table key (e.g.
+  // ['a','b']) is longer than the change path (['a']).
+
+  test('[a.b] → a = 42', () => {
     const src = dedent`
       [a.b]
       x = 1
     ` + '\n';
-    expect(() => patch(src, { a: 42 })).not.toThrow();
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
   });
 
-  test('should replace single AOT entry with scalar', () => {
+  test('[a.b.c] → a = 42 (deep nested table)', () => {
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [a.c]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[a.b] → a = 42 with preceding section (hoist check)', () => {
+    const src = dedent`
+      [s]
+      k = "v"
+
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { s: { k: 'v' }, a: 42 }, dedent`
+      a = 42
+
+      [s]
+      k = "v"
+    ` + '\n');
+  });
+
+  // ── Table → array ───────────────────────────────────────────────────
+
+  test('[a.b] → a = [1, 2, 3]', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [1, 2, 3] }, dedent`
+      a = [ 1, 2, 3 ]
+    ` + '\n');
+  });
+
+  test('[a.b.c] → a = [true, false] (deep nested → array)', () => {
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [true, false] }, dedent`
+      a = [ true, false ]
+    ` + '\n');
+  });
+
+  // ── Table → object ──────────────────────────────────────────────────
+
+  test('[a.b] → a = { x: 1 } (table to inline object)', () => {
+    const src = dedent`
+      [a.b]
+      old = "gone"
+    ` + '\n';
+    expectPatchResult(src, { a: { x: 1 } }, dedent`
+      [a]
+      x = 1
+    ` + '\n');
+  });
+
+  test('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
+    const src = dedent`
+      [a.b.c]
+      old = "gone"
+    ` + '\n';
+    expectPatchResult(src, { a: { d: 'hi' } }, dedent`
+      [a]
+      d = "hi"
+    ` + '\n');
+  });
+
+  // ── AOT → scalar ────────────────────────────────────────────────────
+  // These also trigger handleStructuralEdit because TableArray keys
+  // include the array index (e.g. ['i',0]) and are longer than the path.
+
+  test('[[i]] (single entry) → i = 42', () => {
     const src = dedent`
       [[i]]
       n = 1
     ` + '\n';
-    expect(() => patch(src, { i: 42 })).not.toThrow();
+    expectPatchResult(src, { i: 42 }, dedent`
+      i = 42
+    ` + '\n');
   });
 
-  test.skip('should replace multiple AOT entries with different length array', () => {
+  test('[[i]] × 2 (multiple entries) → i = 42', () => {
     const src = dedent`
       [[i]]
       n = 1
@@ -4993,11 +5105,268 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expect(() => patch(src, { i: [9] })).not.toThrow();
-    const result = patch(src, { i: [9] });
-    const reparsed = parse(result);
-    expect(reparsed.i).toEqual([9]);
+    expectPatchResult(src, { i: 42 }, dedent`
+      i = 42
+    ` + '\n');
   });
+
+  test('[[a.b]] (nested single entry) → a = 42', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[[a.b]] × 2 → a = 42', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[[a.b.c]] → a = 42 (deep nested AOT)', () => {
+    const src = dedent`
+      [[a.b.c]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  // ── AOT → array ─────────────────────────────────────────────────────
+
+  test('[[i]] → i = [9] (AOT to different-length array)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+    ` + '\n';
+    expectPatchResult(src, { i: [9] }, dedent`
+      i = [ 9 ]
+    ` + '\n');
+  });
+
+  test('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: [1, 2, 3] }, dedent`
+      i = [ 1, 2, 3 ]
+    ` + '\n');
+  });
+
+  test('[[a.b]] → a = [1, 2] (nested AOT to array)', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: [1, 2] }, dedent`
+      a = [ 1, 2 ]
+    ` + '\n');
+  });
+
+  // ── AOT → object ────────────────────────────────────────────────────
+
+  test('[[i]] → i = { x: 1 } (AOT to inline object)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: { x: 1 } }, dedent`
+      [i]
+      x = 1
+    ` + '\n');
+  });
+
+  test('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { c: 3 } }, dedent`
+      [a]
+      c = 3
+    ` + '\n');
+  });
+
+  // ── Mixed / complex ─────────────────────────────────────────────────
+
+  test('[a.b] + [[a.c]] → a = 42 (mixed Table + AOT siblings)', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [[a.c]]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [a.c.d]
+      y = 2
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('multiple AOT sequences + table siblings → scalar', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      x = 2
+
+      [a.c]
+      y = 3
+
+      [[a.d]]
+      z = 4
+    ` + '\n';
+    expectPatchResult(src, { a: 99 }, dedent`
+      a = 99
+    ` + '\n');
+  });
+
+  // ── Intermediate-path replacements (deeper than root) ───────────────
+  // When the change path has 2+ segments but is still shorter than the
+  // existing Table/TableArray key.
+
+  test('[a.b.c] → a.b = 42 (intermediate path)', () => {
+    const src = dedent`
+      [a.b.c]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 42 } }, dedent`
+      [a]
+      b = 42
+    ` + '\n');
+  });
+
+  test('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
+    const src = dedent`
+      [[a.b.c]]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 42 } }, dedent`
+      [a]
+      b = 42
+    ` + '\n');
+  });
+
+  // ── Edge: change path matches existing KV key length ─────────────────
+  // These do NOT go through handleStructuralEdit (existing is found), but
+  // verify they still work correctly.
+
+  test('[a] → a = 42 (single-segment table, isTable handler)', () => {
+    const src = dedent`
+      [a]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: 42 }, dedent`
+      a = 42
+    ` + '\n');
+  });
+
+  test('[a.b] → a.b = 99 (path matches table key, isTable handler)', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+    ` + '\n';
+    expectPatchResult(src, { a: { b: 99 } }, dedent`
+      [a]
+      b = 99
+    ` + '\n');
+  });
+
+  test('[[i]] → i = 99 (single-segment AOT, handleStructuralEdit)', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+    expectPatchResult(src, { i: 99 }, dedent`
+      i = 99
+    ` + '\n');
+  });
+
+  // ── Safeguard: unrelated content preserved ──────────────────────────
+
+  test('unrelated tables survive the structural replacement', () => {
+    const src = dedent`
+      [keep]
+      v = 1
+
+      [a.b]
+      x = 2
+
+      [other]
+      w = 3
+    ` + '\n';
+    // TODO: Fix this known formatting bug in remove()'s offset math so that the double blank line is not emitted. See the skipped
+    // NOTE: the double blank line before [other] is a known, pre-existing
+    // formatting bug in remove()'s offset math (not specific to structural
+    // replacement) — see the skipped
+    // "should not accumulate blank lines when deleting tables one at a time"
+    // test below. Asserted here as-is so a regression doesn't silently
+    // change this further; not a statement that this spacing is correct.
+    expectPatchResult(src, { keep: { v: 1 }, a: 42, other: { w: 3 } }, dedent`
+      a = 42
+
+      [keep]
+      v = 1
+
+
+      [other]
+      w = 3
+    ` + '\n');
+  });
+
+  test('unrelated AOT entries survive', () => {
+    const src = dedent`
+      [[keep]]
+      n = 1
+
+      [[a.b]]
+      x = 1
+
+      [[other]]
+      m = 2
+    ` + '\n';
+    // NOTE: same known blank-line bug as above.
+    expectPatchResult(src, { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] }, dedent`
+      a = 42
+
+      [[keep]]
+      n = 1
+
+
+      [[other]]
+      m = 2
+    ` + '\n');
+  });
+
+  // ── Existing (kept) ─────────────────────────────────────────────────
 
   test('should empty array within a table', () => {
     const src = dedent`
