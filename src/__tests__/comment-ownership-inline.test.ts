@@ -678,6 +678,136 @@ describe('nested inside a [table] -- shapes that are NOT regressed', () => {
   });
 });
 
+// writer.ts's insert() has its own "orphaned comment" pre-compensation block (the mirror image
+// of remove()'s, fixed above), but it only ever guarded itself with `isInlineTable(parent)` --
+// never `isInlineArray(parent)`, even though the SAME hoisting mechanism and offset-bleed issue
+// apply identically to multiline arrays. This predates the nested-host-container regression
+// above entirely (introduced in bdb8444, well before comment ownership existed) and is NOT
+// specific to Move/reordering -- it reproduces on a plain `Add` (inserting a brand-new element
+// via splice(), independent of moveInlineElement, which never hits this path since it always
+// pre-strips every comment in the container before calling remove()+insert()). Caught by a
+// GitHub Copilot review comment on this branch's PR. Not skipped: about to be fixed immediately
+// after these specs land (see isInlineArray addition in writer.ts's insert()).
+describe('non-trailing insertion (Add) misplaces an earlier element\'s own comment (pre-existing, unrelated to the Move-path regression above)', () => {
+  test('inserting a new element mid-array drags an EARLIER element\'s own comment onto the new element', () => {
+    const input = dedent`
+      xs = [
+        1, # one
+        2,
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.xs.splice(1, 0, 99);
+
+    // Currently produces `xs = [\n  1,\n  99,    # one\n  2,\n]` -- `# one` (which
+    // describes `1`) drags onto the newly-inserted `99` instead.
+    expect(patch(input, value)).toEqual(dedent`
+      xs = [
+        1, # one
+        99,
+        2,
+      ]
+    ` + '\n');
+  });
+
+  test('same, nested in a [table]', () => {
+    const input = dedent`
+      [sec]
+      xs = [
+        1, # one
+        2,
+      ]
+      y = 9
+    ` + '\n';
+
+    const value = parse(input);
+    value.sec.xs.splice(1, 0, 99);
+
+    expect(patch(input, value)).toEqual(dedent`
+      [sec]
+      xs = [
+        1, # one
+        99,
+        2,
+      ]
+      y = 9
+    ` + '\n');
+  });
+
+  test('same, nested in a [[array-of-tables]]', () => {
+    const input = dedent`
+      [[aot]]
+      xs = [
+        1, # one
+        2,
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.aot[0].xs.splice(1, 0, 99);
+
+    expect(patch(input, value)).toEqual(dedent`
+      [[aot]]
+      xs = [
+        1, # one
+        99,
+        2,
+      ]
+    ` + '\n');
+  });
+
+  test('inserting a new element mid-array leaves a LATER element\'s own comment untouched (already correct)', () => {
+    // The bug's own logic only misfires on comments BEFORE the insertion line, so a
+    // comment on a later element was never at risk -- confirmed here so a fix for the
+    // above doesn't accidentally regress this already-working case.
+    const input = dedent`
+      xs = [
+        1,
+        2, # two
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.xs.splice(1, 0, 99);
+
+    expect(patch(input, value)).toEqual(dedent`
+      xs = [
+        1,
+        99,
+        2, # two
+      ]
+    ` + '\n');
+  });
+
+  test('two separate mid-array insertions in one patch compound into collapsed rows', () => {
+    const input = dedent`
+      xs = [
+        1, # one
+        2,
+        3,
+      ]
+    ` + '\n';
+
+    const value = parse(input);
+    value.xs.splice(1, 0, 98);
+    value.xs.splice(3, 0, 99);
+
+    // Currently produces `xs = [\n  1,\n  98,    # one\n  2, 99,\n  3,\n]` -- no data
+    // loss (values are all correct), but `# one` drags onto `98`, and `2,`/`99,` collapse
+    // onto a single line instead of each getting their own row.
+    expect(patch(input, value)).toEqual(dedent`
+      xs = [
+        1, # one
+        98,
+        2,
+        99,
+        3,
+      ]
+    ` + '\n');
+  });
+});
+
 // Unlike the Move-path regression above, this gap is pre-existing (same output before and
 // after the comment-ownership-for-inline-elements work landed) and is a different root cause:
 // findHostContainer() doesn't resolve through an InlineTable's own KeyValue entries, so an
