@@ -4396,14 +4396,10 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
-  // TODO: This test is currently skipped because the current implementation of patch() does not
-  // guarantee the order of root keys in the output. The test illustrates a desirable behavior
-  // where new root keys are added before existing inline-table since they appeared before
-  // the inline table in the patched object. Implementing this behavior would require a more
-  // complex diffing algorithm that takes into account the order of keys in the patched object,
-  // which is currently out of scope. For now, this test serves as a reminder of a potential
-  // improvement to the patching logic.
-  test.skip('should add new root key-value before inline table if appearing before in the patched object', () => {
+  // Default (updateOrder off): patch() does not reorder existing keys to match JS object
+  // order -- new_root is a genuinely new key, so it's simply appended after mytable, which
+  // keeps its original position. See docs/PLAN-Update-Order.md.
+  test('should append new root key-value after existing inline table when updateOrder is off', () => {
     const existing = dedent`
       mytable = {
          key = "value"
@@ -4414,6 +4410,31 @@ describe('Root key-value placement', () => {
       new_root: 42,
       mytable: { key: 'value' }
     });
+
+    expect(patched).toEqual(dedent`
+      mytable = {
+         key = "value"
+      }
+      new_root = 42
+    ` + '\n');
+  });
+
+  // With updateOrder: true, patch() honours the JS object's key order: new_root appeared
+  // before mytable in the patched object, so it should be hoisted before it in the output.
+  // `updateOrder` doesn't exist on TomlFormat yet -- `as any` cast removed once the option
+  // ships (docs/PLAN-Update-Order.md). This is the plan's canonical Add-plus-reorder case.
+  // Not skipped: failing until updateOrder is implemented, per this session's convention.
+  test('should add new root key-value before inline table if appearing before in the patched object', () => {
+    const existing = dedent`
+      mytable = {
+         key = "value"
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      mytable: { key: 'value' }
+    }, { updateOrder: true } as any);
 
     expect(patched).toEqual(dedent`
       new_root = 42
@@ -4850,7 +4871,7 @@ describe('inlineTableStart nested table handling', () => {
 
 describe('array element comment association', () => {
 
-  test.skip('should keep # a comment on element 1 when truncating to [1]', () => {
+  test('should keep # a comment on element 1 when truncating to [1]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4883,6 +4904,12 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
+  // Skipped for the SAME known, unrelated limitation as the test at the top of this file
+  // ("should indent a relocated first element to match its sibling rows"): dropping the
+  // first element forces the survivor into the array's first slot via a Move, and insert()
+  // positions a new first row at the array's own opening-bracket column instead of matching
+  // its siblings' indentation. The comment ownership itself (# b travels with 2, # c with 3)
+  // is correct -- only the indentation of the relocated row is wrong.
   test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
     const src = dedent`
       arr = [
@@ -4900,7 +4927,7 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  test.skip('should not shift comments down when appending element', () => {
+  test('should not shift comments down when appending element', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4919,6 +4946,9 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
+  // Same known, unrelated indentation quirk as above -- prepending inserts a brand-new
+  // element at index 0, hitting the identical "new first row uses the bracket's own column"
+  // code path in insert(), even though nothing here is being relocated/owns a comment.
   test.skip('should keep comments on original elements when prepending', () => {
     const src = dedent`
       arr = [
