@@ -454,6 +454,132 @@ describe('updateOrder: true', () => {
   });
 });
 
+describe('updateOrder warnings when a requested position could not be honored', () => {
+  test('warns when a move targets a non-contiguous group', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Constructed so the emitted Move is literally keyed "fruit" (not "animal" or "zzz"):
+    // fruit is requested first, and diff.ts's simulate-and-splice always names a Move after
+    // whichever key doesn't already occupy its target scan position.
+    const input = dedent`
+      [animal]
+      kind = "dog"
+
+      [fruit.apple]
+      color = "red"
+
+      [zzz]
+      val = 1
+
+      [fruit.orange]
+      color = "orange"
+    ` + '\n';
+
+    const result = patch(
+      input,
+      {
+        fruit: { apple: { color: 'red' }, orange: { color: 'orange' } },
+        animal: { kind: 'dog' },
+        zzz: { val: 1 }
+      },
+      { updateOrder: true }
+    );
+
+    expect(result).toEqual(input); // left unchanged -- fruit stays non-contiguous
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('toml-patch: updateOrder could not honor the requested position for 1 entry');
+    expect(spy.mock.calls[0][0]).toContain('"fruit"');
+    expect(spy.mock.calls[0][0]).toContain('not contiguous');
+
+    spy.mockRestore();
+  });
+
+  test('warns when a move targets an unsupported location (a dotted-key implicit table interior)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [t]
+      hello.world = 1
+      hello.moon = 2
+      other = 3
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { t: { other: 3, hello: { moon: 2, world: 1 } } },
+      { updateOrder: true }
+    );
+
+    // The outer move (relocating the whole coalesced "hello" unit within t) DOES succeed;
+    // only the inner one (hello's own moon/world order) is unsupported.
+    expect(result).toEqual(dedent`
+      [t]
+      other = 3
+      hello.world = 1
+      hello.moon = 2
+    ` + '\n');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('toml-patch: updateOrder could not honor the requested position for 1 entry');
+    expect(spy.mock.calls[0][0]).toContain('t.hello.moon');
+    expect(spy.mock.calls[0][0]).toContain('unsupported location');
+
+    spy.mockRestore();
+  });
+
+  test('warns when the requested order violates the root-KV/section validity partition', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      new_root = 42
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { section: { key: 'value' }, new_root: 42 },
+      { updateOrder: true, inlineTableStart: 0 }
+    );
+
+    expect(result).toEqual(input);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('toml-patch: updateOrder could not honor the requested position for 1 entry');
+    expect(spy.mock.calls[0][0]).toContain('cannot represent');
+
+    spy.mockRestore();
+  });
+
+  test('does not warn on a successful reorder', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    patch('a = 1\nb = 2\nc = 3\n', { c: 3, a: 1, b: 2 }, { updateOrder: true });
+
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test('does not warn when updateOrder is off, even for a request that would otherwise trigger one', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+    ` + '\n';
+
+    patch(input, { animal: { kind: 'dog' }, fruit: { apple: { color: 'red' }, orange: { color: 'orange' } } });
+
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
 describe('updateOrder default (off): API-compat guarantee -- every case above must stay a no-op reorder', () => {
   test('root key-values: pure reorder produces zero changes, byte-identical output', () => {
     const input = dedent`

@@ -109,6 +109,13 @@ function computeTargetOrder(currentOrder: string[], moves: Move[]): string[] {
   return sim;
 }
 
+/** Full dotted path to the entry a Move targets (its container path plus its own key), for
+ *  warning messages -- clearer than the bare key alone once anything is nested more than one
+ *  level deep (e.g. "t.hello.moon" rather than just "moon"). */
+function describeMovePath(move: Move): string {
+  return [...move.path, move.key].join('.');
+}
+
 /** Resolves a Move's `path` to the Document/Table/TableArray it targets, unwrapping a
  *  KeyValue/InlineItem wrapper if `tryFindByPath` returns one. Returns undefined for any
  *  shape this feature doesn't (yet) support — inline-table interiors, dotted-key implicit
@@ -131,7 +138,7 @@ function resolveContainer(document: Document, path: Path): Document | Table | Ta
   return undefined;
 }
 
-function applyContainerMoves(document: Document, container: Document | Table | TableArray, moves: Move[], prePatchNodes: WeakSet<TreeNode>): void {
+function applyContainerMoves(document: Document, container: Document | Table | TableArray, moves: Move[], prePatchNodes: WeakSet<TreeNode>, warnings: string[]): void {
   const slots = resolveSlots(container, node => prePatchNodes.has(node));
   const units = buildUnits(slots);
 
@@ -141,6 +148,23 @@ function applyContainerMoves(document: Document, container: Document | Table | T
       movableUnitsByKey.set(unit.key, unit);
     }
   }
+
+  // Warn about any requested move whose key genuinely exists here as a member but was marked
+  // unmovable by buildUnits (a non-contiguous group) -- the caller asked for a specific
+  // position and it was silently left exactly where it was.
+  const memberKeys = new Set(
+    units.filter(u => u.kind === 'member' && u.key !== undefined).map(u => u.key!)
+  );
+  for (const move of moves) {
+    if (move.key !== undefined && memberKeys.has(move.key) && !movableUnitsByKey.has(move.key)) {
+      warnings.push(
+        `"${describeMovePath(move)}" -- its entries are not contiguous in the document (e.g. the ` +
+        `TOML spec's own "valid but discouraged" out-of-order table pattern), so reordering was ` +
+        `skipped for it`
+      );
+    }
+  }
+
   if (movableUnitsByKey.size === 0) return; // nothing this container can safely reorder
 
   // Move.from/to are indices into the FULL member key sequence compareObjects saw (every
@@ -170,6 +194,23 @@ function applyContainerMoves(document: Document, container: Document | Table | T
   // only WHICH key fills each position-of-its-kind is being decided here.
   const rootKvTargetOrder = targetOrder.filter(k => !movableUnitsByKey.get(k)!.isSection);
   const sectionTargetOrder = targetOrder.filter(k => movableUnitsByKey.get(k)!.isSection);
+
+  // Warn when the requested order itself asked for a root key-value to land after a section
+  // header -- structurally impossible, so each partition falls back to keeping its own
+  // requested relative order instead of the literal interleaving that was asked for.
+  let sawSection = false;
+  for (const key of targetOrder) {
+    if (movableUnitsByKey.get(key)!.isSection) {
+      sawSection = true;
+    } else if (sawSection) {
+      warnings.push(
+        'the requested order asked for a root key-value to be positioned after a section header, ' +
+        'which TOML cannot represent -- each group (root key-values, section blocks) was reordered ' +
+        'to match its own requested relative order instead'
+      );
+      break;
+    }
+  }
 
   let rootKvCursor = 0;
   let sectionCursor = 0;
@@ -232,18 +273,44 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], prePatchNo
   // travels with the wrong block.
   normalizeSectionComments(document);
 
+  // Collects every requested reposition this pass couldn't honor, across every container, so
+  // a single consolidated console.warn can report them at the end (docs/PLAN-Update-Order.md
+  // scope limitations: non-contiguous groups, the root-KV/section validity partition, and
+  // shapes reordering doesn't reach yet at all -- inline-table/array-of-tables interiors,
+  // dotted-key implicit tables, AOT-entry sub-tables). "Did nothing" for the affected entry is
+  // the safe failure mode in every case; this only makes that silence visible to the caller.
+  const warnings: string[] = [];
+
   const movesByContainer = new Map<Document | Table | TableArray, Move[]>();
   for (const move of moves) {
     if (move.key === undefined) continue;
     const container = resolveContainer(document, move.path);
-    if (!container) continue; // never throw — unsupported shape, safe to skip
+    if (!container) {
+      // Never throw — this is reached for shapes updateOrder doesn't support at all yet:
+      // dotted-key implicit tables, inline-table/array-of-tables interiors, and AOT-entry
+      // sub-tables only reachable via document-sibling scanning.
+      warnings.push(
+        `"${describeMovePath(move)}" -- unsupported location for reordering (e.g. a dotted-key ` +
+        `implicit table, or an interior of an inline table/array-of-tables entry)`
+      );
+      continue;
+    }
     const bucket = movesByContainer.get(container);
     if (bucket) bucket.push(move);
     else movesByContainer.set(container, [move]);
   }
 
   for (const [container, containerMoves] of movesByContainer) {
-    applyContainerMoves(document, container, containerMoves, prePatchNodes);
+    applyContainerMoves(document, container, containerMoves, prePatchNodes, warnings);
+  }
+
+  if (warnings.length > 0) {
+    const unique = [...new Set(warnings)];
+    console.warn(
+      `toml-patch: updateOrder could not honor the requested position for ` +
+      `${unique.length === 1 ? '1 entry' : `${unique.length} entries`}, left unchanged:\n` +
+      unique.map(w => `  - ${w}`).join('\n')
+    );
   }
 
   recalcContainerEnd(document);
