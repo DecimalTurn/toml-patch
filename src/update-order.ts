@@ -143,16 +143,26 @@ function applyContainerMoves(document: Document, container: Document | Table | T
   }
   if (movableUnitsByKey.size === 0) return; // nothing this container can safely reorder
 
-  // The combined (root-key-value + section) order, exactly as compareObjects saw it —
-  // partition classification is derived from ORIGINAL structure below, never from this list.
-  const currentOrder = units
-    .filter(u => u.kind === 'member' && u.movable)
-    .map(u => u.key!);
+  // Move.from/to are indices into the FULL member key sequence compareObjects saw (every
+  // top-level key of this container's JS object, movable or not) -- replaying relevantMoves
+  // against a sequence that already excluded fixed-anchor keys would silently misinterpret
+  // those indices (a move meant to land after a fixed anchor could look like a no-op once
+  // that anchor's slot is gone from the sequence). So the replay runs over the FULL sequence,
+  // fixed anchors included as placeholder tokens (never themselves targeted, since no move's
+  // key can match a non-contiguous-group's un-unique real key here anyway -- see buildUnits),
+  // and only the RESULT is filtered down to movable keys afterward.
+  // NUL-prefixed: TOML keys (bare or quoted) can never contain a control character, so this
+  // placeholder can never collide with a real key name.
+  let anchorCounter = 0;
+  const fullCurrentOrder = units
+    .filter(u => u.kind === 'member')
+    .map(u => (u.movable ? u.key! : `\u0000anchor:${anchorCounter++}`));
 
   const relevantMoves = moves.filter(m => m.key !== undefined && movableUnitsByKey.has(m.key));
   if (relevantMoves.length === 0) return;
 
-  const targetOrder = computeTargetOrder(currentOrder, relevantMoves);
+  const fullTargetOrder = computeTargetOrder(fullCurrentOrder, relevantMoves);
+  const targetOrder = fullTargetOrder.filter(k => movableUnitsByKey.has(k));
 
   // Validity partition (docs/PLAN-Update-Order.md, Scope): a root key-value can never appear
   // after a section header. Root-KV positions and section positions are fixed by the

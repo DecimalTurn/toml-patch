@@ -965,6 +965,29 @@ describe('CST position consistency after updateOrder reordering', () => {
     );
   });
 
+  test('genuinely-movable siblings reorder freely around a fixed non-contiguous anchor', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [fruit.apple]
+        color = "red"
+
+        [animal]
+        kind = "dog"
+
+        [fruit.orange]
+        color = "orange"
+
+        [zebra]
+        stripes = true
+      ` + '\n',
+      {
+        fruit: { apple: { color: 'red' }, orange: { color: 'orange' } },
+        zebra: { stripes: true },
+        animal: { kind: 'dog' }
+      }
+    );
+  });
+
   test('[[array-of-tables]] block moves as a unit', () => {
     expectConsistentWithOrder(
       dedent`

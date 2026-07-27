@@ -134,6 +134,86 @@ describe('updateOrder: true', () => {
     ` + '\n');
   });
 
+  test('the same non-contiguous-group guard applies to table headers ("valid but discouraged" out-of-order tables)', () => {
+    // Straight from the TOML spec's own "valid but discouraged" example: [fruit.apple] and
+    // [fruit.orange] are non-contiguous (split apart by [animal]), so getMemberKey's
+    // first-segment-only key ("fruit" for both) makes this the exact same hazard as the
+    // dotted-key case above, just at the table-header level instead of root scalars.
+    const input = dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { animal: { kind: 'dog' }, fruit: { apple: { color: 'red' }, orange: { color: 'orange' } } },
+      { updateOrder: true }
+    );
+
+    expect(result).toEqual(dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+    ` + '\n');
+  });
+
+  test('other genuinely-movable siblings still reorder freely around a fixed non-contiguous anchor', () => {
+    // Regression test: Move.from/to are indices into the FULL key sequence compareObjects
+    // saw, including "fruit" even though it's unmovable here. Naively replaying only the
+    // "relevant" (movable) moves against a sequence that had ALREADY dropped fruit made an
+    // in-range move look like a no-op purely because the index space had shifted -- zebra and
+    // animal silently failed to reorder around fruit. [fruit.apple]/[fruit.orange] must still
+    // stay exactly where they are; [zebra] and [animal] must freely swap around them.
+    const input = dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+
+      [zebra]
+      stripes = true
+    ` + '\n';
+
+    const result = patch(
+      input,
+      {
+        fruit: { apple: { color: 'red' }, orange: { color: 'orange' } },
+        zebra: { stripes: true },
+        animal: { kind: 'dog' }
+      },
+      { updateOrder: true }
+    );
+
+    expect(result).toEqual(dedent`
+      [fruit.apple]
+      color = "red"
+
+      [zebra]
+      stripes = true
+
+      [fruit.orange]
+      color = "orange"
+
+      [animal]
+      kind = "dog"
+    ` + '\n');
+  });
+
   test('an [[array-of-tables]] block moves as a unit, preserving its own entry order', () => {
     const input = dedent`
       [[a]]
@@ -403,6 +483,49 @@ describe('updateOrder default (off): API-compat guarantee -- every case above mu
     ` + '\n';
 
     expect(patch(input, { b: 2, hello: { world: 1, moon: 3 } })).toEqual(input);
+  });
+
+  test('out-of-order table headers: pure reorder produces zero changes, byte-identical output', () => {
+    const input = dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+    ` + '\n';
+
+    expect(patch(
+      input,
+      { animal: { kind: 'dog' }, fruit: { apple: { color: 'red' }, orange: { color: 'orange' } } }
+    )).toEqual(input);
+  });
+
+  test('movable siblings around a fixed non-contiguous anchor: pure reorder produces zero changes, byte-identical output', () => {
+    const input = dedent`
+      [fruit.apple]
+      color = "red"
+
+      [animal]
+      kind = "dog"
+
+      [fruit.orange]
+      color = "orange"
+
+      [zebra]
+      stripes = true
+    ` + '\n';
+
+    expect(patch(
+      input,
+      {
+        fruit: { apple: { color: 'red' }, orange: { color: 'orange' } },
+        zebra: { stripes: true },
+        animal: { kind: 'dog' }
+      }
+    )).toEqual(input);
   });
 
   test('AOT block: pure reorder produces zero changes, byte-identical output', () => {
