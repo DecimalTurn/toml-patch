@@ -34,7 +34,7 @@ import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff'
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
-import { removeMember, moveInlineElement } from './comment-ownership';
+import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -397,6 +397,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // The comments hoisted out of a multiline InlineArray/InlineTable live in the
+      // nearest enclosing Document/Table/TableArray's own items, not necessarily
+      // `original.items` — resolve it once so insert() can compensate the array the
+      // hoisted comments actually live in, matching removeMember/moveInlineElement.
+      const inlineHostItems = (isInlineArray(parent) || isInlineTable(parent))
+        ? (findHostContainer(original, parent)?.items as TreeNode[] | undefined)
+        : undefined;
+
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
@@ -438,7 +446,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               resolvedIndex = rootTableEnd;
             }
           }
-          insert(original, parent, child, resolvedIndex);
+          insert(original, parent, child, resolvedIndex, undefined, inlineHostItems);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -449,9 +457,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const inlineItem = generateInlineItem(child);
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem);
+          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
         } else {
-          insert(original, parent, child);
+          insert(original, parent, child, undefined, undefined, inlineHostItems);
         }
       } else {
         // Check if we should convert inline tables to multiline tables when adding to existing tables
