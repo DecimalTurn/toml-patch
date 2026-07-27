@@ -1087,6 +1087,20 @@ describe('CST position consistency after updateOrder reordering', () => {
     );
   });
 
+  test('an inline-table-valued root key reorders within the root-KV partition alongside a real section', () => {
+    expectConsistentWithOrder(
+      dedent`
+        a = 1
+        b = { x = 1, y = 2 }
+
+        [section]
+        key = "value"
+      ` + '\n',
+      { b: { x: 1, y: 2 }, a: 1, section: { key: 'value' } },
+      new TomlFormat(undefined, undefined, undefined, undefined, 0, undefined, undefined, undefined, undefined, true)
+    );
+  });
+
   test('identity permutation', () => {
     expectConsistentWithOrder('a = 1\nb = 2\nc = 3\n', { a: 1, b: 2, c: 3 });
   });

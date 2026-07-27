@@ -8,7 +8,7 @@
  * (or, for the Add/Remove cases, the current — unreordered — behaviour).
  */
 import dedent from 'dedent';
-import { parse, patch } from '../index';
+import { patch } from '../index';
 
 describe('updateOrder: true', () => {
   test('reorders root key-values to match the JS object', () => {
@@ -392,6 +392,55 @@ describe('updateOrder: true', () => {
     ` + '\n');
   });
 
+  test('an inline-table-valued root key reorders within the root-KV partition alongside a real section', () => {
+    // b's value happens to be an object, but b itself is a plain KeyValue (not a Table),
+    // so it's classified as a root-KV for partition purposes, same as the scalar a -- and
+    // freely reorderable relative to a, same as if both were scalars.
+    const input = dedent`
+      a = 1
+      b = { x = 1, y = 2 }
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { b: { x: 1, y: 2 }, a: 1, section: { key: 'value' } },
+      { updateOrder: true, inlineTableStart: 0 }
+    );
+
+    expect(result).toEqual(dedent`
+      b = { x = 1, y = 2 }
+      a = 1
+
+      [section]
+      key = "value"
+    ` + '\n');
+  });
+
+  test('the validity partition still holds when the root key being reordered is an inline table', () => {
+    // Same trap as the scalar version above, but with an inline-table-valued root key
+    // instead of a bare scalar: requesting it after [section] must still be structurally
+    // impossible to honour, regardless of inlineTableStart: 0 keeping it a literal inline
+    // value rather than hoisting it into a section of its own.
+    const input = dedent`
+      a = 1
+      b = { x = 1, y = 2 }
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { section: { key: 'value' }, a: 1, b: { x: 1, y: 2 } },
+      { updateOrder: true, inlineTableStart: 0 }
+    );
+
+    expect(result).toEqual(input);
+  });
+
   test('identity permutation produces byte-identical output', () => {
     const input = dedent`
       a = 1
@@ -617,6 +666,22 @@ describe('updateOrder default (off): API-compat guarantee -- every case above mu
     ` + '\n';
 
     expect(patch(input, { section: { key: 'value' }, new_root: 42 }, { inlineTableStart: 0 })).toEqual(input);
+  });
+
+  test('inline-table root key alongside a real section: pure reorder produces zero changes, byte-identical output', () => {
+    const input = dedent`
+      a = 1
+      b = { x = 1, y = 2 }
+
+      [section]
+      key = "value"
+    ` + '\n';
+
+    expect(patch(
+      input,
+      { b: { x: 1, y: 2 }, a: 1, section: { key: 'value' } },
+      { inlineTableStart: 0 }
+    )).toEqual(input);
   });
 
   test('identity permutation produces byte-identical output', () => {
