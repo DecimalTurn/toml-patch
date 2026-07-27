@@ -184,21 +184,21 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     getExitOffsets(root).delete(previous!);
   }
 
-  // Handle orphaned comments for multiline inline table inserts (analogous to the
-  // remove case below). When a new item is added on a new line inside a multiline
-  // inline table, the exit offset on the inserted child bleeds to comments that were
-  // extracted from inside the inline table into the enclosing Document/Table's own
-  // items (`hostItems` — defaults to `root.items`, correct only when the inline table
+  // Handle orphaned comments for multiline inline table/array inserts (analogous to the
+  // remove case below). When a new item is added on a new line inside a multiline inline
+  // table or array, the exit offset on the inserted child bleeds to comments that were
+  // extracted from inside the container into the enclosing Document/Table's own
+  // items (`hostItems` — defaults to `root.items`, correct only when the inline container
   // is itself root-level; pass the real enclosing container's `.items` otherwise).
   // Pre-compensate comments that appear before the insertion line so the bleedthrough
   // leaves them at their original position.
   //
   // Bounded to comments physically within `parent`'s own line span: `hostItems` (be it
   // root.items or a nested host container's items) can hold many OTHER comments with no
-  // relation to this inline table at all (prose between sibling keys, another key's own
+  // relation to this inline container at all (prose between sibling keys, another key's own
   // trailing comment) — blindly shifting every comment in that array by line number alone
   // corrupts unrelated ones the moment a document has more than the hoisted comments in it.
-  if (isInlineTable(parent) && offset.lines !== 0 && (hostItems || hasItems(root)) && root !== parent) {
+  if ((isInlineTable(parent) || isInlineArray(parent)) && offset.lines !== 0 && (hostItems || hasItems(root)) && root !== parent) {
     const insertionLine = child.loc.start.line;
     const commentHostItems = hostItems ?? (root as WithItems).items;
     for (let i = 0; i < commentHostItems.length; i++) {
