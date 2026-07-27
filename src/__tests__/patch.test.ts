@@ -4972,12 +4972,14 @@ describe('structural type replacements', () => {
   // ── helper ──────────────────────────────────────────────────────────
 
   /**
-   * Asserts that patching `src` with `updated` does not throw, produces
-   * parseable TOML, and that reparsing the result deep-equals `updated`.
+   * Asserts that patching `src` with `updated` does not throw, produces the
+   * exact `expectedToml` string, and that reparsing it deep-equals `updated`
+   * (a sanity check that `expectedToml` itself round-trips correctly).
    */
-  function expectPatchResult(src: string, updated: Record<string, any>) {
+  function expectPatchResult(src: string, updated: Record<string, any>, expectedToml: string) {
     let result: string;
     expect(() => { result = patch(src, updated); }).not.toThrow();
+    expect(result!).toBe(expectedToml);
     const reparsed = parse(result!);
     expect(reparsed).toEqual(updated);
   }
@@ -4991,7 +4993,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[a.b.c] → a = 42 (deep nested table)', () => {
@@ -4999,7 +5001,7 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
@@ -5010,7 +5012,7 @@ describe('structural type replacements', () => {
       [a.c]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[a.b] → a = 42 with preceding section (hoist check)', () => {
@@ -5021,7 +5023,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { s: { k: 'v' }, a: 42 });
+    expectPatchResult(src, { s: { k: 'v' }, a: 42 }, 'a = 42\n\n[s]\nk = "v"\n');
   });
 
   // ── Table → array ───────────────────────────────────────────────────
@@ -5031,7 +5033,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [1, 2, 3] });
+    expectPatchResult(src, { a: [1, 2, 3] }, 'a = [ 1, 2, 3 ]\n');
   });
 
   test('[a.b.c] → a = [true, false] (deep nested → array)', () => {
@@ -5039,7 +5041,7 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [true, false] });
+    expectPatchResult(src, { a: [true, false] }, 'a = [ true, false ]\n');
   });
 
   // ── Table → object ──────────────────────────────────────────────────
@@ -5049,7 +5051,7 @@ describe('structural type replacements', () => {
       [a.b]
       old = "gone"
     ` + '\n';
-    expectPatchResult(src, { a: { x: 1 } });
+    expectPatchResult(src, { a: { x: 1 } }, '[a]\nx = 1\n');
   });
 
   test('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
@@ -5057,7 +5059,7 @@ describe('structural type replacements', () => {
       [a.b.c]
       old = "gone"
     ` + '\n';
-    expectPatchResult(src, { a: { d: 'hi' } });
+    expectPatchResult(src, { a: { d: 'hi' } }, '[a]\nd = "hi"\n');
   });
 
   // ── AOT → scalar ────────────────────────────────────────────────────
@@ -5069,7 +5071,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: 42 });
+    expectPatchResult(src, { i: 42 }, 'i = 42\n');
   });
 
   test('[[i]] × 2 (multiple entries) → i = 42', () => {
@@ -5080,7 +5082,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expectPatchResult(src, { i: 42 });
+    expectPatchResult(src, { i: 42 }, 'i = 42\n');
   });
 
   test('[[a.b]] (nested single entry) → a = 42', () => {
@@ -5088,7 +5090,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[[a.b]] × 2 → a = 42', () => {
@@ -5099,7 +5101,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[[a.b.c]] → a = 42 (deep nested AOT)', () => {
@@ -5107,7 +5109,7 @@ describe('structural type replacements', () => {
       [[a.b.c]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   // ── AOT → array ─────────────────────────────────────────────────────
@@ -5120,7 +5122,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expectPatchResult(src, { i: [9] });
+    expectPatchResult(src, { i: [9] }, 'i = [ 9 ]\n');
   });
 
   test('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
@@ -5128,7 +5130,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: [1, 2, 3] });
+    expectPatchResult(src, { i: [1, 2, 3] }, 'i = [ 1, 2, 3 ]\n');
   });
 
   test('[[a.b]] → a = [1, 2] (nested AOT to array)', () => {
@@ -5136,7 +5138,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [1, 2] });
+    expectPatchResult(src, { a: [1, 2] }, 'a = [ 1, 2 ]\n');
   });
 
   // ── AOT → object ────────────────────────────────────────────────────
@@ -5146,7 +5148,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: { x: 1 } });
+    expectPatchResult(src, { i: { x: 1 } }, '[i]\nx = 1\n');
   });
 
   test('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
@@ -5154,7 +5156,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { c: 3 } });
+    expectPatchResult(src, { a: { c: 3 } }, '[a]\nc = 3\n');
   });
 
   // ── Mixed / complex ─────────────────────────────────────────────────
@@ -5167,7 +5169,7 @@ describe('structural type replacements', () => {
       [[a.c]]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
@@ -5178,7 +5180,7 @@ describe('structural type replacements', () => {
       [a.c.d]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('multiple AOT sequences + table siblings → scalar', () => {
@@ -5195,7 +5197,7 @@ describe('structural type replacements', () => {
       [[a.d]]
       z = 4
     ` + '\n';
-    expectPatchResult(src, { a: 99 });
+    expectPatchResult(src, { a: 99 }, 'a = 99\n');
   });
 
   // ── Intermediate-path replacements (deeper than root) ───────────────
@@ -5207,7 +5209,7 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 42 } });
+    expectPatchResult(src, { a: { b: 42 } }, '[a]\nb = 42\n');
   });
 
   test('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
@@ -5215,7 +5217,7 @@ describe('structural type replacements', () => {
       [[a.b.c]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 42 } });
+    expectPatchResult(src, { a: { b: 42 } }, '[a]\nb = 42\n');
   });
 
   // ── Edge: change path matches existing KV key length ─────────────────
@@ -5227,7 +5229,7 @@ describe('structural type replacements', () => {
       [a]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 });
+    expectPatchResult(src, { a: 42 }, 'a = 42\n');
   });
 
   test('[a.b] → a.b = 99 (path matches table key, isTable handler)', () => {
@@ -5235,7 +5237,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 99 } });
+    expectPatchResult(src, { a: { b: 99 } }, '[a]\nb = 99\n');
   });
 
   test('[[i]] → i = 99 (single-segment AOT, handleStructuralEdit)', () => {
@@ -5243,7 +5245,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: 99 });
+    expectPatchResult(src, { i: 99 }, 'i = 99\n');
   });
 
   // ── Safeguard: unrelated content preserved ──────────────────────────
@@ -5259,7 +5261,13 @@ describe('structural type replacements', () => {
       [other]
       w = 3
     ` + '\n';
-    expectPatchResult(src, { keep: { v: 1 }, a: 42, other: { w: 3 } });
+    // NOTE: the double blank line before [other] is a known, pre-existing
+    // formatting bug in remove()'s offset math (not specific to structural
+    // replacement) — see the skipped
+    // "should not accumulate blank lines when deleting tables one at a time"
+    // test below. Asserted here as-is so a regression doesn't silently
+    // change this further; not a statement that this spacing is correct.
+    expectPatchResult(src, { keep: { v: 1 }, a: 42, other: { w: 3 } }, 'a = 42\n\n[keep]\nv = 1\n\n\n[other]\nw = 3\n');
   });
 
   test('unrelated AOT entries survive', () => {
@@ -5273,7 +5281,8 @@ describe('structural type replacements', () => {
       [[other]]
       m = 2
     ` + '\n';
-    expectPatchResult(src, { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] });
+    // NOTE: same known blank-line bug as above.
+    expectPatchResult(src, { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] }, 'a = 42\n\n[[keep]]\nn = 1\n\n\n[[other]]\nm = 2\n');
   });
 
   // ── Existing (kept) ─────────────────────────────────────────────────
