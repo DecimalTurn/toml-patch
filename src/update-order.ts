@@ -138,7 +138,7 @@ function resolveContainer(document: Document, path: Path): Document | Table | Ta
   return undefined;
 }
 
-function applyContainerMoves(document: Document, container: Document | Table | TableArray, moves: Move[], prePatchNodes: WeakSet<TreeNode>, warnings: string[]): void {
+function applyContainerMoves(container: Document | Table | TableArray, moves: Move[], prePatchNodes: WeakSet<TreeNode>, warnings: string[]): void {
   const slots = resolveSlots(container, node => prePatchNodes.has(node));
   const units = buildUnits(slots);
 
@@ -301,7 +301,7 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], prePatchNo
   }
 
   for (const [container, containerMoves] of movesByContainer) {
-    applyContainerMoves(document, container, containerMoves, prePatchNodes, warnings);
+    applyContainerMoves(container, containerMoves, prePatchNodes, warnings);
   }
 
   if (warnings.length > 0) {
