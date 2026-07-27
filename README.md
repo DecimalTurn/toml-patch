@@ -32,6 +32,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
+- [Comment Ownership](#comment-ownership)
 - [Date/Time Handling & Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
   - [TomlFormat Class](#tomlformat-class)
@@ -379,6 +380,33 @@ doc.update(updatedToml);
 
 console.log(doc.toJsObject.server.port); // 3000
 ```
+
+## Comment Ownership
+
+When `patch()` removes or reorders an entry, any comment describing it — a same-line trailing
+comment, or an own-line comment directly above with no blank line in between — travels along with
+it, instead of being left behind to describe whatever ends up in that spot. This applies to root
+keys, `[table]`/`[[array-of-tables]]` blocks, and elements inside multi-line arrays and inline
+tables.
+
+```js
+import * as TOML from '@decimalturn/toml-patch';
+import { strict as assert } from 'assert';
+
+const existing = `
+x = 1 # a note about x
+y = 2
+`;
+
+const patched = TOML.patch(existing, { y: 2 });
+
+assert.strictEqual(patched, `
+y = 2
+`);
+```
+
+See **[docs/CommentOwnership.md](docs/CommentOwnership.md)** for the full behavior, including how a
+blank line opts a comment out of ownership, and current scope limitations.
 
 ## Date/Time Handling & Temporal
 
