@@ -138,8 +138,8 @@ function resolveContainer(document: Document, path: Path): Document | Table | Ta
   return undefined;
 }
 
-function applyContainerMoves(container: Document | Table | TableArray, moves: Move[], prePatchNodes: WeakSet<TreeNode>, warnings: string[]): void {
-  const slots = resolveSlots(container, node => prePatchNodes.has(node));
+function applyContainerMoves(container: Document | Table | TableArray, moves: Move[], commentEligibleNodes: WeakSet<TreeNode>, warnings: string[]): void {
+  const slots = resolveSlots(container, node => commentEligibleNodes.has(node));
   const units = buildUnits(slots);
 
   const movableUnitsByKey = new Map<string, Unit>();
@@ -265,7 +265,7 @@ function applyContainerMoves(container: Document | Table | TableArray, moves: Mo
  * `document` (Add/Remove/Rename/array-Move/structural-edit) — it does no insertion or
  * deletion of its own, only permutes and relays out what's already there.
  */
-export function applyKeyOrderMoves(document: Document, moves: Move[], prePatchNodes: WeakSet<TreeNode>): void {
+export function applyKeyOrderMoves(document: Document, moves: Move[], commentEligibleNodes: WeakSet<TreeNode>): void {
   if (moves.length === 0) return;
 
   // R5: a comment that visually introduces the next section but is physically parked as a
@@ -301,7 +301,7 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], prePatchNo
   }
 
   for (const [container, containerMoves] of movesByContainer) {
-    applyContainerMoves(container, containerMoves, prePatchNodes, warnings);
+    applyContainerMoves(container, containerMoves, commentEligibleNodes, warnings);
   }
 
   if (warnings.length > 0) {

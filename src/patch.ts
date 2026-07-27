@@ -92,7 +92,7 @@ function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
   return false;
 }
 
-/** Every node currently in `document`, for updateOrder's isEligibleForLeading guard. */
+/** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
 function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
   const nodes = new WeakSet<TreeNode>();
   const visit = (node: TreeNode) => { nodes.add(node); };
@@ -215,10 +215,13 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // applyKeyOrderMoves, which feeds it to resolveSlots' isEligibleForLeading predicate so a
   // key that was just Added by this same patch can't adopt a preceding comment run via R2 —
   // node identity is stable across remove()/insert() (they splice the same objects), so this
-  // has to be captured now, before applyChanges runs.
-  const prePatchNodes = collectPrePatchNodes(existing_document);
+  // has to be captured now, before applyChanges runs. applyChanges also adds to this set as it
+  // runs: a structural edit (e.g. table→scalar) regenerates a fresh node in place of an existing
+  // one, and that replacement is conceptually the same entry, not a new one — so it needs to
+  // stay eligible for R2 too, even though its object identity postdates the snapshot.
+  const commentEligibleNodes = collectPrePatchNodes(existing_document);
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, prePatchNodes);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -379,7 +382,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, prePatchNodes: WeakSet<TreeNode> = new WeakSet()): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet()): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
 
@@ -642,12 +645,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             const newTable = generateTable(parentKey);
             insert(original, newTable, freshKV, 0);
             replace(original, tableParent, existing, newTable);
+            // newTable stands in for the pre-existing `existing` table, so it should stay
+            // eligible for the leading comment run `existing` would have owned via R2.
+            commentEligibleNodes.add(newTable);
           } else {
             // Single-segment table [w] — KV belongs directly in the Document.
             // Replace the table with the KV, then reposition the KV to before
             // the first table header so it lands in the implicit root table
             // rather than inside a preceding section.
             replace(original, tableParent, existing, freshKV);
+            // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
+            commentEligibleNodes.add(freshKV);
 
             // If there's a table header before this KV in the items array,
             // the KV visually falls inside the wrong section. Remove and
@@ -845,7 +853,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
   // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
   // patched object's key order. Must run last — see the comment on objectMoves above.
-  applyKeyOrderMoves(original, objectMoves, prePatchNodes);
+  applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
 
   return original;
 }
