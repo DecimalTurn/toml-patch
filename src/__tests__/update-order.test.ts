@@ -187,12 +187,12 @@ describe('updateOrder: true', () => {
   });
 
   test('a multi-line inline-table value shifts intact, including its hoisted in-brace comment', () => {
-    // inlineTableStart: 0 is required here: at the default (1), parseJS/formatTopLevel
-    // unconditionally hoists any inline-table-shaped root key into its own [section] via
-    // remove-then-APPEND, which reorders b after a in updated_js regardless of the object's
-    // own key order -- before the diff ever runs, and independent of updateOrder. With
-    // inlineTableStart: 0 that hoist is disabled, so b stays a literal inline value and the
-    // requested {b, a} order survives into the diff.
+    // At the default inlineTableStart (1), parseJS/formatTopLevel would otherwise hoist `b`
+    // into its own [section] via remove-then-APPEND before the diff ever runs, silently
+    // reordering it after `a` regardless of the requested object order -- patch.ts's
+    // applyRequestedRootKeyOrder corrects updated_js's top-level key order for exactly this
+    // case, so no inlineTableStart override is needed here; `b` stays the literal inline
+    // value the existing document already used.
     const input = dedent`
       a = 1
       b = {
@@ -201,7 +201,7 @@ describe('updateOrder: true', () => {
       }
     ` + '\n';
 
-    const result = patch(input, { b: { x: 1, y: 2 }, a: 1 }, { updateOrder: true, inlineTableStart: 0 });
+    const result = patch(input, { b: { x: 1, y: 2 }, a: 1 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       b = {

@@ -32,7 +32,7 @@ import {
 } from './cst';
 import diff, { Change, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
@@ -117,6 +117,43 @@ function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
   return nodes;
 }
 
+/**
+ * updateOrder needs `updated_js`'s TOP-level key order to reflect exactly what the caller
+ * requested — but parseJS -> formatTopLevel unconditionally hoists any inline-table/AOT-shaped
+ * root key into its own [section]/[[array]] block via remove-then-APPEND (src/formatter.ts).
+ * That's a genuine TOML requirement (root scalars must precede section headers) when the
+ * value becomes an actual section, but formatTopLevel applies it to ANY nested object at the
+ * default inlineTableStart, even when the existing document represents it as a plain inline
+ * value with no such constraint — silently reordering it after every scalar key, regardless
+ * of the caller's request or updateOrder.
+ *
+ * Fixes this by re-deriving the root key order from a throwaway, un-hoisted parse
+ * (inlineTableStart: 0 disables the section conversion entirely) and re-keying `updated_js`'s
+ * top level to match. Only the top-level key ORDER is affected — values, nested levels, and
+ * the actual output format of newly-added content (still driven by `format`/`diffing_fmt`,
+ * unrelated to this) are untouched. Only called when `format.updateOrder` is set, so it costs
+ * nothing when the option is off.
+ */
+function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: TomlFormat, useTemporal: boolean): any {
+  if (!isObject(updated_js)) return updated_js;
+
+  const unhoisted_fmt = resolveTomlFormat({ ...diffing_fmt, inlineTableStart: 0 }, diffing_fmt);
+  const unhoisted_document = parseJS(updated, unhoisted_fmt);
+  const unhoisted_js = toJS(unhoisted_document.items, '', { temporal: useTemporal });
+  if (!isObject(unhoisted_js)) return updated_js;
+
+  const reordered: any = {};
+  for (const key of Object.keys(unhoisted_js)) {
+    if (Object.prototype.hasOwnProperty.call(updated_js, key)) reordered[key] = updated_js[key];
+  }
+  // Defensive: any key present in updated_js but not in the un-hoisted probe (shouldn't
+  // happen — both come from the same `updated`) is appended rather than silently dropped.
+  for (const key of Object.keys(updated_js)) {
+    if (!Object.prototype.hasOwnProperty.call(reordered, key)) reordered[key] = updated_js[key];
+  }
+  return reordered;
+}
+
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
@@ -161,7 +198,10 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
   // stripped) are consistently absent from both sides of the diff.
-  const updated_js = toJS(updated_document.items, '', { temporal: useTemporal });
+  const updated_js_raw = toJS(updated_document.items, '', { temporal: useTemporal });
+  const updated_js = format.updateOrder
+    ? applyRequestedRootKeyOrder(updated, updated_js_raw, diffing_fmt, useTemporal)
+    : updated_js_raw;
   const changes = reorder(diff(existing_js, updated_js, [], { updateOrder: format.updateOrder }));
 
   if (changes.length === 0) {
