@@ -4420,10 +4420,8 @@ describe('Root key-value placement', () => {
   });
 
   // With updateOrder: true, patch() honours the JS object's key order: new_root appeared
-  // before mytable in the patched object, so it should be hoisted before it in the output.
-  // `updateOrder` doesn't exist on TomlFormat yet -- `as any` cast removed once the option
-  // ships (docs/PLAN-Update-Order.md). This is the plan's canonical Add-plus-reorder case.
-  // Not skipped: failing until updateOrder is implemented, per this session's convention.
+  // before mytable in the patched object, so it's hoisted before it in the output. This is
+  // the plan's canonical Add-plus-reorder case (docs/PLAN-Update-Order.md).
   test('should add new root key-value before inline table if appearing before in the patched object', () => {
     const existing = dedent`
       mytable = {
@@ -4434,7 +4432,7 @@ describe('Root key-value placement', () => {
     const patched = patch(existing, {
       new_root: 42,
       mytable: { key: 'value' }
-    }, { updateOrder: true } as any);
+    }, { updateOrder: true });
 
     expect(patched).toEqual(dedent`
       new_root = 42

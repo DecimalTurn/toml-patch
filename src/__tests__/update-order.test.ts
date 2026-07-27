@@ -1,22 +1,16 @@
 /**
- * Behaviour matrix for the (not yet implemented) `updateOrder` option.
- * See docs/PLAN-Update-Order.md for the full design.
+ * Behaviour matrix for the `updateOrder` option. See docs/PLAN-Update-Order.md for the full
+ * design and docs/CommentOwnership.md / docs/PLAN-Comment-Ownership.md for how comments
+ * travel with a moved entry.
  *
- * `updateOrder` does not exist on `TomlFormat` yet, so every `{ updateOrder: true }` call
- * below uses an `as any` cast -- remove the casts once the option ships. Passing it today
- * triggers `validateFormatObject`'s "unsupported format properties" console.warn and is
- * silently ignored, which is exactly why the "updateOrder: true" tests below fail: the
- * assertions describe the DESIRED, post-implementation output, not what patch() does today.
- *
- * The "default off" tests are NOT placeholders -- they pass today and must keep passing
- * once the feature ships: with the option unset (or false), a pure key-order permutation
- * must produce zero changes and byte-identical output (or, for the add/remove cases, the
- * current — unreordered — behaviour), per the "API-compat guarantee" in the plan (§2).
+ * The "default off" tests are the API-compat guarantee (§2): with the option unset (or
+ * false), a pure key-order permutation must produce zero changes and byte-identical output
+ * (or, for the Add/Remove cases, the current — unreordered — behaviour).
  */
 import dedent from 'dedent';
 import { parse, patch } from '../index';
 
-describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
+describe('updateOrder: true', () => {
   test('reorders root key-values to match the JS object', () => {
     const input = dedent`
       a = 1
@@ -24,7 +18,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       c = 3
     ` + '\n';
 
-    const result = patch(input, { c: 3, a: 1, b: 2 }, { updateOrder: true } as any);
+    const result = patch(input, { c: 3, a: 1, b: 2 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       c = 3
@@ -42,7 +36,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       y = 2
     ` + '\n';
 
-    const result = patch(input, { b: { y: 2 }, a: { x: 1 } }, { updateOrder: true } as any);
+    const result = patch(input, { b: { y: 2 }, a: { x: 1 } }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       [b]
@@ -61,7 +55,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       c = 3
     ` + '\n';
 
-    const result = patch(input, { t: { c: 3, a: 1, b: 2 } }, { updateOrder: true } as any);
+    const result = patch(input, { t: { c: 3, a: 1, b: 2 } }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       [t]
@@ -78,7 +72,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       b = 2
     ` + '\n';
 
-    const result = patch(input, { b: 2, a: 1 }, { updateOrder: true } as any);
+    const result = patch(input, { b: 2, a: 1 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       b = 2
@@ -93,7 +87,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       b = 2
     ` + '\n';
 
-    const result = patch(input, { c: 3, a: 1, b: 2 }, { updateOrder: true } as any);
+    const result = patch(input, { c: 3, a: 1, b: 2 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       c = 3
@@ -109,7 +103,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       c = 3
     ` + '\n';
 
-    const result = patch(input, { c: 3, a: 1 }, { updateOrder: true } as any);
+    const result = patch(input, { c: 3, a: 1 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       c = 3
@@ -131,7 +125,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       hello.moon = 3
     ` + '\n';
 
-    const result = patch(input, { b: 2, hello: { world: 1, moon: 3 } }, { updateOrder: true } as any);
+    const result = patch(input, { b: 2, hello: { world: 1, moon: 3 } }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       hello.world = 1
@@ -152,7 +146,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       x = 1
     ` + '\n';
 
-    const result = patch(input, { b: { x: 1 }, a: [{ n: 1 }, { n: 2 }] }, { updateOrder: true } as any);
+    const result = patch(input, { b: { x: 1 }, a: [{ n: 1 }, { n: 2 }] }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       [b]
@@ -178,7 +172,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       z = 3
     ` + '\n';
 
-    const result = patch(input, { b: { z: 3 }, a: { x: 1, sub: { y: 2 } } }, { updateOrder: true } as any);
+    const result = patch(input, { b: { z: 3 }, a: { x: 1, sub: { y: 2 } } }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       [b]
@@ -193,6 +187,12 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
   });
 
   test('a multi-line inline-table value shifts intact, including its hoisted in-brace comment', () => {
+    // inlineTableStart: 0 is required here: at the default (1), parseJS/formatTopLevel
+    // unconditionally hoists any inline-table-shaped root key into its own [section] via
+    // remove-then-APPEND, which reorders b after a in updated_js regardless of the object's
+    // own key order -- before the diff ever runs, and independent of updateOrder. With
+    // inlineTableStart: 0 that hoist is disabled, so b stays a literal inline value and the
+    // requested {b, a} order survives into the diff.
     const input = dedent`
       a = 1
       b = {
@@ -201,7 +201,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       }
     ` + '\n';
 
-    const result = patch(input, { b: { x: 1, y: 2 }, a: 1 }, { updateOrder: true } as any);
+    const result = patch(input, { b: { x: 1, y: 2 }, a: 1 }, { updateOrder: true, inlineTableStart: 0 });
 
     expect(result).toEqual(dedent`
       b = {
@@ -220,7 +220,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       b = 2
     ` + '\n';
 
-    const result = patch(input, { b: 2, a: 1 }, { updateOrder: true } as any);
+    const result = patch(input, { b: 2, a: 1 }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       # General file banner
@@ -239,7 +239,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       y = 2
     ` + '\n';
 
-    const result = patch(input, { b: { y: 2 }, a: { x: 1 } }, { updateOrder: true } as any);
+    const result = patch(input, { b: { y: 2 }, a: { x: 1 } }, { updateOrder: true });
 
     expect(result).toEqual(dedent`
       [b]
@@ -266,12 +266,16 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       z = 3
     ` + '\n';
 
-    const result = patch(input, { c: { z: 3 }, a: { x: 1 }, b: { y: 2 } }, { updateOrder: true } as any);
+    const result = patch(input, { c: { z: 3 }, a: { x: 1 }, b: { y: 2 } }, { updateOrder: true });
 
+    // Gaps belong to the POSITION, not to whichever key ends up there (docs/PLAN-Update-Order.md
+    // §3.3 Step 6: "the slot now at position i gets gap[i]" — precomputed from the ORIGINAL
+    // occupant of position i). Position 1 (originally the a -> b transition) had zero blank
+    // lines, so whichever section lands there post-reorder (now [a]) keeps that zero-gap;
+    // position 2 (originally the b -> c transition) had one blank line, so [b] gets it.
     expect(result).toEqual(dedent`
       [c]
       z = 3
-
       [a]
       x = 1
 
@@ -297,7 +301,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
     const result = patch(
       input,
       { section: { key: 'value' }, new_root: 42 },
-      { updateOrder: true, inlineTableStart: 0 } as any
+      { updateOrder: true, inlineTableStart: 0 }
     );
 
     expect(result).toEqual(dedent`
@@ -315,7 +319,7 @@ describe('updateOrder: true (not yet implemented -- desired behavior)', () => {
       c = 3
     ` + '\n';
 
-    const result = patch(input, { a: 1, b: 2, c: 3 }, { updateOrder: true } as any);
+    const result = patch(input, { a: 1, b: 2, c: 3 }, { updateOrder: true });
 
     expect(result).toEqual(input);
   });

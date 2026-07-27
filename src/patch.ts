@@ -30,11 +30,12 @@ import {
   Value,
   isDateTime
 } from './cst';
-import diff, { Change, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
+import diff, { Change, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
+import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -91,6 +92,31 @@ function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
   return false;
 }
 
+/** Every node currently in `document`, for updateOrder's isEligibleForLeading guard. */
+function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
+  const nodes = new WeakSet<TreeNode>();
+  const visit = (node: TreeNode) => { nodes.add(node); };
+  traverse(document, {
+    Document: visit,
+    Table: visit,
+    TableKey: visit,
+    TableArray: visit,
+    TableArrayKey: visit,
+    KeyValue: visit,
+    Key: visit,
+    String: visit,
+    Integer: visit,
+    Float: visit,
+    Boolean: visit,
+    DateTime: visit,
+    InlineArray: visit,
+    InlineItem: visit,
+    InlineTable: visit,
+    Comment: visit
+  });
+  return nodes;
+}
+
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
@@ -134,9 +160,9 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 
   // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
-  // stripped) are consistently absent from both sides of the diff. 
+  // stripped) are consistently absent from both sides of the diff.
   const updated_js = toJS(updated_document.items, '', { temporal: useTemporal });
-  const changes = reorder(diff(existing_js, updated_js));
+  const changes = reorder(diff(existing_js, updated_js, [], { updateOrder: format.updateOrder }));
 
   if (changes.length === 0) {
     return {
@@ -145,7 +171,14 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal);
+  // Snapshot every node that exists BEFORE any change is applied. Passed through to
+  // applyKeyOrderMoves, which feeds it to resolveSlots' isEligibleForLeading predicate so a
+  // key that was just Added by this same patch can't adopt a preceding comment run via R2 —
+  // node identity is stable across remove()/insert() (they splice the same objects), so this
+  // has to be captured now, before applyChanges runs.
+  const prePatchNodes = collectPrePatchNodes(existing_document);
+
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, prePatchNodes);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -306,9 +339,15 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, prePatchNodes: WeakSet<TreeNode> = new WeakSet()): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
+
+  // Object-key Moves (updateOrder) are only collected here, not applied — they're relayed
+  // out in one batch at the very end, after every other structural change in this patch has
+  // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
+  // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
+  const objectMoves: Move[] = [];
 
   // Potential Changes:
   //
@@ -683,6 +722,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
     } else if (isMove(change)) {
+      // A document-level object Move has path === [] — tryFindByPath resolves an empty path
+      // to `original` itself, which has items, so this check MUST come first or every
+      // document-level key reorder would fall into the array-Move handling below instead.
+      if (change.key !== undefined) {
+        objectMoves.push(change);
+        return;
+      }
+
       let parent = tryFindByPath(original, change.path);
       if (parent) {
         if (hasItem(parent)) parent = parent.item;
@@ -755,6 +802,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // Replace emptied TableArrays (array-of-tables) with inline empty arrays
   // so keys aren't silently lost (e.g. b = [] instead of disappearing).
   replaceEmptiedTableArrays(original, emptiedAotKeys, format);
+
+  // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
+  // patched object's key order. Must run last — see the comment on objectMoves above.
+  applyKeyOrderMoves(original, objectMoves, prePatchNodes);
 
   return original;
 }
