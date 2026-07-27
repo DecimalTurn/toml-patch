@@ -4973,17 +4973,13 @@ describe('structural type replacements', () => {
 
   /**
    * Asserts that patching `src` with `updated` does not throw, produces
-   * parseable TOML, and that the parsed result deep-equals `expected`.
+   * parseable TOML, and that reparsing the result deep-equals `updated`.
    */
-  function expectPatchResult(
-    src: string,
-    updated: Record<string, any>,
-    expected: Record<string, any>,
-  ) {
+  function expectPatchResult(src: string, updated: Record<string, any>) {
     let result: string;
     expect(() => { result = patch(src, updated); }).not.toThrow();
     const reparsed = parse(result!);
-    expect(reparsed).toEqual(expected);
+    expect(reparsed).toEqual(updated);
   }
 
   // ── Table → scalar ──────────────────────────────────────────────────
@@ -4995,7 +4991,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
   test('[a.b.c] → a = 42 (deep nested table)', () => {
@@ -5003,10 +4999,10 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
-  test.skip('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
+  test('[a.b] + [a.c] → a = 42 (multiple sibling tables)', () => {
     // TODO: handleStructuralEdit throws TypeError when removing multiple
     // sibling nodes. The prefix collection + removal loop needs to handle
     // offset accumulation across consecutive remove() calls.
@@ -5017,10 +5013,10 @@ describe('structural type replacements', () => {
       [a.c]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
-  test.skip('[a.b] → a = 42 with preceding section (hoist check)', () => {
+  test('[a.b] → a = 42 with preceding section (hoist check)', () => {
     // TODO: the replacement KV lands after the preceding [s] section,
     // causing a to be parsed as nested under s. Need to hoist before
     // any remaining table headers.
@@ -5031,7 +5027,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { s: { k: 'v' }, a: 42 }, { s: { k: 'v' }, a: 42 });
+    expectPatchResult(src, { s: { k: 'v' }, a: 42 });
   });
 
   // ── Table → array ───────────────────────────────────────────────────
@@ -5041,7 +5037,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [1, 2, 3] }, { a: [1, 2, 3] });
+    expectPatchResult(src, { a: [1, 2, 3] });
   });
 
   test('[a.b.c] → a = [true, false] (deep nested → array)', () => {
@@ -5049,12 +5045,12 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [true, false] }, { a: [true, false] });
+    expectPatchResult(src, { a: [true, false] });
   });
 
   // ── Table → object ──────────────────────────────────────────────────
 
-  test.skip('[a.b] → a = { x: 1 } (table to inline object)', () => {
+  test('[a.b] → a = { x: 1 } (table to inline object)', () => {
     // TODO: the outer key 'a' is lost; output is 'x = 1' instead of
     // 'a = { x = 1 }'. The KV from parseJS round-trip loses its key
     // during insert() into the emptied document.
@@ -5062,16 +5058,16 @@ describe('structural type replacements', () => {
       [a.b]
       old = "gone"
     ` + '\n';
-    expectPatchResult(src, { a: { x: 1 } }, { a: { x: 1 } });
+    expectPatchResult(src, { a: { x: 1 } });
   });
 
-  test.skip('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
+  test('[a.b.c] → a = { d: "hi" } (deep nested to inline object)', () => {
     // Same root cause as above.
     const src = dedent`
       [a.b.c]
       old = "gone"
     ` + '\n';
-    expectPatchResult(src, { a: { d: 'hi' } }, { a: { d: 'hi' } });
+    expectPatchResult(src, { a: { d: 'hi' } });
   });
 
   // ── AOT → scalar ────────────────────────────────────────────────────
@@ -5083,10 +5079,10 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: 42 }, { i: 42 });
+    expectPatchResult(src, { i: 42 });
   });
 
-  test.skip('[[i]] × 2 (multiple entries) → i = 42', () => {
+  test('[[i]] × 2 (multiple entries) → i = 42', () => {
     // TODO: same TypeError as [a.b]+[a.c] case — removing multiple
     // sibling AOT entries causes offset corruption.
     const src = dedent`
@@ -5096,7 +5092,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expectPatchResult(src, { i: 42 }, { i: 42 });
+    expectPatchResult(src, { i: 42 });
   });
 
   test('[[a.b]] (nested single entry) → a = 42', () => {
@@ -5104,10 +5100,10 @@ describe('structural type replacements', () => {
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
-  test.skip('[[a.b]] × 2 → a = 42', () => {
+  test('[[a.b]] × 2 → a = 42', () => {
     // TODO: same multi-sibling TypeError.
     const src = dedent`
       [[a.b]]
@@ -5116,7 +5112,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
   test('[[a.b.c]] → a = 42 (deep nested AOT)', () => {
@@ -5124,12 +5120,12 @@ describe('structural type replacements', () => {
       [[a.b.c]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
   // ── AOT → array ─────────────────────────────────────────────────────
 
-  test.skip('[[i]] → i = [9] (AOT to different-length array)', () => {
+  test('[[i]] → i = [9] (AOT to different-length array)', () => {
     // TODO: "Node not found at i.1" — the removal of multiple AOT
     // entries via findDocumentItemsByKeyPrefix + remove doesn't clean
     // up indexed sub-paths correctly.
@@ -5140,10 +5136,10 @@ describe('structural type replacements', () => {
       [[i]]
       n = 2
     ` + '\n';
-    expectPatchResult(src, { i: [9] }, { i: [9] });
+    expectPatchResult(src, { i: [9] });
   });
 
-  test.skip('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
+  test('[[i]] → i = [1, 2, 3] (AOT to array)', () => {
     // TODO: "Incompatible child type InlineItem" — the replacement
     // KV from parseJS is an InlineItem, not a KeyValue, when the
     // value is an array.
@@ -5151,7 +5147,7 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: [1, 2, 3] }, { i: [1, 2, 3] });
+    expectPatchResult(src, { i: [1, 2, 3] });
   });
 
   test('[[a.b]] → a = [1, 2] (nested AOT to array)', () => {
@@ -5159,7 +5155,7 @@ describe('structural type replacements', () => {
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: [1, 2] }, { a: [1, 2] });
+    expectPatchResult(src, { a: [1, 2] });
   });
 
   // ── AOT → object ────────────────────────────────────────────────────
@@ -5169,21 +5165,21 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: { x: 1 } }, { i: { x: 1 } });
+    expectPatchResult(src, { i: { x: 1 } });
   });
 
-  test.skip('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
+  test('[[a.b]] → a = { c: 3 } (nested AOT to inline object)', () => {
     // TODO: same outer-key-loss issue as table→object cases.
     const src = dedent`
       [[a.b]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { c: 3 } }, { a: { c: 3 } });
+    expectPatchResult(src, { a: { c: 3 } });
   });
 
   // ── Mixed / complex ─────────────────────────────────────────────────
 
-  test.skip('[a.b] + [[a.c]] → a = 42 (mixed Table + AOT siblings)', () => {
+  test('[a.b] + [[a.c]] → a = 42 (mixed Table + AOT siblings)', () => {
     // TODO: multi-sibling TypeError.
     const src = dedent`
       [a.b]
@@ -5192,10 +5188,10 @@ describe('structural type replacements', () => {
       [[a.c]]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
-  test.skip('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
+  test('[a.b] + [a.c.d] → a = 42 (mixed-depth sibling tables)', () => {
     // TODO: multi-sibling TypeError.
     const src = dedent`
       [a.b]
@@ -5204,10 +5200,10 @@ describe('structural type replacements', () => {
       [a.c.d]
       y = 2
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
-  test.skip('multiple AOT sequences + table siblings → scalar', () => {
+  test('multiple AOT sequences + table siblings → scalar', () => {
     // TODO: multi-sibling TypeError.
     const src = dedent`
       [[a.b]]
@@ -5222,14 +5218,14 @@ describe('structural type replacements', () => {
       [[a.d]]
       z = 4
     ` + '\n';
-    expectPatchResult(src, { a: 99 }, { a: 99 });
+    expectPatchResult(src, { a: 99 });
   });
 
   // ── Intermediate-path replacements (deeper than root) ───────────────
   // When the change path has 2+ segments but is still shorter than the
   // existing Table/TableArray key.
 
-  test.skip('[a.b.c] → a.b = 42 (intermediate path)', () => {
+  test('[a.b.c] → a.b = 42 (intermediate path)', () => {
     // TODO: handleStructuralEdit inserts b = 42 at document level
     // instead of nesting under [a]. Need to generate the full key
     // hierarchy when the change path has multiple segments.
@@ -5237,16 +5233,16 @@ describe('structural type replacements', () => {
       [a.b.c]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 42 } }, { a: { b: 42 } });
+    expectPatchResult(src, { a: { b: 42 } });
   });
 
-  test.skip('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
+  test('[[a.b.c]] → a.b = 42 (nested AOT, intermediate path)', () => {
     // Same issue as above.
     const src = dedent`
       [[a.b.c]]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 42 } }, { a: { b: 42 } });
+    expectPatchResult(src, { a: { b: 42 } });
   });
 
   // ── Edge: change path matches existing KV key length ─────────────────
@@ -5258,7 +5254,7 @@ describe('structural type replacements', () => {
       [a]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: 42 }, { a: 42 });
+    expectPatchResult(src, { a: 42 });
   });
 
   test('[a.b] → a.b = 99 (path matches table key, isTable handler)', () => {
@@ -5266,7 +5262,7 @@ describe('structural type replacements', () => {
       [a.b]
       x = 1
     ` + '\n';
-    expectPatchResult(src, { a: { b: 99 } }, { a: { b: 99 } });
+    expectPatchResult(src, { a: { b: 99 } });
   });
 
   test('[[i]] → i = 99 (single-segment AOT, handleStructuralEdit)', () => {
@@ -5274,12 +5270,12 @@ describe('structural type replacements', () => {
       [[i]]
       n = 1
     ` + '\n';
-    expectPatchResult(src, { i: 99 }, { i: 99 });
+    expectPatchResult(src, { i: 99 });
   });
 
   // ── Safeguard: unrelated content preserved ──────────────────────────
 
-  test.skip('unrelated tables survive the structural replacement', () => {
+  test('unrelated tables survive the structural replacement', () => {
     // TODO: hoisting issue — the replacement KV lands after [keep],
     // nesting a under keep instead of keeping it at root.
     const src = dedent`
@@ -5292,14 +5288,10 @@ describe('structural type replacements', () => {
       [other]
       w = 3
     ` + '\n';
-    expectPatchResult(
-      src,
-      { keep: { v: 1 }, a: 42, other: { w: 3 } },
-      { keep: { v: 1 }, a: 42, other: { w: 3 } },
-    );
+    expectPatchResult(src, { keep: { v: 1 }, a: 42, other: { w: 3 } });
   });
 
-  test.skip('unrelated AOT entries survive', () => {
+  test('unrelated AOT entries survive', () => {
     // TODO: same outer-key-loss issue as table→object cases.
     const src = dedent`
       [[keep]]
@@ -5311,11 +5303,7 @@ describe('structural type replacements', () => {
       [[other]]
       m = 2
     ` + '\n';
-    expectPatchResult(
-      src,
-      { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] },
-      { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] },
-    );
+    expectPatchResult(src, { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] });
   });
 
   // ── Existing (kept) ─────────────────────────────────────────────────
