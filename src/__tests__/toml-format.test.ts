@@ -1,4 +1,4 @@
-import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject } from '../toml-format';
+import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat } from '../toml-format';
 import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
@@ -401,15 +401,24 @@ describe('TomlFormat comprehensive tests', () => {
 
     test('should use expected default values', () => {
       const format = TomlFormat.default();
-      
+
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(1);
       expect(format.trailingComma).toBe(false);
       expect(format.bracketSpacing).toBe(true);
+      expect(format.updateOrder).toBe(false);
     });
   });
 
   describe('autoDetectFormat comprehensive scenarios', () => {
+    test('should never auto-detect updateOrder -- always resolves to false', () => {
+      // The existing document's key order says nothing about the caller's intent, so this
+      // joins inlineTableStart/truncateZeroTimeInDates/minimumDecimals in the "caller must
+      // set explicitly" group (docs/PLAN-Update-Order.md).
+      expect(autoDetectFormat('a = 1\nb = 2\n').updateOrder).toBe(false);
+      expect(autoDetectFormat('[a]\nx = 1\n\n[b]\ny = 2\n').updateOrder).toBe(false);
+    });
+
     test('should detect Windows-style formatting', () => {
       const windowsToml = 'title = "Windows"\r\narray = ["a", "b", ]\r\n\r\n';
       const format = autoDetectFormat(windowsToml);
@@ -561,6 +570,10 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ useTabsForIndentation: true })).toEqual({ useTabsForIndentation: true });
     });
 
+    test('accepts boolean updateOrder', () => {
+      expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
+    });
+
     test('accepts all valid properties together', () => {
       const input = {
         newLine: '\n',
@@ -571,6 +584,7 @@ describe('validateFormatObject', () => {
         inlineTableStart: 2,
         truncateZeroTimeInDates: true,
         useTabsForIndentation: false,
+        updateOrder: true,
       };
       expect(validateFormatObject(input)).toEqual(input);
     });
@@ -623,6 +637,11 @@ describe('validateFormatObject', () => {
       expect(() => validateFormatObject({ useTabsForIndentation: 'yes' })).toThrow(TypeError);
     });
 
+    test('rejects non-boolean updateOrder', () => {
+      expect(() => validateFormatObject({ updateOrder: 'yes' })).toThrow(TypeError);
+      expect(() => validateFormatObject({ updateOrder: 'yes' })).toThrow(/updateOrder/);
+    });
+
     test('reports multiple invalid properties in one error', () => {
       expect(() => validateFormatObject({ newLine: 42, trailingComma: 'yes' })).toThrow(
         /newLine.*trailingComma|trailingComma.*newLine/
@@ -664,5 +683,44 @@ describe('validateFormatObject', () => {
       const result = validateFormatObject(obj);
       expect(result).toEqual({ newLine: '\n', trailingComma: true });
     });
+  });
+});
+
+describe('updateOrder option wiring (docs/PLAN-Update-Order.md)', () => {
+  test('resolveTomlFormat threads updateOrder through as the constructor\'s 10th positional argument', () => {
+    // Guards the exact hazard the plan calls out: a positional-argument mistake here would
+    // silently resolve to the WRONG option's value instead of updateOrder's.
+    const fallback = TomlFormat.default();
+    expect(resolveTomlFormat({ updateOrder: true }, fallback).updateOrder).toBe(true);
+    expect(resolveTomlFormat({ updateOrder: false }, fallback).updateOrder).toBe(false);
+    expect(resolveTomlFormat({}, fallback).updateOrder).toBe(fallback.updateOrder);
+  });
+
+  test('resolveTomlFormat falls back to the fallback format\'s updateOrder when unset', () => {
+    const fallback = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true);
+    expect(fallback.updateOrder).toBe(true);
+    expect(resolveTomlFormat({ inlineTableStart: 2 }, fallback).updateOrder).toBe(true);
+  });
+
+  test('an already-constructed TomlFormat instance passes through resolveTomlFormat unchanged', () => {
+    const instance = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true);
+    expect(resolveTomlFormat(instance, TomlFormat.default())).toBe(instance);
+  });
+
+  test('a plain patch() call with no format argument never warns about updateOrder', () => {
+    // Regression guard for the plan's ranked risk #5: forgetting updateOrder in
+    // validateFormatObject's schema would make it land in `unsupported` and warn on EVERY
+    // patch() call, not just ones using the option.
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    patch('a = 1\n', { a: 1, b: 2 });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test('validateFormatObject does not warn when updateOrder is explicitly passed', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

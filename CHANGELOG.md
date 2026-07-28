@@ -10,14 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING**: Raise minimum supported Node.js version from `>=14` to `>=16`.
-- Patching: introducing explicit comment ownership. Comments describing a key, table, array-of-tables entry or an element inside a multi-line
-  array/inline table now travel with it when removed or reordered via `patch()`, instead of being left
-  behind to describe whatever ends up in that spot. See [docs/CommentOwnership.md](docs/CommentOwnership.md). ([#259])
+- Patching: introducing explicit comment ownership. Comments describing a key, table, array-of-tables entry or an element inside a multi-line array or inline table now travel with it when removed or reordered via `patch()`, instead of being left behind to describe whatever ends up in that spot. See [docs/CommentOwnership.md](docs/CommentOwnership.md). ([#259])
 - Improve stringification performance
 
 ### Added
 
 - TomlDocument: New `parseDocument` function that parses a TOML string into a `TomlDocument`
+- Patching: New `updateOrder` option in `TomlFormat`. When `true`, `patch()` reorders root key-values, section blocks and table-body rows to match the JS object's key order, carrying each entry's comments along. Off by default. Shapes not yet reordered are left in place and reported via `console.warn`. ([#260])
 
 ### Fixed
 
@@ -30,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: fix `Node not found` errors on structural type replacements like nested table-to-scalar and AOT-to-scalar. ([#255])
 - Patching: fix remaining structural type replacement bugs — offset corruption when removing multiple sibling tables/AOTs, outer key loss when replacing a table/AOT with an inline object, and errors converting an array-of-tables to a plain array.
 - Patching: preserve `+nan` / `-nan` sign through parse and round-trip. ([#255])
+- Patching: keep a regenerated root key at root level when a section header survives alongside it — emptying an array-of-tables appended the key past the header, which silently reparented it into that section. ([#260])
 
 ## [2.1.0] - 2026-07-21
 
@@ -323,3 +323,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#198]: https://github.com/DecimalTurn/toml-patch/pull/198
 [#255]: https://github.com/DecimalTurn/toml-patch/pull/255
 [#259]: https://github.com/DecimalTurn/toml-patch/pull/259
+[#260]: https://github.com/DecimalTurn/toml-patch/pull/260

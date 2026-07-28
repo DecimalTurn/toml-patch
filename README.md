@@ -408,6 +408,9 @@ y = 2
 See **[docs/CommentOwnership.md](docs/CommentOwnership.md)** for the full behavior, including how a
 blank line opts a comment out of ownership, and current scope limitations.
 
+Note that `patch()` does not reorder entries by default.
+To have it match the key order of the object you pass in, enable [`updateOrder`](#formatting-options).
+
 ## Date/Time Handling & Temporal
 
 TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
@@ -456,6 +459,7 @@ class TomlFormat {
   truncateZeroTimeInDates: boolean
   minimumDecimals?: number
   leadingBom: boolean
+  updateOrder?: boolean
 
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
@@ -610,6 +614,61 @@ format.minimumDecimals = 0;  // { x: 1, y: 1.5 }  →  { x = 1, y = 1.5 }  (defa
 format.minimumDecimals = 1;  // { x: 1, y: 1.5 }  →  { x = 1.0, y = 1.5 }
 format.minimumDecimals = 2;  // { x: 1, y: 1.5 }  →  { x = 1.00, y = 1.50 }
 ```
+
+**updateOrder**
+- **Type:** `boolean` (optional)
+- **Default:** `false`
+- **Description:** Whether `patch()` should reorder entries to match the key order of the JS object you pass in, instead of preserving the existing document's order. Applies to root key-values, `[table]`/`[[array-of-tables]]` section blocks, and rows inside table bodies. Each entry's comments travel with it (see [docs/CommentOwnership.md](docs/CommentOwnership.md)). This option only affects `patch()`, and is never auto-detected — an existing document's order says nothing about what order you want.
+
+With the option off (the default), `patch()` only changes values that actually differ, leaving order alone. Given:
+
+```toml
+b = 2
+a = 1
+```
+
+```js
+patch(existing, { a: 1, b: 2 });                        // unchanged: b = 2 then a = 1
+patch(existing, { a: 1, b: 2 }, { updateOrder: true }); // reordered: a = 1 then b = 2
+```
+
+Comments travel with their entry. Given:
+
+```toml
+# the second one
+b = 2
+
+# the first one
+a = 1
+```
+
+`patch(existing, { a: 1, b: 2 }, { updateOrder: true })` produces:
+
+```toml
+# the first one
+a = 1
+
+# the second one
+b = 2
+```
+
+TOML validity takes precedence over the requested order. A root key-value cannot appear after a section header (it would bind to that section), so root keys and section blocks are reordered independently of each other — a section is never pulled ahead of a root key, regardless of where it sits in the object. Given:
+
+```toml
+[section]
+key = "value"
+```
+
+`patch(existing, { new_root: 42, section: { key: 'value' } }, { updateOrder: true })` produces:
+
+```toml
+new_root = 42
+
+[section]
+key = "value"
+```
+
+Some shapes are not reordered yet: the interiors of inline tables (`{ a = 1, b = 2 }`) and of `[[array-of-tables]]` entries, dotted-key implicit tables, and documents where a table's sub-tables are non-contiguous (`[a]`, `[b]`, `[a.c]` — permuting these would silently relocate unrelated sections). In each case the affected entry is left exactly where it was, and `patch()` emits a `console.warn` naming what it couldn't place so the skip isn't silent.
 
 ### Auto-Detection and Patching
 

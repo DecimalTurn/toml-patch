@@ -4396,14 +4396,10 @@ describe('Root key-value placement', () => {
     ` + '\n');
   });
 
-  // TODO: This test is currently skipped because the current implementation of patch() does not
-  // guarantee the order of root keys in the output. The test illustrates a desirable behavior
-  // where new root keys are added before existing inline-table since they appeared before
-  // the inline table in the patched object. Implementing this behavior would require a more
-  // complex diffing algorithm that takes into account the order of keys in the patched object,
-  // which is currently out of scope. For now, this test serves as a reminder of a potential
-  // improvement to the patching logic.
-  test.skip('should add new root key-value before inline table if appearing before in the patched object', () => {
+  // Default (updateOrder off): patch() does not reorder existing keys to match JS object
+  // order -- new_root is a genuinely new key, so it's simply appended after mytable, which
+  // keeps its original position. See docs/PLAN-Update-Order.md.
+  test('should append new root key-value after existing inline table when updateOrder is off', () => {
     const existing = dedent`
       mytable = {
          key = "value"
@@ -4414,6 +4410,29 @@ describe('Root key-value placement', () => {
       new_root: 42,
       mytable: { key: 'value' }
     });
+
+    expect(patched).toEqual(dedent`
+      mytable = {
+         key = "value"
+      }
+      new_root = 42
+    ` + '\n');
+  });
+
+  // With updateOrder: true, patch() honours the JS object's key order: new_root appeared
+  // before mytable in the patched object, so it's hoisted before it in the output. This is
+  // the plan's canonical Add-plus-reorder case (docs/PLAN-Update-Order.md).
+  test('should add new root key-value before inline table if appearing before in the patched object', () => {
+    const existing = dedent`
+      mytable = {
+         key = "value"
+      }
+      ` + '\n';
+
+    const patched = patch(existing, {
+      new_root: 42,
+      mytable: { key: 'value' }
+    }, { updateOrder: true });
 
     expect(patched).toEqual(dedent`
       new_root = 42
@@ -4813,6 +4832,64 @@ describe('table to scalar replacement', () => {
     expect(reparsed.s).toEqual({ k: 'v' });
   });
 
+  // BUG (reported via GitHub Copilot PR review on #260): a structural table->scalar edit
+  // regenerates a fresh KV/Table node via writer.ts's replace(), in-place at the original's
+  // position. When that same patch also reorders root entries (updateOrder: true),
+  // applyContainerMoves's isEligibleForLeading check (src/update-order.ts) keys R2 adjacency
+  // ownership off prePatchNodes identity -- so the fresh replacement node is wrongly treated
+  // as ineligible, same as a genuinely new (Added) entry. The leading comment above it gets
+  // left pinned at its old physical position instead of travelling with the entry to its new
+  // spot. Fixed by treating structural-replacement nodes as eligible too, not just
+  // pre-existing ones.
+  test('should carry the leading comment along when a table->scalar edit is combined with a reorder', () => {
+    const src = dedent`
+      # comment about w
+      [x.y.z.w]
+      a = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+
+    const result = patch(src, {
+      other: { b: 2 },
+      x: { y: { z: { w: 42 } } }
+    }, { updateOrder: true });
+
+    expect(result).toEqual(dedent`
+      [other]
+      b = 2
+
+      # comment about w
+      [x.y.z]
+      w = 42
+    ` + '\n');
+  });
+
+  // Same bug as above, but through the single-segment replace() call site (table becomes a
+  // root-level scalar directly, rather than a fresh nested table).
+  test('should carry the leading comment along when a single-segment table->scalar edit is combined with a reorder', () => {
+    const src = dedent`
+      foo = 1
+
+      # comment about w
+      [w]
+      a = 1
+    ` + '\n';
+
+    const result = patch(src, {
+      w: 42,
+      foo: 1
+    }, { updateOrder: true });
+
+    expect(result).toEqual(dedent`
+      # comment about w
+      w = 42
+
+      foo = 1
+    ` + '\n');
+  });
+
 });
 
 describe('inlineTableStart nested table handling', () => {
@@ -4850,7 +4927,7 @@ describe('inlineTableStart nested table handling', () => {
 
 describe('array element comment association', () => {
 
-  test.skip('should keep # a comment on element 1 when truncating to [1]', () => {
+  test('should keep # a comment on element 1 when truncating to [1]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4883,6 +4960,12 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
+  // Skipped for the SAME known, unrelated limitation as the test at the top of this file
+  // ("should indent a relocated first element to match its sibling rows"): dropping the
+  // first element forces the survivor into the array's first slot via a Move, and insert()
+  // positions a new first row at the array's own opening-bracket column instead of matching
+  // its siblings' indentation. The comment ownership itself (# b travels with 2, # c with 3)
+  // is correct -- only the indentation of the relocated row is wrong.
   test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
     const src = dedent`
       arr = [
@@ -4900,7 +4983,7 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  test.skip('should not shift comments down when appending element', () => {
+  test('should not shift comments down when appending element', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -4919,6 +5002,9 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
+  // Same known, unrelated indentation quirk as above -- prepending inserts a brand-new
+  // element at index 0, hitting the identical "new first row uses the bracket's own column"
+  // code path in insert(), even though nothing here is being relocated/owns a comment.
   test.skip('should keep comments on original elements when prepending', () => {
     const src = dedent`
       arr = [
@@ -4963,6 +5049,51 @@ describe('emptying array-of-tables', () => {
     const result = patch(src, { i: [] });
     const reparsed = parse(result);
     expect(reparsed.i).toEqual([]);
+  });
+
+  // A root key-value that physically follows a [table] header parses as a member of that
+  // section, not of the root table. replaceEmptiedTableArrays appended the empty-array KV at
+  // the very end of the document, so whenever any section existed the emptied key was silently
+  // reparented into it -- real data corruption, not just cosmetic placement. Reproduces with
+  // updateOrder off. See docs/bug-notes/comment-eligibility-on-structural-replace.md.
+  test('should keep an emptied AOT key at root level when a table section precedes it', () => {
+    const src = dedent`
+      [other]
+      b = 2
+
+      [[tasks]]
+      name = "a"
+    ` + '\n';
+    const result = patch(src, { other: { b: 2 }, tasks: [] });
+    expect(parse(result)).toEqual({ other: { b: 2 }, tasks: [] });
+  });
+
+  test('should keep an emptied AOT key at root level when it originally preceded a table section', () => {
+    const src = dedent`
+      [[tasks]]
+      name = "a"
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { tasks: [], other: { b: 2 } });
+    expect(parse(result)).toEqual({ tasks: [], other: { b: 2 } });
+  });
+
+  test('should keep multiple emptied AOT keys at root level, in order', () => {
+    const src = dedent`
+      [other]
+      b = 2
+
+      [[x]]
+      n = 1
+
+      [[y]]
+      m = 2
+    ` + '\n';
+    const result = patch(src, { other: { b: 2 }, x: [], y: [] });
+    expect(parse(result)).toEqual({ other: { b: 2 }, x: [], y: [] });
+    expect(result.indexOf('x = []')).toBeLessThan(result.indexOf('y = []'));
   });
 
 });
@@ -5374,6 +5505,38 @@ describe('structural type replacements', () => {
       y = [1, 2]
     ` + '\n';
     expect(() => patch(src, { t: { y: [] } })).not.toThrow();
+  });
+
+  // Same root cause as the emptied-AOT placement bug above: handleStructuralEdit appended the
+  // regenerated KV at the end of the document, so an existing section header swallowed it.
+  // The pre-existing no-throw test above only covers a document with no other sections, so it
+  // never caught this. See docs/bug-notes/comment-eligibility-on-structural-replace.md.
+  test('should keep an AOT->scalar replacement at root level when a table section follows it', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { i: 42, other: { b: 2 } });
+    expect(parse(result)).toEqual({ i: 42, other: { b: 2 } });
+  });
+
+  // Hoisting the KV back above the section header also reunites it with the leading comment
+  // that stayed behind at the top of the document when the old AOT node was removed.
+  test('should carry the leading comment with an AOT->scalar replacement hoisted above a section', () => {
+    const src = dedent`
+      # comment about i
+      [[i]]
+      n = 1
+
+      [other]
+      b = 2
+    ` + '\n';
+    const result = patch(src, { i: 42, other: { b: 2 } });
+    expect(parse(result)).toEqual({ i: 42, other: { b: 2 } });
+    expect(result).toMatch(/# comment about i\r?\ni = 42/);
   });
 
 });

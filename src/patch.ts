@@ -30,11 +30,12 @@ import {
   Value,
   isDateTime
 } from './cst';
-import diff, { Change, ChangeType, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
+import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString } from './utils';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
+import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
@@ -91,6 +92,68 @@ function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
   return false;
 }
 
+/** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
+function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
+  const nodes = new WeakSet<TreeNode>();
+  const visit = (node: TreeNode) => { nodes.add(node); };
+  traverse(document, {
+    Document: visit,
+    Table: visit,
+    TableKey: visit,
+    TableArray: visit,
+    TableArrayKey: visit,
+    KeyValue: visit,
+    Key: visit,
+    String: visit,
+    Integer: visit,
+    Float: visit,
+    Boolean: visit,
+    DateTime: visit,
+    InlineArray: visit,
+    InlineItem: visit,
+    InlineTable: visit,
+    Comment: visit
+  });
+  return nodes;
+}
+
+/**
+ * updateOrder needs `updated_js`'s TOP-level key order to reflect exactly what the caller
+ * requested — but parseJS -> formatTopLevel unconditionally hoists any inline-table/AOT-shaped
+ * root key into its own [section]/[[array]] block via remove-then-APPEND (src/formatter.ts).
+ * That's a genuine TOML requirement (root scalars must precede section headers) when the
+ * value becomes an actual section, but formatTopLevel applies it to ANY nested object at the
+ * default inlineTableStart, even when the existing document represents it as a plain inline
+ * value with no such constraint — silently reordering it after every scalar key, regardless
+ * of the caller's request or updateOrder.
+ *
+ * Fixes this by re-deriving the root key order from a throwaway, un-hoisted parse
+ * (inlineTableStart: 0 disables the section conversion entirely) and re-keying `updated_js`'s
+ * top level to match. Only the top-level key ORDER is affected — values, nested levels, and
+ * the actual output format of newly-added content (still driven by `format`/`diffing_fmt`,
+ * unrelated to this) are untouched. Only called when `format.updateOrder` is set, so it costs
+ * nothing when the option is off.
+ */
+function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: TomlFormat, useTemporal: boolean): any {
+  if (!isObject(updated_js)) return updated_js;
+
+  const unhoisted_fmt = resolveTomlFormat({ ...diffing_fmt, inlineTableStart: 0 }, diffing_fmt);
+  const unhoisted_document = parseJS(updated, unhoisted_fmt);
+  const unhoisted_js = toJS(unhoisted_document.items, '', { temporal: useTemporal });
+  if (!isObject(unhoisted_js)) return updated_js;
+
+  const reordered: any = {};
+  for (const key of Object.keys(unhoisted_js)) {
+    if (Object.prototype.hasOwnProperty.call(updated_js, key)) reordered[key] = updated_js[key];
+  }
+  // Defensive: any key present in updated_js but not in the un-hoisted probe (shouldn't
+  // happen — both come from the same `updated`) is appended rather than silently dropped.
+  for (const key of Object.keys(updated_js)) {
+    if (!Object.prototype.hasOwnProperty.call(reordered, key)) reordered[key] = updated_js[key];
+  }
+  return reordered;
+}
+
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
@@ -134,9 +197,16 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 
   // Diff against the JS representation rather than
   // the raw `updated` value, so that any undefined keys (which parseJS already
-  // stripped) are consistently absent from both sides of the diff. 
-  const updated_js = toJS(updated_document.items, '', { temporal: useTemporal });
-  const changes = reorder(coalesceStructuralReplacements(existing_document, updated_js, diff(existing_js, updated_js)));
+  // stripped) are consistently absent from both sides of the diff.
+  const updated_js_raw = toJS(updated_document.items, '', { temporal: useTemporal });
+  const updated_js = format.updateOrder
+    ? applyRequestedRootKeyOrder(updated, updated_js_raw, diffing_fmt, useTemporal)
+    : updated_js_raw;
+  const changes = reorder(coalesceStructuralReplacements(
+    existing_document,
+    updated_js,
+    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder })
+  ));
 
   if (changes.length === 0) {
     return {
@@ -145,7 +215,17 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     };
   }
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal);
+  // Snapshot every node that exists BEFORE any change is applied. Passed through to
+  // applyKeyOrderMoves, which feeds it to resolveSlots' isEligibleForLeading predicate so a
+  // key that was just Added by this same patch can't adopt a preceding comment run via R2 —
+  // node identity is stable across remove()/insert() (they splice the same objects), so this
+  // has to be captured now, before applyChanges runs. applyChanges also adds to this set as it
+  // runs: a structural edit (e.g. table→scalar) regenerates a fresh node in place of an existing
+  // one, and that replacement is conceptually the same entry, not a new one — so it needs to
+  // stay eligible for R2 too, even though its object identity postdates the snapshot.
+  const commentEligibleNodes = collectPrePatchNodes(existing_document);
+
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -409,9 +489,15 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet()): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
+
+  // Object-key Moves (updateOrder) are only collected here, not applied — they're relayed
+  // out in one batch at the very end, after every other structural change in this patch has
+  // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
+  // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
+  const objectMoves: Move[] = [];
 
   // Potential Changes:
   //
@@ -599,7 +685,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // type change (e.g. table→scalar, AOT→scalar, array→empty).
       // Handle by removing old nodes and inserting fresh KV.
       if (!existing) {
-        handleStructuralEdit(original, updated, change, format, temporal);
+        handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes);
         return; // skip generic edit handling
       }
 
@@ -666,27 +752,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             const newTable = generateTable(parentKey);
             insert(original, newTable, freshKV, 0);
             replace(original, tableParent, existing, newTable);
+            // newTable stands in for the pre-existing `existing` table, so it should stay
+            // eligible for the leading comment run `existing` would have owned via R2.
+            commentEligibleNodes.add(newTable);
           } else {
             // Single-segment table [w] — KV belongs directly in the Document.
             // Replace the table with the KV, then reposition the KV to before
             // the first table header so it lands in the implicit root table
             // rather than inside a preceding section.
             replace(original, tableParent, existing, freshKV);
+            // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
+            commentEligibleNodes.add(freshKV);
 
-            // If there's a table header before this KV in the items array,
-            // the KV visually falls inside the wrong section. Remove and
-            // re-insert it at the correct position (before the first table).
-            const document = original as Document;
-            const kvIndex = document.items.indexOf(freshKV);
-            if (kvIndex >= 0) {
-              const firstTableIndex = document.items.findIndex(
-                item => isTable(item) || isTableArray(item)
-              );
-              if (firstTableIndex !== -1 && firstTableIndex < kvIndex) {
-                remove(original, tableParent, freshKV);
-                insert(original, tableParent, freshKV, firstTableIndex);
-              }
-            }
+            hoistRootKeyValueAboveTables(original, freshKV);
           }
           return; // handled; skip the generic replace() below
         }
@@ -786,6 +864,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
     } else if (isMove(change)) {
+      // A document-level object Move has path === [] — tryFindByPath resolves an empty path
+      // to `original` itself, which has items, so this check MUST come first or every
+      // document-level key reorder would fall into the array-Move handling below instead.
+      if (change.key !== undefined) {
+        objectMoves.push(change);
+        return;
+      }
+
       let parent = tryFindByPath(original, change.path);
       if (parent) {
         if (hasItem(parent)) parent = parent.item;
@@ -859,20 +945,61 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // so keys aren't silently lost (e.g. b = [] instead of disappearing).
   replaceEmptiedTableArrays(original, emptiedAotKeys, format);
 
+  // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
+  // patched object's key order. Must run last — see the comment on objectMoves above.
+  applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+
   return original;
+}
+
+/**
+ * Position of the first `[table]`/`[[array]]` header in `doc`, or -1 if there is none.
+ *
+ * A key-value that physically follows a section header belongs to that section, not to the
+ * root table. So any path that regenerates a root-level key has to land it above the first
+ * header — appending at the end of the document silently reparents it, and the value comes
+ * back under the wrong key on the next parse. See
+ * docs/bug-notes/comment-eligibility-on-structural-replace.md.
+ */
+function firstSectionHeaderIndex(doc: Document): number {
+  return doc.items.findIndex(item => isTable(item) || isTableArray(item));
+}
+
+/** Index to insert a regenerated root key-value at so it stays in the root table. */
+function rootKeyValueInsertIndex(doc: Document): number | undefined {
+  const firstTableIndex = firstSectionHeaderIndex(doc);
+  return firstTableIndex === -1 ? undefined : firstTableIndex;
+}
+
+/**
+ * Moves an already-inserted root-level key-value back above the first section header, for the
+ * paths that place it via `replace()` (which pins it to the replaced node's position) rather
+ * than choosing an index. Also tends to reunite the key with a leading comment left behind at
+ * its original position.
+ */
+function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
+  const kvIndex = doc.items.indexOf(kv);
+  if (kvIndex < 0) return;
+
+  const firstTableIndex = firstSectionHeaderIndex(doc);
+  if (firstTableIndex === -1 || firstTableIndex > kvIndex) return;
+
+  remove(doc, doc, kv);
+  insert(doc, doc, kv, firstTableIndex);
 }
 
 /**
  * Handles structural edits where findByPath can't resolve the existing CST node
  * because the structure type has changed (e.g. table→scalar, AOT→scalar, array→empty).
- * Removes old structural nodes and inserts a fresh key-value.
+ * Swaps the fresh key-value in for the old structural nodes.
  */
 function handleStructuralEdit(
   original: Document,
   updated: Document,
   change: Change,
   format: TomlFormat,
-  temporal: boolean
+  temporal: boolean,
+  commentEligibleNodes: WeakSet<TreeNode>
 ): void {
   const updated_js = toJS(updated.items, '', { temporal });
   let jsValue: any = updated_js;
@@ -903,13 +1030,21 @@ function handleStructuralEdit(
   const replacementCst = Array.from(parseTOML(replacementToml));
   const replacementKV = replacementCst[0] as KeyValue;
 
-  // Hoist before the first remaining table/table-array header.
-  const firstHeaderIndex = original.items.findIndex(
-    item => isTable(item) || isTableArray(item)
-  );
-  const insertIndex = firstHeaderIndex === -1 ? undefined : firstHeaderIndex;
+  // Insert above the first remaining section header: a key-value placed after one would
+  // bind to that section instead of the root table.
+  const insertIndex = rootKeyValueInsertIndex(original);
+
+  // Only when a header actually survives the removals. In that case the replacement is
+  // prepended above it rather than appended to an emptied document, and insert() positions
+  // it against its neighbours' loc values — which still carry the removals' pending offsets
+  // until flushed, leaving the emitted node pointing past the end of the output buffer.
+  if (insertIndex !== undefined) applyWrites(original);
 
   insert(original, original, replacementKV, insertIndex);
+
+  // replacementKV stands in for a pre-existing entry, so it keeps that entry's R2
+  // eligibility for adopting an adjacent leading comment during an updateOrder reorder.
+  commentEligibleNodes.add(replacementKV);
 }
 
 /**
@@ -958,12 +1093,14 @@ function cleanupOrphanedComments(doc: Document): void {
  * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
  */
 function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Set<string>, format: TomlFormat): void {
+  if (emptiedKeys.size === 0) return;
+
   for (const key of emptiedKeys) {
     const emptyArrayDoc = parseJS({ [key]: [] }, format);
     const emptyKV = emptyArrayDoc.items[0] as KeyValue;
-    insert(doc, doc, emptyKV, undefined);
+    insert(doc, doc, emptyKV, rootKeyValueInsertIndex(doc));
   }
-  if (emptiedKeys.size > 0) applyWrites(doc);
+  applyWrites(doc);
 }
 
 /**

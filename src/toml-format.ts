@@ -11,6 +11,7 @@ export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
+export const DEFAULT_UPDATE_ORDER = false;
 
 // Detects if trailing commas are used in the existing TOML by examining the CST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -262,6 +263,7 @@ export function validateFormatObject(format: any): any {
     useTabsForIndentation: isBool,
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
+    updateOrder: isBool,
   };
 
   const validatedFormat: any = {};
@@ -321,6 +323,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.useTabsForIndentation ?? fallbackFormat.useTabsForIndentation,
         validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
         validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
+        validatedFormat.updateOrder ?? fallbackFormat.updateOrder,
       );
     }
   } else {
@@ -426,6 +429,22 @@ export class TomlFormat {
    */
   minimumDecimals?: number;
 
+  /**
+   * Whether `patch()` should reorder root key-values, `[table]`/`[[array]]` section blocks,
+   * and rows inside table bodies to match the key order of the JS object passed to `patch()`,
+   * carrying each entry's owned comments along with it (see docs/CommentOwnership.md).
+   *
+   * Off by default: with the option unset or `false`, `patch()` only ever changes values that
+   * actually differ between the existing document and the updated object, preserving the
+   * existing document's order even when the JS object's key order differs.
+   *
+   * Not auto-detectable — the existing document's order says nothing about the caller's
+   * intent, so `autoDetectFormatWithCst` always resolves this to `false`.
+   *
+   * See docs/PLAN-Update-Order.md for the full behavior and current scope limitations.
+   */
+  updateOrder?: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
@@ -439,7 +458,8 @@ export class TomlFormat {
     truncateZeroTimeInDates?: boolean,
     useTabsForIndentation?: boolean,
     minimumDecimals?: number,
-    leadingBom?: boolean
+    leadingBom?: boolean,
+    updateOrder?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
@@ -451,6 +471,7 @@ export class TomlFormat {
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
     this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
+    this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;
   }
 
   /**
@@ -477,7 +498,8 @@ export class TomlFormat {
       DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES,
       DEFAULT_USE_TABS_FOR_INDENTATION,
       DEFAULT_MINIMUM_DECIMALS,
-      DEFAULT_LEADING_BOM
+      DEFAULT_LEADING_BOM,
+      DEFAULT_UPDATE_ORDER
     );
   }
 
@@ -556,7 +578,11 @@ export class TomlFormat {
 
     // minimumDecimals uses default value (0) — caller must set explicitly
     format.minimumDecimals = DEFAULT_MINIMUM_DECIMALS;
-    
+
+    // updateOrder uses default value (false) as well — the existing document's order says
+    // nothing about the caller's intent, so this is never auto-detected.
+    format.updateOrder = DEFAULT_UPDATE_ORDER;
+
     return format;
   }
 

@@ -1,6 +1,6 @@
 import {
   Document, NodeType, TreeNode, Table, TableArray,
-  InlineArray, InlineTable, InlineItem, KeyValue
+  InlineArray, InlineTable, InlineItem, KeyValue, isComment
 } from '../cst';
 import { Location, Position } from '../location';
 import parseTOML from '../parse-toml';
@@ -164,6 +164,78 @@ function findInvertedLocations(doc: Document): string[] {
   return violations;
 }
 
+/**
+ * updateOrder invariant (docs/PLAN-Update-Order.md §3.4): a container's `items` array order
+ * must equal ascending line order for MEMBERS (KeyValue | Table | TableArray). Comments are
+ * excluded from this check on both sides of a pair: a hoisted in-brace comment's `loc` points
+ * inside a preceding member's own multi-line value, not at its own array position, so it is
+ * legitimately "out of order" by this measure — and a normal same-line trailing comment
+ * (`x = 1 # note`) legitimately shares its member's own end line, which isn't a relayout bug.
+ *
+ * @param doc - The root {@link Document} node to validate.
+ * @returns An array of violation strings; empty when every member is properly ordered.
+ */
+function findNonAscendingMemberOrder(doc: Document): string[] {
+  const violations: string[] = [];
+
+  function checkContainer(container: Document | Table | TableArray) {
+    const members = (container.items as TreeNode[]).filter(item => !isComment(item));
+    for (let i = 1; i < members.length; i++) {
+      const prev = members[i - 1];
+      const curr = members[i];
+      if (!posLe(prev.loc.end, curr.loc.start)) {
+        violations.push(
+          `${curr.type} at ${locStr(curr.loc)} is not properly after preceding member ${prev.type} at ${locStr(prev.loc)}`
+        );
+      }
+    }
+  }
+
+  traverse(doc, {
+    Document: { enter: checkContainer },
+    Table: { enter: checkContainer },
+    TableArray: { enter: checkContainer },
+  });
+
+  return violations;
+}
+
+/**
+ * updateOrder invariant (docs/PLAN-Update-Order.md §3.4): no two sibling MEMBERS (KeyValue |
+ * Table | TableArray) in the same container may share a line range. `to-toml.ts` composes
+ * each line as `before + raw + after` and merges colliding writes SILENTLY, so this has to be
+ * guaranteed structurally rather than caught at serialization time. Scoped to member-vs-member
+ * pairs (excluding Comments on either side, same rationale as {@link findNonAscendingMemberOrder})
+ * so a normal same-line trailing comment isn't flagged as a false positive.
+ *
+ * @param doc - The root {@link Document} node to validate.
+ * @returns An array of violation strings; empty when no two members overlap.
+ */
+function findOverlappingSiblingMembers(doc: Document): string[] {
+  const violations: string[] = [];
+
+  function checkContainer(container: Document | Table | TableArray) {
+    const members = (container.items as TreeNode[]).filter(item => !isComment(item));
+    for (let i = 1; i < members.length; i++) {
+      const prev = members[i - 1];
+      const curr = members[i];
+      if (curr.loc.start.line <= prev.loc.end.line) {
+        violations.push(
+          `${curr.type} at ${locStr(curr.loc)} overlaps preceding sibling ${prev.type} at ${locStr(prev.loc)}`
+        );
+      }
+    }
+  }
+
+  traverse(doc, {
+    Document: { enter: checkContainer },
+    Table: { enter: checkContainer },
+    TableArray: { enter: checkContainer },
+  });
+
+  return violations;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -174,10 +246,11 @@ function findInvertedLocations(doc: Document): string[] {
  *
  * @param toml    - TOML source string to parse and patch.
  * @param updated - Plain JS object representing the desired document state.
+ * @param format  - Format to patch with; defaults to a plain `new TomlFormat()`.
  * @returns Overlap violation strings from {@link findPositionOverlaps}.
  */
-function getOverlaps(toml: string, updated: any): string[] {
-  const { document } = patchCst(parseTOML(toml), updated, new TomlFormat());
+function getOverlaps(toml: string, updated: any, format: TomlFormat = new TomlFormat()): string[] {
+  const { document } = patchCst(parseTOML(toml), updated, format);
   return findPositionOverlaps(document);
 }
 
@@ -187,10 +260,11 @@ function getOverlaps(toml: string, updated: any): string[] {
  *
  * @param toml    - TOML source string to parse and patch.
  * @param updated - Plain JS object representing the desired document state.
+ * @param format  - Format to patch with; defaults to a plain `new TomlFormat()`.
  * @returns Inverted-location violation strings from {@link findInvertedLocations}.
  */
-function getInverted(toml: string, updated: any): string[] {
-  const { document } = patchCst(parseTOML(toml), updated, new TomlFormat());
+function getInverted(toml: string, updated: any, format: TomlFormat = new TomlFormat()): string[] {
+  const { document } = patchCst(parseTOML(toml), updated, format);
   return findInvertedLocations(document);
 }
 
@@ -201,10 +275,27 @@ function getInverted(toml: string, updated: any): string[] {
  *
  * @param toml    - TOML source string to parse and patch.
  * @param updated - Plain JS object representing the desired document state.
+ * @param format  - Format to patch with; defaults to a plain `new TomlFormat()`.
  */
-function expectConsistent(toml: string, updated: any) {
-  expect(getOverlaps(toml, updated)).toEqual([]);
-  expect(getInverted(toml, updated)).toEqual([]);
+function expectConsistent(toml: string, updated: any, format: TomlFormat = new TomlFormat()) {
+  expect(getOverlaps(toml, updated, format)).toEqual([]);
+  expect(getInverted(toml, updated, format)).toEqual([]);
+}
+
+/**
+ * Like {@link expectConsistent}, plus the two updateOrder-specific structural invariants
+ * (docs/PLAN-Update-Order.md §3.4): members in ascending line order, and no two sibling
+ * members sharing a line range.
+ *
+ * @param toml    - TOML source string to parse and patch.
+ * @param updated - Plain JS object representing the desired document state.
+ * @param format  - Format to patch with; defaults to `{ updateOrder: true }`.
+ */
+function expectConsistentWithOrder(toml: string, updated: any, format: TomlFormat = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)) {
+  expectConsistent(toml, updated, format);
+  const { document } = patchCst(parseTOML(toml), updated, format);
+  expect(findNonAscendingMemberOrder(document)).toEqual([]);
+  expect(findOverlappingSiblingMembers(document)).toEqual([]);
 }
 
 // ---------------------------------------------------------------------------
@@ -794,4 +885,223 @@ describe('CST position consistency after patching', () => {
     expectConsistent(toml, { long_description: 'This is a very long string value that takes up many columns' });
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// updateOrder (docs/PLAN-Update-Order.md §5.3): every behavior-matrix scenario from
+// update-order.test.ts run through the position-consistency + ascending-order +
+// no-overlap checks, in addition to that file's own output-string assertions.
+// ---------------------------------------------------------------------------
+
+describe('CST position consistency after updateOrder reordering', () => {
+  test('root key-value reorder', () => {
+    expectConsistentWithOrder('a = 1\nb = 2\nc = 3\n', { c: 3, a: 1, b: 2 });
+  });
+
+  test('section-block reorder', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [a]
+        x = 1
+
+        [b]
+        y = 2
+      ` + '\n',
+      { b: { y: 2 }, a: { x: 1 } }
+    );
+  });
+
+  test('table-body row reorder', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [t]
+        a = 1
+        b = 2
+        c = 3
+      ` + '\n',
+      { t: { c: 3, a: 1, b: 2 } }
+    );
+  });
+
+  test('comments travelling with a reordered key', () => {
+    expectConsistentWithOrder(
+      dedent`
+        # leads a
+        a = 1 # trail a
+        b = 2
+      ` + '\n',
+      { b: 2, a: 1 }
+    );
+  });
+
+  test('Add + reorder', () => {
+    expectConsistentWithOrder('a = 1\nb = 2\n', { c: 3, a: 1, b: 2 });
+  });
+
+  test('Remove + reorder', () => {
+    expectConsistentWithOrder('a = 1\nb = 2\nc = 3\n', { c: 3, a: 1 });
+  });
+
+  test('non-contiguous dotted-key group (safe no-op)', () => {
+    expectConsistentWithOrder(
+      'hello.world = 1\nb = 2\nhello.moon = 3\n',
+      { b: 2, hello: { world: 1, moon: 3 } }
+    );
+  });
+
+  test('out-of-order table headers (safe no-op)', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [fruit.apple]
+        color = "red"
+
+        [animal]
+        kind = "dog"
+
+        [fruit.orange]
+        color = "orange"
+      ` + '\n',
+      { animal: { kind: 'dog' }, fruit: { apple: { color: 'red' }, orange: { color: 'orange' } } }
+    );
+  });
+
+  test('genuinely-movable siblings reorder freely around a fixed non-contiguous anchor', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [fruit.apple]
+        color = "red"
+
+        [animal]
+        kind = "dog"
+
+        [fruit.orange]
+        color = "orange"
+
+        [zebra]
+        stripes = true
+      ` + '\n',
+      {
+        fruit: { apple: { color: 'red' }, orange: { color: 'orange' } },
+        zebra: { stripes: true },
+        animal: { kind: 'dog' }
+      }
+    );
+  });
+
+  test('[[array-of-tables]] block moves as a unit', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [[a]]
+        n = 1
+
+        [[a]]
+        n = 2
+
+        [b]
+        x = 1
+      ` + '\n',
+      { b: { x: 1 }, a: [{ n: 1 }, { n: 2 }] }
+    );
+  });
+
+  test('[a] + [a.sub] move together as one unit', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [a]
+        x = 1
+
+        [a.sub]
+        y = 2
+
+        [b]
+        z = 3
+      ` + '\n',
+      { b: { z: 3 }, a: { x: 1, sub: { y: 2 } } }
+    );
+  });
+
+  test('multi-line inline-table value shifts intact, with its hoisted in-brace comment', () => {
+    expectConsistentWithOrder(
+      dedent`
+        a = 1
+        b = {
+          x = 1, # note
+          y = 2,
+        }
+      ` + '\n',
+      { b: { x: 1, y: 2 }, a: 1 }
+    );
+  });
+
+  test('pinned banner stays put while keys reorder around it', () => {
+    expectConsistentWithOrder(
+      dedent`
+        # General file banner
+
+        a = 1
+        b = 2
+      ` + '\n',
+      { b: 2, a: 1 }
+    );
+  });
+
+  test('same-line header comment travels with its table', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [a] # hdr
+        x = 1
+
+        [b]
+        y = 2
+      ` + '\n',
+      { b: { y: 2 }, a: { x: 1 } }
+    );
+  });
+
+  test('R5: comment introducing the next section travels with it', () => {
+    expectConsistentWithOrder(
+      dedent`
+        [a]
+        x = 1
+        # about b
+        [b]
+        y = 2
+
+        [c]
+        z = 3
+      ` + '\n',
+      { c: { z: 3 }, a: { x: 1 }, b: { y: 2 } }
+    );
+  });
+
+  test('validity partition under inlineTableStart: 0', () => {
+    expectConsistentWithOrder(
+      dedent`
+        new_root = 42
+
+        [section]
+        key = "value"
+      ` + '\n',
+      { section: { key: 'value' }, new_root: 42 },
+      new TomlFormat(undefined, undefined, undefined, undefined, 0, undefined, undefined, undefined, undefined, true)
+    );
+  });
+
+  test('an inline-table-valued root key reorders within the root-KV partition alongside a real section', () => {
+    expectConsistentWithOrder(
+      dedent`
+        a = 1
+        b = { x = 1, y = 2 }
+
+        [section]
+        key = "value"
+      ` + '\n',
+      { b: { x: 1, y: 2 }, a: 1, section: { key: 'value' } },
+      new TomlFormat(undefined, undefined, undefined, undefined, 0, undefined, undefined, undefined, undefined, true)
+    );
+  });
+
+  test('identity permutation', () => {
+    expectConsistentWithOrder('a = 1\nb = 2\nc = 3\n', { a: 1, b: 2, c: 3 });
+  });
 });

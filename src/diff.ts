@@ -38,6 +38,8 @@ export interface Move {
   path: Path;
   from: number;
   to: number;
+  /** Present only for object-key moves (updateOrder); identifies the child to place. */
+  key?: string;
 }
 export function isMove(change: Change): change is Move {
   return change.type === ChangeType.Move;
@@ -55,7 +57,17 @@ export function isRename(change: Change): change is Rename {
 
 export type Change = Add | Edit | Remove | Move | Rename;
 
-export default function diff(before: any, after: any, path: Path = []): Change[] {
+export interface DiffOptions {
+  /**
+   * When true, `compareObjects` additionally emits Moves so that object keys end up in the
+   * same order as `after`'s. Off by default: a no-options `diff()` call emits zero Moves for
+   * a pure key-order permutation, which is the compatibility guarantee callers rely on. See
+   * docs/PLAN-Update-Order.md.
+   */
+  updateOrder?: boolean;
+}
+
+export default function diff(before: any, after: any, path: Path = [], options: DiffOptions = {}): Change[] {
   if (before === after || datesEqual(before, after)) {
     return [];
   }
@@ -76,9 +88,9 @@ export default function diff(before: any, after: any, path: Path = []): Change[]
   }
 
   if (Array.isArray(before) && Array.isArray(after)) {
-    return compareArrays(before, after, path);
+    return compareArrays(before, after, path, options);
   } else if (isObject(before) && isObject(after)) {
-    return compareObjects(before, after, path);
+    return compareObjects(before, after, path, options);
   } else {
     return [
       {
@@ -89,7 +101,7 @@ export default function diff(before: any, after: any, path: Path = []): Change[]
   }
 }
 
-function compareObjects(before: any, after: any, path: Path = []): Change[] {
+function compareObjects(before: any, after: any, path: Path = [], options: DiffOptions = {}): Change[] {
   let changes: Change[] = [];
 
   // 1. Get keys and stable values
@@ -108,11 +120,16 @@ function compareObjects(before: any, after: any, path: Path = []): Change[] {
     return !after_keys.includes(before_key);
   };
 
+  // Tracks from -> to for keys renamed in step 2, so the order-emission step below (which
+  // predicts the document's key order after Add/Remove/Rename) can follow a rename through
+  // rather than treating the old name as simply gone.
+  const renamed = new Map<string, string>();
+
   // 2. Check for changes, rename, and removed
   before_keys.forEach((key, index) => {
     const sub_path = path.concat(key);
     if (after_keys.includes(key)) {
-      merge(changes, diff(before[key], after[key], sub_path));
+      merge(changes, diff(before[key], after[key], sub_path, options));
     } else if (isRename(before_stable[index], after_stable)) {
       const to = after_keys[after_stable.indexOf(before_stable[index])];
       changes.push({
@@ -121,6 +138,7 @@ function compareObjects(before: any, after: any, path: Path = []): Change[] {
         from: key,
         to
       });
+      renamed.set(key, to);
     } else {
       changes.push({
         type: ChangeType.Remove,
@@ -139,10 +157,48 @@ function compareObjects(before: any, after: any, path: Path = []): Change[] {
     }
   });
 
+  // 4. Order emission (updateOrder only). Predict the key order the document will have
+  // once Add/Remove/Rename above are applied, then walk the target order emitting a Move
+  // wherever the prediction and the target disagree, splicing the prediction to match as we
+  // go — the same simulate-and-splice approach compareArrays already uses for Move.
+  if (options.updateOrder) {
+    const sim: string[] = [];
+    for (const key of before_keys) {
+      if (after_keys.includes(key)) {
+        if (!sim.includes(key)) sim.push(key);
+      } else if (renamed.has(key)) {
+        // Guard against the pre-existing spurious-rename case ({a:1,b:1} -> {b:1,x:1} emits
+        // Rename a->b even though b is unchanged) pushing a duplicate into sim.
+        const to = renamed.get(key)!;
+        if (!sim.includes(to)) sim.push(to);
+      }
+      // removed -> drop
+    }
+    for (const key of after_keys) {
+      if (!sim.includes(key)) sim.push(key); // adds append
+    }
+
+    after_keys.forEach((key, targetIndex) => {
+      if (sim[targetIndex] === key) return;
+
+      const from = sim.indexOf(key);
+      changes.push({
+        type: ChangeType.Move,
+        path,
+        from,
+        to: targetIndex,
+        key
+      });
+
+      sim.splice(from, 1);
+      sim.splice(targetIndex, 0, key);
+    });
+  }
+
   return changes;
 }
 
-function compareArrays(before: any[], after: any[], path: Path = []): Change[] {
+function compareArrays(before: any[], after: any[], path: Path = [], options: DiffOptions = {}): Change[] {
   let changes: Change[] = [];
 
   // 1. Convert arrays to stable objects
@@ -177,7 +233,7 @@ function compareArrays(before: any[], after: any[], path: Path = []): Change[] {
     // Check if item is removed -> assume it's been edited and replace
     const removed = !after_stable.includes(before_stable[index]);
     if (!overflow && removed) {
-      merge(changes, diff(before[index], after[index], path.concat(index)));
+      merge(changes, diff(before[index], after[index], path.concat(index), options));
       before_stable[index] = value;
 
       return;
