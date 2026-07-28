@@ -164,6 +164,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     ({ shift, offset } = insertInlineAtRoot(parent, child, index));
   } else {
     ({ shift, offset } = insertOnNewLine(
+      root,
       parent as Document | Table | TableArray,
       child as KeyValue | Comment,
       index
@@ -219,6 +220,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 }
 
 function insertOnNewLine(
+  root: Root,
   parent: Document | Table | TableArray,
   child: Block,
   index: number
@@ -292,7 +294,7 @@ function insertOnNewLine(
   // - Single item: skip the extra blank line (the original separator is intact).
   // - Multiple items: use normal offset (compensates accumulated removal shifts).
   const wasEmptied = previous === undefined
-    && (isTable(parent) || isTableArray(parent))
+    && (isTable(parent) || isTableArray(parent) || isDocument(parent))
     && emptiedByRemove.has(parent);
   const wasSingleRemoval = wasEmptied && !hadNonLastRemoval.has(parent);
   if (wasEmptied) {
@@ -300,11 +302,21 @@ function insertOnNewLine(
     hadNonLastRemoval.delete(parent);
   }
 
-  // When multiple items were removed from a table, the first removal's
-  // exit offset (-1) shifts everything up during applyWrites. Compensate
-  // by positioning the new child one line lower. Also skip the blank-line
-  // offset (like the single-removal case) to avoid doubled blank lines.
+  // When multiple items were removed from a table (or the document root),
+  // the accumulated removal offset still sits on the parent's key (Table/
+  // TableArray) or on the parent itself (Document) and will shift this new
+  // child during applyWrites. Cancel it out exactly by shifting the child
+  // the opposite amount, rather than assuming a fixed one-line offset. Also
+  // skip the blank-line offset (like the single-removal case) to avoid
+  // doubled blank lines.
   const needsCompensation = wasEmptied && !wasSingleRemoval;
+  let compensation_lines = 0;
+  if (needsCompensation) {
+    const staleOffset = (isTable(parent) || isTableArray(parent))
+      ? getExitOffsets(root).get((parent as Table | TableArray).key)
+      : getEnterOffsets(root).get(parent);
+    compensation_lines = staleOffset ? -staleOffset.lines : 1;
+  }
   const offset_leading = (wasSingleRemoval || needsCompensation) ? -child_span.lines : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
@@ -314,7 +326,7 @@ function insertOnNewLine(
     columns: child_span.columns
   };
 
-  return { shift: { lines: shift.lines + (needsCompensation ? 1 : 0), columns: shift.columns }, offset };
+  return { shift: { lines: shift.lines + compensation_lines, columns: shift.columns }, offset };
 }
 
 /**
@@ -588,16 +600,17 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
       inlineTablesNeedingTighten.add(parent);
     }
 
-    // When a Table or TableArray becomes completely empty, mark it.
-    if (isTable(parent) || isTableArray(parent)) {
+    // When a Table, TableArray, or the root Document becomes completely
+    // empty, mark it.
+    if (isTable(parent) || isTableArray(parent) || isDocument(parent)) {
       emptiedByRemove.set(parent, true);
     }
   }
 
-  // Track non-last removals from Tables/TableArrays so insertOnNewLine
+  // Track non-last removals from Tables/TableArrays/Document so insertOnNewLine
   // knows whether multiple items were removed (needs compensation).
   if (!(previous === undefined && next === undefined)
-      && (isTable(parent) || isTableArray(parent))) {
+      && (isTable(parent) || isTableArray(parent) || isDocument(parent))) {
     hadNonLastRemoval.add(parent);
   }
 

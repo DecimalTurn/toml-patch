@@ -30,7 +30,7 @@ import {
   Value,
   isDateTime
 } from './cst';
-import diff, { Change, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
+import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
@@ -202,7 +202,11 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const updated_js = format.updateOrder
     ? applyRequestedRootKeyOrder(updated, updated_js_raw, diffing_fmt, useTemporal)
     : updated_js_raw;
-  const changes = reorder(diff(existing_js, updated_js, [], { updateOrder: format.updateOrder }));
+  const changes = reorder(coalesceStructuralReplacements(
+    existing_document,
+    updated_js,
+    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder })
+  ));
 
   if (changes.length === 0) {
     return {
@@ -270,6 +274,109 @@ function reorder(changes: Change[]): Change[] {
   
   return changes;
 
+}
+
+/**
+ * Merges sibling `Remove(prefix.oldKey)` + `Add(prefix.newKey)` changes that
+ * share a common parent path into a single `Edit(prefix)` change.
+ *
+ * When a table/AOT is replaced by an incompatible type at a shallower path
+ * (e.g. `[a.b]` → `a = { x = 1 }`), the object-diff sees the whole `a`
+ * subtree disappear and a differently-shaped `a` appear, and reports it as
+ * a `Remove` of the old child (`a.b`) plus one `Add` per key of the new
+ * value (`a.x`) — never a single `Edit` on `a` itself, since `a` never
+ * existed as its own JS-diff node (it was only implicit via the dotted
+ * table key). Left alone, the generic Add handling resolves the missing
+ * `a` container by walking up to the document root (`findParent`), silently
+ * dropping the `a` nesting. Coalescing back into one `Edit(prefix)` routes
+ * it through `handleStructuralEdit`, which already rebuilds the correct
+ * nested structure from the full updated value at that path.
+ *
+ * Only applies when `prefix` has no literal node of its own in `original`
+ * (it was purely implicit) — if `prefix` is an actual existing table, the
+ * normal per-key Add/Remove handling already does the right thing.
+ *
+ * Also merges per-index Edit/Add/Remove changes under an existing
+ * array-of-tables (AOT) whose updated value is still a JS array but no
+ * longer made up entirely of plain objects (e.g. `[[i]]` → `i = [1, 2, 3]`
+ * or `i = [9]`). An AOT entry is a Table living at the document level, not
+ * an item inside an array node, so it can't be edited/appended/removed in
+ * place the way the diff assumes — the whole array needs to be rebuilt via
+ * `handleStructuralEdit`. When every element of the updated array is still
+ * a plain object, the AOT stays an AOT and the normal per-entry handling is
+ * left untouched.
+ */
+function coalesceStructuralReplacements(original: Document, updated_js: any, changes: Change[]): Change[] {
+  const consumed = new Set<Change>();
+  const coalescedEdits: Change[] = [];
+
+  // Strategy 1: Remove(prefix.oldKey) + Add(prefix.newKey) sharing an
+  // implicit parent with no literal node of its own.
+  const groups = new Map<string, { path: Change['path']; removes: Change[]; adds: Change[] }>();
+  for (const change of changes) {
+    if (!isRemove(change) && !isAdd(change)) continue;
+
+    const parentPath = change.path.slice(0, -1);
+    if (parentPath.length === 0) continue; // never coalesce at the document root itself
+
+    const key = JSON.stringify(parentPath);
+    let group = groups.get(key);
+    if (!group) {
+      group = { path: parentPath, removes: [], adds: [] };
+      groups.set(key, group);
+    }
+    (isRemove(change) ? group.removes : group.adds).push(change);
+  }
+  for (const group of groups.values()) {
+    if (group.removes.length === 0 || group.adds.length === 0) continue;
+    if (tryFindByPath(original, group.path)) continue; // parent still exists literally
+
+    group.removes.forEach(change => consumed.add(change));
+    group.adds.forEach(change => consumed.add(change));
+    coalescedEdits.push({ type: ChangeType.Edit, path: group.path });
+  }
+
+  // Strategy 2: AOT being replaced by an array that no longer holds only
+  // plain objects.
+  const arrayPrefixes = new Map<string, Change['path']>();
+  for (const change of changes) {
+    if (consumed.has(change)) continue;
+    if (!isEdit(change) && !isAdd(change) && !isRemove(change)) continue;
+
+    const index = last(change.path);
+    if (typeof index !== 'number') continue;
+
+    const prefix = change.path.slice(0, -1);
+    if (prefix.length === 0) continue;
+
+    const firstEntry = tryFindByPath(original, prefix.concat(0));
+    if (!firstEntry || !isTableArray(firstEntry)) continue;
+
+    arrayPrefixes.set(JSON.stringify(prefix), prefix);
+  }
+  for (const prefix of arrayPrefixes.values()) {
+    let value: any = updated_js;
+    for (const key of prefix) value = value?.[key];
+    if (!Array.isArray(value)) continue;
+
+    const staysAllObjects = value.every(el => el !== null && typeof el === 'object' && !Array.isArray(el));
+    if (staysAllObjects) continue;
+
+    for (const change of changes) {
+      if (consumed.has(change)) continue;
+      if (!isEdit(change) && !isAdd(change) && !isRemove(change)) continue;
+      if (change.path.length !== prefix.length + 1) continue;
+      if (!arraysEqual(change.path.slice(0, -1), prefix)) continue;
+      consumed.add(change);
+    }
+    coalescedEdits.push({ type: ChangeType.Edit, path: prefix });
+  }
+
+  if (consumed.size === 0) return changes;
+
+  const result = changes.filter(change => !consumed.has(change));
+  result.push(...coalescedEdits);
+  return result;
 }
 
 function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[]): string {
@@ -902,32 +1009,42 @@ function handleStructuralEdit(
 
   if (jsValue === undefined) return;
 
-  const lastName = change.path[change.path.length - 1] as string;
+  // Build a nested object matching the change path.
+  let nested: any = jsValue;
+  for (let i = change.path.length - 1; i >= 0; i--) {
+    nested = { [change.path[i]]: nested };
+  }
 
-  const freshDoc = parseJS({ [lastName]: jsValue }, format);
-  const freshKV = freshDoc.items[0] as KeyValue;
-
+  // Remove old nodes matching the key prefix.
   const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
-  if (prefixNodes.length === 0) {
-    insert(original, original, freshKV, rootKeyValueInsertIndex(original));
-    return;
+  for (const prefixNode of prefixNodes) {
+    remove(original, original, prefixNode);
   }
 
-  // Swap the fresh key-value in for the first old node rather than removing everything and
-  // appending: replace() splices in place, so the key keeps its position, its blank-line
-  // budget, and its adjacency to any leading comment. Appending instead left the key at the
-  // end of the document, below section headers that then swallowed it.
-  replace(original, original, prefixNodes[0], freshKV);
-  for (let i = 1; i < prefixNodes.length; i++) {
-    remove(original, original, prefixNodes[i]);
-  }
+  // Generate the replacement as CST, round-trip through TOML string to get
+  // properly positioned nodes, then parse back. This avoids issues with
+  // parseJS's formatting pipeline (formatEmptyLines, etc.) interacting poorly
+  // with insert().
+  const freshDoc = parseJS(nested, format);
+  const replacementToml = toTOML(freshDoc.items, format);
+  const replacementCst = Array.from(parseTOML(replacementToml));
+  const replacementKV = replacementCst[0] as KeyValue;
 
-  // freshKV stands in for a pre-existing entry, so it keeps that entry's R2 eligibility.
-  commentEligibleNodes.add(freshKV);
+  // Insert above the first remaining section header: a key-value placed after one would
+  // bind to that section instead of the root table.
+  const insertIndex = rootKeyValueInsertIndex(original);
 
-  // The old node may have sat below a section header (valid for a [table], not for the
-  // key-value replacing it).
-  hoistRootKeyValueAboveTables(original, freshKV);
+  // Only when a header actually survives the removals. In that case the replacement is
+  // prepended above it rather than appended to an emptied document, and insert() positions
+  // it against its neighbours' loc values — which still carry the removals' pending offsets
+  // until flushed, leaving the emitted node pointing past the end of the output buffer.
+  if (insertIndex !== undefined) applyWrites(original);
+
+  insert(original, original, replacementKV, insertIndex);
+
+  // replacementKV stands in for a pre-existing entry, so it keeps that entry's R2
+  // eligibility for adopting an adjacent leading comment during an updateOrder reorder.
+  commentEligibleNodes.add(replacementKV);
 }
 
 /**

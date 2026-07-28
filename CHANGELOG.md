@@ -27,10 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: fix wrong section nesting when replacing a table with a scalar value. ([#255])
 - Patching: preserve key with inline empty array when emptying an array-of-tables. ([#255])
 - Patching: fix `Node not found` errors on structural type replacements like nested table-to-scalar and AOT-to-scalar. ([#255])
+- Patching: fix remaining structural type replacement bugs — offset corruption when removing multiple sibling tables/AOTs, outer key loss when replacing a table/AOT with an inline object, and errors converting an array-of-tables to a plain array.
 - Patching: preserve `+nan` / `-nan` sign through parse and round-trip. ([#255])
-- Patching: keep a root key at root level when a structural edit regenerates it (table/AOT-to-scalar, or
-  emptying an array-of-tables) and the document has section headers. The key was appended past them, which
-  silently reparented it into the last section. ([#260])
+- Patching: keep a regenerated root key at root level when a section header survives alongside it — emptying an array-of-tables appended the key past the header, which silently reparented it into that section. ([#260])
 
 ## [2.1.0] - 2026-07-21
 

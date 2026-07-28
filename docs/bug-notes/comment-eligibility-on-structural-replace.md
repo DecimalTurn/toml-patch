@@ -89,25 +89,38 @@ inlined after its `replace()`. The fix extracts that into `hoistRootKeyValueAbov
 
 - **`replaceEmptiedTableArrays`** — inserts at `rootKeyValueInsertIndex(doc)` (just above the first
   section header) instead of appending.
-- **`handleStructuralEdit`** — restructured to mirror the proven `isTable` pattern: `replace()` the
-  first old node in place, `remove()` any remaining ones, then hoist. Swapping in place rather than
-  remove-then-append matters twice over — it keeps the key's blank-line budget (appending produced
-  a doubled blank line, and a bare append-then-move tripped a `to-toml.ts` crash on stale `loc`
-  bookkeeping), and it keeps the key adjacent to its leading comment.
+- **`handleStructuralEdit`** — the same hoist, plus a flush (see below).
 
-That last point resolves the comment-orphaning symptom too: hoisting the key back above the section
-header lands it directly under the comment that stayed behind, so no separate `writer.remove()`
-work was needed after all. The related `writer.remove()`-drops-comments gap noted in
+Hoisting the key back above the section header resolves the comment-orphaning symptom as a side
+effect: it lands directly under the comment that stayed behind, so no separate `writer.remove()`
+work was needed. The related `writer.remove()`-drops-comments gap noted in
 [`PLAN-Update-Order.md`](../PLAN-Update-Order.md#8-open-questions--follow-ups) is genuinely a
 different code path (key swaps, pinned by `swap-table-keys.test.ts`) and remains open there.
 
-`handleStructuralEdit` also now receives `commentEligibleNodes` and registers its `freshKV`, for
-the same reason the `isTable` sites do — it is a replacement, not a new entry.
+`handleStructuralEdit` also now receives `commentEligibleNodes` and registers its replacement node,
+for the same reason the `isTable` sites do — it is a replacement, not a new entry.
+
+### Merge note: overlap with `latest`
+
+`latest` independently reworked `handleStructuralEdit` for the same family of bugs (see its
+"resolve remaining structural type replacement bugs" commit and the exhaustive `structural type
+replacements` suite), including its own copy of the hoist. That version — which rebuilds the full
+nested path and round-trips the replacement through TOML for clean positioning — is the one kept on
+merge, with only the `commentEligibleNodes` registration and the shared `rootKeyValueInsertIndex()`
+helper layered back on.
+
+Its hoist had never actually fired, though: every test in that suite replaces the *entire* document
+(`{ i: 42 }`, `{ a: 99 }`), so no section header survives the removals and the insert index is
+always `undefined`. The first case with a surviving sibling section crashed in `to-toml.ts` —
+`insert()` positions the replacement against neighbour `loc` values that still carry the removals'
+pending offsets, so the emitted node points past the end of the output buffer. Fixed by calling
+`applyWrites()` before the insert, but **only when a header survives**: doing it unconditionally
+changes the blank-line bookkeeping for the emptied-document case and breaks seven of those tests.
 
 Regression tests, all previously failing: `src/__tests__/patch.test.ts`, three in `emptying
-array-of-tables` and two in `structural type replacements`. The pre-existing tests missed this
-because they only ever exercised documents with no competing section (`should replace single AOT
-entry with scalar` asserts nothing beyond `not.toThrow()`).
+array-of-tables` and two in `structural type replacements`. Both suites' pre-existing tests missed
+this by only ever exercising documents with no surviving section (`should replace single AOT entry
+with scalar` asserts nothing beyond `not.toThrow()`).
 
 ## Still open
 
