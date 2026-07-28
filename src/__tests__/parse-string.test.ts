@@ -62,3 +62,42 @@ test('should handle odd/even preceding backslashes for \\e', () => {
   // 3 backslashes then e => one literal backslash + ESC
   expect(parseString('"\\\\\\e"')).toBe('\\' + '\u001b');
 });
+
+// Surrogate code points are not Unicode scalar values, so they have no valid UTF-8 encoding
+// and cannot appear in a TOML document — in either escape form, paired or not. The 8-digit
+// form needs an explicit check: unlike an out-of-range code point, String.fromCodePoint
+// accepts a surrogate and simply yields an unpaired code unit.
+
+test('should reject a lone high surrogate in a 4-digit unicode escape', () => {
+  expect(() => parseString('"\\uD800"')).toThrow(/surrogates not allowed/);
+});
+
+test('should reject a lone low surrogate in a 4-digit unicode escape', () => {
+  expect(() => parseString('"\\uDFFF"')).toThrow(/surrogates not allowed/);
+});
+
+test('should reject a surrogate pair written as two 4-digit unicode escapes', () => {
+  // These two would combine into a valid astral character in UTF-16, but TOML forbids the
+  // escapes themselves — the 8-digit form is the correct spelling.
+  expect(() => parseString('"\\uD83D\\uDE00"')).toThrow(/surrogates not allowed/);
+});
+
+test('should reject a lone high surrogate in an 8-digit unicode escape', () => {
+  expect(() => parseString('"\\U0000D800"')).toThrow(/surrogates not allowed/);
+});
+
+test('should reject a lone low surrogate in an 8-digit unicode escape', () => {
+  expect(() => parseString('"\\U0000DFFF"')).toThrow(/surrogates not allowed/);
+});
+
+test('should reject a surrogate in an 8-digit unicode escape inside a multiline string', () => {
+  expect(() => parseString('"""\\U0000D800"""')).toThrow(/surrogates not allowed/);
+});
+
+test('should still accept a valid astral character via an 8-digit unicode escape', () => {
+  expect(parseString('"\\U0001F600"')).toBe('\u{1F600}');
+});
+
+test('should still reject an out-of-range 8-digit unicode escape', () => {
+  expect(() => parseString('"\\U00110000"')).toThrow();
+});

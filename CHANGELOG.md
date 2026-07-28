@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Parsing: reject surrogate code points in `\UXXXXXXXX` escapes. Only the 4-digit `\uXXXX` form was checked; the 8-digit form let a lone surrogate through, since `String.fromCodePoint` accepts one. ([#261])
+- Stringify/Patching: reject unpaired surrogates in string values and keys instead of emitting a document that is not valid UTF-8. Valid astral characters (surrogate *pairs*) are unaffected. ([#261])
+
 ## [3.0.0] - 2026-07-29
 
 ### Changed
@@ -327,4 +332,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#253]: https://github.com/DecimalTurn/toml-patch/pull/253
 [#259]: https://github.com/DecimalTurn/toml-patch/pull/259
 [#260]: https://github.com/DecimalTurn/toml-patch/pull/260
+[#261]: https://github.com/DecimalTurn/toml-patch/pull/261
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1

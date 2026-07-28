@@ -199,4 +199,51 @@ export function merge<TValue>(target: TValue[], values: TValue[]) {
   }
 }
 
+/**
+ * Finds the first unpaired surrogate code unit in `value`, if any.
+ *
+ * JS strings are UTF-16, so an astral character is legitimately stored as a high/low surrogate
+ * *pair* — those are fine. An unpaired one is not a Unicode scalar value, so it has no valid
+ * UTF-8 encoding and cannot be represented in TOML.
+ *
+ * Hand-rolled rather than using `String.prototype.isWellFormed()`, which needs Node 20 while
+ * this package supports Node 16 — and this also reports *where* the bad unit is.
+ */
+function findLoneSurrogate(value: string): { index: number; code: number } | undefined {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 0xd800 || code > 0xdfff) continue;
+
+    // A high surrogate is valid only when immediately followed by a low one.
+    if (code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1); // NaN past the end — fails the range test below
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        i++; // consume the pair
+        continue;
+      }
+    }
+
+    // Either an unpaired high surrogate, or a low surrogate with no high before it (a paired
+    // low is always consumed by the branch above).
+    return { index: i, code };
+  }
+
+  return undefined;
+}
+
+/**
+ * Throws if `value` contains an unpaired surrogate. `describe` names what is being encoded
+ * (e.g. `'String value'`, `'Key "a"'`) so the message points at the offending input.
+ */
+export function assertNoLoneSurrogate(value: string, describe: string): void {
+  const found = findLoneSurrogate(value);
+  if (!found) return;
+
+  const hex = found.code.toString(16).toUpperCase().padStart(4, '0');
+  throw new Error(
+    `${describe} contains a lone surrogate (U+${hex}) at index ${found.index}. ` +
+    `Unpaired surrogates are not Unicode scalar values and cannot be encoded as TOML.`
+  );
+}
+
 
