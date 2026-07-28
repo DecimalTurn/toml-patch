@@ -109,18 +109,24 @@ nested path and round-trips the replacement through TOML for clean positioning �
 merge, with only the `commentEligibleNodes` registration and the shared `rootKeyValueInsertIndex()`
 helper layered back on.
 
-Its hoist had never actually fired, though: every test in that suite replaces the *entire* document
-(`{ i: 42 }`, `{ a: 99 }`), so no section header survives the removals and the insert index is
-always `undefined`. The first case with a surviving sibling section crashed in `to-toml.ts` —
-`insert()` positions the replacement against neighbour `loc` values that still carry the removals'
-pending offsets, so the emitted node points past the end of the output buffer. Fixed by calling
-`applyWrites()` before the insert, but **only when a header survives**: doing it unconditionally
-changes the blank-line bookkeeping for the emptied-document case and breaks seven of those tests.
+That suite does exercise the hoist with a surviving section (`[a.b] → a = 42 with preceding section
+(hoist check)`, `unrelated tables survive the structural replacement`, `unrelated AOT entries
+survive`). What it never covers is the replaced node being the document's **first** item while a
+section survives after it — every one of those tests keeps an item ahead of the replaced one
+(`[s]`, `[keep]`), so the document's leading slot is never vacated.
 
-Regression tests, all previously failing: `src/__tests__/patch.test.ts`, three in `emptying
-array-of-tables` and two in `structural type replacements`. Both suites' pre-existing tests missed
-this by only ever exercising documents with no surviving section (`should replace single AOT entry
-with scalar` asserts nothing beyond `not.toThrow()`).
+Vacating it and then prepending back into it crashed `to-toml.ts`: `insert()` positions the
+replacement against neighbour `loc` values that still carry the removal's pending offsets, so the
+emitted node points past the end of the output buffer. Fixed by calling `applyWrites()` before the
+insert, but **only when a header survives** — doing it unconditionally changes the blank-line
+bookkeeping for the fully-emptied document and breaks seven of that suite's tests.
+
+Regression tests, all verified to fail without their respective fix: three in `emptying
+array-of-tables`, two in `structural type replacements` for the original placement bug, and four
+more under "Replaced node is the document's FIRST item, section survives" covering the gap above
+across Table→scalar, AOT→scalar, AOT→array and AOT→object. Those four assert the known
+double-blank-line spacing as-is, matching the convention the `unrelated tables survive` test
+already set — pinning current behaviour, not endorsing it.
 
 ## Still open
 

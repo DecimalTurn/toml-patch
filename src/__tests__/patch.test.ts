@@ -5497,6 +5497,92 @@ describe('structural type replacements', () => {
     ` + '\n');
   });
 
+  // ── Replaced node is the document's FIRST item, section survives ─────
+  // The hoist tests above all keep an item ahead of the replaced one ([s], [keep]), so the
+  // document's leading slot is never vacated. When the replaced node IS the first item and a
+  // section survives after it, that slot is emptied and then prepended back into — which
+  // caught a crash in to-toml.ts (insert() positioning the replacement against neighbour loc
+  // values that still carried the removal's pending offsets). handleStructuralEdit now flushes
+  // those writes first, but only in this case: doing it unconditionally changes the
+  // blank-line bookkeeping for the fully-emptied document the other tests cover.
+  //
+  // NOTE: the extra blank line before the surviving section is the same known, pre-existing
+  // remove() offset bug documented on "unrelated tables survive" above. Asserted as-is to pin
+  // current behaviour, not as a statement that the spacing is correct.
+
+  test('[a.b] → a = 42 as first item, section survives after', () => {
+    const src = dedent`
+      [a.b]
+      x = 1
+
+      [s]
+      k = "v"
+    ` + '\n';
+    expectPatchResult(src, { a: 42, s: { k: 'v' } }, dedent`
+      a = 42
+
+
+      [s]
+      k = "v"
+    ` + '\n');
+  });
+
+  test('[[i]] × 2 → i = 42 as first item, section survives after', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [[i]]
+      n = 2
+
+      [s]
+      k = "v"
+    ` + '\n';
+    expectPatchResult(src, { i: 42, s: { k: 'v' } }, dedent`
+      i = 42
+
+
+
+      [s]
+      k = "v"
+    ` + '\n');
+  });
+
+  test('[[i]] → i = [1, 2] as first item, section survives after', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [s]
+      k = "v"
+    ` + '\n';
+    expectPatchResult(src, { i: [1, 2], s: { k: 'v' } }, dedent`
+      i = [ 1, 2 ]
+
+
+      [s]
+      k = "v"
+    ` + '\n');
+  });
+
+  test('[[i]] → i = { x: 1 } as first item, section survives after', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      [s]
+      k = "v"
+    ` + '\n';
+    expectPatchResult(src, { i: { x: 1 }, s: { k: 'v' } }, dedent`
+      [i]
+      x = 1
+
+
+      [s]
+      k = "v"
+    ` + '\n');
+  });
+
   // ── Existing (kept) ─────────────────────────────────────────────────
 
   test('should empty array within a table', () => {
