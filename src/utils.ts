@@ -200,14 +200,22 @@ export function merge<TValue>(target: TValue[], values: TValue[]) {
 }
 
 /**
+ * `String.prototype.isWellFormed`, when the runtime has it (Node 20+; this package supports
+ * Node 16, so it has to be optional). Returns false exactly when a string contains an unpaired
+ * surrogate — the same predicate as `findLoneSurrogate`, but far cheaper.
+ * 
+ * It only yields a boolean, so locating the offending unit for the error message still needs
+ * `findLoneSurrogate` — but that only runs on the failing path.
+ */
+const nativeIsWellFormed: ((this: string) => boolean) | undefined =
+  typeof String.prototype.isWellFormed === 'function' ? String.prototype.isWellFormed : undefined;
+
+/**
  * Finds the first unpaired surrogate code unit in `value`, if any.
  *
  * JS strings are UTF-16, so an astral character is legitimately stored as a high/low surrogate
  * *pair* — those are fine. An unpaired one is not a Unicode scalar value, so it has no valid
  * UTF-8 encoding and cannot be represented in TOML.
- *
- * Hand-rolled rather than using `String.prototype.isWellFormed()`, which needs Node 20 while
- * this package supports Node 16 — and this also reports *where* the bad unit is.
  */
 function findLoneSurrogate(value: string): { index: number; code: number } | undefined {
   for (let i = 0; i < value.length; i++) {
@@ -236,6 +244,10 @@ function findLoneSurrogate(value: string): { index: number; code: number } | und
  * (e.g. `'String value'`, `'Key "a"'`) so the message points at the offending input.
  */
 export function assertNoLoneSurrogate(value: string, describe: string): void {
+  // Fast path for the overwhelmingly common case of a clean string. When the native check is
+  // missing we fall through and scan, which is the same work as before.
+  if (nativeIsWellFormed !== undefined && nativeIsWellFormed.call(value)) return;
+
   const found = findLoneSurrogate(value);
   if (!found) return;
 
