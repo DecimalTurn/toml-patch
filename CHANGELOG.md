@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING**: Raise minimum supported Node.js version from `>=14` to `>=16`.
 - Patching: introducing explicit comment ownership. Comments describing a key, table, array-of-tables entry or an element inside a multi-line array or inline table now travel with it when removed or reordered via `patch()`, instead of being left behind to describe whatever ends up in that spot. See [docs/CommentOwnership.md](docs/CommentOwnership.md). ([#259])
-- Improve stringification performance
+- Improve stringification performance ([0e66e68])
 
 ### Added
 
@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher.
+- Patching: Ensure all elements of nested tables are preserved when using `inlineTableStart` is 2 or higher. ([#253])
 - Patching: prevent whitespace errors when swaping keys between tables.
 - Patching: handle BigInt values in documents without throwing. ([#255])
 - Patching: handle commented multiline arrays correctly when adding keys or emptying them. ([#255])
@@ -322,5 +322,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#189]: https://github.com/DecimalTurn/toml-patch/pull/189
 [#198]: https://github.com/DecimalTurn/toml-patch/pull/198
 [#255]: https://github.com/DecimalTurn/toml-patch/pull/255
+[#253]: https://github.com/DecimalTurn/toml-patch/pull/253
 [#259]: https://github.com/DecimalTurn/toml-patch/pull/259
 [#260]: https://github.com/DecimalTurn/toml-patch/pull/260
+[0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
