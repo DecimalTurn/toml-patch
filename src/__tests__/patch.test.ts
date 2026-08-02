@@ -95,14 +95,12 @@ test('should move elements in inline array', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
-test.skip('should indent a relocated first element to match its sibling rows', () => {
-  // Known limitation, unrelated to comment ownership: removing a non-last
-  // element of an already-multi-line array requires a Move (compareArrays
-  // re-matches surviving elements by value), and relocating an element to
-  // become the array's new first item makes insert() fall back to using the
-  // array's OWN opening-bracket column, rather than matching the indentation
-  // convention of the array's other rows. Reproducible with zero comments
-  // involved. See docs/PLAN-Comment-Ownership.md, "Scoping - what shipped".
+test('should indent a relocated first element to match its sibling rows', () => {
+  // Removing a non-last element of an already-multi-line array requires a Move
+  // (compareArrays re-matches surviving elements by value), which relocates an
+  // element into the array's first slot. calculateInlinePositioning() used to
+  // fall back to the array's own opening-bracket column there, since there is no
+  // previous sibling to line up against; it now matches the following row.
   const input = dedent`
     xs = [
       1,
@@ -120,6 +118,101 @@ test.skip('should indent a relocated first element to match its sibling rows', (
       3,
     ]
   ` + '\n');
+});
+
+// The indent has to be *derived* from the sibling row, not assumed. Every other multi-line
+// array fixture in the suite happens to use two spaces, so an implementation that simply
+// hardcoded 2 would pass all of them — these pin the width to whatever the document uses.
+describe('new first row derives its indent from the existing rows', () => {
+
+  test('should match a 4-space indent when prepending', () => {
+    const input = dedent`
+      xs = [
+          1,
+          2,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual(dedent`
+      xs = [
+          0,
+          1,
+          2,
+      ]
+    ` + '\n');
+  });
+
+  test('should match a 4-space indent when the first element is removed', () => {
+    const input = dedent`
+      xs = [
+          1,
+          2,
+          3,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [2, 3] })).toEqual(dedent`
+      xs = [
+          2,
+          3,
+      ]
+    ` + '\n');
+  });
+
+  // The `\t` escapes resolve before dedent measures the common prefix, so the surrounding
+  // two-space source indent strips cleanly and the tab survives into the fixture.
+  test('should match tab-indented rows when prepending', () => {
+    const input = dedent`
+      xs = [
+      \t1,
+      \t2,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual(dedent`
+      xs = [
+      \t0,
+      \t1,
+      \t2,
+      ]
+    ` + '\n');
+  });
+
+  test('should match tab-indented rows when the first element is removed', () => {
+    const input = dedent`
+      xs = [
+      \t1,
+      \t2,
+      \t3,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [2, 3] })).toEqual(dedent`
+      xs = [
+      \t2,
+      \t3,
+      ]
+    ` + '\n');
+  });
+
+  // Boundary: with a single existing row there is exactly one sibling to align to. Worth
+  // pinning because the lookup skips the just-spliced child by index, so an off-by-one
+  // there would leave nothing to match and silently fall back to the bracket column.
+  test('should align to the only existing row when prepending into a one-row array', () => {
+    const input = dedent`
+      xs = [
+        1,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1] })).toEqual(dedent`
+      xs = [
+        0,
+        1,
+      ]
+    ` + '\n');
+  });
+
 });
 
 test('should rename key-value in table', () => {
@@ -4960,13 +5053,11 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  // Skipped for the SAME known, unrelated limitation as the test at the top of this file
-  // ("should indent a relocated first element to match its sibling rows"): dropping the
-  // first element forces the survivor into the array's first slot via a Move, and insert()
-  // positions a new first row at the array's own opening-bracket column instead of matching
-  // its siblings' indentation. The comment ownership itself (# b travels with 2, # c with 3)
-  // is correct -- only the indentation of the relocated row is wrong.
-  test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
+  // Dropping the first element forces the survivor into the array's first slot via a Move.
+  // Both the comment ownership (# b travels with 2, # c with 3) and the relocated row's
+  // indentation are checked here — see the first-slot handling in
+  // calculateInlinePositioning().
+  test('should keep # b and # c comments when shifting to [2, 3]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -5002,10 +5093,9 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  // Same known, unrelated indentation quirk as above -- prepending inserts a brand-new
-  // element at index 0, hitting the identical "new first row uses the bracket's own column"
-  // code path in insert(), even though nothing here is being relocated/owns a comment.
-  test.skip('should keep comments on original elements when prepending', () => {
+  // Prepending inserts a brand-new element at index 0, reaching the same first-slot
+  // positioning path as the relocation case above without anything being relocated.
+  test('should keep comments on original elements when prepending', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -5022,6 +5112,53 @@ describe('array element comment association', () => {
         3, # c
       ]
     ` + '\n');
+  });
+
+});
+
+describe('array of inline tables', () => {
+
+  test('should keep the array inline when the first element is removed', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ b: 2 }] })).toEqual(dedent`
+      xs = [
+        { b = 2 },
+      ]
+    ` + '\n');
+  });
+
+  // Pre-existing bug, unrelated to the first-row indentation work: prepending an element to
+  // an array of inline tables emits a [[xs]] section AND leaves the original `xs = [...]`
+  // key in place, so `xs` is defined twice and the document is invalid TOML. Reparsing nests
+  // the original array inside the new element:
+  //   {"xs":[{"z":0,"xs":[{"a":1},{"b":2}]}]}
+  // Reproduces identically before and after the indentation fix. Possibly the same root
+  // cause as issue #262 (patch() duplicating a key when a value matches an untouched
+  // sibling); left skipped rather than failing, per this repo's convention for known gaps.
+  test.skip('should prepend an element without duplicating the key', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+
+    expect(result).toEqual(dedent`
+      xs = [
+        { z = 0 },
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
   });
 
 });

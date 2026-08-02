@@ -396,18 +396,10 @@ describe('inline array item removal', () => {
       const value = parse(input);
       value.xs.splice(0, 1);
 
-      // The 5-space indent (not 2) on the surviving rows is a pre-existing,
-      // unrelated quirk: insert() positions a brand-new "first element of an
-      // already-multi-line array" at the OPENING BRACKET's own column rather
-      // than matching the other rows' indentation convention. Reproducible
-      // with zero comments involved -- e.g. plain `xs = [1,\n  2,\n  3,\n]`
-      // with `xs.splice(0,1)` produces the same 5-space indent. Not asserting
-      // the ownership behaviour this test exists for would be worse than
-      // asserting the real (if cosmetically imperfect) baseline.
       expect(patch(input, value)).toEqual(dedent`
         xs = [
-             2, # two
-             3,
+          2, # two
+          3,
         ]
         y = 9
       ` + '\n');
@@ -501,10 +493,8 @@ describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tabl
   describe('first-element removal misplaces the surviving element\'s own comment', () => {
     // The root-level equivalent of this test (above) correctly lands `# two` trailing
     // `2,`. Nested in a table, it lands on the bracket line instead: currently
-    // `xs = [  # two\n     2,\n     3,\n]`. The 5-space indent on survivor rows is the
-    // same pre-existing, unrelated quirk noted on the root-level test above (see also
-    // patch.test.ts's skipped 'should indent a relocated first element...' test) --
-    // kept as-is here so this test isolates the comment-placement regression alone.
+    // `xs = [  # two\n  2,\n  3,\n]`. This test isolates that comment-placement
+    // regression; the survivor rows' indentation is correct.
     test('array nested in a [table] attaches the comment to the bracket line instead of its element', () => {
       const input = dedent`
         [sec]
@@ -522,8 +512,8 @@ describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tabl
       expect(patch(input, value)).toEqual(dedent`
         [sec]
         xs = [
-             2, # two
-             3,
+          2, # two
+          3,
         ]
         y = 9
       ` + '\n');
@@ -545,8 +535,8 @@ describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tabl
       expect(patch(input, value)).toEqual(dedent`
         [[aot]]
         xs = [
-             2, # two
-             3,
+          2, # two
+          3,
         ]
       ` + '\n');
     });
@@ -571,8 +561,8 @@ describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tabl
       // gone entirely and `# one`/`# three` are concatenated into one token.
       expect(patch(input, value)).toEqual(dedent`
         xs = [
-             3, # three
-             4,
+          3, # three
+          4,
         ]
       ` + '\n');
     });
@@ -597,8 +587,8 @@ describe('non-trailing removal (Move) nested inside a [table] or [[array-of-tabl
       expect(patch(input, value)).toEqual(dedent`
         [sec]
         xs = [
-             3, # three
-             4,
+          3, # three
+          4,
         ]
       ` + '\n');
     });
@@ -648,8 +638,8 @@ describe('nested inside a [table] -- shapes that are NOT regressed', () => {
     expect(patch(input, value)).toEqual(dedent`
       [sec]
       xs = [
-           { a = 2 },
-           { a = 3 },
+        { a = 2 },
+        { a = 3 },
       ]
     ` + '\n');
   });
@@ -671,8 +661,8 @@ describe('nested inside a [table] -- shapes that are NOT regressed', () => {
     expect(patch(input, value)).toEqual(dedent`
       [sec]
       xs = [
-           2,
-           3,
+        2,
+        3,
       ]
     ` + '\n');
   });
