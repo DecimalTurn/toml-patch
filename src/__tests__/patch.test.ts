@@ -95,14 +95,12 @@ test('should move elements in inline array', () => {
   expect(patch(example, value)).toMatchSnapshot();
 });
 
-test.skip('should indent a relocated first element to match its sibling rows', () => {
-  // Known limitation, unrelated to comment ownership: removing a non-last
-  // element of an already-multi-line array requires a Move (compareArrays
-  // re-matches surviving elements by value), and relocating an element to
-  // become the array's new first item makes insert() fall back to using the
-  // array's OWN opening-bracket column, rather than matching the indentation
-  // convention of the array's other rows. Reproducible with zero comments
-  // involved. See docs/PLAN-Comment-Ownership.md, "Scoping - what shipped".
+test('should indent a relocated first element to match its sibling rows', () => {
+  // Removing a non-last element of an already-multi-line array requires a Move
+  // (compareArrays re-matches surviving elements by value), which relocates an
+  // element into the array's first slot. calculateInlinePositioning() used to
+  // fall back to the array's own opening-bracket column there, since there is no
+  // previous sibling to line up against; it now matches the following row.
   const input = dedent`
     xs = [
       1,
@@ -4960,13 +4958,11 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  // Skipped for the SAME known, unrelated limitation as the test at the top of this file
-  // ("should indent a relocated first element to match its sibling rows"): dropping the
-  // first element forces the survivor into the array's first slot via a Move, and insert()
-  // positions a new first row at the array's own opening-bracket column instead of matching
-  // its siblings' indentation. The comment ownership itself (# b travels with 2, # c with 3)
-  // is correct -- only the indentation of the relocated row is wrong.
-  test.skip('should keep # b and # c comments when shifting to [2, 3]', () => {
+  // Dropping the first element forces the survivor into the array's first slot via a Move.
+  // Both the comment ownership (# b travels with 2, # c with 3) and the relocated row's
+  // indentation are checked here — see the first-slot handling in
+  // calculateInlinePositioning().
+  test('should keep # b and # c comments when shifting to [2, 3]', () => {
     const src = dedent`
       arr = [
         1, # a
@@ -5002,10 +4998,9 @@ describe('array element comment association', () => {
     ` + '\n');
   });
 
-  // Same known, unrelated indentation quirk as above -- prepending inserts a brand-new
-  // element at index 0, hitting the identical "new first row uses the bracket's own column"
-  // code path in insert(), even though nothing here is being relocated/owns a comment.
-  test.skip('should keep comments on original elements when prepending', () => {
+  // Prepending inserts a brand-new element at index 0, reaching the same first-slot
+  // positioning path as the relocation case above without anything being relocated.
+  test('should keep comments on original elements when prepending', () => {
     const src = dedent`
       arr = [
         1, # a
