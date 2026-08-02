@@ -5708,12 +5708,45 @@ describe('comment removal with section', () => {
 
 });
 
-describe('lone surrogate handling in stringify', () => {
+describe('lone surrogate handling in stringify and patch', () => {
 
-  test.skip('should reject lone surrogates instead of emitting invalid TOML', () => {
-    // Lone surrogates are not valid Unicode scalar values.
-    // stringify should throw rather than emit \\uD800.
-    expect(() => stringify({ s: '\ud800' })).toThrow();
+  // JS strings are UTF-16, so an astral character is legitimately stored as a surrogate
+  // *pair* — those must keep working. An *unpaired* surrogate is not a Unicode scalar value,
+  // has no valid UTF-8 encoding, and so cannot be represented in TOML at all. Rejected at the
+  // two generation choke points (generateString for values, generateKey for keys), which both
+  // stringify and patch funnel through.
+  const HIGH = '\ud800';
+  const LOW = '\udfff';
+
+  test('should reject lone surrogates instead of emitting invalid TOML', () => {
+    expect(() => stringify({ s: HIGH })).toThrow(/lone surrogate \(U\+D800\)/);
+  });
+
+  test('should reject a lone low surrogate', () => {
+    expect(() => stringify({ s: LOW })).toThrow(/lone surrogate \(U\+DFFF\)/);
+  });
+
+  test('should reject a lone surrogate nested in a table or array', () => {
+    expect(() => stringify({ a: { b: [HIGH] } })).toThrow(/lone surrogate/);
+  });
+
+  test('should reject a lone surrogate in a key', () => {
+    expect(() => stringify({ [HIGH]: 1 })).toThrow(/lone surrogate/);
+  });
+
+  test('should reject a lone surrogate when patching an existing value', () => {
+    expect(() => patch('s = "ok"\n', { s: HIGH })).toThrow(/lone surrogate/);
+  });
+
+  test('should reject a lone surrogate when patching in a new key', () => {
+    expect(() => patch('a = 1\n', { a: 1, s: HIGH })).toThrow(/lone surrogate/);
+    expect(() => patch('a = 1\n', { a: 1, [HIGH]: 2 })).toThrow(/lone surrogate/);
+  });
+
+  test('should still accept a valid astral character (surrogate pair)', () => {
+    expect(stringify({ s: '\u{1F600}' })).toBe('s = "\u{1F600}"\n');
+    expect(patch('s = "ok"\n', { s: '\u{1F600}' })).toBe('s = "\u{1F600}"\n');
+    expect(patch('s = "\u{1F600}"\n', parse('s = "\u{1F600}"\n'))).toBe('s = "\u{1F600}"\n');
   });
 
 });

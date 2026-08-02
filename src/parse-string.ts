@@ -100,6 +100,12 @@ function unescapeBasicString(value: string, multiline: boolean): string {
           }
         }
         const cp = parseInt(value.slice(i + 1, i + 9), 16);
+        // Same restriction as the \u form above. Unlike an out-of-range code point, a
+        // surrogate is accepted by String.fromCodePoint (it just yields an unpaired code
+        // unit), so it has to be rejected explicitly.
+        if (cp >= 0xD800 && cp <= 0xDFFF) {
+          throw new Error(`Invalid \\U${value.slice(i + 1, i + 9)}: surrogates not allowed`);
+        }
         parts.push(String.fromCodePoint(cp));
         i += 8;
         break;

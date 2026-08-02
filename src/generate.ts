@@ -29,7 +29,7 @@ import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
-import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString} from './utils';
+import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -138,7 +138,13 @@ function quoteTomlString(value: string): string {
 }
 
 function keyValueToRaw(value: string[]): string {
-  return value.map(part => (IS_BARE_KEY.test(part) ? part : quoteTomlString(part))).join('.');
+  return value.map(part => {
+    // Keys are encoded too, so a lone surrogate is just as invalid here as in a value.
+    // JSON.stringify escapes the offending unit, so the message stays printable rather than
+    // carrying the raw unpaired surrogate into logs.
+    assertNoLoneSurrogate(part, `Key ${JSON.stringify(part)}`);
+    return IS_BARE_KEY.test(part) ? part : quoteTomlString(part);
+  }).join('.');
 }
 
 export function generateKey(value: string[]): Key {
@@ -160,6 +166,10 @@ export function generateKey(value: string[]): Key {
  * @returns A new String node.
  */
 export function generateString(value: string, existingRaw?: string): String {
+  // Single choke point for string values from both stringify and patch — reject unpaired
+  // surrogates here rather than emitting a document that isn't valid UTF-8.
+  assertNoLoneSurrogate(value, 'String value');
+
   if (!existingRaw) {
     return generateBasicString(value);
   }
