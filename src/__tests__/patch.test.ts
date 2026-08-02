@@ -120,6 +120,41 @@ test('should indent a relocated first element to match its sibling rows', () => 
   ` + '\n');
 });
 
+// The indent has to be *derived* from the sibling row, not assumed. Every other multi-line
+// array fixture in the suite happens to use two spaces, so an implementation that simply
+// hardcoded 2 would pass all of them — these pin the width to whatever the document uses.
+describe('new first row derives its indent from the existing rows', () => {
+
+  test('should match a 4-space indent when prepending', () => {
+    const input = 'xs = [\n    1,\n    2,\n]\n';
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual('xs = [\n    0,\n    1,\n    2,\n]\n');
+  });
+
+  test('should match a 4-space indent when the first element is removed', () => {
+    const input = 'xs = [\n    1,\n    2,\n    3,\n]\n';
+    expect(patch(input, { xs: [2, 3] })).toEqual('xs = [\n    2,\n    3,\n]\n');
+  });
+
+  test('should match tab-indented rows when prepending', () => {
+    const input = 'xs = [\n\t1,\n\t2,\n]\n';
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual('xs = [\n\t0,\n\t1,\n\t2,\n]\n');
+  });
+
+  test('should match tab-indented rows when the first element is removed', () => {
+    const input = 'xs = [\n\t1,\n\t2,\n\t3,\n]\n';
+    expect(patch(input, { xs: [2, 3] })).toEqual('xs = [\n\t2,\n\t3,\n]\n');
+  });
+
+  // Boundary: with a single existing row there is exactly one sibling to align to. Worth
+  // pinning because the lookup skips the just-spliced child by index, so an off-by-one
+  // there would leave nothing to match and silently fall back to the bracket column.
+  test('should align to the only existing row when prepending into a one-row array', () => {
+    const input = 'xs = [\n  1,\n]\n';
+    expect(patch(input, { xs: [0, 1] })).toEqual('xs = [\n  0,\n  1,\n]\n');
+  });
+
+});
+
 test('should rename key-value in table', () => {
   const value = parse(example);
   delete value.products[1].color;
@@ -5017,6 +5052,31 @@ describe('array element comment association', () => {
         3, # c
       ]
     ` + '\n');
+  });
+
+});
+
+describe('array of inline tables', () => {
+
+  test('should keep the array inline when the first element is removed', () => {
+    const src = 'xs = [\n  { a = 1 },\n  { b = 2 },\n]\n';
+    expect(patch(src, { xs: [{ b: 2 }] })).toEqual('xs = [\n  { b = 2 },\n]\n');
+  });
+
+  // Pre-existing bug, unrelated to the first-row indentation work: prepending an element to
+  // an array of inline tables emits a [[xs]] section AND leaves the original `xs = [...]`
+  // key in place, so `xs` is defined twice and the document is invalid TOML. Reparsing nests
+  // the original array inside the new element:
+  //   {"xs":[{"z":0,"xs":[{"a":1},{"b":2}]}]}
+  // Reproduces identically before and after the indentation fix. Possibly the same root
+  // cause as issue #262 (patch() duplicating a key when a value matches an untouched
+  // sibling); left skipped rather than failing, per this repo's convention for known gaps.
+  test.skip('should prepend an element without duplicating the key', () => {
+    const src = 'xs = [\n  { a = 1 },\n  { b = 2 },\n]\n';
+    const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+
+    expect(result).toEqual('xs = [\n  { z = 0 },\n  { a = 1 },\n  { b = 2 },\n]\n');
+    expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
   });
 
 });
