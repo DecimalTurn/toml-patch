@@ -774,14 +774,14 @@ describe('non-trailing insertion (Add) misplaces an earlier element\'s own comme
 
 });
 
-// Discovered while isolating the comment-drag bug above: this reproduces identically with
-// ZERO comments involved (confirmed by stripping the fixture down to plain numbers), so it is
-// a separate, pre-existing, comment-UNrelated bug in insert()'s positioning math for two
-// sequential mid-array insertions in one patch -- not something the isInlineArray fix above
-// touches or is responsible for. Left skipped as a known-but-deferred quirk, matching this
-// repo's convention (c.f. patch.test.ts's skipped first-element-indentation test).
-describe.skip('two sequential mid-array insertions in one patch collapse rows (known gap, unrelated to comment ownership)', () => {
-  test('a later insertion lands on the same line as the row before it instead of its own row', () => {
+// Reproduces with ZERO comments involved, so this was never a comment-ownership issue:
+// insert() positions each new element against its previous sibling's `.loc`, which stays
+// pre-offset until applyWrites resolves it. A second insertion into the same container in
+// one patch therefore measured against a stale line and landed on top of the row before it.
+// patch.ts now flushes after inserting into a multi-line inline container, the same
+// discipline removeMember/moveInlineElement already applied for removals and moves.
+describe('two sequential mid-array insertions in one patch', () => {
+  test('a later insertion gets its own row rather than landing on the previous one', () => {
     const input = dedent`
       xs = [
         1, # one
@@ -794,9 +794,6 @@ describe.skip('two sequential mid-array insertions in one patch collapse rows (k
     value.xs.splice(1, 0, 98);
     value.xs.splice(3, 0, 99);
 
-    // Currently produces `xs = [\n  1, # one\n  98,\n  2, 99,\n  3,\n]` -- no data loss
-    // (values are all correct, and `# one` correctly stays with `1` now), but `2,`/`99,`
-    // collapse onto a single line instead of each getting their own row.
     expect(patch(input, value)).toEqual(dedent`
       xs = [
         1, # one
@@ -809,16 +806,14 @@ describe.skip('two sequential mid-array insertions in one patch collapse rows (k
   });
 });
 
-// Unlike the Move-path regression above, this gap is pre-existing (same output before and
-// after the comment-ownership-for-inline-elements work landed) and is a different root cause:
-// findHostContainer() doesn't resolve through an InlineTable's own KeyValue entries, so an
-// array that is itself the value of a multiline inline table's key falls back to the old,
-// comment-oblivious remove()+insert() path entirely. Not part of "these regressions" --
-// tracked separately (see docs/bug-notes/inline-array-nested-container-regression.md, "Still open")
-// and left skipped rather than failing, matching this repo's convention for known-but-deferred
-// gaps (c.f. patch.test.ts's skipped first-element-indentation test).
-describe.skip('nested inside a multiline inline table (known gap, unrelated to the regression above)', () => {
-  test('array element removal drops the comment instead of leaving it stray near the closing bracket', () => {
+// findHostContainer() walks KeyValue.value / InlineTable.items / InlineArray.items /
+// InlineItem.item to locate where hoisted comments were filed, but it did not unwrap a
+// KeyValue reached *through* an InlineItem -- which is exactly how an inline table stores
+// its entries. So for `t = { xs = [...] }` the array was unreachable, findHostContainer
+// returned undefined, and both removeMember and moveInlineElement fell back to the
+// comment-oblivious remove()+insert() path, stranding `# two` near the closing bracket.
+describe('nested inside a multiline inline table', () => {
+  test('array element removal drops that element\'s own comment and keeps the others', () => {
     const input = dedent`
       t = {
         xs = [
@@ -832,8 +827,32 @@ describe.skip('nested inside a multiline inline table (known gap, unrelated to t
     const value = parse(input);
     value.t.xs.splice(1, 1);
 
-    // Currently produces `t = {\n  xs = [\n    1,\n    3,\n       # two\n  ],\n}` --
-    // `# two` survives, stray, instead of being dropped with its removed element.
+    // Matches the root-level and [table]-nested equivalents: `# two` goes with the element
+    // it described, `# one` stays with the element that survived.
+    expect(patch(input, value)).toEqual(dedent`
+      t = {
+        xs = [
+          1, # one
+          3,
+        ],
+      }
+    ` + '\n');
+  });
+
+  test('removal leaves no stray blank line when no comments are involved', () => {
+    const input = dedent`
+      t = {
+        xs = [
+          1,
+          2,
+          3,
+        ],
+      }
+    ` + '\n';
+
+    const value = parse(input);
+    value.t.xs.splice(1, 1);
+
     expect(patch(input, value)).toEqual(dedent`
       t = {
         xs = [

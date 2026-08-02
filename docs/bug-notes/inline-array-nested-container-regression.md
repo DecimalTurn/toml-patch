@@ -161,12 +161,23 @@ comment-oblivious `remove()`+`insert()` path — same (pre-existing, buggy) outp
    (regression)" describe block covering all of the above, plus a "shapes that are NOT regressed"
    block confirming inline-table key removal and array-of-inline-tables removal were unaffected.
 
-## Still open (not addressed by this fix)
+## Follow-up (fixed later, in #264)
 
-`findHostContainer` still doesn't resolve through `InlineTable.items[].item` when that item is itself a
+`findHostContainer` did not resolve through `InlineTable.items[].item` when that item is itself a
 `KeyValue` (the `t = { xs = [...] }` shape — a multiline inline table whose own value is a multiline
-inline array). For this shape, `findHostContainer` returns `undefined` and the code falls through to the
-old, comment-oblivious `remove()`+`insert()` path. Pinned as a skipped spec in
-`comment-ownership-inline.test.ts` ("nested inside a multiline inline table (known gap, unrelated to the
-regression above)") rather than fixed here, since it's a distinct root cause from the Move-path
-regression this document is about.
+inline array). For this shape it returned `undefined` and both `removeMember` and `moveInlineElement`
+fell through to the old, comment-oblivious `remove()`+`insert()` path, stranding the removed element's
+comment near the closing bracket.
+
+Left out of this document's fix as a distinct root cause, pinned as a skipped spec, and fixed
+afterwards by adding the missing unwrap:
+
+```ts
+if (isKeyValue(value)) return searchValue(value.value, container);
+```
+
+An inline table stores its entries as `InlineItem`s wrapping a `KeyValue`, so reaching anything under
+one of its keys means stepping through that `KeyValue`'s value — which the walk already did at the top
+level but not when recursing. Its spec is now live in `comment-ownership-inline.test.ts` ("nested inside
+a multiline inline table"), alongside a second case covering the stray blank line the same path left
+behind when no comments were involved.
