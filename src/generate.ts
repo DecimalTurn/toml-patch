@@ -29,7 +29,7 @@ import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
-import {isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate} from './utils';
+import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -140,7 +140,9 @@ function quoteTomlString(value: string): string {
 function keyValueToRaw(value: string[]): string {
   return value.map(part => {
     // Keys are encoded too, so a lone surrogate is just as invalid here as in a value.
-    assertNoLoneSurrogate(part, `Key "${part}"`);
+    // JSON.stringify escapes the offending unit, so the message stays printable rather than
+    // carrying the raw unpaired surrogate into logs.
+    assertNoLoneSurrogate(part, `Key ${JSON.stringify(part)}`);
     return IS_BARE_KEY.test(part) ? part : quoteTomlString(part);
   }).join('.');
 }

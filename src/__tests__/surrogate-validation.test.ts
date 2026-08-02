@@ -57,6 +57,27 @@ describe('a lone surrogate cannot round-trip in any spelling', () => {
     expect(() => patch('s = "ok"\n', { s: LONE })).toThrow(/lone surrogate/);
   });
 
+  test('should refuse a key holding a lone surrogate, with a printable message', () => {
+    // The message names the offending key, so it must escape it rather than interpolate the
+    // raw code unit — an unpaired surrogate in the message itself cannot be written to a
+    // UTF-8 stream losslessly, which makes the error hard to log.
+    let message = '';
+    expect(() => {
+      try {
+        stringify({ [`bad${LONE}key`]: 1 });
+      } catch (e: any) {
+        message = e.message;
+        throw e;
+      }
+    }).toThrow(/lone surrogate/);
+
+    expect(message).toContain(String.raw`\ud800`);
+    expect(message).not.toContain(LONE);
+    // Well-formed, so logging or re-encoding it is lossless.
+    expect(message.isWellFormed?.() ?? true).toBe(true);
+    expect(Buffer.from(message, 'utf8').toString('utf8')).toBe(message);
+  });
+
   test('should not emit an escaped surrogate that it would then reject on re-parse', () => {
     // Guards the tempting "just escape it" fix: whatever we emit must be re-readable.
     let emitted: string | undefined;

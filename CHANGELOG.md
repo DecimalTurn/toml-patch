@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Parsing: reject surrogate code points in `\UXXXXXXXX` escapes. Only the 4-digit `\uXXXX` form was checked; the 8-digit form let a lone surrogate through, since `String.fromCodePoint` accepts one. ([#261])
-- Stringify/Patching: reject unpaired surrogates in string values and keys instead of emitting a document that is not valid UTF-8. Valid astral characters (surrogate *pairs*) are unaffected. ([#261])
+- Parsing: reject surrogates in `\UXXXXXXXX` escapes. ([#261])
+- Stringify/Patching: reject unpaired surrogates in string values and keys instead of emitting invalid UTF-8. ([#261])
 
 ## [3.0.0] - 2026-07-29
 
