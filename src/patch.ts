@@ -677,6 +677,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // Flush before anything else in this patch touches the same container. insert()
+      // positions a new element against its previous sibling's `.loc`, but that sibling's
+      // position is only pre-offset until applyWrites resolves it — so a second insertion
+      // into the same multi-line container measures against a stale line and lands on top
+      // of the row before it (`2, 99,` on one line instead of two rows). Same discipline
+      // removeMember/moveInlineElement already apply for removals and moves.
+      if ((isInlineArray(parent) || isInlineTable(parent)) && parent.loc.end.line > parent.loc.start.line) {
+        applyWrites(original);
+      }
+
     } else if (isEdit(change)) {
       let existing = tryFindByPath(original, change.path);
       let replacement = findByPath(updated, change.path);

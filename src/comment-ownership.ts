@@ -230,6 +230,11 @@ export function resolveInlineElementSlots(
 export function findHostContainer(root: Document, target: TreeNode): Document | Table | TableArray | undefined {
   function searchValue(value: TreeNode, container: Document | Table | TableArray): Document | Table | TableArray | undefined {
     if (value === target) return container;
+    // An inline table's entries are InlineItems wrapping a KeyValue, so reaching anything
+    // nested under one of its keys means stepping through that KeyValue's value. Without
+    // this, `t = { xs = [...] }` never reaches `xs`'s array and the caller falls back to the
+    // comment-oblivious path.
+    if (isKeyValue(value)) return searchValue(value.value, container);
     if (isInlineTable(value) || isInlineArray(value)) {
       for (const inlineItem of (value as InlineTable | InlineArray).items) {
         if ((inlineItem as TreeNode) === target) return container;
