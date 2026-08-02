@@ -126,31 +126,91 @@ test('should indent a relocated first element to match its sibling rows', () => 
 describe('new first row derives its indent from the existing rows', () => {
 
   test('should match a 4-space indent when prepending', () => {
-    const input = 'xs = [\n    1,\n    2,\n]\n';
-    expect(patch(input, { xs: [0, 1, 2] })).toEqual('xs = [\n    0,\n    1,\n    2,\n]\n');
+    const input = dedent`
+      xs = [
+          1,
+          2,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual(dedent`
+      xs = [
+          0,
+          1,
+          2,
+      ]
+    ` + '\n');
   });
 
   test('should match a 4-space indent when the first element is removed', () => {
-    const input = 'xs = [\n    1,\n    2,\n    3,\n]\n';
-    expect(patch(input, { xs: [2, 3] })).toEqual('xs = [\n    2,\n    3,\n]\n');
+    const input = dedent`
+      xs = [
+          1,
+          2,
+          3,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [2, 3] })).toEqual(dedent`
+      xs = [
+          2,
+          3,
+      ]
+    ` + '\n');
   });
 
+  // The `\t` escapes resolve before dedent measures the common prefix, so the surrounding
+  // two-space source indent strips cleanly and the tab survives into the fixture.
   test('should match tab-indented rows when prepending', () => {
-    const input = 'xs = [\n\t1,\n\t2,\n]\n';
-    expect(patch(input, { xs: [0, 1, 2] })).toEqual('xs = [\n\t0,\n\t1,\n\t2,\n]\n');
+    const input = dedent`
+      xs = [
+      \t1,
+      \t2,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1, 2] })).toEqual(dedent`
+      xs = [
+      \t0,
+      \t1,
+      \t2,
+      ]
+    ` + '\n');
   });
 
   test('should match tab-indented rows when the first element is removed', () => {
-    const input = 'xs = [\n\t1,\n\t2,\n\t3,\n]\n';
-    expect(patch(input, { xs: [2, 3] })).toEqual('xs = [\n\t2,\n\t3,\n]\n');
+    const input = dedent`
+      xs = [
+      \t1,
+      \t2,
+      \t3,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [2, 3] })).toEqual(dedent`
+      xs = [
+      \t2,
+      \t3,
+      ]
+    ` + '\n');
   });
 
   // Boundary: with a single existing row there is exactly one sibling to align to. Worth
   // pinning because the lookup skips the just-spliced child by index, so an off-by-one
   // there would leave nothing to match and silently fall back to the bracket column.
   test('should align to the only existing row when prepending into a one-row array', () => {
-    const input = 'xs = [\n  1,\n]\n';
-    expect(patch(input, { xs: [0, 1] })).toEqual('xs = [\n  0,\n  1,\n]\n');
+    const input = dedent`
+      xs = [
+        1,
+      ]
+    ` + '\n';
+
+    expect(patch(input, { xs: [0, 1] })).toEqual(dedent`
+      xs = [
+        0,
+        1,
+      ]
+    ` + '\n');
   });
 
 });
@@ -5059,8 +5119,18 @@ describe('array element comment association', () => {
 describe('array of inline tables', () => {
 
   test('should keep the array inline when the first element is removed', () => {
-    const src = 'xs = [\n  { a = 1 },\n  { b = 2 },\n]\n';
-    expect(patch(src, { xs: [{ b: 2 }] })).toEqual('xs = [\n  { b = 2 },\n]\n');
+    const src = dedent`
+      xs = [
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ b: 2 }] })).toEqual(dedent`
+      xs = [
+        { b = 2 },
+      ]
+    ` + '\n');
   });
 
   // Pre-existing bug, unrelated to the first-row indentation work: prepending an element to
@@ -5072,10 +5142,22 @@ describe('array of inline tables', () => {
   // cause as issue #262 (patch() duplicating a key when a value matches an untouched
   // sibling); left skipped rather than failing, per this repo's convention for known gaps.
   test.skip('should prepend an element without duplicating the key', () => {
-    const src = 'xs = [\n  { a = 1 },\n  { b = 2 },\n]\n';
+    const src = dedent`
+      xs = [
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n';
+
     const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
 
-    expect(result).toEqual('xs = [\n  { z = 0 },\n  { a = 1 },\n  { b = 2 },\n]\n');
+    expect(result).toEqual(dedent`
+      xs = [
+        { z = 0 },
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
   });
 
