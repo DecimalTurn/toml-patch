@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Parsing: reject surrogates in `\UXXXXXXXX` escapes. ([#261])
 - Stringify/Patching: reject unpaired surrogates in string values and keys instead of emitting invalid UTF-8. ([#261])
+- Patching: indent a new first element of a multi-line array to match its sibling rows instead of the opening bracket. ([#263])
 
 ## [3.0.0] - 2026-07-29
 
@@ -333,4 +334,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#259]: https://github.com/DecimalTurn/toml-patch/pull/259
 [#260]: https://github.com/DecimalTurn/toml-patch/pull/260
 [#261]: https://github.com/DecimalTurn/toml-patch/pull/261
+[#263]: https://github.com/DecimalTurn/toml-patch/pull/263
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
