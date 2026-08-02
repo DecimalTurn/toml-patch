@@ -395,6 +395,11 @@ function calculateInlinePositioning(
   // sits at the end of `key = [` — nowhere near where the rows are indented, so a new first
   // row would land under the bracket instead of level with its siblings. Match the row that
   // will follow it instead (skipping comments, whose column is not the row indent).
+  //
+  // `i > index` rather than `>=`: insertInline() splices `child` in before calling this, so
+  // `parent.items[index]` is `child` itself and `>=` would measure the new row against its
+  // own pre-shift column. The other caller, insertInlineAtRoot(), splices afterwards but
+  // passes useNewLine: false, so it never reaches here.
   if (!previous && useNewLine) {
     const following = (parent.items as TreeNode[]).find(
       (item, i) => i > index && !isComment(item)
