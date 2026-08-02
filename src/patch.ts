@@ -493,6 +493,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // Track AOT keys whose entries were all removed so we can insert empty arrays.
   const emptiedAotKeys = new Set<string>();
 
+  // Multi-line inline containers already inserted into during this patch. The stale-position
+  // problem only arises on the SECOND insertion into the same container, so this lets the
+  // flush be paid just-in-time there rather than after every insertion — a patch touching
+  // many containers once each (the common shape) then pays nothing.
+  const insertedInlineContainers = new Set<TreeNode>();
+
   // Object-key Moves (updateOrder) are only collected here, not applied — they're relayed
   // out in one batch at the very end, after every other structural change in this patch has
   // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
@@ -586,6 +592,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // insert() positions a new element against its previous sibling's `.loc`, but that
+      // position stays pre-offset until applyWrites resolves it. A second insertion into the
+      // same multi-line container would therefore measure against a stale line and land on
+      // top of the row before it (`2, 99,` on one line instead of two rows). Resolve the
+      // earlier insertion first — but only on the second one, since applyWrites walks the
+      // whole tree and a patch inserting into many containers once each needs none of this.
+      const multilineInlineParent =
+        (isInlineArray(parent) || isInlineTable(parent)) && parent.loc.end.line > parent.loc.start.line;
+      if (multilineInlineParent && insertedInlineContainers.has(parent)) {
+        applyWrites(original);
+      }
+
       // The comments hoisted out of a multiline InlineArray/InlineTable live in the
       // nearest enclosing Document/Table/TableArray's own items, not necessarily
       // `original.items` — resolve it once so insert() can compensate the array the
@@ -677,15 +695,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
-      // Flush before anything else in this patch touches the same container. insert()
-      // positions a new element against its previous sibling's `.loc`, but that sibling's
-      // position is only pre-offset until applyWrites resolves it — so a second insertion
-      // into the same multi-line container measures against a stale line and lands on top
-      // of the row before it (`2, 99,` on one line instead of two rows). Same discipline
-      // removeMember/moveInlineElement already apply for removals and moves.
-      if ((isInlineArray(parent) || isInlineTable(parent)) && parent.loc.end.line > parent.loc.start.line) {
-        applyWrites(original);
-      }
+      if (multilineInlineParent) insertedInlineContainers.add(parent);
 
     } else if (isEdit(change)) {
       let existing = tryFindByPath(original, change.path);
