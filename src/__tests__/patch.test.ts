@@ -3872,6 +3872,28 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
+  // The same principle as the test above — an emptied table survives as a header — but the
+  // parent here is *implicit*: `[a.b]` declares `a` only by virtue of `b` existing under it.
+  // Remove `b` and there is no node left to keep `a` alive, so the document comes back as
+  // `{}` rather than `{ a: {} }`. Materialising the parent is the missing piece.
+  //
+  // Not specific to array-of-tables: `[a.b]` and `[[a.b]]` behave identically, and an
+  // explicitly declared `[a]` already survives. Found while reviewing #266; see
+  // https://github.com/DecimalTurn/toml-patch/pull/266 for the discussion.
+  test.skip('should keep an implicit parent table when its only child is removed', () => {
+    const fromTable = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+    expect(parse(patch(fromTable, { a: {} }))).toEqual({ a: {} });
+
+    const fromArrayOfTables = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+    expect(parse(patch(fromArrayOfTables, { a: {} }))).toEqual({ a: {} });
+  });
+
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
       ports = [ 8001, 8002, 8003 ]
