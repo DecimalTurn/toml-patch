@@ -992,11 +992,34 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         insert(original, original, fromNode, toIndex);
       }
     } else if (isRename(change)) {
-      let parent = findByPath(original, change.path.concat(change.from)) as
+      const sourcePath = change.path.concat(change.from);
+
+      let parent = tryFindByPath(original, sourcePath) as
         | KeyValue
         | Table
         | TableArray
-        | InlineItem<KeyValue>;
+        | InlineItem<KeyValue>
+        | undefined;
+
+      // When renaming a prefix segment of a dotted table key (e.g. the "a" in
+      // [a.b] → [x.b]), the source path ["a"] does not match the table's full key
+      // ["a","b"].  Fall back to a key-prefix search so rename can update just the
+      // matching segment in place.
+      if (!parent) {
+        const prefixNodes = findDocumentItemsByKeyPrefix(original, sourcePath);
+        if (prefixNodes.length === 1 && (isTable(prefixNodes[0]) || isTableArray(prefixNodes[0]))) {
+          const node = prefixNodes[0] as Table | TableArray;
+          const keyHolder = node.key;
+          const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
+          const segmentIndex = sourcePath.length - 1;
+          key.value[segmentIndex] = change.to;
+          key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+          key.loc.end.column = key.loc.start.column + key.raw.length;
+          return; // skip the rest of rename logic for this change
+        }
+      }
+
+      if (!parent) parent = findByPath(original, sourcePath) as KeyValue | Table | TableArray | InlineItem<KeyValue>;
       let replacement = findByPath(updated, change.path.concat(change.to)) as
         | KeyValue
         | Table
