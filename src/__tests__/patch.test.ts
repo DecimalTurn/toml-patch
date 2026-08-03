@@ -6171,13 +6171,21 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(patch(src, { t: { b: { n: 1 } } }))).toEqual({ t: { b: { n: 1 } } });
   });
 
+  const renameKey = (obj: Record<string, unknown>, from: string, to: string) => {
+    obj[to] = obj[from];
+    delete obj[from];
+  };
+
   test('should leave a genuine rename alone', () => {
     const src = dedent`
       a = 1
       keep = 2
     ` + '\n';
 
-    const result = patch(src, { z: 1, keep: 2 });
+    const obj = parse(src);
+    renameKey(obj, 'a', 'z');
+
+    const result = patch(src, obj);
     expect(result).toEqual(dedent`
       z = 1
       keep = 2
@@ -6342,6 +6350,35 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(result).toEqual(dedent`
       [x]
       y = { n = 1 }
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
+  });
+
+  test('should rename the root segment of a dotted section key - with comment', () => {
+    const src = dedent`
+      [a.b]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a', 'x');
+
+    let result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [x.b]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { b: { n: 1 } } });
+  
+    renameKey(obj, 'b', 'y');
+
+    result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [x.y]
+      # comment about n
+      n = 1 
     ` + '\n');
     expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
   });
