@@ -4,7 +4,7 @@
  *
  * Usage: npx tsx src/__tests__/fuzz-harness.ts [--count N] [--seed SEED]
  */
-import { randomToml } from '../randomizer';
+import { randomToml } from './randomizer';
 import { parse, stringify } from '../';
 import { inspect } from 'util';
 

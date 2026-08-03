@@ -1,4 +1,4 @@
-import { randomToml, SeededRandom } from '../randomizer';
+import { randomToml, SeededRandom } from './randomizer';
 import { parse } from '../';
 
 describe('SeededRandom', () => {

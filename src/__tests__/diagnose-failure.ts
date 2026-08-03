@@ -2,7 +2,7 @@
  * Quick diagnostic: reproduce a specific failure and show exactly what differs.
  * Usage: npx tsx src/__tests__/diagnose-failure.ts <seed>
  */
-import { randomToml } from '../randomizer';
+import { randomToml } from './randomizer';
 import { parse, stringify } from '../';
 
 const seed = parseInt(process.argv[2] || '0', 10);

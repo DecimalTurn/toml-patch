@@ -114,18 +114,3 @@ export { TomlDocument } from './toml-document';
 export function parseDocument(value: string | Uint8Array, options?: ParseOptions): TomlDocument {
   return new TomlDocument(value, options);
 }
-
-/**
- * Random TOML document generation for fuzz testing.
- *
- * @example
- * ```typescript
- * import { randomToml } from '@decimalturn/toml-patch';
- *
- * const result = randomToml({ seed: 42 });
- * console.log(result.toml);
- * // Reproduce with the same seed: randomToml({ seed: result.seed })
- * ```
- */
-export { randomToml, SeededRandom } from './randomizer';
-export type { RandomizerOptions, RandomTomlResult } from './randomizer';

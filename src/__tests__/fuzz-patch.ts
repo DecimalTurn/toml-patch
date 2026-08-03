@@ -4,7 +4,7 @@
  *
  * Usage: npx tsx src/__tests__/fuzz-patch.ts [--count N] [--seed SEED] [--mutations M]
  */
-import { randomToml, RandomizerOptions } from '../randomizer';
+import { randomToml } from './randomizer';
 import { parse, patch } from '../';
 import { inspect } from 'util';
 
@@ -111,8 +111,8 @@ function deleteAt(obj: any, path: (string | number)[]): void {
   if (parent == null) return;
   if (typeof key === 'number' && Array.isArray(parent)) {
     parent.splice(key, 1);
-  } else if (typeof key === 'string' && typeof parent === 'object') {
-    delete parent[key];
+  } else if (typeof key === 'string' && typeof parent === 'object' && parent !== null) {
+    delete (parent as Record<string, unknown>)[key];
   }
 }
 

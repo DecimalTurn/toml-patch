@@ -29,9 +29,9 @@ import {
   TreeNode,
   Block,
   RowItem
-} from './cst';
-import { clonePosition, Position, Location } from './location';
-import { generateKey } from './generate';
+} from '../cst';
+import { clonePosition, Position, Location } from '../location';
+import { generateKey } from '../generate';
 
 // ─── Seeded PRNG (mulberry32) ────────────────────────────────────────────
 
