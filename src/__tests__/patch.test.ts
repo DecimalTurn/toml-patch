@@ -5824,6 +5824,71 @@ describe('deleting an array-of-tables key', () => {
     expect(parse(result)).toEqual({ i: [] });
   });
 
+  // Nested AOTs go through the same emptiedAotKeys path, but the key has to survive as
+  // segments. Joining it to `"a.b"` and handing that to parseJS reads the dot as part of a
+  // single JS key, emitting the quoted `"a.b" = []` — a root key literally named `a.b`
+  // rather than `b` nested under `a`.
+  test('should remove a nested key entirely when it is deleted', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+  });
+
+  test('should remove a nested key while a sibling under the same parent survives', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+
+      [a.c]
+      m = 2
+    ` + '\n';
+
+    const result = patch(src, { a: { c: { m: 2 } } });
+    expect(result).toEqual(dedent`
+      [a.c]
+      m = 2
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { c: { m: 2 } } });
+  });
+
+  test('should degrade a nested key to a dotted empty array when explicitly emptied', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { a: { b: [] } });
+    expect(result).toEqual(dedent`
+      a.b = []
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: [] } });
+  });
+
+  test('should keep a surviving sibling when a nested key is emptied', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+
+      [a.c]
+      m = 2
+    ` + '\n';
+
+    expect(parse(patch(src, { a: { b: [], c: { m: 2 } } }))).toEqual({ a: { b: [], c: { m: 2 } } });
+  });
+
+  test('should handle a key nested more than two levels deep', () => {
+    const src = dedent`
+      [[a.b.c]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+    expect(parse(patch(src, { a: { b: { c: [] } } }))).toEqual({ a: { b: { c: [] } } });
+  });
+
 });
 
 describe('blank line accumulation on table deletion', () => {
