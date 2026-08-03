@@ -732,13 +732,7 @@ describe('renaming', () => {
     ` + '\n');
   });
 
-  // Pre-existing and unrelated to ownership: renaming a key whose value is a table throws.
-  // The isRename branch in patch.ts assumes a KeyValue and reads `replacement.key.value`,
-  // but a Table keeps its key at `.key.item.value` (a TableKey wrapping a Key), so the value
-  // is undefined and preserveEscapedKeyRaw fails on `.map`. Scalars and arrays rename fine.
-  // The change list is correct; only applying it fails. See the matching skipped test in
-  // patch.test.ts, 'should rename a key whose value is a table'.
-  test.skip('renames a table and keeps the comments inside it', () => {
+  test('renames a table and keeps the comments inside it', () => {
     const input = dedent`
       # doc for a
       [a]

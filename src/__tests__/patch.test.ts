@@ -6276,18 +6276,11 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(result)).toEqual({ y: 1, z: 1 });
   });
 
-  // Renaming a key whose value is an object throws, and has nothing to do with equal values
-  // — `[a]\nn = 1` patched to `{ z: { n: 1 } }` is a single unambiguous Rename and still
-  // fails. Verified to reproduce on unmodified `latest`; scalars and arrays rename fine, so
-  // it is specific to table and inline-table values, in patch application rather than in the
-  // diff. The change list is correct here; only applying it fails.
-  //
-  // The isRename branch assumes a KeyValue and reads `replacement.key.value`, but a Table
-  // keeps its key at `.key.item.value` — a TableKey wrapping a Key — so the value is
-  // undefined and preserveEscapedKeyRaw throws on `.map` (patch.ts:384, from :1008).
-  // Fixing it means teaching that branch the Table/TableArray shapes, including which
-  // sub-node to hand to replace().
-  test.skip('should rename a key whose value is a table', () => {
+  // A KeyValue holds its Key directly; a [table] wraps it in a TableKey. The rename branch
+  // read `.key.value` unconditionally, so for a section it got undefined and threw inside
+  // preserveEscapedKeyRaw. Nothing to do with equal values — this is a single unambiguous
+  // Rename, and it failed on `latest` too.
+  test('should rename a key whose value is a table', () => {
     const src = dedent`
       [a]
       n = 1
@@ -6299,6 +6292,40 @@ describe('removing a key whose value matches a sibling (#262)', () => {
       n = 1
     ` + '\n');
     expect(parse(result)).toEqual({ z: { n: 1 } });
+  });
+
+  test('should rename a table without disturbing its siblings', () => {
+    const src = dedent`
+      [a]
+      n = 1
+
+      [keep]
+      m = 2
+    ` + '\n';
+
+    const result = patch(src, { z: { n: 1 }, keep: { m: 2 } });
+    expect(result).toEqual(dedent`
+      [z]
+      n = 1
+
+      [keep]
+      m = 2
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: { n: 1 }, keep: { m: 2 } });
+  });
+
+  // Renaming a *dotted* section key is still unsupported, but it now refuses rather than
+  // emitting `[z]` and silently dropping the `a.` prefix. parseJS renders the replacement as
+  // a plain nested key (`z` under `[a]`) where the document holds `[a.b]`, so the two key
+  // nodes describe different shapes and cannot simply be swapped. It threw before this
+  // branch understood sections at all, so this is the same outcome with a clearer message.
+  test('should refuse to rename a dotted section key rather than drop its prefix', () => {
+    const src = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+
+    expect(() => patch(src, { a: { z: { n: 1 } } })).toThrow(/different shapes|segment/i);
   });
 
 });
