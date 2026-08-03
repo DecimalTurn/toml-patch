@@ -1021,9 +1021,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // understood sections at all, and a clear failure beats a corrupted document.
       if (parentKey.value.length !== replacementKey.value.length) {
         throw new Error(
-          `Cannot rename "${parentKey.raw}" to "${replacementKey.raw}": the replacement key ` +
-          `has ${replacementKey.value.length} segment(s) where the existing key has ` +
-          `${parentKey.value.length}. Renaming a dotted or nested section key is not supported yet.`
+          `Cannot rename "${parentKey.raw}" to "${replacementKey.raw}": the replacement key has ` +
+          `${replacementKey.value.length} segment(s) where the existing key has ` +
+          `${parentKey.value.length}, so one cannot be substituted for the other.`
         );
       }
 

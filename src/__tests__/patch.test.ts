@@ -6314,18 +6314,36 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(result)).toEqual({ z: { n: 1 }, keep: { m: 2 } });
   });
 
-  // Renaming a *dotted* section key is still unsupported, but it now refuses rather than
-  // emitting `[z]` and silently dropping the `a.` prefix. parseJS renders the replacement as
-  // a plain nested key (`z` under `[a]`) where the document holds `[a.b]`, so the two key
-  // nodes describe different shapes and cannot simply be swapped. It threw before this
-  // branch understood sections at all, so this is the same outcome with a clearer message.
+  // Renaming the LEAF of a dotted section key refuses rather than emitting `[z]` and
+  // silently dropping the `a.` prefix. parseJS renders the replacement as a plain nested key
+  // (`z` under `[a]`) where the document holds `[a.b]`, so the two key nodes have different
+  // segment counts and cannot be substituted. It threw before this branch understood
+  // sections at all, so the outcome is unchanged and only the message improves.
   test('should refuse to rename a dotted section key rather than drop its prefix', () => {
     const src = dedent`
       [a.b]
       n = 1
     ` + '\n';
 
-    expect(() => patch(src, { a: { z: { n: 1 } } })).toThrow(/different shapes|segment/i);
+    expect(() => patch(src, { a: { z: { n: 1 } } })).toThrow(/segment/i);
+  });
+
+  // Renaming the ROOT segment does work, because the diff resolves it at the document level
+  // where both sides are single-segment. Note the value is re-rendered as an inline table
+  // rather than staying a `[x.y]` section — the data round-trips, the representation does
+  // not survive.
+  test('should rename the root segment of a dotted section key', () => {
+    const src = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { x: { y: { n: 1 } } });
+    expect(result).toEqual(dedent`
+      [x]
+      y = { n = 1 }
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
   });
 
 });
