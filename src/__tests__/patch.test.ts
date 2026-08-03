@@ -5745,19 +5745,25 @@ describe('structural type replacements', () => {
 
 });
 
-describe('meaningful error messages', () => {
+// Both of these were once internal TypeErrors ("reading 'substring' of undefined",
+// "reading 'length' of undefined") and were parked asserting that a *clearer* error be
+// thrown instead. Neither throws any more, so they now assert the output they should have
+// produced all along.
+describe('removals that used to throw', () => {
 
-  test.skip('should give meaningful error when emptying a commented array document', () => {
+  test('should empty a document whose only key is a commented array', () => {
     const src = dedent`
       arr = [
         1, # one
       ]
     ` + '\n';
-    // Should not throw internal TypeError 'reading substring of undefined'
-    expect(() => patch(src, {})).toThrow(/Node not found|Cannot remove/i);
+
+    const result = patch(src, {});
+    expect(result).toEqual('\n');
+    expect(parse(result)).toEqual({});
   });
 
-  test.skip('should give meaningful error when deleting AOT while adding unrelated key', () => {
+  test('should delete an array-of-tables while adding an unrelated key', () => {
     const src = dedent`
       [[i]]
       n = 1
@@ -5765,8 +5771,57 @@ describe('meaningful error messages', () => {
       [[i]]
       n = 2
     ` + '\n';
-    // Should not throw internal TypeError 'reading length of undefined'
-    expect(() => patch(src, { other: 1 })).toThrow(/Node not found|Cannot remove/i);
+
+    const result = patch(src, { other: 1 });
+    expect(result).toEqual(dedent`
+      other = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ other: 1 });
+  });
+
+});
+
+describe('deleting an array-of-tables key', () => {
+
+  // Removing every entry is how both "emptied to []" and "deleted outright" reach the
+  // patcher, so the key was re-materialised as `key = []` either way — putting back a key
+  // the caller had deleted. Plain arrays and plain tables were always removed correctly;
+  // only array-of-tables resurrected.
+  test('should remove the key entirely when it is deleted', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+  });
+
+  test('should remove the key entirely when deleted alongside a surviving sibling', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      k = 5
+    ` + '\n';
+
+    const result = patch(src, { k: 5 });
+    expect(result).toEqual(dedent`
+      k = 5
+    ` + '\n');
+    expect(parse(result)).toEqual({ k: 5 });
+  });
+
+  test('should still degrade to an inline empty array when explicitly emptied', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { i: [] });
+    expect(result).toEqual(dedent`
+      i = []
+    ` + '\n');
+    expect(parse(result)).toEqual({ i: [] });
   });
 
 });

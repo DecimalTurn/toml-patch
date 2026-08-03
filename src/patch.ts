@@ -827,10 +827,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             removeMember(original, original, entry);
           }
-          // After removing all AOT entries, insert an empty inline array
-          // key-value so the key isn't lost (e.g. b = []).
+          // After removing all AOT entries, insert an empty inline array key-value so the
+          // key isn't lost (e.g. b = []), but only when the caller still wants the key.
+          // "Emptied to []" and "deleted outright" both arrive here as a Remove of every
+          // entry; re-materialising unconditionally put back a key the caller had deleted.
           const key = change.path[change.path.length - 1] as string;
-          emptiedAotKeys.add(key);
+          if (tryFindByPath(updated, change.path)) {
+            emptiedAotKeys.add(key);
+          }
         } else {
           // The path might be an implicit intermediate key — a key that is a
           // prefix of a dotted table key but has no CST node of its own.
@@ -873,12 +877,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         removeMember(original, parent, node);
 
-        // Track AOT keys whose entries may have been fully removed
+        // Track AOT keys whose entries may have been fully removed — again only when the
+        // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
         if (isTableArray(node)) {
           const aotKey = (node as TableArray).key.item.value;
           const aotPath = change.path.slice(0, -1);
           const stillExists = tryFindByPath(original, aotPath.concat(0));
-          if (!stillExists) {
+          if (!stillExists && tryFindByPath(updated, aotPath)) {
             emptiedAotKeys.add(aotKey.join('.'));
           }
         }
