@@ -36,7 +36,7 @@ import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObjec
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
-import { generateInlineItem, generateTable, generateTableArray, generateString } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString, generateKeyValue } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -490,8 +490,10 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * ```
  */
 function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet()): Document {
-  // Track AOT keys whose entries were all removed so we can insert empty arrays.
-  const emptiedAotKeys = new Set<string>();
+  // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
+  // the dotted name for de-duplication, but carrying the path segments — a nested key like
+  // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
+  const emptiedAotKeys = new Map<string, string[]>();
 
   // Multi-line inline containers already inserted into during this patch. The stale-position
   // problem only arises on the SECOND insertion into the same container, so this lets the
@@ -827,10 +829,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             removeMember(original, original, entry);
           }
-          // After removing all AOT entries, insert an empty inline array
-          // key-value so the key isn't lost (e.g. b = []).
-          const key = change.path[change.path.length - 1] as string;
-          emptiedAotKeys.add(key);
+          // After removing all AOT entries, insert an empty inline array key-value so the
+          // key isn't lost (e.g. b = []), but only when the caller still wants the key.
+          // "Emptied to []" and "deleted outright" both arrive here as a Remove of every
+          // entry; re-materialising unconditionally put back a key the caller had deleted.
+          if (tryFindByPath(updated, change.path)) {
+            const aotPath = change.path as string[];
+            emptiedAotKeys.set(aotPath.join('.'), aotPath);
+          }
         } else {
           // The path might be an implicit intermediate key — a key that is a
           // prefix of a dotted table key but has no CST node of its own.
@@ -873,13 +879,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         removeMember(original, parent, node);
 
-        // Track AOT keys whose entries may have been fully removed
+        // Track AOT keys whose entries may have been fully removed — again only when the
+        // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
         if (isTableArray(node)) {
           const aotKey = (node as TableArray).key.item.value;
           const aotPath = change.path.slice(0, -1);
           const stillExists = tryFindByPath(original, aotPath.concat(0));
-          if (!stillExists) {
-            emptiedAotKeys.add(aotKey.join('.'));
+          if (!stillExists && tryFindByPath(updated, aotPath)) {
+            emptiedAotKeys.set(aotKey.join('.'), aotKey);
           }
         }
       }
@@ -1112,12 +1119,15 @@ function cleanupOrphanedComments(doc: Document): void {
  * Replaces emptied TableArrays with inline empty array key-values so that
  * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
  */
-function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Set<string>, format: TomlFormat): void {
+function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, string[]>, format: TomlFormat): void {
   if (emptiedKeys.size === 0) return;
 
-  for (const key of emptiedKeys) {
-    const emptyArrayDoc = parseJS({ [key]: [] }, format);
-    const emptyKV = emptyArrayDoc.items[0] as KeyValue;
+  for (const path of emptiedKeys.values()) {
+    // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
+    // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
+    // root key literally named `a.b` instead of `b` nested under `a`.
+    const emptyArrayDoc = parseJS({ [path[path.length - 1]]: [] }, format);
+    const emptyKV = generateKeyValue(path, (emptyArrayDoc.items[0] as KeyValue).value);
     insert(doc, doc, emptyKV, rootKeyValueInsertIndex(doc));
   }
   applyWrites(doc);

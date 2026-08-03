@@ -3872,6 +3872,28 @@ describe('undefined handling in patch', () => {
       ` + '\n');
   });
 
+  // The same principle as the test above — an emptied table survives as a header — but the
+  // parent here is *implicit*: `[a.b]` declares `a` only by virtue of `b` existing under it.
+  // Remove `b` and there is no node left to keep `a` alive, so the document comes back as
+  // `{}` rather than `{ a: {} }`. Materialising the parent is the missing piece.
+  //
+  // Not specific to array-of-tables: `[a.b]` and `[[a.b]]` behave identically, and an
+  // explicitly declared `[a]` already survives. Found while reviewing #266; see
+  // https://github.com/DecimalTurn/toml-patch/pull/266 for the discussion.
+  test.skip('should keep an implicit parent table when its only child is removed', () => {
+    const fromTable = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+    expect(parse(patch(fromTable, { a: {} }))).toEqual({ a: {} });
+
+    const fromArrayOfTables = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+    expect(parse(patch(fromArrayOfTables, { a: {} }))).toEqual({ a: {} });
+  });
+
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
       ports = [ 8001, 8002, 8003 ]
@@ -5745,19 +5767,25 @@ describe('structural type replacements', () => {
 
 });
 
-describe('meaningful error messages', () => {
+// Both of these were once internal TypeErrors ("reading 'substring' of undefined",
+// "reading 'length' of undefined") and were parked asserting that a *clearer* error be
+// thrown instead. Neither throws any more, so they now assert the output they should have
+// produced all along.
+describe('removals that used to throw', () => {
 
-  test.skip('should give meaningful error when emptying a commented array document', () => {
+  test('should empty a document whose only key is a commented array', () => {
     const src = dedent`
       arr = [
         1, # one
       ]
     ` + '\n';
-    // Should not throw internal TypeError 'reading substring of undefined'
-    expect(() => patch(src, {})).toThrow(/Node not found|Cannot remove/i);
+
+    const result = patch(src, {});
+    expect(result).toEqual('\n');
+    expect(parse(result)).toEqual({});
   });
 
-  test.skip('should give meaningful error when deleting AOT while adding unrelated key', () => {
+  test('should delete an array-of-tables while adding an unrelated key', () => {
     const src = dedent`
       [[i]]
       n = 1
@@ -5765,8 +5793,122 @@ describe('meaningful error messages', () => {
       [[i]]
       n = 2
     ` + '\n';
-    // Should not throw internal TypeError 'reading length of undefined'
-    expect(() => patch(src, { other: 1 })).toThrow(/Node not found|Cannot remove/i);
+
+    const result = patch(src, { other: 1 });
+    expect(result).toEqual(dedent`
+      other = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ other: 1 });
+  });
+
+});
+
+describe('deleting an array-of-tables key', () => {
+
+  // Removing every entry is how both "emptied to []" and "deleted outright" reach the
+  // patcher, so the key was re-materialised as `key = []` either way — putting back a key
+  // the caller had deleted. Plain arrays and plain tables were always removed correctly;
+  // only array-of-tables resurrected.
+  test('should remove the key entirely when it is deleted', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+  });
+
+  test('should remove the key entirely when deleted alongside a surviving sibling', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+
+      k = 5
+    ` + '\n';
+
+    const result = patch(src, { k: 5 });
+    expect(result).toEqual(dedent`
+      k = 5
+    ` + '\n');
+    expect(parse(result)).toEqual({ k: 5 });
+  });
+
+  test('should still degrade to an inline empty array when explicitly emptied', () => {
+    const src = dedent`
+      [[i]]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { i: [] });
+    expect(result).toEqual(dedent`
+      i = []
+    ` + '\n');
+    expect(parse(result)).toEqual({ i: [] });
+  });
+
+  // Nested AOTs go through the same emptiedAotKeys path, but the key has to survive as
+  // segments. Joining it to `"a.b"` and handing that to parseJS reads the dot as part of a
+  // single JS key, emitting the quoted `"a.b" = []` — a root key literally named `a.b`
+  // rather than `b` nested under `a`.
+  test('should remove a nested key entirely when it is deleted', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+  });
+
+  test('should remove a nested key while a sibling under the same parent survives', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+
+      [a.c]
+      m = 2
+    ` + '\n';
+
+    const result = patch(src, { a: { c: { m: 2 } } });
+    expect(result).toEqual(dedent`
+      [a.c]
+      m = 2
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { c: { m: 2 } } });
+  });
+
+  test('should degrade a nested key to a dotted empty array when explicitly emptied', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { a: { b: [] } });
+    expect(result).toEqual(dedent`
+      a.b = []
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: [] } });
+  });
+
+  test('should keep a surviving sibling when a nested key is emptied', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+
+      [a.c]
+      m = 2
+    ` + '\n';
+
+    expect(parse(patch(src, { a: { b: [], c: { m: 2 } } }))).toEqual({ a: { b: [], c: { m: 2 } } });
+  });
+
+  test('should handle a key nested more than two levels deep', () => {
+    const src = dedent`
+      [[a.b.c]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, {}))).toEqual({});
+    expect(parse(patch(src, { a: { b: { c: [] } } }))).toEqual({ a: { b: { c: [] } } });
   });
 
 });

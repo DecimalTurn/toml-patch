@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: drop an array element's comment with it when the array is the value of a multi-line inline table key. ([#264])
 - Patching: reclaim a removed section's blank separator, so deleting sections no longer accumulates blank lines. ([#265])
 - Patching: stop reading the removal of a key whose value matches an untouched sibling as a rename onto that sibling, which emitted the key twice and produced invalid TOML. ([#262])
+- Patching: remove an array-of-tables key entirely when it is deleted, instead of bringing it back as `key = []`. ([#266])
+- Patching: re-materialise an emptied nested array-of-tables as `a.b = []` rather than a root key quoted `"a.b"`. ([#266])
 
 ## [3.0.0] - 2026-07-29
 
@@ -342,4 +344,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#263]: https://github.com/DecimalTurn/toml-patch/pull/263
 [#264]: https://github.com/DecimalTurn/toml-patch/pull/264
 [#265]: https://github.com/DecimalTurn/toml-patch/pull/265
+[#266]: https://github.com/DecimalTurn/toml-patch/pull/266
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
