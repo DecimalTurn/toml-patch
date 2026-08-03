@@ -5864,6 +5864,30 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     ` + '\n');
   });
 
+  // A separate, pre-existing bug in the same heuristic, found while covering #262 and
+  // verified to reproduce on unmodified `latest`. When SEVERAL equal-valued keys collapse
+  // onto one, `isRename` matches every one of them against the same target -- `before_key`
+  // is looked up with `before_stable.indexOf`, which always finds the first match -- so
+  // `{a:1,b:1} -> {z:1}` emits `Rename a->z` AND `Rename b->z`. The second rename blanks its
+  // node's key, giving a key with an empty name:
+  //
+  //   "  = 1\nz = 1\n"   which does not parse
+  //
+  // Fixing it means making the rename pairing one-to-one (consuming each matched source and
+  // target), which is a larger change to the heuristic than #262's target check.
+  test.skip('should not emit an empty key when several equal-valued keys collapse onto one', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
 });
 
 describe('blank line accumulation on table deletion', () => {
