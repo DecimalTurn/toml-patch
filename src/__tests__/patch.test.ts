@@ -5155,15 +5155,26 @@ describe('array of inline tables', () => {
     ` + '\n');
   });
 
-  // Pre-existing bug, unrelated to the first-row indentation work: prepending an element to
-  // an array of inline tables emits a [[xs]] section AND leaves the original `xs = [...]`
-  // key in place, so `xs` is defined twice and the document is invalid TOML. Reparsing nests
-  // the original array inside the new element:
-  //   {"xs":[{"z":0,"xs":[{"a":1},{"b":2}]}]}
-  // Reproduces identically before and after the indentation fix. Possibly the same root
-  // cause as issue #262 (patch() duplicating a key when a value matches an untouched
-  // sibling); left skipped rather than failing, per this repo's convention for known gaps.
-  test.skip('should prepend an element without duplicating the key', () => {
+  // parseJS renders an array of objects as [[xs]] sections at the default inlineTableStart,
+  // so an Add resolved against the updated document arrived as a section while `xs = [...]`
+  // stayed put — defining the key twice, and re-parsing as the original array nested inside
+  // the new element ({"xs":[{"z":0,"xs":[...]}]}). The document's own shape has to win.
+  //
+  // It was filed as a prepend bug, but position had nothing to do with it: appending and
+  // mid-inserting failed identically, as did the single-line array form. Only a root-level
+  // key was affected — nested under a [table], parseJS already kept the array inline.
+  test('should append an element without duplicating the key', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should prepend an element without duplicating the key', () => {
     const src = dedent`
       xs = [
         { a = 1 },
@@ -5172,15 +5183,69 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+    expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+  });
 
-    expect(result).toEqual(dedent`
+  test('should insert an element in the middle without duplicating the key', () => {
+    const src = dedent`
       xs = [
-        { z = 0 },
         { a = 1 },
         { b = 2 },
       ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
+  });
+
+  test('should add to a single-line array of inline tables', () => {
+    const result = patch('xs = [{ a = 1 }]\n', { xs: [{ a: 1 }, { z: 0 }] });
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should add to an empty inline array', () => {
+    const result = patch('xs = []\n', { xs: [{ z: 0 }] });
+    expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
+  });
+
+  test('should add several elements at once', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+  });
+
+  // The document's shape wins in both directions: a real [[xs]] source must keep producing
+  // sections, not get rewritten into an inline array.
+  test('should still append a section to a genuine array-of-tables', () => {
+    const src = dedent`
+      [[xs]]
+      a = 1
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      [[xs]]
+      a = 1
+
+      [[xs]]
+      z = 0
     ` + '\n');
-    expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should still append a section to a nested array-of-tables', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, { a: { b: [{ n: 1 }, { z: 0 }] } })))
+      .toEqual({ a: { b: [{ n: 1 }, { z: 0 }] } });
   });
 
 });

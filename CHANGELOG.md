@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: add an element to an inline array of tables (`xs = [{ ... }]`) as an inline element rather than emitting a `[[xs]]` section alongside it, which defined the key twice. ([#267])
+
 ## [3.0.1] - 2026-08-03
 
 ### Fixed
@@ -347,4 +351,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#264]: https://github.com/DecimalTurn/toml-patch/pull/264
 [#265]: https://github.com/DecimalTurn/toml-patch/pull/265
 [#266]: https://github.com/DecimalTurn/toml-patch/pull/266
+[#267]: https://github.com/DecimalTurn/toml-patch/pull/267
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
