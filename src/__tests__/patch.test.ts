@@ -5224,21 +5224,38 @@ describe('array of inline tables', () => {
   // that never had the duplication bug. Asserted as-is to pin current behaviour; see the
   // skipped 'should match its siblings' bracket spacing' below.
   test('should add to a single-line array of inline tables', () => {
-    const result = patch('xs = [{ a = 1 }]\n', { xs: [{ a: 1 }, { z: 0 }] });
-    expect(result).toEqual('xs = [{ a = 1 }, {z = 0}]\n');
+    const src = dedent`
+      xs = [{ a = 1 }]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [{ a = 1 }, {z = 0}]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
   });
 
   test('should add to an empty inline array', () => {
     // No sibling to copy a style from, so the format's own defaults apply.
-    const result = patch('xs = []\n', { xs: [{ z: 0 }] });
-    expect(result).toEqual('xs = [{z = 0}]\n');
+    const src = dedent`
+      xs = []
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [{z = 0}]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
   });
 
   test.skip('should match its siblings\' bracket spacing on a single-line array', () => {
-    const result = patch('xs = [{ a = 1 }]\n', { xs: [{ a: 1 }, { z: 0 }] });
-    expect(result).toEqual('xs = [{ a = 1 }, { z = 0 }]\n');
+    const src = dedent`
+      xs = [{ a = 1 }]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [{ a = 1 }, { z = 0 }]
+    ` + '\n');
   });
 
   test('should add several elements at once', () => {
@@ -5333,8 +5350,15 @@ describe('array of inline tables', () => {
       n = 1
     ` + '\n';
 
-    expect(parse(patch(src, { a: { b: [{ n: 1 }, { z: 0 }] } })))
-      .toEqual({ a: { b: [{ n: 1 }, { z: 0 }] } });
+    const result = patch(src, { a: { b: [{ n: 1 }, { z: 0 }] } });
+    expect(result).toEqual(dedent`
+      [[a.b]]
+      n = 1
+
+      [[a.b]]
+      z = 0
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: [{ n: 1 }, { z: 0 }] } });
   });
 
 });
