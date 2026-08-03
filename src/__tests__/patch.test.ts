@@ -6334,18 +6334,18 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(result)).toEqual({ z: { n: 1 }, keep: { m: 2 } });
   });
 
-  // Renaming the LEAF of a dotted section key refuses rather than emitting `[z]` and
-  // silently dropping the `a.` prefix. parseJS renders the replacement as a plain nested key
-  // (`z` under `[a]`) where the document holds `[a.b]`, so the two key nodes have different
-  // segment counts and cannot be substituted. It threw before this branch understood
-  // sections at all, so the outcome is unchanged and only the message improves.
-  test('should refuse to rename a dotted section key rather than drop its prefix', () => {
+  // Renaming the leaf of a dotted section key now correctly updates just the leaf
+  // segment in place without dropping the prefix (e.g. [a.b] -> [a.z]).
+  test('should rename the leaf segment of a dotted section key', () => {
     const src = dedent`
       [a.b]
       n = 1
     ` + '\n';
 
-    expect(() => patch(src, { a: { z: { n: 1 } } })).toThrow(/segment/i);
+    expect(patch(src, { a: { z: { n: 1 } } })).toEqual(dedent`
+      [a.z]
+      n = 1
+    ` + '\n');
   });
 
   // Renaming the ROOT segment does work, because the diff resolves it at the document level
@@ -6393,6 +6393,64 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     //   n = 1 
     // ` + '\n');
     // expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
+  });
+
+  test('should rename the leaf segment of a dotted section key - with comment', () => {
+    const src = dedent`
+      [a.b]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+  
+    renameKey(obj, 'a.b', 'a.y');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.y]
+      # comment about n
+      n = 1 
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { y: { n: 1 } } });
+  });
+
+  test('should rename an intermediate segment of a deeply nested dotted section key', () => {
+    const src = dedent`
+      [a.b.c]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a.b', 'a.x');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.x.c]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { x: { c: { n: 1 } } } });
+  });
+
+  test('should rename the leaf segment of a deeply nested dotted section key', () => {
+    const src = dedent`
+      [a.b.c]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a.b.c', 'a.b.z');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.b.z]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: { z: { n: 1 } } } });
   });
 
 });
