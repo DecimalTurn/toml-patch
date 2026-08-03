@@ -117,7 +117,16 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
     if (index < 0) return false;
 
     const before_key = before_keys[before_stable.indexOf(stable)];
-    return !after_keys.includes(before_key);
+    if (after_keys.includes(before_key)) return false;
+
+    // The target has to be a key `before` did not already contain. Without this, removing a
+    // key whose value happens to equal an untouched sibling's reads as a rename onto that
+    // sibling: the removed node is renamed in place, the real target is left alone, and the
+    // key is emitted twice — output that no longer parses. Recomputing both sides from
+    // `stable` keeps this correct for either call site (one passes after_stable, the other
+    // before_stable). See https://github.com/DecimalTurn/toml-patch/issues/262.
+    const after_key = after_keys[after_stable.indexOf(stable)];
+    return after_key !== undefined && !before_keys.includes(after_key);
   };
 
   // Tracks from -> to for keys renamed in step 2, so the order-emission step below (which

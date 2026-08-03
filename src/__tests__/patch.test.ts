@@ -5913,6 +5913,125 @@ describe('deleting an array-of-tables key', () => {
 
 });
 
+// Removing a key whose value happens to equal an untouched sibling's was misread as a
+// rename onto that sibling, so the removed key's node was renamed in place and the real
+// target left alone — emitting the key twice, which does not parse.
+// https://github.com/DecimalTurn/toml-patch/issues/262
+describe('removing a key whose value matches a sibling (#262)', () => {
+
+  test('should remove the key rather than duplicating its twin at root level', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { b: 1 });
+    expect(result).toEqual(dedent`
+      b = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ b: 1 });
+  });
+
+  test('should remove the key rather than duplicating its twin inside a table', () => {
+    const src = dedent`
+      [features]
+      a = true
+      b = true
+    ` + '\n';
+
+    const result = patch(src, { features: { b: true } });
+    expect(result).toEqual(dedent`
+      [features]
+      b = true
+    ` + '\n');
+    expect(parse(result)).toEqual({ features: { b: true } });
+  });
+
+  test('should take the removed key\'s comment with it, not graft it onto the survivor', () => {
+    const src = dedent`
+      [f]
+      # doc a
+      a = true
+      # doc b
+      b = true
+    ` + '\n';
+
+    const result = patch(src, { f: { b: true } });
+    expect(result).toEqual(dedent`
+      [f]
+      # doc b
+      b = true
+    ` + '\n');
+    expect(parse(result)).toEqual({ f: { b: true } });
+  });
+
+  test('should still add a new key alongside such a removal', () => {
+    // The misread rename consumed the whole change list, so `x` was silently dropped.
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    expect(parse(patch(src, { b: 1, x: 1 }))).toEqual({ b: 1, x: 1 });
+  });
+
+  test('should handle string and array values, not just numbers', () => {
+    expect(parse(patch('a = "x"\nb = "x"\n', { b: 'x' }))).toEqual({ b: 'x' });
+    expect(parse(patch('a = [1]\nb = [1]\n', { b: [1] }))).toEqual({ b: [1] });
+  });
+
+  test('should handle sibling tables with equal contents', () => {
+    // This shape threw `Item not found in parent for replace` rather than duplicating.
+    const src = dedent`
+      [t.a]
+      n = 1
+
+      [t.b]
+      n = 1
+    ` + '\n';
+
+    expect(parse(patch(src, { t: { b: { n: 1 } } }))).toEqual({ t: { b: { n: 1 } } });
+  });
+
+  test('should leave a genuine rename alone', () => {
+    const src = dedent`
+      a = 1
+      keep = 2
+    ` + '\n';
+
+    const result = patch(src, { z: 1, keep: 2 });
+    expect(result).toEqual(dedent`
+      z = 1
+      keep = 2
+    ` + '\n');
+  });
+
+  // A separate, pre-existing bug in the same heuristic, found while covering #262 and
+  // verified to reproduce on unmodified `latest`. When SEVERAL equal-valued keys collapse
+  // onto one, `isRename` matches every one of them against the same target -- `before_key`
+  // is looked up with `before_stable.indexOf`, which always finds the first match -- so
+  // `{a:1,b:1} -> {z:1}` emits `Rename a->z` AND `Rename b->z`. The second rename blanks its
+  // node's key, giving a key with an empty name:
+  //
+  //   "  = 1\nz = 1\n"   which does not parse
+  //
+  // Fixing it means making the rename pairing one-to-one (consuming each matched source and
+  // target), which is a larger change to the heuristic than #262's target check.
+  test.skip('should not emit an empty key when several equal-valued keys collapse onto one', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
+});
+
 describe('blank line accumulation on table deletion', () => {
 
   test('should not accumulate blank lines when deleting tables one at a time', () => {
