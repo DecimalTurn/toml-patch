@@ -653,6 +653,45 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // The child comes from the updated document with global format applied
             // Override with the original array's format
             child.comma = originalHadTrailingCommas;
+
+            // `format.trailingComma` is a single flag, but it is read off whichever
+            // separator the detector happened to see. An array written `[ { a = 1 }, ]`
+            // sets it from the comma after the inline table, then that same flag decides
+            // the comma *inside* the new table — emitting `{ z = 0, }` next to `{ a = 1 }`.
+            // The two are independent, so take the inner one from a sibling table.
+            //
+            // Regenerated rather than patched in place: clearing the flag on a node already
+            // laid out with a comma leaves the slot behind as `{ z = 0  }`.
+            const addedItem = child;
+            const addedTable = isInlineTable(addedItem.item) ? addedItem.item : undefined;
+            const siblingTable = addedTable && addedTable.items.length > 0
+              ? (parent.items as InlineItem[])
+                  .map(item => item.item)
+                  .find(item => item !== addedItem.item && isInlineTable(item))
+              : undefined;
+
+            if (addedTable && siblingTable) {
+              const wanted = tableHadTrailingCommas(siblingTable);
+              if (wanted !== tableHadTrailingCommas(addedTable)) {
+                const updated_js = toJS(updated.items, '', { temporal });
+                let jsValue: any = updated_js;
+                for (const k of change.path) jsValue = jsValue?.[k];
+
+                const matchedFmt = resolveTomlFormat(
+                  { ...format, inlineTableStart: 0, trailingComma: wanted },
+                  format
+                );
+                const rebuilt = jsValue === undefined
+                  ? undefined
+                  : parseJS({ tmp: jsValue }, matchedFmt).items[0];
+
+                if (rebuilt && isKeyValue(rebuilt)) {
+                  const replacementItem = generateInlineItem(rebuilt.value);
+                  replacementItem.comma = addedItem.comma;
+                  child = replacementItem;
+                }
+              }
+            }
           }
         }
         

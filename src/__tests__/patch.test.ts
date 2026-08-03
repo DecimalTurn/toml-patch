@@ -5208,17 +5208,37 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+        { b = 2 },
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
   });
 
+  // NOTE: the added table comes out as `{z = 0}` without bracket spacing, unlike the
+  // `{ a = 1 }` beside it. Pre-existing and specific to single-line arrays — the multi-line
+  // form above is spaced correctly, and this reproduces on `latest` for the nested shape
+  // that never had the duplication bug. Asserted as-is to pin current behaviour; see the
+  // skipped 'should match its siblings' bracket spacing' below.
   test('should add to a single-line array of inline tables', () => {
     const result = patch('xs = [{ a = 1 }]\n', { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual('xs = [{ a = 1 }, {z = 0}]\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
   });
 
   test('should add to an empty inline array', () => {
+    // No sibling to copy a style from, so the format's own defaults apply.
     const result = patch('xs = []\n', { xs: [{ z: 0 }] });
+    expect(result).toEqual('xs = [{z = 0}]\n');
     expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
+  });
+
+  test.skip('should match its siblings\' bracket spacing on a single-line array', () => {
+    const result = patch('xs = [{ a = 1 }]\n', { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual('xs = [{ a = 1 }, { z = 0 }]\n');
   });
 
   test('should add several elements at once', () => {
@@ -5229,7 +5249,63 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+        { y = 9 },
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+  });
+
+  // `format.trailingComma` is one flag read off whichever separator the detector saw first.
+  // `[ { a = 1 }, ]` sets it from the comma *after* the table, and that same flag then chose
+  // the comma *inside* the added one — `{ z = 0, }` beside `{ a = 1 }`. The two are
+  // independent, so the inner one is taken from a sibling table.
+  test('should not add an inner trailing comma its siblings do not have', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+      ]
+    ` + '\n');
+  });
+
+  test('should keep an inner trailing comma its siblings do have', () => {
+    const src = dedent`
+      xs = [
+        { a = 1, },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [
+        { a = 1, },
+        { z = 0, },
+      ]
+    ` + '\n');
+  });
+
+  test('should match sibling comma style for a multi-key element', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0, w: 2 }] })).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0, w = 2 },
+      ]
+    ` + '\n');
   });
 
   // The document's shape wins in both directions: a real [[xs]] source must keep producing

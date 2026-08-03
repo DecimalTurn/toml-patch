@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patching: add an element to an inline array of tables (`xs = [{ ... }]`) as an inline element rather than emitting a `[[xs]]` section alongside it, which defined the key twice. ([#267])
+- Patching: match a sibling's inner trailing comma when adding an inline table to an array, instead of taking it from the array's own separator (`{ z = 0, }` beside `{ a = 1 }`). ([#267])
 
 ## [3.0.1] - 2026-08-03
 
