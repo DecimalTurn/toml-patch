@@ -6184,18 +6184,12 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     ` + '\n');
   });
 
-  // A separate, pre-existing bug in the same heuristic, found while covering #262 and
-  // verified to reproduce on unmodified `latest`. When SEVERAL equal-valued keys collapse
-  // onto one, `isRename` matches every one of them against the same target -- `before_key`
-  // is looked up with `before_stable.indexOf`, which always finds the first match -- so
-  // `{a:1,b:1} -> {z:1}` emits `Rename a->z` AND `Rename b->z`. The second rename blanks its
-  // node's key, giving a key with an empty name:
-  //
-  //   "  = 1\nz = 1\n"   which does not parse
-  //
-  // Fixing it means making the rename pairing one-to-one (consuming each matched source and
-  // target), which is a larger change to the heuristic than #262's target check.
-  test.skip('should not emit an empty key when several equal-valued keys collapse onto one', () => {
+  // Rename matching resolved the target with `indexOf`, which always returns the first
+  // match, so every equal-valued source claimed the same one. `{a:1,b:1} -> {z:1}` emitted
+  // `Rename a->z` AND `Rename b->z`, and the second blanked its node's key, giving a key
+  // with an empty name — `"  = 1\nz = 1\n"`, which does not parse. Claiming a target now
+  // retires it, so the later source falls through to a Remove.
+  test('should not emit an empty key when several equal-valued keys collapse onto one', () => {
     const src = dedent`
       a = 1
       b = 1
@@ -6206,6 +6200,105 @@ describe('removing a key whose value matches a sibling (#262)', () => {
       z = 1
     ` + '\n');
     expect(parse(result)).toEqual({ z: 1 });
+  });
+
+  test('should handle three equal-valued keys collapsing onto one', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+      c = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
+  test('should collapse onto two targets without emitting an empty key', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1, y: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+      y = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1, y: 1 });
+  });
+
+  test('should collapse equal-valued keys inside a table', () => {
+    const src = dedent`
+      [t]
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { t: { z: 1 } });
+    expect(result).toEqual(dedent`
+      [t]
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ t: { z: 1 } });
+  });
+
+  test('should collapse equal-valued string keys', () => {
+    const src = dedent`
+      a = "x"
+      b = "x"
+    ` + '\n';
+
+    const result = patch(src, { z: 'x' });
+    expect(result).toEqual(dedent`
+      z = "x"
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 'x' });
+  });
+
+  // Pairing is greedy, so `a` and `b` are renamed onto `y` and `z` and only the leftover `c`
+  // is removed. See comment-ownership.test.ts's `renaming` block for what that means for the
+  // comments each key owns.
+  test('should collapse three keys onto two targets', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+      c = 1
+    ` + '\n';
+
+    const result = patch(src, { y: 1, z: 1 });
+    expect(result).toEqual(dedent`
+      y = 1
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ y: 1, z: 1 });
+  });
+
+  // Renaming a key whose value is an object throws, and has nothing to do with equal values
+  // — `[a]\nn = 1` patched to `{ z: { n: 1 } }` is a single unambiguous Rename and still
+  // fails. Verified to reproduce on unmodified `latest`; scalars and arrays rename fine, so
+  // it is specific to table and inline-table values, in patch application rather than in the
+  // diff. The change list is correct here; only applying it fails.
+  //
+  // The isRename branch assumes a KeyValue and reads `replacement.key.value`, but a Table
+  // keeps its key at `.key.item.value` — a TableKey wrapping a Key — so the value is
+  // undefined and preserveEscapedKeyRaw throws on `.map` (patch.ts:384, from :1008).
+  // Fixing it means teaching that branch the Table/TableArray shapes, including which
+  // sub-node to hand to replace().
+  test.skip('should rename a key whose value is a table', () => {
+    const src = dedent`
+      [a]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { z: { n: 1 } });
+    expect(result).toEqual(dedent`
+      [z]
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: { n: 1 } });
   });
 
 });

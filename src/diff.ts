@@ -110,44 +110,69 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   const after_keys = Object.keys(after);
   const after_stable = after_keys.map(key => stableStringify(after[key]));
 
-  // Check for rename by seeing if object is in both before and after
-  // and that key is no longer used in after
-  const isRename = (stable: string, search: string[]) => {
-    const index = search.indexOf(stable);
-    if (index < 0) return false;
-
-    const before_key = before_keys[before_stable.indexOf(stable)];
-    if (after_keys.includes(before_key)) return false;
-
-    // The target has to be a key `before` did not already contain. Without this, removing a
-    // key whose value happens to equal an untouched sibling's reads as a rename onto that
-    // sibling: the removed node is renamed in place, the real target is left alone, and the
-    // key is emitted twice — output that no longer parses. Recomputing both sides from
-    // `stable` keeps this correct for either call site (one passes after_stable, the other
-    // before_stable). See https://github.com/DecimalTurn/toml-patch/issues/262.
-    const after_key = after_keys[after_stable.indexOf(stable)];
-    return after_key !== undefined && !before_keys.includes(after_key);
+  // A key that disappeared is inferred to have been renamed when a key appears holding the
+  // same value, since a rename is never declared — value equality is the only signal.
+  //
+  // Several keys can share a value, so the candidates are grouped by value and paired off in
+  // order, as many as both sides can supply. Preserving comments is the point of this
+  // library, so a plausible pairing is worth more than declining to guess: a renamed node is
+  // edited in place and keeps its comments and formatting, whereas a remove-plus-add loses
+  // them. Where the pairing is genuinely ambiguous the choice is arbitrary but harmless in
+  // kind — a comment lands on one interchangeable key rather than another. Patching in
+  // smaller steps removes the ambiguity for callers who care which.
+  //
+  // Pairing by position is what keeps it one-to-one. Matching with `indexOf` always resolved
+  // to the first candidate, so every equal-valued source claimed the same target:
+  // `{a:1,b:1} -> {z:1}` emitted two renames onto `z`, and the second blanked its node's
+  // key, giving `  = 1` — output that does not parse. Leftovers on either side fall through
+  // to Remove or Add.
+  //
+  // Keys present on both sides are excluded from both groups: they were not renamed and are
+  // not available as targets. That is what keeps a removal whose value happens to match an
+  // untouched sibling from being read as a rename onto it (issue #262).
+  //
+  // Tracked as from -> to because step 4 (order emission) has to follow a rename through
+  // rather than treating the old name as simply gone.
+  const groupByValue = (keys: string[], stables: string[], exclude: string[]) => {
+    const groups = new Map<string, string[]>();
+    keys.forEach((key, index) => {
+      if (exclude.includes(key)) return;
+      const group = groups.get(stables[index]);
+      if (group) group.push(key);
+      else groups.set(stables[index], [key]);
+    });
+    return groups;
   };
 
-  // Tracks from -> to for keys renamed in step 2, so the order-emission step below (which
-  // predicts the document's key order after Add/Remove/Rename) can follow a rename through
-  // rather than treating the old name as simply gone.
+  const disappeared = groupByValue(before_keys, before_stable, after_keys);
+  const appeared = groupByValue(after_keys, after_stable, before_keys);
+
   const renamed = new Map<string, string>();
+  const renameTargets = new Set<string>();
+
+  for (const [value, sources] of disappeared) {
+    const targets = appeared.get(value);
+    if (!targets) continue;
+
+    const pairs = Math.min(sources.length, targets.length);
+    for (let i = 0; i < pairs; i++) {
+      renamed.set(sources[i], targets[i]);
+      renameTargets.add(targets[i]);
+    }
+  }
 
   // 2. Check for changes, rename, and removed
-  before_keys.forEach((key, index) => {
+  before_keys.forEach(key => {
     const sub_path = path.concat(key);
     if (after_keys.includes(key)) {
       merge(changes, diff(before[key], after[key], sub_path, options));
-    } else if (isRename(before_stable[index], after_stable)) {
-      const to = after_keys[after_stable.indexOf(before_stable[index])];
+    } else if (renamed.has(key)) {
       changes.push({
         type: ChangeType.Rename,
         path,
         from: key,
-        to
+        to: renamed.get(key)!
       });
-      renamed.set(key, to);
     } else {
       changes.push({
         type: ChangeType.Remove,
@@ -157,8 +182,8 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   });
 
   // 3. Check for additions
-  after_keys.forEach((key, index) => {
-    if (!before_keys.includes(key) && !isRename(after_stable[index], before_stable)) {
+  after_keys.forEach(key => {
+    if (!before_keys.includes(key) && !renameTargets.has(key)) {
       changes.push({
         type: ChangeType.Add,
         path: path.concat(key)

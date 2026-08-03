@@ -54,14 +54,17 @@ describe('rename inference requires a genuinely new target key (#262)', () => {
   });
 
   test('should not swallow an added key alongside such a removal', () => {
-    // Previously emitted only `Rename a -> b`, so `x` was never added at all.
-    expect(diff({ a: 1, b: 1 }, { b: 1, x: 1 })).toEqual(
-      expect.arrayContaining([
-        { type: 'Remove', path: ['a'] },
-        { type: 'Add', path: ['x'] }
-      ])
-    );
-    expect(diff({ a: 1, b: 1 }, { b: 1, x: 1 })).toHaveLength(2);
+    // The bug this guards is `x` vanishing: the original emitted only `Rename a -> b`, so
+    // `x` was never added and `b` was written twice.
+    //
+    // `b` is present on both sides, so it is neither a rename source nor an available
+    // target. That leaves exactly one departing key and one arriving key with the value 1,
+    // which is an unambiguous pairing, so `a` is now renamed to `x` rather than removed and
+    // re-added. Either shape carries `x` into the output; the rename additionally keeps
+    // whatever comments and formatting `a` had.
+    expect(diff({ a: 1, b: 1 }, { b: 1, x: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'x' }
+    ]);
   });
 
   test('should still infer a genuine rename onto a key that did not exist before', () => {
@@ -76,6 +79,72 @@ describe('rename inference requires a genuinely new target key (#262)', () => {
 
   test('should report a Remove when values differ, as it always did', () => {
     expect(diff({ a: 1, b: 2 }, { b: 2 })).toEqual([{ type: 'Remove', path: ['a'] }]);
+  });
+});
+
+// Value equality is the only signal a rename can be inferred from, and several keys can share
+// a value. Candidates are grouped by value and paired off in order, as many as both sides can
+// supply, because a renamed node keeps its comments while a remove-plus-add loses them.
+// Pairing by position is what keeps it one-to-one — the whole group claiming one target is
+// what produced a key with an empty name.
+describe('rename pairing', () => {
+  test('should rename when one key departs and one arrives', () => {
+    expect(diff({ a: 1 }, { z: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' }
+    ]);
+  });
+
+  test('should rename regardless of untouched siblings holding other values', () => {
+    expect(diff({ a: 1, keep: 2 }, { z: 1, keep: 2 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' }
+    ]);
+  });
+
+  test('should pair every source it can when several share a value', () => {
+    expect(diff({ a: 1, b: 1 }, { z: 1, y: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' },
+      { type: 'Rename', path: [], from: 'b', to: 'y' }
+    ]);
+  });
+
+  test('should remove the sources it cannot pair', () => {
+    expect(diff({ a: 1, b: 1 }, { z: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' },
+      { type: 'Remove', path: ['b'] }
+    ]);
+  });
+
+  test('should add the targets it cannot pair', () => {
+    expect(diff({ a: 1 }, { z: 1, w: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' },
+      { type: 'Add', path: ['w'] }
+    ]);
+  });
+
+  test('should pair as far as the shorter side allows', () => {
+    expect(diff({ a: 1, b: 1, c: 1 }, { y: 1, z: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'y' },
+      { type: 'Rename', path: [], from: 'b', to: 'z' },
+      { type: 'Remove', path: ['c'] }
+    ]);
+  });
+
+  test('should group by value, so one value never consumes another\'s targets', () => {
+    expect(diff({ a: 1, b: 1, c: 2 }, { z: 1, y: 1, w: 2 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' },
+      { type: 'Rename', path: [], from: 'b', to: 'y' },
+      { type: 'Rename', path: [], from: 'c', to: 'w' }
+    ]);
+  });
+
+  test('should never claim one target twice', () => {
+    // The lone target is claimed once and the rest are removed. Emitting a second
+    // `Rename -> z` here is what blanked a node's key, giving `  = 1`.
+    expect(diff({ a: 1, b: 1, c: 1 }, { z: 1 })).toEqual([
+      { type: 'Rename', path: [], from: 'a', to: 'z' },
+      { type: 'Remove', path: ['b'] },
+      { type: 'Remove', path: ['c'] }
+    ]);
   });
 });
 
