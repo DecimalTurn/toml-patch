@@ -51,10 +51,7 @@ describe('R1 - right-side ownership', () => {
     const value = parse(input);
     delete value.a;
 
-    // The leading blank line here is a pre-existing quirk of removing the
-    // first document block (reproducible even with no comment involved at
-    // all) — unrelated to comment ownership, not asserted as desirable.
-    expect(patch(input, value)).toEqual('\n' + dedent`
+    expect(patch(input, value)).toEqual(dedent`
       [b]
       z = 3
     ` + '\n');

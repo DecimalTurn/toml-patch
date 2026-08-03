@@ -591,6 +591,32 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     columns: keep_line ? -removed_span.columns : 0
   };
 
+  // A node's span covers the lines it occupies but not the blank line above it, and
+  // insertOnNewLine gives a [table]/[[array]] exactly such a separator when placing one
+  // (leading_lines = 2). Shifting by the span alone therefore stranded it, so deleting
+  // sections one at a time accumulated blank lines.
+  //
+  // Reclaim it, but only the separator the removed node itself owned. The gap *below* the
+  // node belongs to whatever follows — a section carries its own leading blank and must keep
+  // it, which is why this cannot simply close the distance to `next`.
+  //
+  // Skipped when `next` does not genuinely begin below the removed node: a comment hoisted
+  // out of a multi-line inline container is filed as a sibling but keeps a loc pointing
+  // *inside* the braces, so it can sit within the removed node's own span.
+  const isBlockContainer = isDocument(parent) || isTable(parent) || isTableArray(parent);
+  if (isBlockContainer && next && !keep_line && next.loc.start.line > node.loc.end.line) {
+    const removedIsSection = isTable(node) || isTableArray(node);
+    const nextIsSection = isTable(next) || isTableArray(next);
+    const extra = previous
+      // Only a section carries a leading separator, so only removing one frees a blank line.
+      // A key-value sits flush against the line above and frees nothing extra.
+      ? (removedIsSection ? node.loc.start.line - previous.loc.end.line - 1 : 0)
+      // Nothing above: `next` is pulled to the top of the container, where the separator it
+      // was carrying becomes a spurious leading blank.
+      : (nextIsSection ? next.loc.start.line - node.loc.end.line - 1 : 0);
+    if (extra > 0) offset.lines -= extra;
+  }
+
   // If there is nothing left, don't perform any offsets.
   //
   // Exception: multiline inline containers (InlineTable / InlineArray whose opening
