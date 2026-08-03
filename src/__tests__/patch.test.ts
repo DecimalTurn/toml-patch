@@ -5800,6 +5800,42 @@ describe('blank line accumulation on table deletion', () => {
     ` + '\n');
   });
 
+  // The separator reclaimed above is measured from what physically precedes the removed
+  // section. A comment hoisted out of a multi-line inline table is filed *after* the
+  // key-value it came from but keeps a loc pointing inside the braces, so it is the
+  // immediately preceding sibling while ending far above the real content. Measuring from
+  // it counted the inline table's body as blank space and pulled the next section up over
+  // the closing brace, emitting a document that no longer parses.
+  test('should not over-reclaim past a comment hoisted out of an earlier inline table', () => {
+    const src = dedent`
+      x = {
+        a = 1, # interior
+        b = 2
+      }
+
+      [t]
+      z = 9
+
+      [u]
+      w = 1
+    ` + '\n';
+
+    const value = parse(src);
+    delete value.t;
+    const result = patch(src, value);
+
+    expect(result).toEqual(dedent`
+      x = {
+        a = 1, # interior
+        b = 2
+      }
+
+      [u]
+      w = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { a: 1, b: 2 }, u: { w: 1 } });
+  });
+
 });
 
 describe('comment removal with section', () => {

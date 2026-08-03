@@ -607,10 +607,23 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   if (isBlockContainer && next && !keep_line && next.loc.start.line > node.loc.end.line) {
     const removedIsSection = isTable(node) || isTableArray(node);
     const nextIsSection = isTable(next) || isTableArray(next);
+
+    // `previous` is the preceding sibling in items order, which is not necessarily the
+    // furthest one physically: a comment hoisted out of a multi-line inline container is
+    // filed after the key-value it came from while keeping a loc pointing *inside* the
+    // braces. Measuring from it would count the container's own body as blank space and
+    // pull `next` up over the closing brace. Take the furthest end line instead, the same
+    // anchor insertOnNewLine picks.
+    let precedingEndLine = -1;
+    for (let i = 0; i < index; i++) {
+      const end = parent.items[i].loc.end.line;
+      if (end > precedingEndLine) precedingEndLine = end;
+    }
+
     const extra = previous
       // Only a section carries a leading separator, so only removing one frees a blank line.
       // A key-value sits flush against the line above and frees nothing extra.
-      ? (removedIsSection ? node.loc.start.line - previous.loc.end.line - 1 : 0)
+      ? (removedIsSection ? node.loc.start.line - precedingEndLine - 1 : 0)
       // Nothing above: `next` is pulled to the top of the container, where the separator it
       // was carrying becomes a spurious leading blank.
       : (nextIsSection ? next.loc.start.line - node.loc.end.line - 1 : 0);
