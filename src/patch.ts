@@ -534,6 +534,36 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           is_table_array = true;
         }
       }
+      // The converse of the guard below: parseJS renders an array of objects as [[key]]
+      // sections at the default inlineTableStart, but the document may hold that array
+      // inline (`key = [{ ... }]`). The document's shape has to win, or the new element
+      // arrives as a section while `key = [...]` stays put — defining the key twice, and
+      // re-parsing as the original array nested inside the new element.
+      if (is_table_array && isInteger(index) && !isInteger(last(parent_path))) {
+        const existingParent = tryFindByPath(original, parent_path);
+        const existingArray = existingParent && isKeyValue(existingParent)
+          ? existingParent.value
+          : existingParent;
+
+        if (existingArray && isInlineArray(existingArray)) {
+          const updated_js = toJS(updated.items, '', { temporal });
+          let jsValue: any = updated_js;
+          for (const k of change.path) jsValue = jsValue?.[k];
+
+          // Wrap in a throwaway key so parseJS yields a value node, then take that value.
+          // inlineTableStart: 0 keeps it inline — the element belongs inside an inline array,
+          // so it must be an inline table whatever the configured depth would have chosen for
+          // a top-level key (at the default it would come back as a `[tmp]` section).
+          const inlineFmt = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+          const valueDoc = jsValue === undefined ? undefined : parseJS({ tmp: jsValue }, inlineFmt);
+          const wrapper = valueDoc?.items[0];
+          if (wrapper && isKeyValue(wrapper)) {
+            child = generateInlineItem(wrapper.value);
+            is_table_array = false;
+          }
+        }
+      }
+
       // When is_table_array is true but the child from the updated document is not
       // a TableArray block (e.g. parseJS inlined it because of inlineTableStart),
       // regenerate a fresh TableArray from the JS value.
@@ -623,6 +653,45 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // The child comes from the updated document with global format applied
             // Override with the original array's format
             child.comma = originalHadTrailingCommas;
+
+            // `format.trailingComma` is a single flag, but it is read off whichever
+            // separator the detector happened to see. An array written `[ { a = 1 }, ]`
+            // sets it from the comma after the inline table, then that same flag decides
+            // the comma *inside* the new table — emitting `{ z = 0, }` next to `{ a = 1 }`.
+            // The two are independent, so take the inner one from a sibling table.
+            //
+            // Regenerated rather than patched in place: clearing the flag on a node already
+            // laid out with a comma leaves the slot behind as `{ z = 0  }`.
+            const addedItem = child;
+            const addedTable = isInlineTable(addedItem.item) ? addedItem.item : undefined;
+            const siblingTable = addedTable && addedTable.items.length > 0
+              ? (parent.items as InlineItem[])
+                  .map(item => item.item)
+                  .find(item => item !== addedItem.item && isInlineTable(item))
+              : undefined;
+
+            if (addedTable && siblingTable) {
+              const wanted = tableHadTrailingCommas(siblingTable);
+              if (wanted !== tableHadTrailingCommas(addedTable)) {
+                const updated_js = toJS(updated.items, '', { temporal });
+                let jsValue: any = updated_js;
+                for (const k of change.path) jsValue = jsValue?.[k];
+
+                const matchedFmt = resolveTomlFormat(
+                  { ...format, inlineTableStart: 0, trailingComma: wanted },
+                  format
+                );
+                const rebuilt = jsValue === undefined
+                  ? undefined
+                  : parseJS({ tmp: jsValue }, matchedFmt).items[0];
+
+                if (rebuilt && isKeyValue(rebuilt)) {
+                  const replacementItem = generateInlineItem(rebuilt.value);
+                  replacementItem.comma = addedItem.comma;
+                  child = replacementItem;
+                }
+              }
+            }
           }
         }
         

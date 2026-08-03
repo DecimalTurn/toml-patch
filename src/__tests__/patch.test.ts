@@ -5155,15 +5155,32 @@ describe('array of inline tables', () => {
     ` + '\n');
   });
 
-  // Pre-existing bug, unrelated to the first-row indentation work: prepending an element to
-  // an array of inline tables emits a [[xs]] section AND leaves the original `xs = [...]`
-  // key in place, so `xs` is defined twice and the document is invalid TOML. Reparsing nests
-  // the original array inside the new element:
-  //   {"xs":[{"z":0,"xs":[{"a":1},{"b":2}]}]}
-  // Reproduces identically before and after the indentation fix. Possibly the same root
-  // cause as issue #262 (patch() duplicating a key when a value matches an untouched
-  // sibling); left skipped rather than failing, per this repo's convention for known gaps.
-  test.skip('should prepend an element without duplicating the key', () => {
+  // parseJS renders an array of objects as [[xs]] sections at the default inlineTableStart,
+  // so an Add resolved against the updated document arrived as a section while `xs = [...]`
+  // stayed put — defining the key twice, and re-parsing as the original array nested inside
+  // the new element ({"xs":[{"z":0,"xs":[...]}]}). The document's own shape has to win.
+  //
+  // It was filed as a prepend bug, but position had nothing to do with it: appending and
+  // mid-inserting failed identically, as did the single-line array form. Only a root-level
+  // key was affected — nested under a [table], parseJS already kept the array inline.
+  test('should append an element without duplicating the key', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should prepend an element without duplicating the key', () => {
     const src = dedent`
       xs = [
         { a = 1 },
@@ -5172,7 +5189,6 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
-
     expect(result).toEqual(dedent`
       xs = [
         { z = 0 },
@@ -5181,6 +5197,168 @@ describe('array of inline tables', () => {
       ]
     ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+  });
+
+  test('should insert an element in the middle without duplicating the key', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+        { b = 2 },
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
+  });
+
+  // NOTE: the added table comes out as `{z = 0}` without bracket spacing, unlike the
+  // `{ a = 1 }` beside it. Pre-existing and specific to single-line arrays — the multi-line
+  // form above is spaced correctly, and this reproduces on `latest` for the nested shape
+  // that never had the duplication bug. Asserted as-is to pin current behaviour; see the
+  // skipped 'should match its siblings' bracket spacing' below.
+  test('should add to a single-line array of inline tables', () => {
+    const src = dedent`
+      xs = [{ a = 1 }]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [{ a = 1 }, {z = 0}]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should add to an empty inline array', () => {
+    // No sibling to copy a style from, so the format's own defaults apply.
+    const src = dedent`
+      xs = []
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [{z = 0}]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
+  });
+
+  test.skip('should match its siblings\' bracket spacing on a single-line array', () => {
+    const src = dedent`
+      xs = [{ a = 1 }]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [{ a = 1 }, { z = 0 }]
+    ` + '\n');
+  });
+
+  test('should add several elements at once', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+        { y = 9 },
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { y: 9 }] });
+  });
+
+  // `format.trailingComma` is one flag read off whichever separator the detector saw first.
+  // `[ { a = 1 }, ]` sets it from the comma *after* the table, and that same flag then chose
+  // the comma *inside* the added one — `{ z = 0, }` beside `{ a = 1 }`. The two are
+  // independent, so the inner one is taken from a sibling table.
+  test('should not add an inner trailing comma its siblings do not have', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+      ]
+    ` + '\n');
+  });
+
+  test('should keep an inner trailing comma its siblings do have', () => {
+    const src = dedent`
+      xs = [
+        { a = 1, },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0 }] })).toEqual(dedent`
+      xs = [
+        { a = 1, },
+        { z = 0, },
+      ]
+    ` + '\n');
+  });
+
+  test('should match sibling comma style for a multi-key element', () => {
+    const src = dedent`
+      xs = [
+        { a = 1 },
+      ]
+    ` + '\n';
+
+    expect(patch(src, { xs: [{ a: 1 }, { z: 0, w: 2 }] })).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0, w = 2 },
+      ]
+    ` + '\n');
+  });
+
+  // The document's shape wins in both directions: a real [[xs]] source must keep producing
+  // sections, not get rewritten into an inline array.
+  test('should still append a section to a genuine array-of-tables', () => {
+    const src = dedent`
+      [[xs]]
+      a = 1
+    ` + '\n';
+
+    const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      [[xs]]
+      a = 1
+
+      [[xs]]
+      z = 0
+    ` + '\n');
+    expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
+  });
+
+  test('should still append a section to a nested array-of-tables', () => {
+    const src = dedent`
+      [[a.b]]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { a: { b: [{ n: 1 }, { z: 0 }] } });
+    expect(result).toEqual(dedent`
+      [[a.b]]
+      n = 1
+
+      [[a.b]]
+      z = 0
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: [{ n: 1 }, { z: 0 }] } });
   });
 
 });
