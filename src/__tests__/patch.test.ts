@@ -5171,6 +5171,12 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { a = 1 },
+        { z = 0 },
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
   });
 
@@ -5183,6 +5189,13 @@ describe('array of inline tables', () => {
     ` + '\n';
 
     const result = patch(src, { xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
+    expect(result).toEqual(dedent`
+      xs = [
+        { z = 0 },
+        { a = 1 },
+        { b = 2 },
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ z: 0 }, { a: 1 }, { b: 2 }] });
   });
 
