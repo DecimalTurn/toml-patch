@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: indent a new first element of a multi-line array to match its sibling rows instead of the opening bracket. ([#263])
 - Patching: give each element its own row when inserting more than one into the same multi-line array in a single patch. ([#264])
 - Patching: drop an array element's comment with it when the array is the value of a multi-line inline table key. ([#264])
+- Patching: reclaim a removed section's blank separator, so deleting sections no longer accumulates blank lines. ([#265])
 
 ## [3.0.0] - 2026-07-29
 
@@ -338,4 +339,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#261]: https://github.com/DecimalTurn/toml-patch/pull/261
 [#263]: https://github.com/DecimalTurn/toml-patch/pull/263
 [#264]: https://github.com/DecimalTurn/toml-patch/pull/264
+[#265]: https://github.com/DecimalTurn/toml-patch/pull/265
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1

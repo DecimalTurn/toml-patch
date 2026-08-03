@@ -3848,7 +3848,7 @@ describe('undefined handling in patch', () => {
     const obj = parse(existing);
     obj.owner = undefined;
 
-    expect(patch(existing, obj)).toEqual('\n' + dedent`
+    expect(patch(existing, obj)).toEqual(dedent`
       [database]
       server = "localhost"
       ` + '\n');
@@ -5591,19 +5591,11 @@ describe('structural type replacements', () => {
       [other]
       w = 3
     ` + '\n';
-    // TODO: Fix this known formatting bug in remove()'s offset math so that the double blank line is not emitted. See the skipped
-    // NOTE: the double blank line before [other] is a known, pre-existing
-    // formatting bug in remove()'s offset math (not specific to structural
-    // replacement) — see the skipped
-    // "should not accumulate blank lines when deleting tables one at a time"
-    // test below. Asserted here as-is so a regression doesn't silently
-    // change this further; not a statement that this spacing is correct.
     expectPatchResult(src, { keep: { v: 1 }, a: 42, other: { w: 3 } }, dedent`
       a = 42
 
       [keep]
       v = 1
-
 
       [other]
       w = 3
@@ -5621,13 +5613,11 @@ describe('structural type replacements', () => {
       [[other]]
       m = 2
     ` + '\n';
-    // NOTE: same known blank-line bug as above.
     expectPatchResult(src, { keep: [{ n: 1 }], a: 42, other: [{ m: 2 }] }, dedent`
       a = 42
 
       [[keep]]
       n = 1
-
 
       [[other]]
       m = 2
@@ -5642,10 +5632,6 @@ describe('structural type replacements', () => {
   // values that still carried the removal's pending offsets). handleStructuralEdit now flushes
   // those writes first, but only in this case: doing it unconditionally changes the
   // blank-line bookkeeping for the fully-emptied document the other tests cover.
-  //
-  // NOTE: the extra blank line before the surviving section is the same known, pre-existing
-  // remove() offset bug documented on "unrelated tables survive" above. Asserted as-is to pin
-  // current behaviour, not as a statement that the spacing is correct.
 
   test('[a.b] → a = 42 as first item, section survives after', () => {
     const src = dedent`
@@ -5657,7 +5643,6 @@ describe('structural type replacements', () => {
     ` + '\n';
     expectPatchResult(src, { a: 42, s: { k: 'v' } }, dedent`
       a = 42
-
 
       [s]
       k = "v"
@@ -5678,8 +5663,6 @@ describe('structural type replacements', () => {
     expectPatchResult(src, { i: 42, s: { k: 'v' } }, dedent`
       i = 42
 
-
-
       [s]
       k = "v"
     ` + '\n');
@@ -5695,7 +5678,6 @@ describe('structural type replacements', () => {
     ` + '\n';
     expectPatchResult(src, { i: [1, 2], s: { k: 'v' } }, dedent`
       i = [ 1, 2 ]
-
 
       [s]
       k = "v"
@@ -5713,7 +5695,6 @@ describe('structural type replacements', () => {
     expectPatchResult(src, { i: { x: 1 }, s: { k: 'v' } }, dedent`
       [i]
       x = 1
-
 
       [s]
       k = "v"
@@ -5792,7 +5773,7 @@ describe('meaningful error messages', () => {
 
 describe('blank line accumulation on table deletion', () => {
 
-  test.skip('should not accumulate blank lines when deleting tables one at a time', () => {
+  test('should not accumulate blank lines when deleting tables one at a time', () => {
     let s = dedent`
       [a]
       x = 1
@@ -5817,6 +5798,42 @@ describe('blank line accumulation on table deletion', () => {
       [d]
       w = 4
     ` + '\n');
+  });
+
+  // The separator reclaimed above is measured from what physically precedes the removed
+  // section. A comment hoisted out of a multi-line inline table is filed *after* the
+  // key-value it came from but keeps a loc pointing inside the braces, so it is the
+  // immediately preceding sibling while ending far above the real content. Measuring from
+  // it counted the inline table's body as blank space and pulled the next section up over
+  // the closing brace, emitting a document that no longer parses.
+  test('should not over-reclaim past a comment hoisted out of an earlier inline table', () => {
+    const src = dedent`
+      x = {
+        a = 1, # interior
+        b = 2
+      }
+
+      [t]
+      z = 9
+
+      [u]
+      w = 1
+    ` + '\n';
+
+    const value = parse(src);
+    delete value.t;
+    const result = patch(src, value);
+
+    expect(result).toEqual(dedent`
+      x = {
+        a = 1, # interior
+        b = 2
+      }
+
+      [u]
+      w = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { a: 1, b: 2 }, u: { w: 1 } });
   });
 
 });
