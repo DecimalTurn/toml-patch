@@ -24,6 +24,7 @@ import {
   hasItem,
   hasItems,
   InlineItem,
+  InlineTable,
   CST,
   Table,
   TableArray,
@@ -563,15 +564,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
             // Match sibling bracket spacing. parseJS may or may not have applied it
             // depending on the format path; fill in the gap when siblings have it.
-            if (isInlineTable(child.item) && child.item.items.length > 0) {
+            if (isInlineItem(child) && isInlineTable(child.item) && child.item.items.length > 0) {
               const table = child.item;
               const alreadySpaced = table.items[0].loc.start.column - table.loc.start.column > 1;
               if (!alreadySpaced) {
-                const siblingTable = (existingArray.items as InlineItem[])
+                const sibling = (existingArray.items as InlineItem[])
                   .map(item => item.item)
-                  .find(item => isInlineTable(item) && item.items.length > 0);
-                const siblingSpaced = siblingTable
-                  && siblingTable.items[0].loc.start.column - siblingTable.loc.start.column > 1;
+                  .find(item => isInlineTable(item) && item.items.length > 0) as InlineTable | undefined;
+                const siblingSpaced = sibling
+                  && sibling.items[0].loc.start.column - sibling.loc.start.column > 1;
                 if (siblingSpaced) {
                   applyBracketSpacing(original, table, true);
                 }
