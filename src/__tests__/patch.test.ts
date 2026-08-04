@@ -6222,6 +6222,39 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(result)).toEqual({ z: 1 });
   });
 
+  // This test demonstrates the current best-effort behaviour when several equal-valued
+  // keys are renamed in a single patch call.  Only the first pair is matched as a rename
+  // and keeps its comment; the second is treated as a remove.  To avoid losing comments or preserving the 
+  // wrong comment, limit yourself to one rename per call to `patch()`.
+  test('should keep the first paired comment when equal-valued keys collapse onto one', () => {
+    const src = dedent`
+      a = 1  # doc for a
+      b = 1  # doc for b
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      z = 1  # doc for a
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
+  test('should keep the first paired above-key comment when equal-valued keys collapse onto one', () => {
+    const src = dedent`
+      # doc for a
+      a = 1
+      # doc for b
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      # doc for a
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
   test('should handle three equal-valued keys collapsing onto one', () => {
     const src = dedent`
       a = 1
