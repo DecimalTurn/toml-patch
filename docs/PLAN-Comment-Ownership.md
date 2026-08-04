@@ -149,7 +149,7 @@ Rules are evaluated in precedence order.
 | | Rule |
 |---|---|
 | **R1** | **Right-side ownership wins.** A `Comment` with `start.line <= M.loc.end.line`, where `M` is the nearest preceding member, is owned by `M`. |
-| **R2** | **Adjacency ownership.** A comment run whose last line is exactly `M.loc.start.line - 1` is owned by the member `M` directly below it. |
+| **R2** | **Adjacency ownership.** A comment run whose last line is exactly `M.loc.start.line - 1` is owned by the member `M` directly below it. When `M` is the last child of an implicit parent and `M`'s removal materialises the parent, the run transfers to the materialised parent header. |
 | **R3** | **A blank line severs ownership.** A run separated from the member below by one or more blank lines is *unowned* — pinned to its position, never travels. |
 | **R4** | **Unowned otherwise.** A run with no member below it in the same container is pinned. |
 | **R5** | **Cross-container normalisation.** A trailing run inside a `Table`/`TableArray` that R2 assigns to the *following* document block is re-parented to `Document.items`. |

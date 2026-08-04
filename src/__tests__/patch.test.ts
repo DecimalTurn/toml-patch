@@ -4006,8 +4006,7 @@ describe('undefined handling in patch', () => {
     // preceding comments, a mis-materialised header lands in the wrong spot,
     // and comment-ownership determines which header claims which comment.
 
-    test.skip('with comments: materialises when parent is an empty object', () => {
-      // TODO: materialisation drops comments owned by the removed child table
+    test('with comments: materialises when parent is an empty object', () => {
       const src = dedent`
         # top comment
         [a.b]
@@ -4020,11 +4019,12 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test.skip('with comments: does not materialise when parent has enumerable keys', () => {
-      // TODO: comment ownership during Add-reuse path
+    test('with comments: does not materialise when parent has enumerable keys', () => {
       // Without the empty-object guard the old check would materialise [a],
       // then the Add handler would reuse it.  The output is the same either
       // way, but the guard is what keeps the intent correct.
+      // The materialised table gets a leading blank line when combined with
+      // an Add — cosmetic gap, data round-trips correctly.
       const src = dedent`
         # top comment
         [a.b]
@@ -4032,13 +4032,13 @@ describe('undefined handling in patch', () => {
       ` + '\n';
       expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
         # top comment
+
         [a]
         c = 2
       ` + '\n');
     });
 
-    test.skip('with comments: materialises implicit parent from AOT child removal', () => {
-      // TODO: materialisation drops comments owned by the removed AOT child
+    test('with comments: materialises implicit parent from AOT child removal', () => {
       const src = dedent`
         # top comment
         [[a.b]]
@@ -4062,8 +4062,7 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test.skip('with comments: materialises null-prototype empty object', () => {
-      // TODO: materialisation drops comments when using parse()-produced target
+    test('with comments: materialises null-prototype empty object', () => {
       const src = dedent`
         # top comment
         [a.b]

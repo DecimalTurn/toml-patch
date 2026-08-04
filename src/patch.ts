@@ -912,6 +912,42 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Remove all entries by repeatedly pulling the one at index 0.
         const first = tryFindByPath(original, change.path.concat(0));
         if (first) {
+          // R2 extension: when the AOT entries are the sole children of an
+          // implicit parent, convert the first entry in place to a Table so
+          // comments preceding it in Document.items are preserved.
+          let materialiseAotInPlace = false;
+          if (change.path.length > 1 && rawUpdated !== undefined) {
+            const parentPath = change.path.slice(0, -1);
+            const allSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            const otherSiblings = allSiblings.filter(s =>
+              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, change.path))
+            );
+            if (otherSiblings.length === 0) {
+              let value: any = rawUpdated;
+              for (const k of parentPath) value = value?.[k];
+              if (isObject(value) && Object.keys(value).length === 0) {
+                // Convert first entry: clear items, rename key, change type.
+                const aotNode = first as TableArray;
+                const aotKeyHolder = aotNode.key;
+                while (aotNode.items.length > 0) {
+                  removeMember(original, aotNode, last(aotNode.items as TreeNode[])!);
+                }
+                (aotNode as any).type = NodeType.Table;
+                // Also change the key type so toTOML renders [a] not [[a]].
+                (aotKeyHolder as any).type = NodeType.TableKey;
+                // Rename the key in place (preserving original loc.start).
+                const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
+                aotKey.value = parentPath as string[];
+                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value);
+                aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
+                aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
+                materialiseAotInPlace = true;
+              }
+            }
+          }
+
+          // Remove remaining AOT entries.  If the first was converted in place
+          // it no longer matches change.path, so the loop naturally skips it.
           let entry: TreeNode | undefined;
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             removeMember(original, original, entry);
@@ -928,7 +964,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // When the AOT entries were the sole children of an implicit parent
           // (e.g. [[a.b]] -> { a: {} }), the parent disappears.  Materialise it
           // as an empty table if the caller still wants the parent key.
-          if (change.path.length > 1 && rawUpdated !== undefined) {
+          // Skip if already materialised in place above.
+          if (!materialiseAotInPlace &&
+              change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
             const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
             if (remainingSiblings.length === 0) {
@@ -980,12 +1018,45 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = original;
         }
 
-        removeMember(original, parent, node);
+        // R2 extension: when the last child of an implicit parent is removed,
+        // materialise the parent in place (rename key, clear items) so that
+        // comments preceding the child in Document.items are preserved.
+        let materialisedInPlace = false;
+        if (change.path.length > 1 && isTable(node) && rawUpdated !== undefined) {
+          const parentPath = change.path.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath)
+            .filter(s => s !== node);
+          if (remainingSiblings.length === 0) {
+            let value: any = rawUpdated;
+            for (const k of parentPath) value = value?.[k];
+            if (isObject(value) && Object.keys(value).length === 0) {
+              const table = node as Table;
+              while (table.items.length > 0) {
+                remove(original, table, last(table.items as TreeNode[])!);
+              }
+              const keyHolder = table.key;
+              const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
+              key.value = parentPath as string[];
+              key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+              key.loc.end.column = key.loc.start.column + key.raw.length;
+              keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
+              // The body is gone — shrink table.loc to the header only.
+              table.loc.end.line = keyHolder.loc.end.line;
+              table.loc.end.column = keyHolder.loc.end.column;
+              materialisedInPlace = true;
+            }
+          }
+        }
 
-        // When removing a node whose key has an implicit parent (e.g. the Table at
-        // ["a","b"] from [a.b] has an implicit parent "a" with no CST node of its own),
-        // check whether the parent should survive as an empty table header.
-        if (change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
+        if (!materialisedInPlace) {
+          removeMember(original, parent, node);
+        }
+
+        // When removing a node whose key has an implicit parent, check whether
+        // the parent should survive as an empty table header.  Table nodes are
+        // handled in-place above; only TableArray falls through to generate+insert.
+        if (!materialisedInPlace &&
+            change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
           const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
           if (remainingSiblings.length === 0) {
