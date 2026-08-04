@@ -6171,31 +6171,45 @@ describe('removing a key whose value matches a sibling (#262)', () => {
     expect(parse(patch(src, { t: { b: { n: 1 } } }))).toEqual({ t: { b: { n: 1 } } });
   });
 
+  const renameKey = (obj: Record<string, unknown>, fromPath: string, toPath: string) => {
+    const resolve = (path: string) => {
+      const parts = path.split('.');
+      let parent = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        parent = parent[parts[i]] as Record<string, unknown>;
+      }
+      return { parent, key: parts[parts.length - 1] };
+    };
+
+    const { parent: fromParent, key: fromKey } = resolve(fromPath);
+    const { parent: toParent, key: toKey } = resolve(toPath);
+
+    toParent[toKey] = fromParent[fromKey];
+    delete fromParent[fromKey];
+  };
+
   test('should leave a genuine rename alone', () => {
     const src = dedent`
       a = 1
       keep = 2
     ` + '\n';
 
-    const result = patch(src, { z: 1, keep: 2 });
+    const obj = parse(src);
+    renameKey(obj, 'a', 'z');
+
+    const result = patch(src, obj);
     expect(result).toEqual(dedent`
       z = 1
       keep = 2
     ` + '\n');
   });
 
-  // A separate, pre-existing bug in the same heuristic, found while covering #262 and
-  // verified to reproduce on unmodified `latest`. When SEVERAL equal-valued keys collapse
-  // onto one, `isRename` matches every one of them against the same target -- `before_key`
-  // is looked up with `before_stable.indexOf`, which always finds the first match -- so
-  // `{a:1,b:1} -> {z:1}` emits `Rename a->z` AND `Rename b->z`. The second rename blanks its
-  // node's key, giving a key with an empty name:
-  //
-  //   "  = 1\nz = 1\n"   which does not parse
-  //
-  // Fixing it means making the rename pairing one-to-one (consuming each matched source and
-  // target), which is a larger change to the heuristic than #262's target check.
-  test.skip('should not emit an empty key when several equal-valued keys collapse onto one', () => {
+  // Rename matching resolved the target with `indexOf`, which always returns the first
+  // match, so every equal-valued source claimed the same one. `{a:1,b:1} -> {z:1}` emitted
+  // `Rename a->z` AND `Rename b->z`, and the second blanked its node's key, giving a key
+  // with an empty name — `"  = 1\nz = 1\n"`, which does not parse. Claiming a target now
+  // retires it, so the later source falls through to a Remove.
+  test('should not emit an empty key when several equal-valued keys collapse onto one', () => {
     const src = dedent`
       a = 1
       b = 1
@@ -6206,6 +6220,237 @@ describe('removing a key whose value matches a sibling (#262)', () => {
       z = 1
     ` + '\n');
     expect(parse(result)).toEqual({ z: 1 });
+  });
+
+  test('should handle three equal-valued keys collapsing onto one', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+      c = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1 });
+  });
+
+  test('should collapse onto two targets without emitting an empty key', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { z: 1, y: 1 });
+    expect(result).toEqual(dedent`
+      z = 1
+      y = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 1, y: 1 });
+  });
+
+  test('should collapse equal-valued keys inside a table', () => {
+    const src = dedent`
+      [t]
+      a = 1
+      b = 1
+    ` + '\n';
+
+    const result = patch(src, { t: { z: 1 } });
+    expect(result).toEqual(dedent`
+      [t]
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ t: { z: 1 } });
+  });
+
+  test('should collapse equal-valued string keys', () => {
+    const src = dedent`
+      a = "x"
+      b = "x"
+    ` + '\n';
+
+    const result = patch(src, { z: 'x' });
+    expect(result).toEqual(dedent`
+      z = "x"
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: 'x' });
+  });
+
+  // Pairing is greedy, so `a` and `b` are renamed onto `y` and `z` and only the leftover `c`
+  // is removed. See comment-ownership.test.ts's `renaming` block for what that means for the
+  // comments each key owns.
+  test('should collapse three keys onto two targets', () => {
+    const src = dedent`
+      a = 1
+      b = 1
+      c = 1
+    ` + '\n';
+
+    const result = patch(src, { y: 1, z: 1 });
+    expect(result).toEqual(dedent`
+      y = 1
+      z = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ y: 1, z: 1 });
+  });
+
+  // A KeyValue holds its Key directly; a [table] wraps it in a TableKey. The rename branch
+  // read `.key.value` unconditionally, so for a section it got undefined and threw inside
+  // preserveEscapedKeyRaw. Nothing to do with equal values — this is a single unambiguous
+  // Rename, and it failed on `latest` too.
+  test('should rename a key whose value is a table', () => {
+    const src = dedent`
+      [a]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { z: { n: 1 } });
+    expect(result).toEqual(dedent`
+      [z]
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: { n: 1 } });
+  });
+
+  test('should rename a table without disturbing its siblings', () => {
+    const src = dedent`
+      [a]
+      n = 1
+
+      [keep]
+      m = 2
+    ` + '\n';
+
+    const result = patch(src, { z: { n: 1 }, keep: { m: 2 } });
+    expect(result).toEqual(dedent`
+      [z]
+      n = 1
+
+      [keep]
+      m = 2
+    ` + '\n');
+    expect(parse(result)).toEqual({ z: { n: 1 }, keep: { m: 2 } });
+  });
+
+  // Renaming the leaf of a dotted section key now correctly updates just the leaf
+  // segment in place without dropping the prefix (e.g. [a.b] -> [a.z]).
+  test('should rename the leaf segment of a dotted section key', () => {
+    const src = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+
+    expect(patch(src, { a: { z: { n: 1 } } })).toEqual(dedent`
+      [a.z]
+      n = 1
+    ` + '\n');
+  });
+
+  // Renaming the ROOT segment does work, because the diff resolves it at the document level
+  // where both sides are single-segment. Note the value is re-rendered as an inline table
+  // rather than staying a `[x.y]` section — the data round-trips, the representation does
+  // not survive.
+  test('should rename the root segment of a dotted section key', () => {
+    const src = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { x: { y: { n: 1 } } });
+    expect(result).toEqual(dedent`
+      [x]
+      y = { n = 1 }
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
+  });
+
+  test('should rename the root segment of a dotted section key - with comment', () => {
+    const src = dedent`
+      [a.b]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a', 'x');
+
+    let result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [x.b]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ x: { b: { n: 1 } } });
+  
+    // renameKey(obj, 'b', 'y');
+
+    // result = patch(src, obj);
+    // expect(result).toEqual(dedent`
+    //   [x.y]
+    //   # comment about n
+    //   n = 1 
+    // ` + '\n');
+    // expect(parse(result)).toEqual({ x: { y: { n: 1 } } });
+  });
+
+  test('should rename the leaf segment of a dotted section key - with comment', () => {
+    const src = dedent`
+      [a.b]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+  
+    renameKey(obj, 'a.b', 'a.y');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.y]
+      # comment about n
+      n = 1 
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { y: { n: 1 } } });
+  });
+
+  test('should rename an intermediate segment of a deeply nested dotted section key', () => {
+    const src = dedent`
+      [a.b.c]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a.b', 'a.x');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.x.c]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { x: { c: { n: 1 } } } });
+  });
+
+  test('should rename the leaf segment of a deeply nested dotted section key', () => {
+    const src = dedent`
+      [a.b.c]
+      # comment about n
+      n = 1
+    ` + '\n';
+
+    const obj = parse(src);
+    renameKey(obj, 'a.b.c', 'a.b.z');
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [a.b.z]
+      # comment about n
+      n = 1
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { b: { z: { n: 1 } } } });
   });
 
 });

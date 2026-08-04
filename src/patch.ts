@@ -992,23 +992,90 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         insert(original, original, fromNode, toIndex);
       }
     } else if (isRename(change)) {
-      let parent = findByPath(original, change.path.concat(change.from)) as
+      const sourcePath = change.path.concat(change.from);
+
+      let parent = tryFindByPath(original, sourcePath) as
         | KeyValue
-        | InlineItem<KeyValue>;
+        | Table
+        | TableArray
+        | InlineItem<KeyValue>
+        | undefined;
+
+      // When renaming a prefix segment of a dotted table key (e.g. the "a" in
+      // [a.b] → [x.b]), the source path ["a"] does not match the table's full key
+      // ["a","b"].  Fall back to a key-prefix search so rename can update just the
+      // matching segment in place.
+      if (!parent) {
+        const prefixNodes = findDocumentItemsByKeyPrefix(original, sourcePath);
+        if (prefixNodes.length === 1 && (isTable(prefixNodes[0]) || isTableArray(prefixNodes[0]))) {
+          const node = prefixNodes[0] as Table | TableArray;
+          const keyHolder = node.key;
+          const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
+          const segmentIndex = sourcePath.length - 1;
+          key.value[segmentIndex] = change.to;
+          key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+          key.loc.end.column = key.loc.start.column + key.raw.length;
+          return; // skip the rest of rename logic for this change
+        }
+      }
+
+      if (!parent) parent = findByPath(original, sourcePath) as KeyValue | Table | TableArray | InlineItem<KeyValue>;
       let replacement = findByPath(updated, change.path.concat(change.to)) as
         | KeyValue
+        | Table
+        | TableArray
         | InlineItem<KeyValue>;
 
       if (hasItem(parent)) parent = parent.item;
       if (hasItem(replacement)) replacement = replacement.item;
 
+      // A KeyValue holds its Key directly, while a [table]/[[array]] wraps it in a
+      // TableKey/TableArrayKey. Reach the inner Key either way — reading `.key.value` off a
+      // section gives undefined, which used to make preserveEscapedKeyRaw throw on `.map`.
+      const parentHolder = parent.key;
+      const replacementHolder = replacement.key;
+      const parentKey = hasItem(parentHolder) ? parentHolder.item : parentHolder;
+      const replacementKey = hasItem(replacementHolder) ? replacementHolder.item : replacementHolder;
+
+      // Both sides must describe the same shape of key. parseJS can render the replacement
+      // as a plain nested key — `z` inside `[a]` — where the document holds a dotted section
+      // header `[a.b]`, and swapping one node for the other would silently drop the `a.`
+      // prefix, emitting `[z]`. Refuse instead: these shapes threw before this branch
+      // understood sections at all, and a clear failure beats a corrupted document.
+      if (parentKey.value.length !== replacementKey.value.length) {
+        // When the existing node is a Table/TableArray whose key shares a prefix with
+        // change.path + change.from, and the replacement is a plain KeyValue, we're
+        // renaming one segment of a dotted section header rather than replacing the
+        // whole key (e.g. [a.b] -> [a.y]).  Rename just the matching segment in place.
+        const fullSourcePath = change.path.concat(change.from);
+        if ((isTable(parent) || isTableArray(parent)) &&
+            isKeyValue(replacement) &&
+            arraysEqual(parentKey.value.slice(0, fullSourcePath.length), fullSourcePath)) {
+          const segmentIndex = fullSourcePath.length - 1;
+          parentKey.value[segmentIndex] = change.to;
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
+          return;
+        }
+
+        throw new Error(
+          `Cannot rename "${parentKey.raw}" to "${replacementKey.raw}": the replacement key has ` +
+          `${replacementKey.value.length} segment(s) where the existing key has ` +
+          `${parentKey.value.length}, so one cannot be substituted for the other.`
+        );
+      }
+
       // Preserve key escape style from the original key raw when renaming.
       // Example: if the original key used "\\u263A", keep that escape form
       // instead of normalizing to the raw character (☺).
-      replacement.key.raw = preserveEscapedKeyRaw(parent.key.raw, replacement.key.value);
-      replacement.key.loc.end.column = replacement.key.loc.start.column + replacement.key.raw.length;
+      replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value);
+      replacementKey.loc.end.column = replacementKey.loc.start.column + replacementKey.raw.length;
 
-      replace(original, parent, parent.key, replacement.key);
+      // Hand replace() whichever node actually owns the Key. For a section that is the
+      // TableKey wrapper: a Table's own `.items` are its rows, so passing the Table would
+      // send replace() looking for the key in the wrong array.
+      const keyOwner = hasItem(parentHolder) ? parentHolder : parent;
+      replace(original, keyOwner, parentKey, replacementKey);
     }
   });
 

@@ -666,3 +666,186 @@ describe('combinations', () => {
     ` + '\n');
   });
 });
+
+// Ownership under RENAME, rather than removal.
+//
+// A rename is inferred, never declared: the diff only sees that one key vanished and another
+// appeared, with value equality as the only evidence. A renamed node is edited in place, so
+// everything it owns rides along; a remove-plus-add loses it. Preserving comments is the
+// point of this library, so the pairing is greedy — every source that can be matched to a
+// target of the same value is, and only the leftovers become removes or adds.
+//
+// When several keys share a value the pairing is arbitrary, and a comment can land on one
+// interchangeable key rather than another. That is accepted deliberately: the alternative is
+// dropping every comment in the group. Patching in smaller steps removes the ambiguity for
+// callers who need a specific pairing.
+describe('renaming', () => {
+  test('carries a leading comment to the renamed key', () => {
+    const input = dedent`
+      # doc for a
+      a = 1
+    ` + '\n';
+
+    expect(patch(input, { z: 1 })).toEqual(dedent`
+      # doc for a
+      z = 1
+    ` + '\n');
+  });
+
+  test('carries a same-line trailing comment to the renamed key', () => {
+    const input = dedent`
+      a = 1 # trailing a
+    ` + '\n';
+
+    expect(patch(input, { z: 1 })).toEqual(dedent`
+      z = 1 # trailing a
+    ` + '\n');
+  });
+
+  test('carries both a leading run and a trailing comment', () => {
+    const input = dedent`
+      # one
+      # two
+      a = 1 # trailing a
+    ` + '\n';
+
+    expect(patch(input, { z: 1 })).toEqual(dedent`
+      # one
+      # two
+      z = 1 # trailing a
+    ` + '\n');
+  });
+
+  test('leaves an untouched sibling and its comment alone', () => {
+    const input = dedent`
+      # doc for a
+      a = 1
+      # doc for keep
+      keep = 2
+    ` + '\n';
+
+    expect(patch(input, { z: 1, keep: 2 })).toEqual(dedent`
+      # doc for a
+      z = 1
+      # doc for keep
+      keep = 2
+    ` + '\n');
+  });
+
+  test('renames a table and keeps the comments inside it', () => {
+    const input = dedent`
+      # doc for a
+      [a]
+      # doc for n
+      n = 1
+    ` + '\n';
+
+    expect(patch(input, { z: { n: 1 } })).toEqual(dedent`
+      # doc for a
+      [z]
+      # doc for n
+      n = 1
+    ` + '\n');
+  });
+
+  describe('several keys sharing a value are paired in order', () => {
+    test('keeps every comment when the sides are the same size', () => {
+      const input = dedent`
+        # doc for a
+        a = 1
+        # doc for b
+        b = 1
+      ` + '\n';
+
+      expect(patch(input, { z: 1, y: 1 })).toEqual(dedent`
+        # doc for a
+        z = 1
+        # doc for b
+        y = 1
+      ` + '\n');
+    });
+
+    test('keeps the paired comment and drops the unpaired one', () => {
+      const input = dedent`
+        # doc for a
+        a = 1
+        # doc for b
+        b = 1
+      ` + '\n';
+
+      // `a` pairs with `z` and keeps its comment; `b` has nothing left to pair with, so it
+      // is removed and takes its own comment with it.
+      expect(patch(input, { z: 1 })).toEqual(dedent`
+        # doc for a
+        z = 1
+      ` + '\n');
+    });
+
+    test('leaves an unpaired target bare', () => {
+      const input = dedent`
+        # doc for a
+        a = 1
+      ` + '\n';
+
+      expect(patch(input, { z: 1, w: 1 })).toEqual(dedent`
+        # doc for a
+        z = 1
+        w = 1
+      ` + '\n');
+    });
+
+    test('pairs as far as the shorter side allows', () => {
+      const input = dedent`
+        # doc for a
+        a = 1
+        # doc for b
+        b = 1
+        # doc for c
+        c = 1
+      ` + '\n';
+
+      expect(patch(input, { y: 1, z: 1 })).toEqual(dedent`
+        # doc for a
+        y = 1
+        # doc for b
+        z = 1
+      ` + '\n');
+    });
+
+    test('groups by value, so one value never consumes another\'s targets', () => {
+      const input = dedent`
+        # doc for a
+        a = 1
+        # doc for b
+        b = 1
+        # doc for c
+        c = 2
+      ` + '\n';
+
+      expect(patch(input, { z: 1, y: 1, w: 2 })).toEqual(dedent`
+        # doc for a
+        z = 1
+        # doc for b
+        y = 1
+        # doc for c
+        w = 2
+      ` + '\n');
+    });
+  });
+
+  test('a removal whose value matches an untouched sibling keeps that sibling\'s comment', () => {
+    // The #262 shape: `b` survives, so it is neither a rename source nor a target, and its
+    // comment must stay with it rather than being replaced by `a`'s.
+    const input = dedent`
+      # doc for a
+      a = 1
+      # doc for b
+      b = 1
+    ` + '\n';
+
+    expect(patch(input, { b: 1 })).toEqual(dedent`
+      # doc for b
+      b = 1
+    ` + '\n');
+  });
+});
