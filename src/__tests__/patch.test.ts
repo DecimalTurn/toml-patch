@@ -3880,7 +3880,7 @@ describe('undefined handling in patch', () => {
   // Not specific to array-of-tables: `[a.b]` and `[[a.b]]` behave identically, and an
   // explicitly declared `[a]` already survives. Found while reviewing #266; see
   // https://github.com/DecimalTurn/toml-patch/pull/266 for the discussion.
-  test.skip('should keep an implicit parent table when its only child is removed', () => {
+  test('should keep an implicit parent table when its only child is removed', () => {
     const fromTable = dedent`
       [a.b]
       n = 1
