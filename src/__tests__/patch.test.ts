@@ -3885,13 +3885,21 @@ describe('undefined handling in patch', () => {
       [a.b]
       n = 1
     ` + '\n';
-    expect(parse(patch(fromTable, { a: {} }))).toEqual({ a: {} });
+    const resultTable = patch(fromTable, { a: {} });
+    expect(resultTable).toEqual(dedent`
+      [a]
+    ` + '\n');
+    expect(parse(resultTable)).toEqual({ a: {} });
 
     const fromArrayOfTables = dedent`
       [[a.b]]
       n = 1
     ` + '\n';
-    expect(parse(patch(fromArrayOfTables, { a: {} }))).toEqual({ a: {} });
+    const resultAot = patch(fromArrayOfTables, { a: {} });
+    expect(resultAot).toEqual(dedent`
+      [a]
+    ` + '\n');
+    expect(parse(resultAot)).toEqual({ a: {} });
   });
 
   test('should throw when patching with undefined inside an array', () => {
