@@ -934,7 +934,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (remainingSiblings.length === 0) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
-              if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+              if (isObject(value) && Object.keys(value).length === 0) {
                 const emptyTable = generateTable(parentPath as string[]);
                 insert(original, original, emptyTable, original.items.length);
               }
@@ -991,7 +991,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
-            if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            if (isObject(value) && Object.keys(value).length === 0) {
               const emptyTable = generateTable(parentPath as string[]);
               insert(original, original, emptyTable, original.items.length);
             }
