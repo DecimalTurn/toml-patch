@@ -4038,6 +4038,21 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
+    // Desired: no blank line between the comment and the materialised table
+    // when an Add follows in the same patch.  Currently produces a blank line.
+    test('with comments: no blank line before materialised parent when sibling is added', () => {
+      const src = dedent`
+        # top comment
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
+        # top comment
+        [a]
+        c = 2
+      ` + '\n');
+    });
+
     test('with comments: materialises implicit parent from AOT child removal', () => {
       const src = dedent`
         # top comment
