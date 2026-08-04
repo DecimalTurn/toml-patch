@@ -3880,18 +3880,203 @@ describe('undefined handling in patch', () => {
   // Not specific to array-of-tables: `[a.b]` and `[[a.b]]` behave identically, and an
   // explicitly declared `[a]` already survives. Found while reviewing #266; see
   // https://github.com/DecimalTurn/toml-patch/pull/266 for the discussion.
-  test.skip('should keep an implicit parent table when its only child is removed', () => {
+  test('should keep an implicit parent table when its only child is removed', () => {
     const fromTable = dedent`
       [a.b]
       n = 1
     ` + '\n';
-    expect(parse(patch(fromTable, { a: {} }))).toEqual({ a: {} });
+    const resultTable = patch(fromTable, { a: {} });
+    expect(resultTable).toEqual(dedent`
+      [a]
+    ` + '\n');
+    expect(parse(resultTable)).toEqual({ a: {} });
 
     const fromArrayOfTables = dedent`
       [[a.b]]
       n = 1
     ` + '\n';
-    expect(parse(patch(fromArrayOfTables, { a: {} }))).toEqual({ a: {} });
+    const resultAot = patch(fromArrayOfTables, { a: {} });
+    expect(resultAot).toEqual(dedent`
+      [a]
+    ` + '\n');
+    expect(parse(resultAot)).toEqual({ a: {} });
+  });
+
+  // In response to https://github.com/DecimalTurn/toml-patch/pull/270#discussion_r3710438584
+  // The implicit-parent materialisation guard (isObject + zero keys) replaced a looser
+  // inline check (typeof === 'object' && !Array.isArray) that would accept Date, Regexp,
+  // and non-empty plain objects as grounds to insert an empty table header.  Each test
+  // below exercises one boundary of the guard.
+  describe('implicit-parent materialisation guard', () => {
+
+    test('materialises when parent is an empty object', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    test('does not materialise when parent has enumerable keys via a sibling Add', () => {
+      // `{ a: { c: 2 } }` — the old check would pass, but the guard sees
+      // Object.keys({ c: 2 }).length === 1 and skips materialisation.  The Add handler
+      // reuses the materialised table today, but the guard is still the right check.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
+        [a]
+        c = 2
+      ` + '\n');
+    });
+
+    test('does not materialise when parent is a scalar (number)', () => {
+      // A scalar at the parent path would pass neither old nor new check.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: 42 })).toEqual(dedent`
+        a = 42
+      ` + '\n');
+    });
+
+    test('does not materialise when target value is null (parseJS rejects)', () => {
+      // `parseJS` throws on null values before diffing starts.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(() => patch(src, { a: null })).toThrow('"null" values are not supported');
+    });
+
+    test('does not materialise when parent is an array', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: [1, 2] })).toEqual(dedent`
+        a = [ 1, 2 ]
+      ` + '\n');
+    });
+
+    test('materialises when parent is a null-prototype empty object', () => {
+      // parse() returns Object.create(null) — the guard must handle these.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      const obj = parse(src);
+      delete obj.a.b;
+      expect(patch(src, obj)).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    test('does not materialise when parent has remaining siblings (another table)', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+        [a.c]
+        m = 2
+      ` + '\n';
+      // Remove a.b, keep a.c.  remainingSiblings at ["a"] is non-empty, so the guard
+      // is never reached.
+      expect(patch(src, { a: { c: { m: 3 } } })).toEqual(dedent`
+        [a.c]
+        m = 3
+      ` + '\n');
+    });
+
+    test('materialises implicit parent from AOT child removal', () => {
+      const src = dedent`
+        [[a.b]]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    // ── same boundaries, but with TOML comments ──────────────────────────
+    // Comments make the issue more visible: a missing [a] header drops its
+    // preceding comments, a mis-materialised header lands in the wrong spot,
+    // and comment-ownership determines which header claims which comment.
+
+    test.skip('with comments: materialises when parent is an empty object', () => {
+      // TODO: materialisation drops comments owned by the removed child table
+      const src = dedent`
+        # top comment
+        [a.b]
+        # child comment
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+        [a]
+      ` + '\n');
+    });
+
+    test.skip('with comments: does not materialise when parent has enumerable keys', () => {
+      // TODO: comment ownership during Add-reuse path
+      // Without the empty-object guard the old check would materialise [a],
+      // then the Add handler would reuse it.  The output is the same either
+      // way, but the guard is what keeps the intent correct.
+      const src = dedent`
+        # top comment
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
+        # top comment
+        [a]
+        c = 2
+      ` + '\n');
+    });
+
+    test.skip('with comments: materialises implicit parent from AOT child removal', () => {
+      // TODO: materialisation drops comments owned by the removed AOT child
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+        [a]
+      ` + '\n');
+    });
+
+    test('with comments: does not materialise when parent is an array', () => {
+      const src = dedent`
+        # top comment
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: [1, 2] })).toEqual(dedent`
+        # top comment
+        a = [ 1, 2 ]
+      ` + '\n');
+    });
+
+    test.skip('with comments: materialises null-prototype empty object', () => {
+      // TODO: materialisation drops comments when using parse()-produced target
+      const src = dedent`
+        # top comment
+        [a.b]
+        n = 1
+      ` + '\n';
+      const obj = parse(src);
+      delete obj.a.b;
+      expect(patch(src, obj)).toEqual(dedent`
+        # top comment
+        [a]
+      ` + '\n');
+    });
+
   });
 
   test('should throw when patching with undefined inside an array', () => {
@@ -5218,11 +5403,6 @@ describe('array of inline tables', () => {
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
   });
 
-  // NOTE: the added table comes out as `{z = 0}` without bracket spacing, unlike the
-  // `{ a = 1 }` beside it. Pre-existing and specific to single-line arrays — the multi-line
-  // form above is spaced correctly, and this reproduces on `latest` for the nested shape
-  // that never had the duplication bug. Asserted as-is to pin current behaviour; see the
-  // skipped 'should match its siblings' bracket spacing' below.
   test('should add to a single-line array of inline tables', () => {
     const src = dedent`
       xs = [{ a = 1 }]
@@ -5230,7 +5410,7 @@ describe('array of inline tables', () => {
 
     const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
     expect(result).toEqual(dedent`
-      xs = [{ a = 1 }, {z = 0}]
+      xs = [{ a = 1 }, { z = 0 }]
     ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
   });
@@ -5248,7 +5428,7 @@ describe('array of inline tables', () => {
     expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
   });
 
-  test.skip('should match its siblings\' bracket spacing on a single-line array', () => {
+  test('should match its siblings\' bracket spacing on a single-line array', () => {
     const src = dedent`
       xs = [{ a = 1 }]
     ` + '\n';

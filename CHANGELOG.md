@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Patching: add an element to an inline array of tables (`xs = [{ ... }]`) as an inline element rather than emitting a `[[xs]]` section alongside it, which defined the key twice. ([#267])
 - Patching: match a sibling's inner trailing comma when adding an inline table to an array, instead of taking it from the array's own separator (`{ z = 0, }` beside `{ a = 1 }`). ([#267])
+- Patching: match sibling bracket spacing when adding an inline table to an inline array (`{ z = 0 }` beside `{ a = 1 }`). ([#270])
+- Patching: keep an implicit parent table as an empty header when its last child is removed (`[a.b]` → `{ a: {} }` now produces `[a]` instead of an empty document). Covers both table (`[a.b]`) and array-of-tables (`[[a.b]]`) cases. ([#270])
 - Patching: pair renames one target each, so collapsing several equal-valued keys onto one no longer emits a key with an empty name. Keys sharing a value are matched in order, keeping their comments, and only the leftovers become removes or adds. ([#269])
 - Patching: rename a `[table]` section key instead of throwing. The rename path read the key node directly, which only works for a key-value — a section wraps it in a `TableKey`. ([#269])
 - Patching: rename a segment of a dotted section key (e.g. `[a.b]` → `[x.b]`, `[a.b]` → `[a.y]`, `[a.b.c]` → `[a.x.c]`) instead of throwing. The Rename handler now falls back to key-prefix search and handles segment-count mismatches when the target is rendered as a plain nested key. ([#269])
@@ -357,4 +359,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#266]: https://github.com/DecimalTurn/toml-patch/pull/266
 [#267]: https://github.com/DecimalTurn/toml-patch/pull/267
 [#269]: https://github.com/DecimalTurn/toml-patch/pull/269
+[#270]: https://github.com/DecimalTurn/toml-patch/pull/270
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1

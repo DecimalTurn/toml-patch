@@ -24,6 +24,7 @@ import {
   hasItem,
   hasItems,
   InlineItem,
+  InlineTable,
   CST,
   Table,
   TableArray,
@@ -225,7 +226,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
   const commentEligibleNodes = collectPrePatchNodes(existing_document);
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -489,7 +490,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet()): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
   // the dotted name for de-duplication, but carrying the path segments — a nested key like
   // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
@@ -560,6 +561,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (wrapper && isKeyValue(wrapper)) {
             child = generateInlineItem(wrapper.value);
             is_table_array = false;
+
+            // Match sibling bracket spacing. parseJS may or may not have applied it
+            // depending on the format path; fill in the gap when siblings have it.
+            if (isInlineItem(child) && isInlineTable(child.item) && child.item.items.length > 0) {
+              const table = child.item;
+              const alreadySpaced = table.items[0].loc.start.column - table.loc.start.column > 1;
+              if (!alreadySpaced) {
+                const sibling = (existingArray.items as InlineItem[])
+                  .map(item => item.item)
+                  .find(item => isInlineTable(item) && item.items.length > 0) as InlineTable | undefined;
+                const siblingSpaced = sibling
+                  && sibling.items[0].loc.start.column - sibling.loc.start.column > 1;
+                if (siblingSpaced) {
+                  applyBracketSpacing(original, table, true);
+                }
+              }
+            }
           }
         }
       }
@@ -906,6 +924,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             const aotPath = change.path as string[];
             emptiedAotKeys.set(aotPath.join('.'), aotPath);
           }
+
+          // When the AOT entries were the sole children of an implicit parent
+          // (e.g. [[a.b]] -> { a: {} }), the parent disappears.  Materialise it
+          // as an empty table if the caller still wants the parent key.
+          if (change.path.length > 1 && rawUpdated !== undefined) {
+            const parentPath = change.path.slice(0, -1);
+            const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            if (remainingSiblings.length === 0) {
+              let value: any = rawUpdated;
+              for (const k of parentPath) value = value?.[k];
+              if (isObject(value) && Object.keys(value).length === 0) {
+                const emptyTable = generateTable(parentPath as string[]);
+                insert(original, original, emptyTable, original.items.length);
+              }
+            }
+          }
         } else {
           // The path might be an implicit intermediate key — a key that is a
           // prefix of a dotted table key but has no CST node of its own.
@@ -947,6 +981,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
 
         removeMember(original, parent, node);
+
+        // When removing a node whose key has an implicit parent (e.g. the Table at
+        // ["a","b"] from [a.b] has an implicit parent "a" with no CST node of its own),
+        // check whether the parent should survive as an empty table header.
+        if (change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
+          const parentPath = change.path.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+          if (remainingSiblings.length === 0) {
+            let value: any = rawUpdated;
+            for (const k of parentPath) value = value?.[k];
+            if (isObject(value) && Object.keys(value).length === 0) {
+              const emptyTable = generateTable(parentPath as string[]);
+              insert(original, original, emptyTable, original.items.length);
+            }
+          }
+        }
 
         // Track AOT keys whose entries may have been fully removed — again only when the
         // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
