@@ -560,6 +560,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (wrapper && isKeyValue(wrapper)) {
             child = generateInlineItem(wrapper.value);
             is_table_array = false;
+
+            // Match sibling bracket spacing. parseJS may or may not have applied it
+            // depending on the format path; fill in the gap when siblings have it.
+            if (isInlineTable(child.item) && child.item.items.length > 0) {
+              const table = child.item;
+              const alreadySpaced = table.items[0].loc.start.column - table.loc.start.column > 1;
+              if (!alreadySpaced) {
+                const siblingTable = (existingArray.items as InlineItem[])
+                  .map(item => item.item)
+                  .find(item => isInlineTable(item) && item.items.length > 0);
+                const siblingSpaced = siblingTable
+                  && siblingTable.items[0].loc.start.column - siblingTable.loc.start.column > 1;
+                if (siblingSpaced) {
+                  applyBracketSpacing(original, table, true);
+                }
+              }
+            }
           }
         }
       }

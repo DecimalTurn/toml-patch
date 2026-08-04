@@ -5218,11 +5218,6 @@ describe('array of inline tables', () => {
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }, { b: 2 }] });
   });
 
-  // NOTE: the added table comes out as `{z = 0}` without bracket spacing, unlike the
-  // `{ a = 1 }` beside it. Pre-existing and specific to single-line arrays — the multi-line
-  // form above is spaced correctly, and this reproduces on `latest` for the nested shape
-  // that never had the duplication bug. Asserted as-is to pin current behaviour; see the
-  // skipped 'should match its siblings' bracket spacing' below.
   test('should add to a single-line array of inline tables', () => {
     const src = dedent`
       xs = [{ a = 1 }]
@@ -5230,7 +5225,7 @@ describe('array of inline tables', () => {
 
     const result = patch(src, { xs: [{ a: 1 }, { z: 0 }] });
     expect(result).toEqual(dedent`
-      xs = [{ a = 1 }, {z = 0}]
+      xs = [{ a = 1 }, { z = 0 }]
     ` + '\n');
     expect(parse(result)).toEqual({ xs: [{ a: 1 }, { z: 0 }] });
   });
@@ -5248,7 +5243,7 @@ describe('array of inline tables', () => {
     expect(parse(result)).toEqual({ xs: [{ z: 0 }] });
   });
 
-  test.skip('should match its siblings\' bracket spacing on a single-line array', () => {
+  test('should match its siblings\' bracket spacing on a single-line array', () => {
     const src = dedent`
       xs = [{ a = 1 }]
     ` + '\n';
