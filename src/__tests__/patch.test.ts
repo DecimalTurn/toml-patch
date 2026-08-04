@@ -3902,6 +3902,23 @@ describe('undefined handling in patch', () => {
     expect(parse(resultAot)).toEqual({ a: {} });
   });
 
+  test('should not materialise an implicit parent when it still has other keys', () => {
+    // Removing one child of an implicit parent while another child is being added should
+    // not produce a duplicate empty table header.  `rawUpdated.a = { c: 2 }` is a non-empty
+    // object, so the parent should survive only through the Add path, not materialisation.
+    const src = dedent`
+      [a.b]
+      n = 1
+    ` + '\n';
+
+    const result = patch(src, { a: { c: 2 } });
+    expect(result).toEqual(dedent`
+      [a]
+      c = 2
+    ` + '\n');
+    expect(parse(result)).toEqual({ a: { c: 2 } });
+  });
+
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
       ports = [ 8001, 8002, 8003 ]
