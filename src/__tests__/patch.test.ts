@@ -3902,21 +3902,105 @@ describe('undefined handling in patch', () => {
     expect(parse(resultAot)).toEqual({ a: {} });
   });
 
-  test('should not materialise an implicit parent when it still has other keys', () => {
-    // Removing one child of an implicit parent while another child is being added should
-    // not produce a duplicate empty table header.  `rawUpdated.a = { c: 2 }` is a non-empty
-    // object, so the parent should survive only through the Add path, not materialisation.
-    const src = dedent`
-      [a.b]
-      n = 1
-    ` + '\n';
+  // In response to https://github.com/DecimalTurn/toml-patch/pull/270#discussion_r3710438584
+  // The implicit-parent materialisation guard (isObject + zero keys) replaced a looser
+  // inline check (typeof === 'object' && !Array.isArray) that would accept Date, Regexp,
+  // and non-empty plain objects as grounds to insert an empty table header.  Each test
+  // below exercises one boundary of the guard.
+  describe('implicit-parent materialisation guard', () => {
 
-    const result = patch(src, { a: { c: 2 } });
-    expect(result).toEqual(dedent`
-      [a]
-      c = 2
-    ` + '\n');
-    expect(parse(result)).toEqual({ a: { c: 2 } });
+    test('materialises when parent is an empty object', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    test('does not materialise when parent has enumerable keys via a sibling Add', () => {
+      // `{ a: { c: 2 } }` — the old check would pass, but the guard sees
+      // Object.keys({ c: 2 }).length === 1 and skips materialisation.  The Add handler
+      // reuses the materialised table today, but the guard is still the right check.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
+        [a]
+        c = 2
+      ` + '\n');
+    });
+
+    test('does not materialise when parent is a scalar (number)', () => {
+      // A scalar at the parent path would pass neither old nor new check.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: 42 })).toEqual(dedent`
+        a = 42
+      ` + '\n');
+    });
+
+    test('does not materialise when target value is null (parseJS rejects)', () => {
+      // `parseJS` throws on null values before diffing starts.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(() => patch(src, { a: null })).toThrow('"null" values are not supported');
+    });
+
+    test('does not materialise when parent is an array', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: [1, 2] })).toEqual(dedent`
+        a = [ 1, 2 ]
+      ` + '\n');
+    });
+
+    test('materialises when parent is a null-prototype empty object', () => {
+      // parse() returns Object.create(null) — the guard must handle these.
+      const src = dedent`
+        [a.b]
+        n = 1
+      ` + '\n';
+      const obj = parse(src);
+      delete obj.a.b;
+      expect(patch(src, obj)).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    test('does not materialise when parent has remaining siblings (another table)', () => {
+      const src = dedent`
+        [a.b]
+        n = 1
+        [a.c]
+        m = 2
+      ` + '\n';
+      // Remove a.b, keep a.c.  remainingSiblings at ["a"] is non-empty, so the guard
+      // is never reached.
+      expect(patch(src, { a: { c: { m: 3 } } })).toEqual(dedent`
+        [a.c]
+        m = 3
+      ` + '\n');
+    });
+
+    test('materialises implicit parent from AOT child removal', () => {
+      const src = dedent`
+        [[a.b]]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
   });
 
   test('should throw when patching with undefined inside an array', () => {
