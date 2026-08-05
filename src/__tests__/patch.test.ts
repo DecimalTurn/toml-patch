@@ -4089,14 +4089,17 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    // R1: trailing comment on the same line as the header stays with it.
-    test('with comments: trailing comment on header line survives materialisation', () => {
+    // R1: trailing comment on the same line as the header shouldn't be kept.
+    // This comment ownership is ambiguous, but considering that the comment is to the right
+    // of the header, it is more likely to be about the LEAF than about the table itself.
+    // The materialised parent is not a leaf, so the comment is dropped.
+    test('with comments: trailing comment on header line does not survive materialisation', () => {
       const src = dedent`
         [a.b] # header note
         n = 1
       ` + '\n';
       expect(patch(src, { a: {} })).toEqual(dedent`
-        [a] # header note
+        [a]
       ` + '\n');
     });
 
@@ -4140,9 +4143,37 @@ describe('undefined handling in patch', () => {
 
   });
 
-  // What about a reordering of AOT entries?
+  test('reordering of AOT entries with comments - with table header', () => {
+    const src = dedent`
+      [a]
+      # first entry comment
+      [[a.b]]
+      n = 1
 
-  // We want to keep the comments with their respective entries, so the order of the comments should follow the order of the entries.  
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+      # second entry comment
+      [[a.b]]
+      n = 2
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
+  // We want to keep the comments with their respective entries
+  // even if there is no table header for the parent table, and even 
+  // if the order of the entries is changed , so the order of the comments 
+  // should follow the order of the entries.  
   test('reordering of AOT entries with comments', () => {
     const src = dedent`
       # first entry comment
