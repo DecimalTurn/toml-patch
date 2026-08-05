@@ -498,8 +498,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
   // Tables materialised in-place during this patch (R2 extension).  After
   // applyWrites, fix up their line position to remove spurious blank lines
-  // between preceding comments and the materialised header.
+  // between preceding comments and the materialised header.  Only tracked
+  // when the preceding item in Document.items is an R2-adjacent Comment
+  // (R3 gaps are intentional and left alone).
   const materialisedTables = new Set<Table>();
+
+  function trackAdjacentComment(table: Table) {
+    const items = original.items as TreeNode[];
+    const idx = items.indexOf(table as TreeNode);
+    if (idx > 0) {
+      const prev = items[idx - 1];
+      if (isComment(prev) && prev.loc.end.line + 1 === table.loc.start.line) {
+        materialisedTables.add(table);
+      }
+    }
+  }
 
   // Multi-line inline containers already inserted into during this patch. The stale-position
   // problem only arises on the SECOND insertion into the same container, so this lets the
@@ -949,6 +962,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value);
                 aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
                 aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
+                // Shrink loc.end to the header-only span.
+                (aotNode as any).loc.end.line = aotKeyHolder.loc.end.line;
+                (aotNode as any).loc.end.column = aotKeyHolder.loc.end.column;
+                // Track for blank-line fixup if preceded by an R2-adjacent comment.
+                trackAdjacentComment(aotNode as any as Table);
                 materialiseAotInPlace = true;
               }
             }
@@ -1056,14 +1074,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // Only track for blank-line fixup if the preceding comment
               // is R2-adjacent.  A blank line (R3) severs ownership and
               // the gap is intentional.
-              const items = original.items as TreeNode[];
-              const idx = items.indexOf(table as TreeNode);
-              if (idx > 0) {
-                const prev = items[idx - 1];
-                if (isComment(prev) && prev.loc.end.line + 1 === table.loc.start.line) {
-                  materialisedTables.add(table);
-                }
-              }
+              trackAdjacentComment(table);
               materialisedInPlace = true;
             }
           }
