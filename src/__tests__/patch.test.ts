@@ -4019,27 +4019,8 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test('with comments: does not materialise when parent has enumerable keys', () => {
-      // Without the empty-object guard the old check would materialise [a],
-      // then the Add handler would reuse it.  The output is the same either
-      // way, but the guard is what keeps the intent correct.
-      // The materialised table gets a leading blank line when combined with
-      // an Add — cosmetic gap, data round-trips correctly.
-      const src = dedent`
-        # top comment
-        [a.b]
-        n = 1
-      ` + '\n';
-      expect(patch(src, { a: { c: 2 } })).toEqual(dedent`
-        # top comment
 
-        [a]
-        c = 2
-      ` + '\n');
-    });
 
-    // Desired: no blank line between the comment and the materialised table
-    // when an Add follows in the same patch.  Currently produces a blank line.
     test('with comments: no blank line before materialised parent when sibling is added', () => {
       const src = dedent`
         # top comment
