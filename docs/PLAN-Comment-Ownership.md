@@ -207,6 +207,11 @@ Now there are two runs: `# here is some information` is pinned by R3, and only t
 For a table body, the "nearest preceding member" is initialised to the header, i.e.
 `lastMemberEndLine = table.key.loc.end.line`.
 
+During implicit-parent materialisation a table header is renamed upward (e.g. `[a.b]` → `[a]`).
+R1 trailing comments on the original header line (`[a.b] # note`) are not transferred to the
+materialised parent. A comment to the right of the header is ambiguous between the leaf and
+the parent and on balance is more likely to describe the leaf being removed.
+
 ### Worked example 1 — one comment per run
 
 ```toml
