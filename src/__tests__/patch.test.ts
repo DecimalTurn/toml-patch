@@ -6936,3 +6936,24 @@ describe('identity round-trip normalizations', () => {
   });
 
 });
+
+  test.skip('Avoid including a commented out kv when there are comments around it', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # enable when ready
+      # a = 1
+      # The z-value must always be specified
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # enable when ready
+      # a = 1
+    ` + '\n');
+  });
