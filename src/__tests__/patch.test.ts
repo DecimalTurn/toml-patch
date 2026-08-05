@@ -4141,6 +4141,28 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
+    // R2: when AOT entries are converted to a Table in-place, the node's
+    // When the AOT in-place path converts [[a.b]] to [a], the node's loc.end
+    // must be shrunk to the header span so subsequent operations in the same
+    // patch (like adding a sibling table) position content correctly.
+    test('AOT in-place + add sibling: no spurious blank line before new table', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: {}, x: { v: 1 } })).toEqual(dedent`
+        # top comment
+        [a]
+
+        [x]
+        v = 1
+      ` + '\n');
+    });
+
   });
 
   test.skip('reordering of AOT entries with comments - with table header', () => {
