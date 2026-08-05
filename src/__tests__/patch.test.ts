@@ -3,6 +3,7 @@ import { parse, stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
+import { TomlFormat } from '../toml-format';
 
 test('it should apply edit to key-value', () => {
   const value = parse(example);
@@ -4138,6 +4139,35 @@ describe('undefined handling in patch', () => {
     });
 
   });
+
+  // What about a reordering of AOT entries?
+
+  // We want to keep the comments with their respective entries, so the order of the comments should follow the order of the entries.  
+  test('reordering of AOT entries with comments', () => {
+    const src = dedent`
+      # first entry comment
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      # second entry comment
+      [[a.b]]
+      n = 2
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
 
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
