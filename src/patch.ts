@@ -1053,7 +1053,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // The body is gone — shrink table.loc to the header only.
               table.loc.end.line = keyHolder.loc.end.line;
               table.loc.end.column = keyHolder.loc.end.column;
-              materialisedTables.add(table);
+              // Only track for blank-line fixup if the preceding comment
+              // is R2-adjacent.  A blank line (R3) severs ownership and
+              // the gap is intentional.
+              const items = original.items as TreeNode[];
+              const idx = items.indexOf(table as TreeNode);
+              if (idx > 0) {
+                const prev = items[idx - 1];
+                if (isComment(prev) && prev.loc.end.line + 1 === table.loc.start.line) {
+                  materialisedTables.add(table);
+                }
+              }
               materialisedInPlace = true;
             }
           }
