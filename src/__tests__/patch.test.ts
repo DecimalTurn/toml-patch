@@ -4072,6 +4072,71 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
+    // R3: a blank line severs ownership.  The comment is unowned and pinned,
+    // so it does not transfer to the materialised parent.
+    test('with comments: blank line severs ownership, comment does not transfer', () => {
+      const src = dedent`
+        # top comment
+
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+
+        [a]
+      ` + '\n');
+    });
+
+    // R1: trailing comment on the same line as the header stays with it.
+    test('with comments: trailing comment on header line survives materialisation', () => {
+      const src = dedent`
+        [a.b] # header note
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a] # header note
+      ` + '\n');
+    });
+
+    // Multiple AOT entries with a preceding comment.
+    test('with comments: materialises implicit parent from multiple AOT entries', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+        [a]
+      ` + '\n');
+    });
+
+    // Multiple AOT entries with a preceding comment (with single deletion).
+    // In this context, we are ok with a blank line before the materialised parent, 
+    // because the comment could be about the entire AOT section, so we don't necessarly want 
+    // it deleted, but we also don't want to make it owned by the other AOT entry, 
+    // so we leave it unowned and pinned.  The blank line is the only way to do that.
+    test('with comments: materialises implicit parent from multiple AOT entries for single deletion', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: { b: [ { n: 2 }] } })).toEqual(dedent`
+        # top comment
+
+        [[a.b]]
+        n = 2
+      ` + '\n');
+    });
+
   });
 
   test('should throw when patching with undefined inside an array', () => {
