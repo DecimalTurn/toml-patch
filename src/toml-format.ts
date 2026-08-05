@@ -487,6 +487,7 @@ export class TomlFormat {
    *   - truncateZeroTimeInDates: false
    *   - useTabsForIndentation: false
    *   - minimumDecimals: 0
+   *   - updateOrder: false
    */
   static default(): TomlFormat {
     return new TomlFormat(
