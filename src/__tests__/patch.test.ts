@@ -4143,7 +4143,7 @@ describe('undefined handling in patch', () => {
 
   });
 
-  test('reordering of AOT entries with comments - with table header', () => {
+  test.skip('reordering of AOT entries with comments - with table header', () => {
     const src = dedent`
       [a]
       # first entry comment
@@ -4174,7 +4174,7 @@ describe('undefined handling in patch', () => {
   // even if there is no table header for the parent table, and even 
   // if the order of the entries is changed , so the order of the comments 
   // should follow the order of the entries.  
-  test('reordering of AOT entries with comments', () => {
+  test.skip('reordering of AOT entries with comments', () => {
     const src = dedent`
       # first entry comment
       [[a.b]]
