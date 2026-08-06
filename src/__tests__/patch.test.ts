@@ -7053,29 +7053,27 @@ describe('float exponent notation round-trip', () => {
 });
   // ── Tests documenting issues found by fuzz harness ──────────────────
 
-  // ISSUE: Adding a nested key to a table defined with [parent.child] syntax
-  // causes duplicate table headers.
-  test.skip('BUG: adding nested key to dotted-key table produces duplicate headers', () => {
+  // Adding a nested key to a [parent.child] table works correctly — the new
+  // key is emitted as an inline table value under the existing header.
+  test('adding nested key to dotted-key table emits inline value', () => {
     const src = dedent`
       [ef8fai0n]
       p8ou7aufb.at4 = "original value"
     ` + '\n';
 
     const obj = parse(src);
-    // Adding a nested key under ef8fai0n
     obj.ef8fai0n.newkey = { subkey: 'value' };
 
-    const result = patch(src, obj);
-    // Should not produce duplicate [ef8fai0n] headers
-    const headerCount = (result.match(/\[ef8fai0n\]/g) || []).length;
-    expect(headerCount).toBe(1);
-    // Should be re-parseable
-    expect(() => parse(result)).not.toThrow();
+    expect(patch(src, obj)).toEqual(dedent`
+      [ef8fai0n]
+      p8ou7aufb.at4 = "original value"
+      newkey = { subkey = "value" }
+    ` + '\n');
   });
 
-  // ISSUE: Modifying a value inside a dotted-key table [a.b] emits an inline
+  // BUG: Modifying a value inside a dotted-key table [a.b] emits an inline
   // table `a = { b = { ... } }` alongside the original [a.b] header, causing
-  // "Cannot extend inline table" parse errors.
+  // "Cannot extend inline table" parse errors on re-parse.
   test.skip('BUG: modifying nested dotted-key value produces inline table conflict', () => {
     const src = dedent`
       ["<~9".dd]
@@ -7086,14 +7084,19 @@ describe('float exponent notation round-trip', () => {
     const obj = parse(src);
     obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
 
-    const result = patch(src, obj);
-    // Should be valid TOML
-    expect(() => parse(result)).not.toThrow();
+    // Current (buggy) output — the inline table and dotted-key header conflict:
+    expect(patch(src, obj)).toEqual(dedent`
+      ["<~9"]
+      dd = {13i = {x1wdfu5_ = -4277}}
+
+      ["<~9".dd]
+      13i.x1wdfu5_.o67ar6 = 11449
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n');
   });
 
-  // ISSUE: Same pattern as above but with a different key structure.
-  // Modifying a nested value under a dotted-key table emits conflicting
-  // inline table + table header.
+  // BUG: Same pattern — modifying a deeply nested value under a dotted-key
+  // table emits conflicting inline table + table header.
   test.skip('BUG: modifying deeply nested value under dotted-key table emits conflicting headers', () => {
     const src = dedent`
       [d4v9qdab6p.")t--7".poln3sbu]
@@ -7106,9 +7109,17 @@ describe('float exponent notation round-trip', () => {
     const obj = parse(src);
     obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
 
-    const result = patch(src, obj);
-    // Should be valid TOML
-    expect(() => parse(result)).not.toThrow();
+    // Current (buggy) output — conflicting inline table + dotted-key header:
+    expect(patch(src, obj)).toEqual(dedent`
+      [d4v9qdab6p]
+      ")t--7" = { poln3sbu = { "" = { swr = "changed" } } }
+
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr.l1- = "R"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n');
   });
 
   // This one works — modifying a value inside a table array element.
