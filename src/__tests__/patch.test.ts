@@ -7051,3 +7051,97 @@ describe('float exponent notation round-trip', () => {
     expect(toml).toBe(`x = ${Number.MAX_SAFE_INTEGER}\n`);
   });
 });
+  // ── Tests documenting issues found by fuzz harness ──────────────────
+
+  // ISSUE: Adding a nested key to a table defined with [parent.child] syntax
+  // causes duplicate table headers.
+  test.skip('BUG: adding nested key to dotted-key table produces duplicate headers', () => {
+    const src = dedent`
+      [ef8fai0n]
+      p8ou7aufb.at4 = "original value"
+    ` + '\n';
+
+    const obj = parse(src);
+    // Adding a nested key under ef8fai0n
+    obj.ef8fai0n.newkey = { subkey: 'value' };
+
+    const result = patch(src, obj);
+    // Should not produce duplicate [ef8fai0n] headers
+    const headerCount = (result.match(/\[ef8fai0n\]/g) || []).length;
+    expect(headerCount).toBe(1);
+    // Should be re-parseable
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // ISSUE: Modifying a value inside a dotted-key table [a.b] emits an inline
+  // table `a = { b = { ... } }` alongside the original [a.b] header, causing
+  // "Cannot extend inline table" parse errors.
+  test.skip('BUG: modifying nested dotted-key value produces inline table conflict', () => {
+    const src = dedent`
+      ["<~9".dd]
+      13i.x1wdfu5_.o67ar6 = 11449
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n';
+
+    const obj = parse(src);
+    obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
+
+    const result = patch(src, obj);
+    // Should be valid TOML
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // ISSUE: Same pattern as above but with a different key structure.
+  // Modifying a nested value under a dotted-key table emits conflicting
+  // inline table + table header.
+  test.skip('BUG: modifying deeply nested value under dotted-key table emits conflicting headers', () => {
+    const src = dedent`
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr.l1- = "R"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n';
+
+    const obj = parse(src);
+    obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
+
+    const result = patch(src, obj);
+    // Should be valid TOML
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // This one works — modifying a value inside a table array element.
+  test('adding key to table defined with [parent] syntax', () => {
+    const src = dedent`
+      [ef8fai0n]
+      p8ou7aufb.at4 = "original value"
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.ef8fai0n.q3ytjt3s = 'new value';
+
+    const result = patch(src, obj);
+    expect(result).toContain('q3ytjt3s = "new value"');
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // This one works — modifying a value inside a table array element.
+  test('modifying value inside table array element', () => {
+    const src = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 123
+
+      [[products]]
+      name = "Nail"
+      sku = 456
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.products[0].sku = 999;
+
+    const result = patch(src, obj);
+    expect(result).toContain('sku = 999');
+    expect(() => parse(result)).not.toThrow();
+  });
