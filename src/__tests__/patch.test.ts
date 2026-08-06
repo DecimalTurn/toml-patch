@@ -7010,3 +7010,44 @@ describe('identity round-trip normalizations', () => {
       # a = 1
     ` + '\n');
   });
+
+describe('float exponent notation round-trip', () => {
+  // Values that exceed MAX_SAFE_INTEGER must stay as floats through
+  // parse → stringify → parse, not be promoted to bigint.  The original
+  // TOML exponent notation (e.g. 743e+15) is unambiguously a float.
+
+  test('743e+15 stays number through round-trip', () => {
+    const obj1 = parse('x = 743e+15\n');
+    expect(typeof obj1.x).toBe('number');
+    const toml2 = stringify(obj1);
+    const obj2 = parse(toml2);
+    expect(typeof obj2.x).toBe('number');
+  });
+
+  test('-666e+14 stays number through round-trip', () => {
+    const obj1 = parse('x = -666e+14\n');
+    expect(typeof obj1.x).toBe('number');
+    const toml2 = stringify(obj1);
+    const obj2 = parse(toml2);
+    expect(typeof obj2.x).toBe('number');
+  });
+
+  test('integer-keyed float above MAX_SAFE_INTEGER stays number', () => {
+    const obj = { x: 9007199254740993 }; // > MAX_SAFE_INTEGER, whole number
+    const toml = stringify(obj);
+    // Must contain a decimal point so it's unambiguously a float
+    expect(toml).toContain('.');
+    const parsed = parse(toml);
+    expect(typeof parsed.x).toBe('number');
+  });
+
+  test('value within safe integer range still stringifies as integer', () => {
+    const toml = stringify({ x: 42 });
+    expect(toml).toBe('x = 42\n');
+  });
+
+  test('MAX_SAFE_INTEGER itself stays as integer', () => {
+    const toml = stringify({ x: Number.MAX_SAFE_INTEGER });
+    expect(toml).toBe(`x = ${Number.MAX_SAFE_INTEGER}\n`);
+  });
+});
