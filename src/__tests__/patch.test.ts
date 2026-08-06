@@ -3,6 +3,7 @@ import { parse, stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
+import { TomlFormat } from '../toml-format';
 
 test('it should apply edit to key-value', () => {
   const value = parse(example);
@@ -4006,8 +4007,7 @@ describe('undefined handling in patch', () => {
     // preceding comments, a mis-materialised header lands in the wrong spot,
     // and comment-ownership determines which header claims which comment.
 
-    test.skip('with comments: materialises when parent is an empty object', () => {
-      // TODO: materialisation drops comments owned by the removed child table
+    test('with comments: materialises when parent is an empty object', () => {
       const src = dedent`
         # top comment
         [a.b]
@@ -4020,11 +4020,9 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test.skip('with comments: does not materialise when parent has enumerable keys', () => {
-      // TODO: comment ownership during Add-reuse path
-      // Without the empty-object guard the old check would materialise [a],
-      // then the Add handler would reuse it.  The output is the same either
-      // way, but the guard is what keeps the intent correct.
+
+
+    test('with comments: no blank line before materialised parent when sibling is added', () => {
       const src = dedent`
         # top comment
         [a.b]
@@ -4037,8 +4035,7 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test.skip('with comments: materialises implicit parent from AOT child removal', () => {
-      // TODO: materialisation drops comments owned by the removed AOT child
+    test('with comments: materialises implicit parent from AOT child removal', () => {
       const src = dedent`
         # top comment
         [[a.b]]
@@ -4062,8 +4059,7 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    test.skip('with comments: materialises null-prototype empty object', () => {
-      // TODO: materialisation drops comments when using parse()-produced target
+    test('with comments: materialises null-prototype empty object', () => {
       const src = dedent`
         # top comment
         [a.b]
@@ -4077,7 +4073,154 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
+    // R3: a blank line severs ownership.  The comment is unowned and pinned,
+    // so it does not transfer to the materialised parent.
+    test('with comments: blank line severs ownership, comment does not transfer', () => {
+      const src = dedent`
+        # top comment
+
+        [a.b]
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+
+        [a]
+      ` + '\n');
+    });
+
+    // R1: trailing comment on the same line as the header shouldn't be kept.
+    // This comment ownership is ambiguous, but considering that the comment is to the right
+    // of the header, it is more likely to be about the LEAF than about the table itself.
+    // The materialised parent is not a leaf, so the comment is dropped.
+    test('with comments: trailing comment on header line does not survive materialisation', () => {
+      const src = dedent`
+        [a.b] # header note
+        n = 1
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        [a]
+      ` + '\n');
+    });
+
+    // Multiple AOT entries with a preceding comment.
+    test('with comments: materialises implicit parent from multiple AOT entries', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: {} })).toEqual(dedent`
+        # top comment
+        [a]
+      ` + '\n');
+    });
+
+    // Multiple AOT entries with a preceding comment (with single deletion).
+    // In this context, we are ok with a blank line before the materialised parent, 
+    // because the comment could be about the entire AOT section, so we don't necessarly want 
+    // it deleted, but we also don't want to make it owned by the other AOT entry, 
+    // so we leave it unowned and pinned.  The blank line is the only way to do that.
+    test('with comments: materialises implicit parent from multiple AOT entries for single deletion', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: { b: [ { n: 2 }] } })).toEqual(dedent`
+        # top comment
+
+        [[a.b]]
+        n = 2
+      ` + '\n');
+    });
+
+    // R2: when AOT entries are converted to a Table in-place, the node's
+    // When the AOT in-place path converts [[a.b]] to [a], the node's loc.end
+    // must be shrunk to the header span so subsequent operations in the same
+    // patch (like adding a sibling table) position content correctly.
+    test('AOT in-place + add sibling: no spurious blank line before new table', () => {
+      const src = dedent`
+        # top comment
+        [[a.b]]
+        n = 1
+
+        [[a.b]]
+        n = 2
+      ` + '\n';
+      expect(patch(src, { a: {}, x: { v: 1 } })).toEqual(dedent`
+        # top comment
+        [a]
+
+        [x]
+        v = 1
+      ` + '\n');
+    });
+
   });
+
+  test.skip('reordering of AOT entries with comments - with table header', () => {
+    const src = dedent`
+      [a]
+      # first entry comment
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+      # second entry comment
+      [[a.b]]
+      n = 2
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
+  // We want to keep the comments with their respective entries
+  // even if there is no table header for the parent table, and even 
+  // if the order of the entries is changed , so the order of the comments 
+  // should follow the order of the entries.  
+  test.skip('reordering of AOT entries with comments', () => {
+    const src = dedent`
+      # first entry comment
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      # second entry comment
+      [[a.b]]
+      n = 2
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
 
   test('should throw when patching with undefined inside an array', () => {
     const existing = dedent`
@@ -6846,3 +6989,24 @@ describe('identity round-trip normalizations', () => {
   });
 
 });
+
+  test.skip('Avoid including a commented out kv when there are comments around it', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # enable when ready
+      # a = 1
+      # The z-value must always be specified
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # enable when ready
+      # a = 1
+    ` + '\n');
+  });

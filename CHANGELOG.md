@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: pair renames one target each, so collapsing several equal-valued keys onto one no longer emits a key with an empty name. Keys sharing a value are matched in order, keeping their comments, and only the leftovers become removes or adds. ([#269])
 - Patching: rename a `[table]` section key instead of throwing. The rename path read the key node directly, which only works for a key-value — a section wraps it in a `TableKey`. ([#269])
 - Patching: rename a segment of a dotted section key (e.g. `[a.b]` → `[x.b]`, `[a.b]` → `[a.y]`, `[a.b.c]` → `[a.x.c]`) instead of throwing. The Rename handler now falls back to key-prefix search and handles segment-count mismatches when the target is rendered as a plain nested key. ([#269])
+- Patching: avoid extra blank line when the first array-of-tables entry is converted to a table in-place during implicit parent materialisation. ([#271])
 
 ## [3.0.1] - 2026-08-03
 

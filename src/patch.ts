@@ -34,7 +34,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKeyValue } from './generate';
@@ -496,6 +496,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
   const emptiedAotKeys = new Map<string, string[]>();
 
+  // Tables materialised in-place during this patch (R2 extension).  After
+  // applyWrites, fix up their line position to remove spurious blank lines
+  // between preceding comments and the materialised header.  Only tracked
+  // when the preceding item in Document.items is an R2-adjacent Comment
+  // (R3 gaps are intentional and left alone).
+  const materialisedTables = new Set<Table>();
+
+  function trackAdjacentComment(table: Table) {
+    const items = original.items as TreeNode[];
+    const idx = items.indexOf(table as TreeNode);
+    if (idx > 0) {
+      const prev = items[idx - 1];
+      if (isComment(prev) && prev.loc.end.line + 1 === table.loc.start.line) {
+        materialisedTables.add(table);
+      }
+    }
+  }
+
   // Multi-line inline containers already inserted into during this patch. The stale-position
   // problem only arises on the SECOND insertion into the same container, so this lets the
   // flush be paid just-in-time there rather than after every insertion — a patch touching
@@ -794,7 +812,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // type change (e.g. table→scalar, AOT→scalar, array→empty).
       // Handle by removing old nodes and inserting fresh KV.
       if (!existing) {
-        handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes);
+        handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes, materialisedTables);
         return; // skip generic edit handling
       }
 
@@ -859,6 +877,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
           if (parentKey.length > 0) {
             const newTable = generateTable(parentKey);
+            materialisedTables.add(newTable);
             insert(original, newTable, freshKV, 0);
             replace(original, tableParent, existing, newTable);
             // newTable stands in for the pre-existing `existing` table, so it should stay
@@ -912,6 +931,49 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Remove all entries by repeatedly pulling the one at index 0.
         const first = tryFindByPath(original, change.path.concat(0));
         if (first) {
+          const firstIndex = (original.items as TreeNode[]).indexOf(first);
+
+          // R2 extension: when the AOT entries are the sole children of an
+          // implicit parent, convert the first entry in place to a Table so
+          // comments preceding it in Document.items are preserved.
+          let materialiseAotInPlace = false;
+          if (change.path.length > 1 && rawUpdated !== undefined) {
+            const parentPath = change.path.slice(0, -1);
+            const allSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            const otherSiblings = allSiblings.filter(s =>
+              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, change.path))
+            );
+            if (otherSiblings.length === 0) {
+              let value: any = rawUpdated;
+              for (const k of parentPath) value = value?.[k];
+              if (isObject(value) && Object.keys(value).length === 0) {
+                // Convert first entry: clear items, rename key, change type.
+                const aotNode = first as TableArray;
+                const aotKeyHolder = aotNode.key;
+                while (aotNode.items.length > 0) {
+                  removeMember(original, aotNode, last(aotNode.items as TreeNode[])!);
+                }
+                (aotNode as any).type = NodeType.Table;
+                // Also change the key type so toTOML renders [a] not [[a]].
+                (aotKeyHolder as any).type = NodeType.TableKey;
+                // Rename the key in place (preserving original loc.start).
+                const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
+                aotKey.value = parentPath as string[];
+                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value);
+                aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
+                aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
+                // Shrink loc.end to the header-only span.
+                (aotNode as any).loc.end.line = aotKeyHolder.loc.end.line;
+                (aotNode as any).loc.end.column = aotKeyHolder.loc.end.column;
+                // Track for blank-line fixup if preceded by an R2-adjacent comment.
+                trackAdjacentComment(aotNode as any as Table);
+                materialiseAotInPlace = true;
+              }
+            }
+          }
+
+          // Remove remaining AOT entries.  If the first was converted in place
+          // it no longer matches change.path, so the loop naturally skips it.
           let entry: TreeNode | undefined;
           while ((entry = tryFindByPath(original, change.path.concat(0)))) {
             removeMember(original, original, entry);
@@ -928,7 +990,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // When the AOT entries were the sole children of an implicit parent
           // (e.g. [[a.b]] -> { a: {} }), the parent disappears.  Materialise it
           // as an empty table if the caller still wants the parent key.
-          if (change.path.length > 1 && rawUpdated !== undefined) {
+          // Skip if already materialised in place above.
+          if (!materialiseAotInPlace &&
+              change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
             const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
             if (remainingSiblings.length === 0) {
@@ -936,7 +1000,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
                 const emptyTable = generateTable(parentPath as string[]);
-                insert(original, original, emptyTable, original.items.length);
+                materialisedTables.add(emptyTable);
+                const insertIdx = firstIndex >= 0 ? firstIndex : original.items.length;
+                insert(original, original, emptyTable, insertIdx);
               }
             }
           }
@@ -980,12 +1046,56 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = original;
         }
 
-        removeMember(original, parent, node);
+        // R2 extension: when the last child of an implicit parent is removed,
+        // materialise the parent in place (rename key, clear items) so that
+        // comments preceding the child in Document.items are preserved.
+        let materialisedInPlace = false;
+        if (change.path.length > 1 && isTable(node) && rawUpdated !== undefined) {
+          const parentPath = change.path.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath)
+            .filter(s => s !== node);
+          if (remainingSiblings.length === 0) {
+            let value: any = rawUpdated;
+            for (const k of parentPath) value = value?.[k];
+            if (isObject(value) && Object.keys(value).length === 0) {
+              const table = node as Table;
+              while (table.items.length > 0) {
+                remove(original, table, last(table.items as TreeNode[])!);
+              }
+              const keyHolder = table.key;
+              const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
+              key.value = parentPath as string[];
+              key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+              key.loc.end.column = key.loc.start.column + key.raw.length;
+              keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
+              // The body is gone — shrink table.loc to the header only.
+              table.loc.end.line = keyHolder.loc.end.line;
+              table.loc.end.column = keyHolder.loc.end.column;
+              // Only track for blank-line fixup if the preceding comment
+              // is R2-adjacent.  A blank line (R3) severs ownership and
+              // the gap is intentional.
+              trackAdjacentComment(table);
+              materialisedInPlace = true;
+            }
+          }
+        }
 
-        // When removing a node whose key has an implicit parent (e.g. the Table at
-        // ["a","b"] from [a.b] has an implicit parent "a" with no CST node of its own),
-        // check whether the parent should survive as an empty table header.
-        if (change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
+        // Capture the node's index before removal so the materialised table
+        // can be inserted at the original position (preserving blank-line
+        // spacing with preceding comments).
+        const nodeIndex = isDocument(parent) && hasItems(parent)
+          ? (parent.items as TreeNode[]).indexOf(node)
+          : -1;
+
+        if (!materialisedInPlace) {
+          removeMember(original, parent, node);
+        }
+
+        // When removing a node whose key has an implicit parent, check whether
+        // the parent should survive as an empty table header.  Table nodes are
+        // handled in-place above; only TableArray falls through to generate+insert.
+        if (!materialisedInPlace &&
+            change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
           const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
           if (remainingSiblings.length === 0) {
@@ -993,7 +1103,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
               const emptyTable = generateTable(parentPath as string[]);
-              insert(original, original, emptyTable, original.items.length);
+              materialisedTables.add(emptyTable);
+              // Insert at the original position so preceding comments
+              // stay adjacent without a spurious blank line.
+              const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+              insert(original, original, emptyTable, insertIdx);
             }
           }
         }
@@ -1131,6 +1245,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
   applyWrites(original);
 
+  // Fix up blank lines between comments and materialised tables.  During
+  // implicit-parent materialisation the table is renamed in place; after
+  // applyWrites a spurious blank line can appear between a preceding comment
+  // and the table header.  Only fix tables tracked during this patch.
+  for (let i = 1; i < (original.items as TreeNode[]).length; i++) {
+    const prev = original.items[i - 1];
+    const curr = original.items[i];
+    if (isComment(prev) && isTable(curr) && materialisedTables.has(curr)) {
+      const gap = curr.loc.start.line - prev.loc.end.line - 1;
+      if (gap > 0) {
+        shiftNode(curr, { lines: -gap, columns: 0 });
+      }
+    }
+  }
+
   // Fix up InlineTables that lost their only item to remove(). The exit
   // offset that carried the closing-bracket space was on the removed item
   // and is now lost. Tighten the end column and reapply bracket spacing.
@@ -1212,7 +1341,8 @@ function handleStructuralEdit(
   change: Change,
   format: TomlFormat,
   temporal: boolean,
-  commentEligibleNodes: WeakSet<TreeNode>
+  commentEligibleNodes: WeakSet<TreeNode>,
+  materialisedTables: Set<Table>
 ): void {
   const updated_js = toJS(updated.items, '', { temporal });
   let jsValue: any = updated_js;
@@ -1254,6 +1384,11 @@ function handleStructuralEdit(
   if (insertIndex !== undefined) applyWrites(original);
 
   insert(original, original, replacementKV, insertIndex);
+
+  // Track for blank-line fixup after applyWrites.
+  if (isTable(replacementKV)) {
+    materialisedTables.add(replacementKV);
+  }
 
   // replacementKV stands in for a pre-existing entry, so it keeps that entry's R2
   // eligibility for adopting an adjacent leading comment during an updateOrder reorder.
