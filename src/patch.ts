@@ -34,8 +34,8 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode } from './writer';
-import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
@@ -153,6 +153,50 @@ function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: 
     if (!Object.prototype.hasOwnProperty.call(reordered, key)) reordered[key] = updated_js[key];
   }
   return reordered;
+}
+
+/**
+ * The parser's table-body loop consumes comments between consecutive [[x]] entries
+ * as trailing children of the first entry (it sees `# comment` before the next
+ * `[[x]]` header). This function promotes those trailing comments to Document-level
+ * siblings so that resolveSlots can assign them to the correct entry.
+ */
+function normalizeAotEntryComments(doc: Document): void {
+  const items = doc.items as TreeNode[];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    // Handle both Table and TableArray: comments between a section header
+    // and its next sibling AOT entry, or between consecutive AOT entries,
+    // are parsed as trailing children of the first section. Promote them.
+    if (!((isTable(item) || isTableArray(item)) && hasItems(item))) continue;
+
+    const containerItems = item.items as TreeNode[];
+    // Find trailing comments at the end of this entry
+    let commentStart = containerItems.length;
+    while (commentStart > 0 && isComment(containerItems[commentStart - 1])) {
+      commentStart--;
+    }
+
+    if (commentStart < containerItems.length) {
+      // Check if the next Document item is another TableArray with a
+      // matching key prefix (for Tables: child AOT; for TableArrays: sibling AOT)
+      const nextItem = items[i + 1];
+      if (nextItem && isTableArray(nextItem)) {
+        const thisKey = (item as Table | TableArray).key.item.value;
+        const nextKey = (nextItem as TableArray).key.item.value;
+        if (arraysEqual(thisKey, nextKey.slice(0, thisKey.length))) {
+          // Promote trailing comments to Document level
+          const comments = containerItems.splice(commentStart);
+          const nextIdx = items.indexOf(nextItem);
+          for (const comment of [...comments].reverse()) {
+            items.splice(nextIdx, 0, comment);
+          }
+          // Fix up loc.end
+          recalcContainerEnd(item);
+        }
+      }
+    }
+  }
 }
 
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
@@ -1212,17 +1256,57 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
-        // Find source entry, remove it, then re-insert at the target position.
-        const fromNode = findByPath(original, change.path.concat(change.from));
-        remove(original, original, fromNode);
+        //
+        // First, normalize: the parser's table-body loop consumes comments
+        // between consecutive [[x]] entries as trailing children of the first
+        // entry. Promote those to Document-level siblings and fix up loc.end
+        // so resolveSlots assigns them to the correct entry.
+        normalizeAotEntryComments(original);
 
-        // After removal, the entry now at virtual index change.to gives us the
-        // Document.items insertion point.
+        // Find source entry.
+        const fromNode = findByPath(original, change.path.concat(change.from));
+
+        // Move the entire slot (entry + its comments) as a single unit.
+        const docSlots = resolveSlots(original);
+        const fromSlot = docSlots.find(s => s.member === fromNode);
+        const slotItems = fromSlot ? [...fromSlot.items] : [fromNode];
+
+        // Remove each slot item from the Document (same discipline as removeMember).
+        const memberIdx = fromSlot ? fromSlot.items.indexOf(fromNode) : 0;
+        for (let i = 0; i <= memberIdx; i++) {
+          if (!(original.items as TreeNode[]).includes(slotItems[i])) continue;
+          remove(original, original, slotItems[i]);
+        }
+        for (let i = memberIdx + 1; i < slotItems.length; i++) {
+          const idx = (original.items as TreeNode[]).indexOf(slotItems[i]);
+          if (idx >= 0) (original.items as TreeNode[]).splice(idx, 1);
+        }
+
+        // Find insertion point. Use tryFindByPath to locate the target member.
+        // If BOTH source and target slots have leading comments, insert before
+        // the target slot's first item so the comments stay with their members
+        // after the swap. Otherwise use the member's own index.
         const toEntry = tryFindByPath(original, change.path.concat(change.to));
-        const toIndex = toEntry
-          ? original.items.indexOf(toEntry as any)
-          : original.items.length;
-        insert(original, original, fromNode, toIndex);
+        let toIndex: number;
+        if (toEntry) {
+          const postSlots = resolveSlots(original);
+          const targetSlot = postSlots.find(s => s.member === toEntry);
+          const targetHasLeadingComment = targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]);
+          const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
+          if (targetHasLeadingComment && sourceHadLeadingComment) {
+            toIndex = original.items.indexOf(targetSlot!.items[0]);
+          } else {
+            toIndex = original.items.indexOf(toEntry as any);
+          }
+        } else {
+          toIndex = original.items.length;
+        }
+
+        // Insert all slot items in reverse order at the computed index
+        // so they end up in their original order.
+        for (let i = slotItems.length - 1; i >= 0; i--) {
+          insert(original, original, slotItems[i], toIndex);
+        }
       }
     } else if (isRename(change)) {
       const sourcePath = change.path.concat(change.from);
