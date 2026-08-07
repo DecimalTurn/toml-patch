@@ -365,4 +365,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#267]: https://github.com/DecimalTurn/toml-patch/pull/267
 [#269]: https://github.com/DecimalTurn/toml-patch/pull/269
 [#270]: https://github.com/DecimalTurn/toml-patch/pull/270
+[#271]: https://github.com/DecimalTurn/toml-patch/pull/271
+[#273]: https://github.com/DecimalTurn/toml-patch/pull/273
+[#274]: https://github.com/DecimalTurn/toml-patch/pull/274
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
