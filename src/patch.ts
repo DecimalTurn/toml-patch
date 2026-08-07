@@ -850,6 +850,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
+            // The key is now shorter — shift key loc, equals, and the
+            // existing value's loc so the writer moves the replacement
+            // to the correct position.
+            const oldEndCol = existing.key.loc.end.column;
+            const newEndCol = existing.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existing.key.loc.end.column = newEndCol;
+            existing.equals += delta;
+            existing.value.loc.start.column += delta;
+            existing.value.loc.end.column += delta;
           }
         }
         
@@ -878,6 +888,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
+            // The key is now shorter — shift key loc, equals, and the
+            // existing value's loc so the writer moves the replacement
+            // to the correct position.
+            const oldEndCol = existing.key.loc.end.column;
+            const newEndCol = existing.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existing.key.loc.end.column = newEndCol;
+            existing.equals += delta;
+            existing.value.loc.start.column += delta;
+            existing.value.loc.end.column += delta;
           }
         }
 
