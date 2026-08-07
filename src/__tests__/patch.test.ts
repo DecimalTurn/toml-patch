@@ -7078,14 +7078,14 @@ describe('float exponent notation round-trip', () => {
     obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
 
     const result = patch(src, obj);
-    // Should produce valid TOML — currently throws "Cannot extend inline table"
+    // Desired output — currently emits conflicting inline table + [<~9.dd] header
     expect(result).toEqual(dedent`
       ["<~9".dd]
       13i.x1wdfu5_.o67ar6 = -4277
       zbr5.p-6c.aex4j = [1, 2, 3]
     ` + '\n');
+    // Currently throws: Cannot extend inline table at <~9.dd
     expect(() => parse(result)).not.toThrow();
-
   });
 
   // BUG: Same pattern — modifying a deeply nested value under [a.b.c]
@@ -7104,6 +7104,7 @@ describe('float exponent notation round-trip', () => {
     obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
 
     const result = patch(src, obj);
+    // Desired output — currently emits conflicting inline table + dotted-key header
     expect(result).toEqual(dedent`
       [d4v9qdab6p.")t--7".poln3sbu]
       xjcn = -inf
@@ -7111,15 +7112,13 @@ describe('float exponent notation round-trip', () => {
       "".swr = "changed"
       hc."%1mya" = "CT]AJj]$HH"
     ` + '\n');
-    
-    // Should produce valid TOML — currently throws "Cannot extend inline table"
+    // Currently throws: Cannot extend inline table at d4v9qdab6p.)t--7.poln3sbu
     expect(() => parse(result)).not.toThrow();
   });
 
   // BUG: Adding a key to a nested table array element throws
   // "Incompatible child type 'InlineItem'". Same root cause as the
-  // inline table conflicts above — the diff engine resolves the path
-  // at the wrong CST level.
+  // inline table conflicts above.
   // See docs/bug-notes/ISSUE-patch-node-not-found.md
   test.fails('BUG: adding key to nested table array element throws Incompatible child type', () => {
     const src = dedent`
@@ -7133,8 +7132,18 @@ describe('float exponent notation round-trip', () => {
     const obj = parse(src);
     obj.a.b[0].y = 3;
 
+    // Currently throws: Incompatible child type "InlineItem"
+    expect(() => patch(src, obj)).not.toThrow();
     const result = patch(src, obj);
-    expect(result).toContain('y = 3');
+    // Desired output
+    expect(result).toEqual(dedent`
+      [[a.b]]
+      x = 1
+      y = 3
+
+      [[a.b]]
+      x = 2
+    ` + '\n');
     expect(() => parse(result)).not.toThrow();
   });
 
