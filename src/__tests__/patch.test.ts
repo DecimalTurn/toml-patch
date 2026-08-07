@@ -7390,3 +7390,20 @@ describe('float exponent notation round-trip', () => {
     // Currently throws: Unsupported parent type "InlineItem" for insert
     expect(() => patch(src, obj)).not.toThrow();
   });
+
+  // Changing a dotted-key value from object to empty array works correctly.
+  test('changing dotted-key value from object to array', () => {
+    const src = dedent`
+      [w.dalac]
+      vko.mucg."rDrfx:_" = 1974-01-11
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.w.dalac.vko = [];
+
+    expect(patch(src, obj)).toEqual(dedent`
+      [w.dalac]
+      vko = []
+    ` + '\n');
+    expect(() => parse(patch(src, obj))).not.toThrow();
+  });
