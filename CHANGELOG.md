@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: rename a `[table]` section key instead of throwing. The rename path read the key node directly, which only works for a key-value — a section wraps it in a `TableKey`. ([#269])
 - Patching: rename a segment of a dotted section key (e.g. `[a.b]` → `[x.b]`, `[a.b]` → `[a.y]`, `[a.b.c]` → `[a.x.c]`) instead of throwing. The Rename handler now falls back to key-prefix search and handles segment-count mismatches when the target is rendered as a plain nested key. ([#269])
 - Patching: avoid extra blank line when the first array-of-tables entry is converted to a table in-place during implicit parent materialisation. ([#271])
+- Stringify: prevent float-to-bigint type change on round-trip. Whole-number values exceeding `Number.MAX_SAFE_INTEGER` (e.g. `743000000000000000` from TOML `743e+15`) are now always emitted with a decimal point so they stay as `number` on re-parse instead of being promoted to `bigint`. ([#273])
 
 ## [3.0.1] - 2026-08-03
 
