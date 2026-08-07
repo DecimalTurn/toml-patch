@@ -7122,6 +7122,24 @@ describe('float exponent notation round-trip', () => {
     expect(result).not.toContain('l1-');
   });
 
+  test('truncating indented dotted key preserves column alignment', () => {
+    const src = dedent`
+      [t]
+          a.b.c = 1
+      x = 2
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.t.a.b = 42; // truncate from a.b.c to a.b, change value
+
+    expect(patch(src, obj)).toEqual(dedent`
+      [t]
+          a.b = 42
+      x = 2
+    ` + '\n');
+    expect(() => parse(patch(src, obj))).not.toThrow();
+  });
+
   // See docs/bug-notes/ISSUE-patch-node-not-found.md
   test('adding key to nested AOT element (was: Incompatible child type crash)', () => {
     const src = dedent`
