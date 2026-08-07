@@ -743,22 +743,43 @@ function serializeValue(value: Value): string {
 }
 
 function serializeInlineArray(arr: InlineArray): string {
+  if (arr.items.length === 0) return '[]';
+  if (arr.items.length <= 1 || Math.random() > 0.3) {
+    // Single-line
+    const parts = arr.items.map(item => {
+      const val = serializeValue(item.item as Value);
+      return item.comma ? val + ',' : val;
+    });
+    return '[' + parts.join(' ') + ']';
+  }
+  // Multi-line
   const parts = arr.items.map(item => {
     const val = serializeValue(item.item as Value);
-    return item.comma ? val + ',' : val;
+    return '    ' + val + (item.comma ? ',' : '');
   });
-  return '[' + parts.join(' ') + ']';
+  return '[\n' + parts.join('\n') + ',\n]';
 }
 
 function serializeInlineTable(table: InlineTable): string {
   if (table.items.length === 0) return '{}';
+  if (table.items.length <= 1 || Math.random() > 0.4) {
+    // Single-line
+    const parts = table.items.map(item => {
+      const kv = item.item as KeyValue;
+      const keyStr = kv.key.raw;
+      const valueStr = serializeValue(kv.value);
+      return item.comma ? `${keyStr} = ${valueStr},` : `${keyStr} = ${valueStr}`;
+    });
+    return '{ ' + parts.join(' ') + ' }';
+  }
+  // Multi-line
   const parts = table.items.map(item => {
     const kv = item.item as KeyValue;
     const keyStr = kv.key.raw;
     const valueStr = serializeValue(kv.value);
-    return item.comma ? `${keyStr} = ${valueStr},` : `${keyStr} = ${valueStr}`;
+    return '    ' + keyStr + ' = ' + valueStr + (item.comma ? ',' : '');
   });
-  return '{ ' + parts.join(' ') + ' }';
+  return '{\n' + parts.join('\n') + ',\n}';
 }
 
 // ─── Main Entry Point ────────────────────────────────────────────────────
