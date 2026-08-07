@@ -831,14 +831,26 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Edit for key-value means value changes
         // Preserve formatting from existing value in replacement value
         
-        // If the change path is a prefix of the existing dotted key (e.g.
-        // path ['a','b'] matched KV with key ['a','b','c']), truncate the
-        // key to match. Only trigger when the prefix truly matches — not
-        // when parseJS restructured the keys (e.g. ['hello','world'] vs ['world']).
-        if (existing.key.value.length > replacement.key.value.length &&
-            arraysEqual(existing.key.value.slice(0, replacement.key.value.length), replacement.key.value)) {
-          existing.key.value = existing.key.value.slice(0, replacement.key.value.length);
-          existing.key.raw = generateKey(existing.key.value).raw;
+        // If findByPath matched via prefix (the path is shorter than the
+        // existing dotted key), truncate the key. We detect this by finding
+        // the longest suffix of change.path that matches a prefix of the
+        // existing key — this handles cases where parseJS restructured keys
+        // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
+        if (existing.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existing.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existing.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existing.key.value.length) {
+            existing.key.value = existing.key.value.slice(0, matchLen);
+            existing.key.raw = generateKey(existing.key.value).raw;
+          }
         }
         
         preserveFormatting(existing.value, replacement.value);
@@ -850,8 +862,25 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         existing = existing.value;
         replacement = replacement.value;
       } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
-        // Sometimes, the replacement looks like it could be an inline item, but the original is a key-value
-        // In this case, we convert the replacement to a key-value to match the original
+        // Truncate the existing key if the path matched via prefix (same
+        // logic as the isKeyValue && isKeyValue branch above).
+        if (existing.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existing.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existing.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existing.key.value.length) {
+            existing.key.value = existing.key.value.slice(0, matchLen);
+            existing.key.raw = generateKey(existing.key.value).raw;
+          }
+        }
+
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
