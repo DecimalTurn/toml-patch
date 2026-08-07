@@ -4192,6 +4192,33 @@ describe('undefined handling in patch', () => {
     ` + '\n');
   });
 
+    test('reordering of AOT entries with comments - with table header - compact form', () => {
+    const src = dedent`
+      [a]
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+
+      # second entry comment
+      [[a.b]]
+      n = 2
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
   // We want to keep the comments with their respective entries
   // even if there is no table header for the parent table, and even 
   // if the order of the entries is changed , so the order of the comments 
