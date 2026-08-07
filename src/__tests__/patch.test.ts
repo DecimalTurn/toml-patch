@@ -7064,10 +7064,9 @@ describe('float exponent notation round-trip', () => {
   //
   // When the bugs are fixed, these tests will start passing.
 
-  // BUG: Modifying a value inside [a.b] emits an inline table a = { b = {...} }
-  // alongside the original [a.b] header. The result cannot be re-parsed.
-  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
-  test.fails('BUG: modifying nested dotted-key value produces inline table conflict', () => {
+  // FIXED: Modifying a value inside [a.b] no longer emits conflicting
+  // inline table + header. See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
+  test('modifying nested dotted-key value (was: inline table conflict)', () => {
     const src = dedent`
       ["<~9".dd]
       13i.x1wdfu5_.o67ar6 = 11449
@@ -7077,15 +7076,12 @@ describe('float exponent notation round-trip', () => {
     const obj = parse(src);
     obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
 
-    const result = patch(src, obj);
-    // Desired output — currently emits conflicting inline table + [<~9.dd] header
-    expect(result).toEqual(dedent`
+    expect(patch(src, obj)).toEqual(dedent`
       ["<~9".dd]
       13i.x1wdfu5_.o67ar6 = -4277
       zbr5.p-6c.aex4j = [1, 2, 3]
     ` + '\n');
-    // Currently throws: Cannot extend inline table at <~9.dd
-    expect(() => parse(result)).not.toThrow();
+    expect(() => parse(patch(src, obj))).not.toThrow();
   });
 
   // BUG: Same pattern — modifying a deeply nested value under [a.b.c]

@@ -37,7 +37,7 @@ import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObjec
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
-import { generateInlineItem, generateTable, generateTableArray, generateString, generateKeyValue } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -823,6 +823,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
         // Preserve formatting from existing value in replacement value
+        
+        // If the change path is a prefix of the existing dotted key (e.g.
+        // path ['a','b'] matched KV with key ['a','b','c']), truncate the
+        // key to match. Only trigger when the prefix truly matches — not
+        // when parseJS restructured the keys (e.g. ['hello','world'] vs ['world']).
+        if (existing.key.value.length > replacement.key.value.length &&
+            arraysEqual(existing.key.value.slice(0, replacement.key.value.length), replacement.key.value)) {
+          existing.key.value = existing.key.value.slice(0, replacement.key.value.length);
+          existing.key.raw = generateKey(existing.key.value).raw;
+        }
+        
         preserveFormatting(existing.value, replacement.value);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);

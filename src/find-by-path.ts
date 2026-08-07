@@ -84,6 +84,13 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
             found = findByPath(item, remainingPath);
           }
           return true;
+        } else if (isKeyValue(item) && key.length > path.length && arraysEqual(key.slice(0, path.length), path)) {
+          // Path is a prefix of a dotted KeyValue's key (e.g. path ['a','b']
+          // matching key ['a','b','c']). The path is fully consumed — return
+          // the KV itself so the caller can handle the key-length mismatch
+          // as a structural edit.
+          found = item;
+          return true;
         } else {
           return false;
         }
