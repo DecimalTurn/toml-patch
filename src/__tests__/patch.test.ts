@@ -4165,7 +4165,7 @@ describe('undefined handling in patch', () => {
 
   });
 
-  test.skip('reordering of AOT entries with comments - with table header', () => {
+  test.fails('reordering of AOT entries with comments - with table header', () => {
     const src = dedent`
       [a]
       # first entry comment
@@ -4196,7 +4196,7 @@ describe('undefined handling in patch', () => {
   // even if there is no table header for the parent table, and even 
   // if the order of the entries is changed , so the order of the comments 
   // should follow the order of the entries.  
-  test.skip('reordering of AOT entries with comments', () => {
+  test.fails('reordering of AOT entries with comments', () => {
     const src = dedent`
       # first entry comment
       [[a.b]]
@@ -6990,7 +6990,7 @@ describe('identity round-trip normalizations', () => {
 
 });
 
-  test.skip('Avoid including a commented out kv when there are comments around it', () => {
+  test.fails('Avoid including a commented out kv when there are comments around it', () => {
     const input = dedent`
       # doc for t
       [t]
@@ -7051,3 +7051,133 @@ describe('float exponent notation round-trip', () => {
     expect(toml).toBe(`x = ${Number.MAX_SAFE_INTEGER}\n`);
   });
 });
+  // ── Tests documenting issues found by fuzz harness ──────────────────
+  //
+  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
+  // See docs/bug-notes/ISSUE-patch-incompatible-child-type.md
+  // See docs/bug-notes/ISSUE-patch-node-not-found.md
+  //
+  // These tests currently FAIL because modifying a nested value under a
+  // dotted-key table header (e.g. [a.b.c]) causes patch() to emit an
+  // inline table alongside the original header, producing conflicting
+  // structures that fail to re-parse.
+  //
+  // When the bugs are fixed, these tests will start passing.
+
+  // BUG: Modifying a value inside [a.b] emits an inline table a = { b = {...} }
+  // alongside the original [a.b] header. The result cannot be re-parsed.
+  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
+  test.fails('BUG: modifying nested dotted-key value produces inline table conflict', () => {
+    const src = dedent`
+      ["<~9".dd]
+      13i.x1wdfu5_.o67ar6 = 11449
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n';
+
+    const obj = parse(src);
+    obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
+
+    const result = patch(src, obj);
+    // Desired output — currently emits conflicting inline table + [<~9.dd] header
+    expect(result).toEqual(dedent`
+      ["<~9".dd]
+      13i.x1wdfu5_.o67ar6 = -4277
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n');
+    // Currently throws: Cannot extend inline table at <~9.dd
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // BUG: Same pattern — modifying a deeply nested value under [a.b.c]
+  // emits conflicting inline table + table header.
+  // See docs/bug-notes/ISSUE-patch-incompatible-child-type.md
+  test.fails('BUG: modifying deeply nested value under dotted-key table emits conflicting headers', () => {
+    const src = dedent`
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr.l1- = "R"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n';
+
+    const obj = parse(src);
+    obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
+
+    const result = patch(src, obj);
+    // Desired output — currently emits conflicting inline table + dotted-key header
+    expect(result).toEqual(dedent`
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr = "changed"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n');
+    // Currently throws: Cannot extend inline table at d4v9qdab6p.)t--7.poln3sbu
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // BUG: Adding a key to a nested table array element throws
+  // "Incompatible child type 'InlineItem'". Same root cause as the
+  // inline table conflicts above.
+  // See docs/bug-notes/ISSUE-patch-node-not-found.md
+  test.fails('BUG: adding key to nested table array element throws Incompatible child type', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      x = 2
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.a.b[0].y = 3;
+
+    // Currently throws: Incompatible child type "InlineItem"
+    expect(() => patch(src, obj)).not.toThrow();
+    const result = patch(src, obj);
+    // Desired output
+    expect(result).toEqual(dedent`
+      [[a.b]]
+      x = 1
+      y = 3
+
+      [[a.b]]
+      x = 2
+    ` + '\n');
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // This one works — modifying a value inside a table array element.
+  test('adding key to table defined with [parent] syntax', () => {
+    const src = dedent`
+      [ef8fai0n]
+      p8ou7aufb.at4 = "original value"
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.ef8fai0n.q3ytjt3s = 'new value';
+
+    const result = patch(src, obj);
+    expect(result).toContain('q3ytjt3s = "new value"');
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // This one works — modifying a value inside a table array element.
+  test('modifying value inside table array element', () => {
+    const src = dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 123
+
+      [[products]]
+      name = "Nail"
+      sku = 456
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.products[0].sku = 999;
+
+    const result = patch(src, obj);
+    expect(result).toContain('sku = 999');
+    expect(() => parse(result)).not.toThrow();
+  });
