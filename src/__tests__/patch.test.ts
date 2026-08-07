@@ -7074,7 +7074,13 @@ describe('float exponent notation round-trip', () => {
 
     const result = patch(src, obj);
     // Should produce valid TOML — currently throws "Cannot extend inline table"
+    expect(result).toEqual(dedent`
+      ["<~9".dd]
+      13i.x1wdfu5_.o67ar6 = -4277
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n');
     expect(() => parse(result)).not.toThrow();
+
   });
 
   // BUG: Same pattern — modifying a deeply nested value under [a.b.c]
@@ -7092,6 +7098,14 @@ describe('float exponent notation round-trip', () => {
     obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
 
     const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr = "changed"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n');
+    
     // Should produce valid TOML — currently throws "Cannot extend inline table"
     expect(() => parse(result)).not.toThrow();
   });
