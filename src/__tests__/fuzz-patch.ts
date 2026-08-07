@@ -4,7 +4,7 @@
  *
  * Usage: npx tsx src/__tests__/fuzz-patch.ts [--count N] [--seed SEED] [--mutations M]
  */
-import { randomToml } from './randomizer';
+import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch } from '../';
 import { inspect } from 'util';
 
@@ -176,95 +176,81 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 // ─── Random value generator for mutations ────────────────────────────────
 
-function randomMutationValue(): JsonValue {
-  const r = Math.random();
-  if (r < 0.20) {
-    // random string
-    const len = Math.floor(Math.random() * 20) + 1;
+function randomMutationValue(rng: SeededRandom): JsonValue {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-';
+  const roll = rng.next();
+  if (roll < 0.20) {
+    const len = rng.nextRange(1, 20);
     let s = '';
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-';
-    for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < len; i++) s += chars[rng.nextInt(chars.length)];
     return s;
   }
-  if (r < 0.45) return Math.floor(Math.random() * 10000) - 5000;
-  if (r < 0.60) return Math.random() * 10000 - 5000;
-  if (r < 0.75) return Math.random() > 0.5;
-  if (r < 0.85) return new Date(Date.UTC(2000 + Math.floor(Math.random() * 50), Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1));
-  if (r < 0.95) {
-    const len = Math.floor(Math.random() * 4);
-    return Array.from({ length: len }, () => randomMutationValue());
+  if (roll < 0.45) return rng.nextRange(-5000, 5000);
+  if (roll < 0.60) return (rng.next() * 10000) - 5000;
+  if (roll < 0.75) return rng.chance(0.5);
+  if (roll < 0.85) return new Date(Date.UTC(
+    2000 + rng.nextRange(0, 49),
+    rng.nextRange(0, 11),
+    rng.nextRange(1, 28)
+  ));
+  if (roll < 0.95) {
+    const len = rng.nextRange(0, 3);
+    return Array.from({ length: len }, () => randomMutationValue(rng));
   }
-  // inline table
-  const keys = Math.floor(Math.random() * 3) + 1;
+  const keys = rng.nextRange(1, 3);
   const obj: any = {};
   for (let i = 0; i < keys; i++) {
-    obj['k' + Math.floor(Math.random() * 100)] = randomMutationValue();
+    obj['k' + rng.nextRange(0, 99)] = randomMutationValue(rng);
   }
   return obj;
 }
 
 // ─── Mutation generator ──────────────────────────────────────────────────
 
-function generateMutation(obj: unknown): RandomMutation | null {
+function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
   const paths = collectPaths(obj);
 
-  // Filter: don't mutate paths that point to arrays (mutate array elements instead)
-  // Also skip paths that would be root-level arrays
   const mutablePaths = paths.filter(p => {
     if (p.length === 0) return false;
     const parent = p.length > 0 ? getAt(obj, p.slice(0, -1)) : obj;
-    if (Array.isArray(parent)) {
-      // Parent is array → can delete or change element, or add new element
-      return true;
-    }
+    if (Array.isArray(parent)) return true;
     return true;
   });
 
   if (mutablePaths.length === 0) return null;
 
-  const path = mutablePaths[Math.floor(Math.random() * mutablePaths.length)];
+  const path = mutablePaths[rng.nextInt(mutablePaths.length)];
   const parent = path.length > 0 ? getAt(obj, path.slice(0, -1)) : obj;
   const existing = getAt(obj, path);
   const isArrayParent = Array.isArray(parent);
   const key = path[path.length - 1];
 
-  // Choose mutation kind based on context
-  const roll = Math.random();
+  const roll = rng.next();
 
   if (isArrayParent && typeof key === 'number') {
-    // Array context
     if (existing !== undefined && roll < 0.3) {
-      // Remove array item
       return { path, kind: 'remove-array-item' };
     }
     if (roll < 0.6) {
-      // Change array item
-      return { path, kind: 'change-value', newValue: randomMutationValue() };
+      return { path, kind: 'change-value', newValue: randomMutationValue(rng) };
     }
-    // Add array item
-    return { path, kind: 'add-array-item', newValue: randomMutationValue() };
+    return { path, kind: 'add-array-item', newValue: randomMutationValue(rng) };
   }
 
-  // Object context
   if (existing !== undefined && typeof existing === 'object' && !(existing instanceof Date) && roll < 0.1) {
-    // Don't delete/overwrite objects — too destructive
     return null;
   }
 
   if (existing !== undefined && roll < 0.3) {
-    // Delete key
     return { path, kind: 'delete-key' };
   }
   if (existing !== undefined && roll < 0.4) {
-    // Change type
-    return { path, kind: 'change-type', newValue: randomMutationValue() };
+    return { path, kind: 'change-type', newValue: randomMutationValue(rng) };
   }
   if (existing !== undefined) {
-    // Change value
-    return { path, kind: 'change-value', newValue: randomMutationValue() };
+    return { path, kind: 'change-value', newValue: randomMutationValue(rng) };
   }
-  // Add key
-  return { path, kind: 'add-key', newValue: randomMutationValue() };
+  return { path, kind: 'add-key', newValue: randomMutationValue(rng) };
 }
 
 function applyMutation(obj: any, mutation: RandomMutation): void {
@@ -335,10 +321,12 @@ function fuzzOne(
     // 2. Deep clone
     let obj2 = deepClone(obj1) as any;
 
-    // 3. Apply mutations
+    // 3. Apply mutations using a seeded RNG (offset from doc seed
+    //    so mutationCount changes don't alter the same-seed sequence)
+    const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
     const mutationDescs: string[] = [];
     for (let i = 0; i < mutationCount; i++) {
-      const mutation = generateMutation(obj2);
+      const mutation = generateMutation(obj2, mutationRng);
       if (!mutation) break;
       applyMutation(obj2, mutation);
       mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);

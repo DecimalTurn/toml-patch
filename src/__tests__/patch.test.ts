@@ -7356,3 +7356,37 @@ describe('float exponent notation round-trip', () => {
     expect(result).toContain('sku = 999');
     expect(() => parse(result)).not.toThrow();
   });
+
+  // ── Tests documenting issues found by expanded fuzz harness ─────────
+
+  // BUG: Deleting a deeply nested key inside a table with special characters
+  // in the path throws "Unsupported parent type for remove".
+  test.fails('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
+    const src = dedent`
+      [b-v0g]
+      h6op4iwf5r = 42
+
+      [*TqS.hbm]
+      Il%aX^Mae.O^oB3/] = { vy2f-nr = { i3wjnp = "delete-me" } }
+    ` + '\n';
+
+    const obj = parse(src);
+    delete obj['*TqS'].hbm['Il%aX^Mae']['O^oB3/]']['vy2f-nr'].i3wjnp;
+
+    // Currently throws: Unsupported parent type for remove
+    expect(() => patch(src, obj)).not.toThrow();
+  });
+
+  // BUG: Adding an array item inside a deeply nested inline array throws
+  // "Unsupported parent type 'InlineItem' for insert".
+  test.fails('BUG: adding to nested inline array throws Unsupported parent type InlineItem for insert', () => {
+    const src = dedent`
+      KeL = [18:45:20, false, ["a", "b"]]
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.KeL[2].push('c');
+
+    // Currently throws: Unsupported parent type "InlineItem" for insert
+    expect(() => patch(src, obj)).not.toThrow();
+  });
