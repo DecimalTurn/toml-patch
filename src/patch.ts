@@ -854,12 +854,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // existing value's loc so the writer moves the replacement
             // to the correct position.
             const oldEndCol = existing.key.loc.end.column;
-            const newEndCol = existing.key.raw.length;
+            const newEndCol = existing.key.loc.start.column + existing.key.raw.length;
             const delta = newEndCol - oldEndCol;
             existing.key.loc.end.column = newEndCol;
             existing.equals += delta;
             existing.value.loc.start.column += delta;
-            existing.value.loc.end.column += delta;
+            if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
+            if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
           }
         }
         
@@ -892,12 +893,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // existing value's loc so the writer moves the replacement
             // to the correct position.
             const oldEndCol = existing.key.loc.end.column;
-            const newEndCol = existing.key.raw.length;
+            const newEndCol = existing.key.loc.start.column + existing.key.raw.length;
             const delta = newEndCol - oldEndCol;
             existing.key.loc.end.column = newEndCol;
             existing.equals += delta;
             existing.value.loc.start.column += delta;
-            existing.value.loc.end.column += delta;
+            if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
+            if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
           }
         }
 
