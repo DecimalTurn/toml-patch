@@ -7112,11 +7112,8 @@ describe('float exponent notation round-trip', () => {
     expect(() => parse(result)).not.toThrow();
   });
 
-  // BUG: Adding a key to a nested table array element throws
-  // "Incompatible child type 'InlineItem'". Same root cause as the
-  // inline table conflicts above.
   // See docs/bug-notes/ISSUE-patch-node-not-found.md
-  test.fails('BUG: adding key to nested table array element throws Incompatible child type', () => {
+  test('adding key to nested table array element (was: Incompatible child type crash)', () => {
     const src = dedent`
       [[a.b]]
       x = 1
