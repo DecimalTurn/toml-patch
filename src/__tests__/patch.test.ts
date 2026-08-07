@@ -7064,10 +7064,9 @@ describe('float exponent notation round-trip', () => {
   //
   // When the bugs are fixed, these tests will start passing.
 
-  // BUG: Modifying a value inside [a.b] emits an inline table a = { b = {...} }
-  // alongside the original [a.b] header. The result cannot be re-parsed.
-  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
-  test.fails('BUG: modifying nested dotted-key value produces inline table conflict', () => {
+  // FIXED: Modifying a value inside [a.b] no longer emits conflicting
+  // inline table + header. See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
+  test('modifying nested dotted-key value (was: inline table conflict)', () => {
     const src = dedent`
       ["<~9".dd]
       13i.x1wdfu5_.o67ar6 = 11449
@@ -7078,20 +7077,24 @@ describe('float exponent notation round-trip', () => {
     obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
 
     const result = patch(src, obj);
-    // Desired output — currently emits conflicting inline table + [<~9.dd] header
+
     expect(result).toEqual(dedent`
       ["<~9".dd]
-      13i.x1wdfu5_.o67ar6 = -4277
+      13i.x1wdfu5_ = -4277
       zbr5.p-6c.aex4j = [1, 2, 3]
     ` + '\n');
-    // Currently throws: Cannot extend inline table at <~9.dd
+
     expect(() => parse(result)).not.toThrow();
+    // Key truncated from 13i.x1wdfu5_.o67ar6 to 13i.x1wdfu5_
+    // (x1wdfu5_ changed from table to scalar, dropping last segment)
+    expect(result).toContain('13i.x1wdfu5_');
+    expect(result).not.toContain('o67ar6');
   });
 
   // BUG: Same pattern — modifying a deeply nested value under [a.b.c]
   // emits conflicting inline table + table header.
   // See docs/bug-notes/ISSUE-patch-incompatible-child-type.md
-  test.fails('BUG: modifying deeply nested value under dotted-key table emits conflicting headers', () => {
+  test('modifying deeply nested value under dotted-key table (was: inline table conflict)', () => {
     const src = dedent`
       [d4v9qdab6p.")t--7".poln3sbu]
       xjcn = -inf
@@ -7104,7 +7107,7 @@ describe('float exponent notation round-trip', () => {
     obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
 
     const result = patch(src, obj);
-    // Desired output — currently emits conflicting inline table + dotted-key header
+
     expect(result).toEqual(dedent`
       [d4v9qdab6p.")t--7".poln3sbu]
       xjcn = -inf
@@ -7112,15 +7115,33 @@ describe('float exponent notation round-trip', () => {
       "".swr = "changed"
       hc."%1mya" = "CT]AJj]$HH"
     ` + '\n');
-    // Currently throws: Cannot extend inline table at d4v9qdab6p.)t--7.poln3sbu
+    
     expect(() => parse(result)).not.toThrow();
+    // Key truncated from "".swr.l1- to "".swr (l1- removed)
+    expect(result).toContain('"".swr');
+    expect(result).not.toContain('l1-');
   });
 
-  // BUG: Adding a key to a nested table array element throws
-  // "Incompatible child type 'InlineItem'". Same root cause as the
-  // inline table conflicts above.
+  test('truncating indented dotted key preserves column alignment', () => {
+    const src = dedent`
+      [t]
+          a.b.c = 1
+      x = 2
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.t.a.b = 42; // truncate from a.b.c to a.b, change value
+
+    expect(patch(src, obj)).toEqual(dedent`
+      [t]
+          a.b = 42
+      x = 2
+    ` + '\n');
+    expect(() => parse(patch(src, obj))).not.toThrow();
+  });
+
   // See docs/bug-notes/ISSUE-patch-node-not-found.md
-  test.fails('BUG: adding key to nested table array element throws Incompatible child type', () => {
+  test('adding key to nested AOT element (was: Incompatible child type crash)', () => {
     const src = dedent`
       [[a.b]]
       x = 1

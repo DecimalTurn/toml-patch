@@ -37,7 +37,7 @@ import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObjec
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode } from './writer';
 import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
-import { generateInlineItem, generateTable, generateTableArray, generateString, generateKeyValue } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -760,7 +760,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               resolvedIndex = rootTableEnd;
             }
           }
-          insert(original, parent, child, resolvedIndex, undefined, inlineHostItems);
+          // Unwrap InlineItem when adding to a TableArray or Document —
+          // InlineItems are only valid inside InlineTables/InlineArrays.
+          let childToInsert = child;
+          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
+            childToInsert = child.item;
+          }
+          insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -792,10 +798,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         } else if (format.inlineTableStart === 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
           insert(original, parent, child, undefined, true);
         } else {
-          // Unwrap InlineItem if we're adding to a Table (not InlineTable)
-          // InlineItems should only exist within InlineTables or InlineArrays
+          // Unwrap InlineItem if we're adding to a Table, TableArray, or
+          // Document. InlineItems should only exist within InlineTables or
+          // InlineArrays — block containers expect raw KV/Table nodes.
           let childToInsert = child;
-          if (isInlineItem(child) && (isTable(parent) || isDocument(parent))) {
+          if (isInlineItem(child) && (isTable(parent) || isTableArray(parent) || isDocument(parent))) {
             childToInsert = child.item;
           }
           insert(original, parent, childToInsert);
@@ -823,6 +830,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
         // Edit for key-value means value changes
         // Preserve formatting from existing value in replacement value
+        
+        // If findByPath matched via prefix (the path is shorter than the
+        // existing dotted key), truncate the key. We detect this by finding
+        // the longest suffix of change.path that matches a prefix of the
+        // existing key — this handles cases where parseJS restructured keys
+        // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
+        if (existing.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existing.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existing.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existing.key.value.length) {
+            existing.key.value = existing.key.value.slice(0, matchLen);
+            existing.key.raw = generateKey(existing.key.value).raw;
+            // The key is now shorter — shift key loc, equals, and the
+            // existing value's loc so the writer moves the replacement
+            // to the correct position.
+            const oldEndCol = existing.key.loc.end.column;
+            const newEndCol = existing.key.loc.start.column + existing.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existing.key.loc.end.column = newEndCol;
+            existing.equals += delta;
+            existing.value.loc.start.column += delta;
+            if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
+            if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+          }
+        }
+        
         preserveFormatting(existing.value, replacement.value);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);
@@ -832,8 +873,36 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         existing = existing.value;
         replacement = replacement.value;
       } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
-        // Sometimes, the replacement looks like it could be an inline item, but the original is a key-value
-        // In this case, we convert the replacement to a key-value to match the original
+        // Truncate the existing key if the path matched via prefix (same
+        // logic as the isKeyValue && isKeyValue branch above).
+        if (existing.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existing.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existing.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existing.key.value.length) {
+            existing.key.value = existing.key.value.slice(0, matchLen);
+            existing.key.raw = generateKey(existing.key.value).raw;
+            // The key is now shorter — shift key loc, equals, and the
+            // existing value's loc so the writer moves the replacement
+            // to the correct position.
+            const oldEndCol = existing.key.loc.end.column;
+            const newEndCol = existing.key.loc.start.column + existing.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existing.key.loc.end.column = newEndCol;
+            existing.equals += delta;
+            existing.value.loc.start.column += delta;
+            if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
+            if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+          }
+        }
+
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;

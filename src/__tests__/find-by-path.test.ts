@@ -69,6 +69,38 @@ it('should find nodes within nested inline tables', () => {
   expect(cache.item.value.type).toEqual('InlineTable');
 });
 
+it('should match KeyValue when path is prefix of its dotted key', () => {
+  const toml = 'a.b.c = 1\nx = 2\n';
+  const cst = parseTOML(toml);
+  const document: Document = {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    items: [...cst]
+  };
+
+  // Path ['a','b'] is a prefix of key ['a','b','c'] — should find the KV
+  const kv = findByPath(document, ['a', 'b']);
+  expect(kv.type).toEqual('KeyValue');
+  expect((kv as any).key.value).toEqual(['a', 'b', 'c']);
+  expect((kv as any).value.value).toEqual(1);
+});
+
+it('should match KeyValue under table header when path is prefix of its dotted key', () => {
+  const toml = '[t]\na.b.c = 1\nx = 2\n';
+  const cst = parseTOML(toml);
+  const document: Document = {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+    items: [...cst]
+  };
+
+  // Path ['t','a','b'] is a prefix of key ['a','b','c'] inside [t]
+  const kv = findByPath(document, ['t', 'a', 'b']);
+  expect(kv.type).toEqual('KeyValue');
+  expect((kv as any).key.value).toEqual(['a', 'b', 'c']);
+  expect((kv as any).value.value).toEqual(1);
+});
+
 it('should keep scanning AOT-scoped siblings after a shorter prefix match fails', () => {
   const toml = dedent`
     [[fruit]]
