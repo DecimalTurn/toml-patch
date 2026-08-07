@@ -7123,7 +7123,7 @@ describe('float exponent notation round-trip', () => {
   });
 
   // See docs/bug-notes/ISSUE-patch-node-not-found.md
-  test('adding key to nested table array element (was: Incompatible child type crash)', () => {
+  test('adding key to nested AOT element (was: Incompatible child type crash)', () => {
     const src = dedent`
       [[a.b]]
       x = 1
