@@ -1302,10 +1302,34 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           toIndex = original.items.length;
         }
 
-        // Insert all slot items in reverse order at the computed index
-        // so they end up in their original order.
-        for (let i = slotItems.length - 1; i >= 0; i--) {
-          insert(original, original, slotItems[i], toIndex);
+        // Insert slot items in forward order at incrementing indices so
+        // each item can be positioned relative to the ones before it.
+        // Use leadingLines: 1 for a TableArray following a comment to
+        // avoid the extra blank line insert() normally adds between them.
+        let insertIdx = toIndex;
+        for (let i = 0; i < slotItems.length; i++) {
+          const item = slotItems[i];
+          let itemLeadingLines: number | undefined;
+          if (!isComment(item) && i > 0 && isComment(slotItems[i - 1])) {
+            itemLeadingLines = 1;
+          }
+          insert(original, original, item, insertIdx, undefined, undefined, itemLeadingLines);
+          insertIdx++;
+        }
+
+        // When we reduced leadingLines for a non-prepend insert, the entry's
+        // exit offset is 1 line smaller, so items after it end up 1 line too
+        // high. Shift them down to compensate. Prepends (toIndex === 0) don't
+        // need this because the offset_leading goes from -1 to 0 (increase).
+        if (toIndex > 0 && slotItems.some((item, i) => !isComment(item) && i > 0 && isComment(slotItems[i - 1]))) {
+          applyWrites(original);
+          const lastInserted = slotItems[slotItems.length - 1];
+          const lastIdx = original.items.indexOf(lastInserted);
+          if (lastIdx >= 0) {
+            for (let j = lastIdx + 1; j < original.items.length; j++) {
+              shiftNode(original.items[j], { lines: 1, columns: 0 });
+            }
+          }
         }
       }
     } else if (isRename(change)) {
