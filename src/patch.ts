@@ -760,7 +760,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               resolvedIndex = rootTableEnd;
             }
           }
-          insert(original, parent, child, resolvedIndex, undefined, inlineHostItems);
+          // Unwrap InlineItem when adding to a TableArray or Document —
+          // InlineItems are only valid inside InlineTables/InlineArrays.
+          let childToInsert = child;
+          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
+            childToInsert = child.item;
+          }
+          insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -792,10 +798,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         } else if (format.inlineTableStart === 0 && isKeyValue(child) && isInlineTable(child.value) && isDocument(parent)) {
           insert(original, parent, child, undefined, true);
         } else {
-          // Unwrap InlineItem if we're adding to a Table (not InlineTable)
-          // InlineItems should only exist within InlineTables or InlineArrays
+          // Unwrap InlineItem if we're adding to a Table, TableArray, or
+          // Document. InlineItems should only exist within InlineTables or
+          // InlineArrays — block containers expect raw KV/Table nodes.
           let childToInsert = child;
-          if (isInlineItem(child) && (isTable(parent) || isDocument(parent))) {
+          if (isInlineItem(child) && (isTable(parent) || isTableArray(parent) || isDocument(parent))) {
             childToInsert = child.item;
           }
           insert(original, parent, childToInsert);
