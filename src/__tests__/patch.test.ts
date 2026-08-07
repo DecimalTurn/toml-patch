@@ -4183,9 +4183,9 @@ describe('undefined handling in patch', () => {
     expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
       [a]
       # second entry comment
-
       [[a.b]]
       n = 2
+
       # first entry comment
       [[a.b]]
       n = 1
@@ -4212,7 +4212,6 @@ describe('undefined handling in patch', () => {
 
     expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
       # second entry comment
-
       [[a.b]]
       n = 2
 
