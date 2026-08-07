@@ -55,3 +55,7 @@ The CST stores table arrays as sequential `TableArray` nodes, each containing `K
 ### Severity
 
 High — prevents valid modifications to table array contents, a core use case for `patch()`.
+
+### Test
+
+No dedicated test yet — the simple table-array reproduction (modifying `products[0].sku`) works correctly on `latest`. The complex cases found by the fuzzer (deeply nested paths with special characters) are harder to reproduce manually.

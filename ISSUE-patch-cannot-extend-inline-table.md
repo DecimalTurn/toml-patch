@@ -48,3 +48,7 @@ These two representations collide because `["<~9".dd]` tries to extend the inlin
 ### Severity
 
 High — produces invalid TOML output, same class of bug as duplicate table headers.
+
+### Test
+
+`test.fails('BUG: modifying nested dotted-key value produces inline table conflict')` in `src/__tests__/patch.test.ts` (line ~7065).

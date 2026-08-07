@@ -41,3 +41,7 @@ The CST transformation pipeline in the writer assumes certain node type invarian
 ### Severity
 
 Medium — affects specific structural patterns (dotted-key tables with nested modifications) but prevents valid patch operations.
+
+### Test
+
+`test.fails('BUG: modifying deeply nested value under dotted-key table emits conflicting headers')` in `src/__tests__/patch.test.ts` (line ~7082).

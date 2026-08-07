@@ -61,3 +61,7 @@ zbr5.p-6c.aex4j = [...]
 ### Severity
 
 High — produces invalid TOML that cannot be re-parsed, breaking the fundamental `patch()` contract.
+
+### Test
+
+The exact reproduction from this issue (adding a flat key) was fixed on `latest`. The variant (modifying a nested value, causing inline table conflict) is covered by `test.fails('BUG: modifying nested dotted-key value produces inline table conflict')` in `src/__tests__/patch.test.ts` (line ~7065).
