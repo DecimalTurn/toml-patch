@@ -1294,7 +1294,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const targetHasLeadingComment = targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]);
           const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
           if (targetHasLeadingComment && sourceHadLeadingComment) {
-            toIndex = original.items.indexOf(targetSlot!.items[0]);
+            toIndex = original.items.indexOf(targetSlot!.items[0] as any);
           } else {
             toIndex = original.items.indexOf(toEntry as any);
           }
@@ -1324,7 +1324,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (toIndex > 0 && slotItems.some((item, i) => !isComment(item) && i > 0 && isComment(slotItems[i - 1]))) {
           applyWrites(original);
           const lastInserted = slotItems[slotItems.length - 1];
-          const lastIdx = original.items.indexOf(lastInserted);
+          const lastIdx = original.items.indexOf(lastInserted as any);
           if (lastIdx >= 0) {
             for (let j = lastIdx + 1; j < original.items.length; j++) {
               shiftNode(original.items[j], { lines: 1, columns: 0 });
