@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: rename a segment of a dotted section key (e.g. `[a.b]` → `[x.b]`, `[a.b]` → `[a.y]`, `[a.b.c]` → `[a.x.c]`) instead of throwing. The Rename handler now falls back to key-prefix search and handles segment-count mismatches when the target is rendered as a plain nested key. ([#269])
 - Patching: avoid extra blank line when the first array-of-tables entry is converted to a table in-place during implicit parent materialisation. ([#271])
 - Stringify: prevent float-to-bigint type change on round-trip. Whole-number values exceeding `Number.MAX_SAFE_INTEGER` (e.g. `743000000000000000` from TOML `743e+15`) are now always emitted with a decimal point so they stay as `number` on re-parse instead of being promoted to `bigint`. ([#273])
+- Patching: modifying nested dotted-key values that change from a table to a scalar (e.g. `a.b.c = 1` → `a.b = 42` under `[a.b]`) no longer emits conflicting inline tables or misplaces the value. ([#274])
+- Patching: adding a key to a nested table array element (e.g. `[[a.b]]`) no longer throws "Incompatible child type 'InlineItem'". ([#274])
 
 ## [3.0.1] - 2026-08-03
 
