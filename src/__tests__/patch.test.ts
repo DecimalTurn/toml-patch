@@ -7053,6 +7053,10 @@ describe('float exponent notation round-trip', () => {
 });
   // ── Tests documenting issues found by fuzz harness ──────────────────
   //
+  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
+  // See docs/bug-notes/ISSUE-patch-incompatible-child-type.md
+  // See docs/bug-notes/ISSUE-patch-node-not-found.md
+  //
   // These tests currently FAIL because modifying a nested value under a
   // dotted-key table header (e.g. [a.b.c]) causes patch() to emit an
   // inline table alongside the original header, producing conflicting
@@ -7062,6 +7066,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Modifying a value inside [a.b] emits an inline table a = { b = {...} }
   // alongside the original [a.b] header. The result cannot be re-parsed.
+  // See docs/bug-notes/ISSUE-patch-cannot-extend-inline-table.md
   test.fails('BUG: modifying nested dotted-key value produces inline table conflict', () => {
     const src = dedent`
       ["<~9".dd]
@@ -7085,6 +7090,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Same pattern — modifying a deeply nested value under [a.b.c]
   // emits conflicting inline table + table header.
+  // See docs/bug-notes/ISSUE-patch-incompatible-child-type.md
   test.fails('BUG: modifying deeply nested value under dotted-key table emits conflicting headers', () => {
     const src = dedent`
       [d4v9qdab6p.")t--7".poln3sbu]
@@ -7107,6 +7113,28 @@ describe('float exponent notation round-trip', () => {
     ` + '\n');
     
     // Should produce valid TOML — currently throws "Cannot extend inline table"
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // BUG: Adding a key to a nested table array element throws
+  // "Incompatible child type 'InlineItem'". Same root cause as the
+  // inline table conflicts above — the diff engine resolves the path
+  // at the wrong CST level.
+  // See docs/bug-notes/ISSUE-patch-node-not-found.md
+  test.fails('BUG: adding key to nested table array element throws Incompatible child type', () => {
+    const src = dedent`
+      [[a.b]]
+      x = 1
+
+      [[a.b]]
+      x = 2
+    ` + '\n';
+
+    const obj = parse(src);
+    obj.a.b[0].y = 3;
+
+    const result = patch(src, obj);
+    expect(result).toContain('y = 3');
     expect(() => parse(result)).not.toThrow();
   });
 
