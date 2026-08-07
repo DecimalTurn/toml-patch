@@ -7077,6 +7077,13 @@ describe('float exponent notation round-trip', () => {
     obj['<~9'].dd['13i'].x1wdfu5_ = -4277;
 
     const result = patch(src, obj);
+
+    expect(result).toEqual(dedent`
+      ["<~9".dd]
+      13i.x1wdfu5_ = -4277
+      zbr5.p-6c.aex4j = [1, 2, 3]
+    ` + '\n');
+
     expect(() => parse(result)).not.toThrow();
     // Key truncated from 13i.x1wdfu5_.o67ar6 to 13i.x1wdfu5_
     // (x1wdfu5_ changed from table to scalar, dropping last segment)
@@ -7100,6 +7107,15 @@ describe('float exponent notation round-trip', () => {
     obj['d4v9qdab6p'][')t--7']['poln3sbu']['']['swr'] = 'changed';
 
     const result = patch(src, obj);
+
+    expect(result).toEqual(dedent`
+      [d4v9qdab6p.")t--7".poln3sbu]
+      xjcn = -inf
+      qknixakrm.j = false
+      "".swr = "changed"
+      hc."%1mya" = "CT]AJj]$HH"
+    ` + '\n');
+    
     expect(() => parse(result)).not.toThrow();
     // Key truncated from "".swr.l1- to "".swr (l1- removed)
     expect(result).toContain('"".swr');
