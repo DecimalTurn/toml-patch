@@ -22,7 +22,12 @@ export function isString(value: any): value is string {
 }
 
 export function isInteger(value: any): value is number {
-  return typeof value === 'number' && value % 1 === 0 && isFinite(value) && !Object.is(value, -0);
+  return typeof value === 'number'
+    && value % 1 === 0
+    && isFinite(value)
+    && !Object.is(value, -0)
+    && value >= Number.MIN_SAFE_INTEGER
+    && value <= Number.MAX_SAFE_INTEGER;
 }
 
 export function isBigInt(value: any): value is bigint {
