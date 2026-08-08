@@ -1279,7 +1279,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         // Record original position of the document item just after the slot,
         // for exit-offset compensation after insertion.
-        const slotFirstIdx = original.items.indexOf(fromSlot ? fromSlot.items[0] : fromNode);
+        const slotFirstIdx = original.items.indexOf((fromSlot ? fromSlot.items[0] : fromNode) as any);
 
         // Also compute the original gap between the last slot item and
         // whatever comes after it in line order, for exit-offset compensation.
@@ -1323,7 +1323,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (toEntry) {
           const postSlots = resolveSlots(original);
           const targetSlot = postSlots.find(s => s.member === toEntry);
-          targetHasLeadingComment = targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]);
+          targetHasLeadingComment = !!(targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]));
           if (targetHasLeadingComment && sourceHadLeadingComment) {
             toIndex = original.items.indexOf(targetSlot!.items[0] as any);
           } else {
@@ -1337,7 +1337,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // reproduce it for the first slot item.
         const targetPrevEnd = toIndex > 0
           ? original.items[toIndex - 1].loc.end.line
-          : (isDocument(original) ? 0 : original.loc.start.line);
+          : 0;
         const targetFirstLine = toIndex < original.items.length
           ? original.items[toIndex].loc.start.line
           : undefined;
@@ -1353,7 +1353,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const item = slotItems[i];
 
           let itemLeadingLines: number | undefined;
-          if (isCommentedSwap && insertIdx > 0) {
+          // Override leadingLines when the original spacing differs from
+          // insert()'s defaults. This applies when:
+          // a) Both slots have leading comments (a commented swap), or
+          // b) The source has comments and a pinned comment sits right
+          //    before the insertion point (mixed blank lines case).
+          const shouldOverride = isCommentedSwap || (sourceHadLeadingComment && toIndex > 0 && toIndex < original.items.length);
+          if (shouldOverride && insertIdx > 0) {
             const prevEnd = i === 0 ? targetPrevEnd : slotOriginalPos[i - 1].endLine;
             const origLeading = (i === 0 && targetFirstLine !== undefined)
               ? targetFirstLine - targetPrevEnd
