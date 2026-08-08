@@ -1271,6 +1271,36 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         const fromSlot = docSlots.find(s => s.member === fromNode);
         const slotItems = fromSlot ? [...fromSlot.items] : [fromNode];
 
+        // Save original positions before removal so we can restore spacing.
+        const slotOriginalPos = slotItems.map(item => ({
+          startLine: item.loc.start.line,
+          endLine: item.loc.end.line
+        }));
+
+        // Record original position of the document item just after the slot,
+        // for exit-offset compensation after insertion.
+        const slotFirstIdx = original.items.indexOf(fromSlot ? fromSlot.items[0] : fromNode);
+
+        // Also compute the original gap between the last slot item and
+        // whatever comes after it in line order, for exit-offset compensation.
+        const lastSlotEnd = slotOriginalPos[slotOriginalPos.length - 1].endLine;
+        let originalAfterGap: number | undefined;
+        for (let k = 0; k < original.items.length; k++) {
+          const item = original.items[k];
+          if (item.loc.start.line > lastSlotEnd) {
+            originalAfterGap = item.loc.start.line - lastSlotEnd;
+            break;
+          }
+        }
+        // If no item follows in line order (slot was at document end),
+        // use the gap from the item just before the slot to the first
+        // slot item — this is the spacing between the two entries that
+        // should be preserved between the moved entry and what follows.
+        if (originalAfterGap === undefined && slotFirstIdx > 0) {
+          const beforeSlot = original.items[slotFirstIdx - 1];
+          originalAfterGap = slotOriginalPos[0].startLine - beforeSlot.loc.end.line;
+        }
+
         // Remove each slot item from the Document (same discipline as removeMember).
         const memberIdx = fromSlot ? fromSlot.items.indexOf(fromNode) : 0;
         for (let i = 0; i <= memberIdx; i++) {
@@ -1288,11 +1318,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // after the swap. Otherwise use the member's own index.
         const toEntry = tryFindByPath(original, change.path.concat(change.to));
         let toIndex: number;
+        let targetHasLeadingComment = false;
+        const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
         if (toEntry) {
           const postSlots = resolveSlots(original);
           const targetSlot = postSlots.find(s => s.member === toEntry);
-          const targetHasLeadingComment = targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]);
-          const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
+          targetHasLeadingComment = targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]);
           if (targetHasLeadingComment && sourceHadLeadingComment) {
             toIndex = original.items.indexOf(targetSlot!.items[0] as any);
           } else {
@@ -1302,32 +1333,57 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           toIndex = original.items.length;
         }
 
-        // Insert slot items in forward order at incrementing indices so
-        // each item can be positioned relative to the ones before it.
-        // Use leadingLines: 1 for a TableArray following a comment to
-        // avoid the extra blank line insert() normally adds between them.
+        // Capture the original gap at the target position so we can
+        // reproduce it for the first slot item.
+        const targetPrevEnd = toIndex > 0
+          ? original.items[toIndex - 1].loc.end.line
+          : (isDocument(original) ? 0 : original.loc.start.line);
+        const targetFirstLine = toIndex < original.items.length
+          ? original.items[toIndex].loc.start.line
+          : undefined;
+
+        // Insert slot items in forward order at incrementing indices.
+        // Compute leadingLines from the original spacing so blank lines
+        // are preserved exactly as they were in the source document.
+        // Only override when both slots have leading comments (a true swap
+        // of commented entries); otherwise let insertOnNewLine decide.
+        const isCommentedSwap = targetHasLeadingComment && sourceHadLeadingComment;
         let insertIdx = toIndex;
         for (let i = 0; i < slotItems.length; i++) {
           const item = slotItems[i];
+
           let itemLeadingLines: number | undefined;
-          if (!isComment(item) && i > 0 && isComment(slotItems[i - 1])) {
-            itemLeadingLines = 1;
+          if (isCommentedSwap && insertIdx > 0) {
+            const prevEnd = i === 0 ? targetPrevEnd : slotOriginalPos[i - 1].endLine;
+            const origLeading = (i === 0 && targetFirstLine !== undefined)
+              ? targetFirstLine - targetPrevEnd
+              : slotOriginalPos[i].startLine - prevEnd;
+            const isSquare = isTable(item) || isTableArray(item);
+            const defaultLeading = isSquare ? 2 : 1;
+            if (origLeading !== defaultLeading) {
+              itemLeadingLines = origLeading;
+            }
           }
+
           insert(original, original, item, insertIdx, undefined, undefined, itemLeadingLines);
           insertIdx++;
         }
 
-        // When we reduced leadingLines for a non-prepend insert, the entry's
-        // exit offset is 1 line smaller, so items after it end up 1 line too
-        // high. Shift them down to compensate. Prepends (toIndex === 0) don't
-        // need this because the offset_leading goes from -1 to 0 (increase).
-        if (toIndex > 0 && slotItems.some((item, i) => !isComment(item) && i > 0 && isComment(slotItems[i - 1]))) {
+        // Restore the original gap between the last slot item and the
+        // next document item, since overriding leadingLines changes the
+        // exit offset and may misposition subsequent items.
+        if (originalAfterGap !== undefined) {
           applyWrites(original);
-          const lastInserted = slotItems[slotItems.length - 1];
-          const lastIdx = original.items.indexOf(lastInserted as any);
-          if (lastIdx >= 0) {
-            for (let j = lastIdx + 1; j < original.items.length; j++) {
-              shiftNode(original.items[j], { lines: 1, columns: 0 });
+          const lastItem = slotItems[slotItems.length - 1];
+          const afterStart = original.items.indexOf(lastItem as any) + 1;
+          if (afterStart < original.items.length) {
+            const nextItem = original.items[afterStart];
+            const newGap = nextItem.loc.start.line - lastItem.loc.end.line;
+            const delta = originalAfterGap - newGap;
+            if (delta !== 0) {
+              for (let j = afterStart; j < original.items.length; j++) {
+                shiftNode(original.items[j], { lines: delta, columns: 0 });
+              }
             }
           }
         }
