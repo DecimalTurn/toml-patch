@@ -4250,7 +4250,8 @@ describe('undefined handling in patch', () => {
 
   // Blank line between comment and its entry on both entries.
   // A blank line severs comment ownership (R3), so comments stay
-  // in their original positions — only the entries are swapped.
+  // in their original positions and the second entry moves up to the first position.
+  // This looks like the comment remains at the end.
   test('reordering of AOT entries with comments - blank lines between comments and entries', () => {
     const src = dedent`
       [a]
@@ -4277,11 +4278,13 @@ describe('undefined handling in patch', () => {
       [[a.b]]
       n = 2
 
-      # second entry comment
-
       [[a.b]]
       n = 1
+
+      # second entry comment
     ` + '\n');
+
+      
   });
 
   // Mixed: first entry has blank between comment and entry (severed),
