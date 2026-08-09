@@ -7360,6 +7360,25 @@ describe('float exponent notation round-trip', () => {
 
   // ── Tests documenting issues found by expanded fuzz harness ─────────
 
+  // Regression: deleting a key from a triply-nested single-line inline table
+  // requires post-order recalc so each parent reads the child's already-fixed
+  // end column.  A pre-order traversal would read a stale innerEndCol and
+  // leave trailing whitespace before the outer closing braces.
+  test('recalcInlineContainerEnds post-order: triply nested inline table', () => {
+    const src = dedent`
+      outer = { mid = { inner = { k = "x" } } }
+    ` + '\n';
+
+    const obj = parse(src);
+    delete obj.outer.mid.inner.k;
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      outer = { mid = { inner = {} } }
+    ` + '\n');
+    expect(() => parse(result)).not.toThrow();
+  });
+
   // BUG: Deleting a deeply nested key inside a table with special characters
   // in the path throws "Unsupported parent type for remove".
   test('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
