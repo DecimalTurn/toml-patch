@@ -7145,7 +7145,7 @@ describe('identity round-trip normalizations', () => {
 
 });
 
-  test.fails('Avoid including a commented out kv when there are comments around it', () => {
+  test('Avoid including a commented out kv when there are comments around it', () => {
     const input = dedent`
       # doc for t
       [t]
@@ -7163,6 +7163,269 @@ describe('identity round-trip normalizations', () => {
       [t]
       # enable when ready
       # a = 1
+    ` + '\n');
+  });
+
+
+  test('Do include the comment if the key inside the comment matches the key', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Switch this value when ready
+      # z = 1
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('Do not include the comment if the key inside the comment does not match the key', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1
+    ` + '\n');
+  });
+
+  test('Do not include the comment if the commented KV inside the comment does not match the key + inline comment', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1 # some extra comment
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1 # some extra comment
+    ` + '\n');
+  });
+
+  test('does not treat a # inside a quoted value as an inline comment marker', () => {
+    // `# k = "a # b" extra` has a # inside quotes — not an inline comment.
+    // The old broad heuristic /#.*=.*#/ would wrongly classify this as a
+    // barrier and keep the comment; the precise regex correctly treats it
+    // as prose and removes it with z.
+    const input = dedent`
+      # doc for t
+      [t]
+      # k = "a # b" extra
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('Do include the comment if the commented KV inside the comment is part of a sentence and would not be valid toml if commented out', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1 is something to consider
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  // ── Edge cases for commented-out KV detection ──────────────────────
+
+  test('keeps commented-out KV with quoted string value when key differs', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # x = "hello world"
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # x = "hello world"
+    ` + '\n');
+  });
+
+  test('removes commented-out KV with quoted string value when key matches', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # z = "hello world"
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('keeps commented-out KV with boolean value when key differs', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # x = true
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # x = true
+    ` + '\n');
+  });
+
+  test('keeps commented-out dotted key when key differs', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # a.b = 1
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # a.b = 1
+    ` + '\n');
+  });
+
+  test('removes commented-out dotted key when first segment matches', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # z.x = 1
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('treats commented-out KV with matching key + inline comment as part of the run', () => {
+    // key matches → no barrier, entire run (including prose) is owned by z and removed
+    const input = dedent`
+      # doc for t
+      [t]
+      # Some context here
+      # z = 1 # was the old default
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('keeps commented-out KV with inline comment when key differs', () => {
+    // key differs → barrier, both comments survive
+    const input = dedent`
+      # doc for t
+      [t]
+      # Some context here
+      # x = 1 # was the old default
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # Some context here
+      # x = 1 # was the old default
+    ` + '\n');
+  });
+
+  test('removes commented-out KV when the deleted key is quoted and matches', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # "z key" = old value
+      "z key" = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t['z key'];
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('keeps commented-out KV when the deleted key is quoted and does not match', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # "x key" = old value
+      "z key" = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t['z key'];
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # "x key" = old value
     ` + '\n');
   });
 

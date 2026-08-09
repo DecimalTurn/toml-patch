@@ -30,12 +30,77 @@ const KEY_SEGMENT = String.raw`(?:[\w-]+|"[^"]*"|'[^']*')`;
 export const IS_COMMENTED_OUT_KEY_VALUE =
   new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=`);
 
+/** A value after `=` in a commented-out KV: a quoted string, number, boolean,
+ *  date-like token, or a single bare word.  Multi-word prose (e.g.
+ *  `# key = 1 is something to consider`) does NOT match, so the comment
+ *  is treated as alive prose rather than a dead entry. */
+const VALUE_TOKEN = String.raw`(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|"""[\s\S]*?"""|'''[\s\S]*?'''|[^\s#]+)`;
+
+/** Full-line match: `# key = value` where value is a single token. */
+const IS_PURE_COMMENTED_OUT_KV =
+  new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=\s*${VALUE_TOKEN}\s*$`);
+
 /** `# [table]`, `# [[array]]`, `# [a.b]` */
 export const IS_COMMENTED_OUT_HEADER =
   new RegExp(String.raw`^#\s*\[\[?\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*\]\]?\s*$`);
 
 export function isCommentedOutEntry(comment: Comment): boolean {
-  return IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw) || IS_COMMENTED_OUT_HEADER.test(comment.raw);
+  return IS_PURE_COMMENTED_OUT_KV.test(comment.raw) || IS_COMMENTED_OUT_HEADER.test(comment.raw);
+}
+
+/**
+ * True when a `#` appears outside of quotes after the `=` in a
+ * commented-out-KV line — i.e. the line has an inline trailing comment
+ * (`# key = val # note`).  `#` inside a quoted value (e.g.
+ * `# key = "a # b" extra`) is NOT an inline comment.
+ */
+function hasInlineCommentAfterValue(comment: Comment): boolean {
+  const eqIdx = comment.raw.indexOf('=');
+  if (eqIdx < 0) return false;
+  let inDQuote = false;
+  let inSQuote = false;
+  for (let i = eqIdx + 1; i < comment.raw.length; i++) {
+    const ch = comment.raw[i];
+    if (ch === '\\') { i++; continue; }
+    if (!inSQuote && ch === '"') { inDQuote = !inDQuote; continue; }
+    if (!inDQuote && ch === "'") { inSQuote = !inSQuote; continue; }
+    if (!inDQuote && !inSQuote && ch === '#') return true;
+  }
+  return false;
+}
+
+/**
+ * True when the comment looks enough like a KV to act as a barrier in
+ * scanSlots.  Broader than `isCommentedOutEntry`: also matches lines with
+ * an inline trailing comment (`# key = val # note`) and lines whose value
+ * part is short enough not to be obvious prose (≤3 words after `=`).
+ */
+function looksLikeKV(comment: Comment): boolean {
+  if (isCommentedOutEntry(comment)) return true;
+  if (!IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw)) return false;
+  // Has an inline comment after the value: `# key = val # note`
+  if (hasInlineCommentAfterValue(comment)) return true;
+  // Short value: `# key = a few words` (not running prose)
+  const afterEq = comment.raw.replace(/^[^=]*=\s*/, '');
+  const wordCount = afterEq.split(/\s+/).filter(Boolean).length;
+  return wordCount <= 3;
+}
+
+/** Extract the first key segment from a commented-out KV like `# key = val`. */
+function commentedOutFirstKey(comment: Comment): string | undefined {
+  const m = comment.raw.match(IS_COMMENTED_OUT_KEY_VALUE);
+  if (!m) return undefined;
+  // Strip `#` prefix and everything from `=` onward, then trim.
+  // For dotted keys like `# a.b.c = val`, this gives `a.b.c`.
+  let key = m[0].replace(/^#\s*/, '').replace(/\s*=.*$/, '').trim();
+  // Take only the first segment for comparison with the KV's own first key.
+  const dot = key.indexOf('.');
+  if (dot >= 0) key = key.substring(0, dot);
+  // Strip quotes if present
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key || undefined;
 }
 
 /**
@@ -135,9 +200,36 @@ function scanSlots(
     if (pendingRun.length) {
       const runEndLine = last(pendingRun)!.loc.end.line;
       const adjacent = runEndLine + 1 === item.loc.start.line;
-      const allDead = pendingRun.every(isCommentedOutEntry);
-      if (adjacent && isEligibleForLeading(item) && !allDead) {
-        // R2, subject to R6.
+      if (adjacent && isEligibleForLeading(item)) {
+        // R2, subject to R6.  A commented-out KV whose key differs from
+        // the following KV's key acts as a barrier: only comments after
+        // the LAST such barrier belong to the KV.  Dead entries whose
+        // key matches the KV's key stay in the run (they are "related").
+        // This applies to all-dead runs too — when every dead entry's
+        // key matches the KV, R6 does not apply and the run is owned.
+        const memberKey = getMemberKey(item);
+        if (memberKey !== undefined) {
+          let lastBarrierIdx = -1;
+          for (let i = pendingRun.length - 1; i >= 0; i--) {
+            // Use looksLikeKV for barrier detection — a line like
+            // `# key = val # extra` still severs ownership even though
+            // it isn't a "pure" dead entry.
+            const ck = looksLikeKV(pendingRun[i]) ? commentedOutFirstKey(pendingRun[i]) : undefined;
+            if (ck !== undefined && ck !== memberKey) {
+              lastBarrierIdx = i;
+              break;
+            }
+          }
+          if (lastBarrierIdx >= 0) {
+            const pinned = pendingRun.splice(0, lastBarrierIdx + 1);
+            slots.push({
+              kind: 'pinned',
+              items: pinned,
+              startLine: pinned[0].loc.start.line,
+              endLine: last(pinned)!.loc.end.line
+            });
+          }
+        }
         leading = pendingRun;
         pendingRun = [];
       } else {

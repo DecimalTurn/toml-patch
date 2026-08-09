@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: Move entire AOT entry + owned comments as a unit during reorder so comments follow their entries when updateOrder is enabled.
 - Patching: tighten empty single-line inline tables and propagate to parent containers  ([#276])
 - Patching: unwrap InlineArrayItem when inserting into nested inline array ([#276])
+- Patching: adjust commented out kv behavior to match expected behavior of comment ownership rules ([#277])
 
 ## [3.0.1] - 2026-08-03
 
@@ -371,4 +372,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#273]: https://github.com/DecimalTurn/toml-patch/pull/273
 [#274]: https://github.com/DecimalTurn/toml-patch/pull/274
 [#276]: https://github.com/DecimalTurn/toml-patch/pull/276
+[#277]: https://github.com/DecimalTurn/toml-patch/pull/277
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
