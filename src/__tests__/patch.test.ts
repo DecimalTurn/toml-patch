@@ -7167,13 +7167,12 @@ describe('identity round-trip normalizations', () => {
   });
 
 
-  test.skip('Avoid including a commented out kv when there are comments around it', () => {
+  test('Do include the comment if the key inside the comment matches the key', () => {
     const input = dedent`
       # doc for t
       [t]
-      # enable when ready
-      # a = 1
-      # The z-value must always be specified
+      # Switch this value when ready
+      # z = 1
       z = 9
     ` + '\n';
 
@@ -7183,10 +7182,29 @@ describe('identity round-trip normalizations', () => {
     expect(patch(input, value)).toEqual(dedent`
       # doc for t
       [t]
-      # enable when ready
-      # a = 1
     ` + '\n');
   });
+
+  test('Do not include the comment if the key inside the comment does not match the key', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1
+    ` + '\n');
+  });
+
 describe('float exponent notation round-trip', () => {
   // Values that exceed MAX_SAFE_INTEGER must stay as floats through
   // parse → stringify → parse, not be promoted to bigint.  The original

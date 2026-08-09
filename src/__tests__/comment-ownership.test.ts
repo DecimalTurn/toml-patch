@@ -205,8 +205,15 @@ describe('R2 - adjacency ownership', () => {
     const value = parse(input);
     delete value.Key;
 
+    // `# key = "value1"` is a commented-out KV whose key (`key`) differs
+    // from the real KV below (`Key`), so it severs ownership.  Only `Key`
+    // itself is removed; the comments above survive.
     expect(patch(input, value)).toEqual(dedent`
       a = 1
+      # here is some information
+      #
+      # And some more, with a key example:
+      # key = "value1"
     ` + '\n');
   });
 

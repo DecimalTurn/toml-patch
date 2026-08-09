@@ -38,6 +38,23 @@ export function isCommentedOutEntry(comment: Comment): boolean {
   return IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw) || IS_COMMENTED_OUT_HEADER.test(comment.raw);
 }
 
+/** Extract the first key segment from a commented-out KV like `# key = val`. */
+function commentedOutFirstKey(comment: Comment): string | undefined {
+  const m = comment.raw.match(IS_COMMENTED_OUT_KEY_VALUE);
+  if (!m) return undefined;
+  // Strip `#` prefix and everything from `=` onward, then trim.
+  // For dotted keys like `# a.b.c = val`, this gives `a.b.c`.
+  let key = m[0].replace(/^#\s*/, '').replace(/\s*=.*$/, '').trim();
+  // Take only the first segment for comparison with the KV's own first key.
+  const dot = key.indexOf('.');
+  if (dot >= 0) key = key.substring(0, dot);
+  // Strip quotes if present
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key || undefined;
+}
+
 /**
  * True only for a genuinely multi-line InlineTable/InlineArray. Single-line
  * containers can never hold hoisted interior comments in the first place
@@ -137,24 +154,24 @@ function scanSlots(
       const adjacent = runEndLine + 1 === item.loc.start.line;
       const allDead = pendingRun.every(isCommentedOutEntry);
       if (adjacent && isEligibleForLeading(item) && !allDead) {
-        // R2, subject to R6.  When the run contains dead entries
-        // (commented-out KVs) but ends with an alive comment (prose),
-        // only the suffix after the LAST dead entry belongs to the KV.
-        // The dead entries and anything before them are pinned — they
-        // look like their own "section" of commented-out content.
-        // If the run ends with a dead entry, the whole run belongs
-        // to the KV (one prose line defeats R6).
-        const lastComment = last(pendingRun)!;
-        if (!isCommentedOutEntry(lastComment)) {
-          let lastDeadIdx = -1;
-          for (let i = pendingRun.length - 2; i >= 0; i--) {
+        // R2, subject to R6.  A commented-out KV whose key differs from
+        // the following KV's key acts as a barrier: only comments after
+        // the LAST such barrier belong to the KV.  Dead entries whose
+        // key matches the KV's key stay in the run (they are "related").
+        const memberKey = getMemberKey(item);
+        if (memberKey !== undefined) {
+          let lastBarrierIdx = -1;
+          for (let i = pendingRun.length - 1; i >= 0; i--) {
             if (isCommentedOutEntry(pendingRun[i])) {
-              lastDeadIdx = i;
-              break;
+              const ck = commentedOutFirstKey(pendingRun[i]);
+              if (ck !== undefined && ck !== memberKey) {
+                lastBarrierIdx = i;
+                break;
+              }
             }
           }
-          if (lastDeadIdx >= 0) {
-            const pinned = pendingRun.splice(0, lastDeadIdx + 1);
+          if (lastBarrierIdx >= 0) {
+            const pinned = pendingRun.splice(0, lastBarrierIdx + 1);
             slots.push({
               kind: 'pinned',
               items: pinned,
