@@ -25,6 +25,7 @@ import {
   hasItems,
   InlineItem,
   InlineTable,
+  InlineArray,
   CST,
   Table,
   TableArray,
@@ -34,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -1504,23 +1505,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     }
   }
 
-  // Fix up InlineTables that lost their only item to remove(). The exit
-  // offset that carried the closing-bracket space was on the removed item
-  // and is now lost. Tighten the end column and reapply bracket spacing.
+  // Fix up InlineTables and InlineArrays that lost their only item to
+  // remove(). The exit offset that carried the closing-bracket space was
+  // on the removed item and is now lost. Tighten the end column and
+  // reapply bracket spacing.
   let hasTightened = false;
   traverse(original, {
     InlineTable: (node) => {
-      if (hasInlineTableNeedingTighten(node)) {
-        if (node.items.length > 0) {
-          const lastItem = node.items[node.items.length - 1];
-          node.loc.end.column = lastItem.loc.end.column + 1;
-        } else {
-          // Empty table: close the brace right after the opening brace.
-          // loc.end is exclusive (} is written at end.column - 1), so
-          // we need end.column = start.column + 2 to produce "{}".
-          node.loc.end.column = node.loc.start.column + 2;
-        }
-        deleteInlineTableNeedingTighten(node);
+      if (hasInlineContainerNeedingTighten(node)) {
+        tightenInlineContainerEnd(node);
+        deleteInlineContainerNeedingTighten(node);
+        applyBracketSpacing(original, node, format.bracketSpacing);
+        hasTightened = true;
+      }
+    },
+    InlineArray: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) {
+        tightenInlineContainerEnd(node);
+        deleteInlineContainerNeedingTighten(node);
         applyBracketSpacing(original, node, format.bracketSpacing);
         hasTightened = true;
       }
@@ -1528,9 +1530,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) {
     applyWrites(original);
-    // Nested InlineTable tightening doesn't propagate through the offset
-    // system (the removed item's offset was zeroed), so parent container
-    // end positions must be recalculated explicitly.
+    // Nested inline container tightening doesn't propagate through the
+    // offset system (the removed item's offset was zeroed), so parent
+    // container end positions must be recalculated explicitly.
     recalcInlineContainerEnds(original);
   }
 
@@ -1653,6 +1655,21 @@ function handleStructuralEdit(
 }
 
 /**
+ * Tighten the end column of a single-line InlineTable or InlineArray whose
+ * only item was removed by remove(). When items remain, the end is tightened
+ * to just after the last item; when empty, to start + 2 so brackets touch
+ * (e.g. `[]` or `{}`). loc.end is exclusive.
+ */
+function tightenInlineContainerEnd(node: InlineTable | InlineArray): void {
+  if (node.items.length > 0) {
+    const lastItem = node.items[node.items.length - 1];
+    node.loc.end.column = lastItem.loc.end.column + 1;
+  } else {
+    node.loc.end.column = node.loc.start.column + 2;
+  }
+}
+
+/**
  * After tightening a nested single-line InlineTable (whose only item was
  * removed), recalculate the end positions of any parent single-line InlineTable
  * or InlineArray containers. The remove() call zeroed the offset for the
@@ -1666,15 +1683,7 @@ function recalcInlineContainerEnds(root: TreeNode): void {
         if (node.items.length === 0) return;
         if (node.loc.end.line !== node.loc.start.line) return;
         const lastItem = node.items[node.items.length - 1];
-        // The InlineItem's own loc.end may be stale when it wraps a
-        // tightened inner container. Look through to the wrapped value's end.
-        let innerEndCol = lastItem.loc.end.column;
-        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
-          const v = lastItem.item.value;
-          if (isInlineTable(v) || isInlineArray(v)) {
-            innerEndCol = v.loc.end.column;
-          }
-        }
+        const innerEndCol = resolveInnerEndCol(lastItem);
         const originalEndCol = node.loc.end.column;
         // Preserve the original gap (bracket spacing etc.) between the
         // last item's InlineItem end and the closing brace.
@@ -1690,13 +1699,7 @@ function recalcInlineContainerEnds(root: TreeNode): void {
         if (node.items.length === 0) return;
         if (node.loc.end.line !== node.loc.start.line) return;
         const lastItem = node.items[node.items.length - 1];
-        let innerEndCol = lastItem.loc.end.column;
-        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
-          const v = lastItem.item.value;
-          if (isInlineTable(v) || isInlineArray(v)) {
-            innerEndCol = v.loc.end.column;
-          }
-        }
+        const innerEndCol = resolveInnerEndCol(lastItem);
         const originalEndCol = node.loc.end.column;
         const originalGap = originalEndCol - lastItem.loc.end.column;
         const newEndCol = innerEndCol + originalGap;
@@ -1706,6 +1709,31 @@ function recalcInlineContainerEnds(root: TreeNode): void {
       }
     }
   });
+}
+
+/**
+ * Resolve the effective end column of an InlineItem's inner value,
+ * looking through KeyValue wrappers and into tightened InlineTable or
+ * InlineArray containers. Returns lastItem.loc.end.column for items
+ * that don't need or support look-through.
+ */
+function resolveInnerEndCol(lastItem: TreeNode): number {
+  if (!isInlineItem(lastItem)) return lastItem.loc.end.column;
+
+  // InlineTable items: InlineItem<KeyValue> — look through to the value
+  if (isKeyValue(lastItem.item)) {
+    const v = lastItem.item.value;
+    if (isInlineTable(v) || isInlineArray(v)) {
+      return v.loc.end.column;
+    }
+  }
+
+  // InlineArray items: InlineItem<InlineTable|InlineArray> — direct look-through
+  if (isInlineTable(lastItem.item) || isInlineArray(lastItem.item)) {
+    return lastItem.item.loc.end.column;
+  }
+
+  return lastItem.loc.end.column;
 }
 
 /**
