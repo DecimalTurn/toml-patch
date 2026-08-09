@@ -30,12 +30,36 @@ const KEY_SEGMENT = String.raw`(?:[\w-]+|"[^"]*"|'[^']*')`;
 export const IS_COMMENTED_OUT_KEY_VALUE =
   new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=`);
 
+/** A value after `=` in a commented-out KV: a quoted string, number, boolean,
+ *  date-like token, or a single bare word.  Multi-word prose (e.g.
+ *  `# key = 1 is something to consider`) does NOT match, so the comment
+ *  is treated as alive prose rather than a dead entry. */
+const VALUE_TOKEN = String.raw`(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|"""[\s\S]*?"""|'''[\s\S]*?'''|[^\s#]+)`;
+
+/** Full-line match: `# key = value` where value is a single token. */
+const IS_PURE_COMMENTED_OUT_KV =
+  new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=\s*${VALUE_TOKEN}\s*$`);
+
 /** `# [table]`, `# [[array]]`, `# [a.b]` */
 export const IS_COMMENTED_OUT_HEADER =
   new RegExp(String.raw`^#\s*\[\[?\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*\]\]?\s*$`);
 
 export function isCommentedOutEntry(comment: Comment): boolean {
-  return IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw) || IS_COMMENTED_OUT_HEADER.test(comment.raw);
+  return IS_PURE_COMMENTED_OUT_KV.test(comment.raw) || IS_COMMENTED_OUT_HEADER.test(comment.raw);
+}
+
+/**
+ * True when the comment looks enough like a KV to act as a barrier in
+ * scanSlots.  This is broader than `isCommentedOutEntry`: it also matches
+ * lines that have an inline trailing comment after the value
+ * (e.g. `# key = val # note`), but NOT lines where the value runs into
+ * prose (e.g. `# key = 1 is something to consider`).
+ */
+function looksLikeKV(comment: Comment): boolean {
+  if (isCommentedOutEntry(comment)) return true;
+  // The lenient regex matched `# key =` and there is a `#` after the `=`
+  // (an inline comment), so the line is `# key = val # extra`.
+  return IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw) && /#.*=.*#/.test(comment.raw);
 }
 
 /** Extract the first key segment from a commented-out KV like `# key = val`. */
@@ -162,12 +186,13 @@ function scanSlots(
         if (memberKey !== undefined) {
           let lastBarrierIdx = -1;
           for (let i = pendingRun.length - 1; i >= 0; i--) {
-            if (isCommentedOutEntry(pendingRun[i])) {
-              const ck = commentedOutFirstKey(pendingRun[i]);
-              if (ck !== undefined && ck !== memberKey) {
-                lastBarrierIdx = i;
-                break;
-              }
+            // Use looksLikeKV for barrier detection — a line like
+            // `# key = val # extra` still severs ownership even though
+            // it isn't a "pure" dead entry.
+            const ck = looksLikeKV(pendingRun[i]) ? commentedOutFirstKey(pendingRun[i]) : undefined;
+            if (ck !== undefined && ck !== memberKey) {
+              lastBarrierIdx = i;
+              break;
             }
           }
           if (lastBarrierIdx >= 0) {
