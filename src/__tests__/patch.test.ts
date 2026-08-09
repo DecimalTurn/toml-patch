@@ -7210,7 +7210,7 @@ describe('identity round-trip normalizations', () => {
       # doc for t
       [t]
       # Include this  value when ready
-      # something = 1
+      # something = 1 # some extra comment
       z = 9
     ` + '\n';
 
@@ -7222,6 +7222,24 @@ describe('identity round-trip normalizations', () => {
       [t]
       # Include this  value when ready
       # something = 1 # some extra comment
+    ` + '\n');
+  });
+
+  test('Do include the comment if the commented KV inside the comment is part of a sentence and would not be valid toml if commented out', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # Include this  value when ready
+      # something = 1 is something to consider
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
     ` + '\n');
   });
 
