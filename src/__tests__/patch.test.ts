@@ -4251,7 +4251,8 @@ describe('undefined handling in patch', () => {
   // Blank line between comment and its entry on both entries.
   // A blank line severs comment ownership (R3), so comments stay
   // in their original positions and the second entry moves up to the first position.
-  // This looks like the comment remains at the end.
+  // This looks like the comment remains at the end. It's not ideal, but
+  // it's the only way I can think of that doesn't violate R3.
   test('reordering of AOT entries with comments - blank lines between comments and entries', () => {
     const src = dedent`
       [a]
