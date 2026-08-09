@@ -58,7 +58,7 @@ function looksLikeKV(comment: Comment): boolean {
   if (isCommentedOutEntry(comment)) return true;
   if (!IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw)) return false;
   // Has an inline comment after the value: `# key = val # note`
-  if (/#.*=.*#/.test(comment.raw)) return true;
+  if (new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=\s*${VALUE_TOKEN}\s+#`).test(comment.raw)) return true;
   // Short value: `# key = a few words` (not running prose)
   const afterEq = comment.raw.replace(/^[^=]*=\s*/, '');
   const wordCount = afterEq.split(/\s+/).filter(Boolean).length;
