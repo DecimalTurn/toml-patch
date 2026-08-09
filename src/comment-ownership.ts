@@ -179,7 +179,6 @@ function scanSlots(
     if (pendingRun.length) {
       const runEndLine = last(pendingRun)!.loc.end.line;
       const adjacent = runEndLine + 1 === item.loc.start.line;
-      const allDead = pendingRun.every(isCommentedOutEntry);
       if (adjacent && isEligibleForLeading(item)) {
         // R2, subject to R6.  A commented-out KV whose key differs from
         // the following KV's key acts as a barrier: only comments after
