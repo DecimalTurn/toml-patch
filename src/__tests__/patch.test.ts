@@ -7373,6 +7373,41 @@ describe('identity round-trip normalizations', () => {
     ` + '\n');
   });
 
+  test('removes commented-out KV when the deleted key is quoted and matches', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # "z key" = old value
+      "z key" = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t['z key'];
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
+  test('keeps commented-out KV when the deleted key is quoted and does not match', () => {
+    const input = dedent`
+      # doc for t
+      [t]
+      # "x key" = old value
+      "z key" = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t['z key'];
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+      # "x key" = old value
+    ` + '\n');
+  });
+
 describe('float exponent notation round-trip', () => {
   // Values that exceed MAX_SAFE_INTEGER must stay as floats through
   // parse → stringify → parse, not be promoted to bigint.  The original

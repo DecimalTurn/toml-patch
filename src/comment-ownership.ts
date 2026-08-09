@@ -50,16 +50,19 @@ export function isCommentedOutEntry(comment: Comment): boolean {
 
 /**
  * True when the comment looks enough like a KV to act as a barrier in
- * scanSlots.  This is broader than `isCommentedOutEntry`: it also matches
- * lines that have an inline trailing comment after the value
- * (e.g. `# key = val # note`), but NOT lines where the value runs into
- * prose (e.g. `# key = 1 is something to consider`).
+ * scanSlots.  Broader than `isCommentedOutEntry`: also matches lines with
+ * an inline trailing comment (`# key = val # note`) and lines whose value
+ * part is short enough not to be obvious prose (≤3 words after `=`).
  */
 function looksLikeKV(comment: Comment): boolean {
   if (isCommentedOutEntry(comment)) return true;
-  // The lenient regex matched `# key =` and there is a `#` after the `=`
-  // (an inline comment), so the line is `# key = val # extra`.
-  return IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw) && /#.*=.*#/.test(comment.raw);
+  if (!IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw)) return false;
+  // Has an inline comment after the value: `# key = val # note`
+  if (/#.*=.*#/.test(comment.raw)) return true;
+  // Short value: `# key = a few words` (not running prose)
+  const afterEq = comment.raw.replace(/^[^=]*=\s*/, '');
+  const wordCount = afterEq.split(/\s+/).filter(Boolean).length;
+  return wordCount <= 3;
 }
 
 /** Extract the first key segment from a commented-out KV like `# key = val`. */
