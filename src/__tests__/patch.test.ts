@@ -7362,19 +7362,27 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Deleting a deeply nested key inside a table with special characters
   // in the path throws "Unsupported parent type for remove".
-  test.fails('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
+  test('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
     const src = dedent`
       [b-v0g]
       h6op4iwf5r = 42
 
-      [*TqS.hbm]
-      Il%aX^Mae.O^oB3/] = { vy2f-nr = { i3wjnp = "delete-me" } }
+      ["*TqS".hbm]
+      "Il%aX^Mae"."O^oB3/]" = { vy2f-nr = { i3wjnp = "delete-me" } }
     ` + '\n';
 
     const obj = parse(src);
     delete obj['*TqS'].hbm['Il%aX^Mae']['O^oB3/]']['vy2f-nr'].i3wjnp;
 
     // Currently throws: Unsupported parent type for remove
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [b-v0g]
+      h6op4iwf5r = 42
+
+      ["*TqS".hbm]
+      "Il%aX^Mae"."O^oB3/]" = { vy2f-nr = {} }
+    ` + '\n');
     expect(() => patch(src, obj)).not.toThrow();
   });
 

@@ -1505,16 +1505,29 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   let hasTightened = false;
   traverse(original, {
     InlineTable: (node) => {
-      if (hasInlineTableNeedingTighten(node) && node.items.length > 0) {
-        const lastItem = node.items[node.items.length - 1];
-        node.loc.end.column = lastItem.loc.end.column + 1;
+      if (hasInlineTableNeedingTighten(node)) {
+        if (node.items.length > 0) {
+          const lastItem = node.items[node.items.length - 1];
+          node.loc.end.column = lastItem.loc.end.column + 1;
+        } else {
+          // Empty table: close the brace right after the opening brace.
+          // loc.end is exclusive (} is written at end.column - 1), so
+          // we need end.column = start.column + 2 to produce "{}".
+          node.loc.end.column = node.loc.start.column + 2;
+        }
         deleteInlineTableNeedingTighten(node);
         applyBracketSpacing(original, node, format.bracketSpacing);
         hasTightened = true;
       }
     }
   });
-  if (hasTightened) applyWrites(original);
+  if (hasTightened) {
+    applyWrites(original);
+    // Nested InlineTable tightening doesn't propagate through the offset
+    // system (the removed item's offset was zeroed), so parent container
+    // end positions must be recalculated explicitly.
+    recalcInlineContainerEnds(original);
+  }
 
   // Clean up extracted comments that were orphaned when an inline array or
   // inline table was emptied. Comments inside multiline inline containers are
@@ -1632,6 +1645,52 @@ function handleStructuralEdit(
   // replacementKV stands in for a pre-existing entry, so it keeps that entry's R2
   // eligibility for adopting an adjacent leading comment during an updateOrder reorder.
   commentEligibleNodes.add(replacementKV);
+}
+
+/**
+ * After tightening a nested single-line InlineTable (whose only item was
+ * removed), recalculate the end positions of any parent single-line InlineTable
+ * or InlineArray containers. The remove() call zeroed the offset for the
+ * removed item (single-line, no siblings), so applyWrites can't propagate the
+ * shrink to ancestor containers.
+ */
+function recalcInlineContainerEnds(root: TreeNode): void {
+  traverse(root, {
+    InlineTable: (node) => {
+      if (node.items.length === 0) return;
+      if (node.loc.end.line !== node.loc.start.line) return;
+      const lastItem = node.items[node.items.length - 1];
+      // The InlineItem's own loc.end may be stale when it wraps a
+      // tightened inner table. Look through to the inner table's end.
+      let innerEndCol = lastItem.loc.end.column;
+      if (isInlineItem(lastItem) && isKeyValue(lastItem.item) && isInlineTable(lastItem.item.value)) {
+        innerEndCol = lastItem.item.value.loc.end.column;
+      }
+      const originalEndCol = node.loc.end.column;
+      // Preserve the original gap (bracket spacing etc.) between the
+      // last item's InlineItem end and the closing brace.
+      const originalGap = originalEndCol - lastItem.loc.end.column;
+      const newEndCol = innerEndCol + originalGap;
+      if (newEndCol !== originalEndCol) {
+        node.loc.end.column = newEndCol;
+      }
+    },
+    InlineArray: (node) => {
+      if (node.items.length === 0) return;
+      if (node.loc.end.line !== node.loc.start.line) return;
+      const lastItem = node.items[node.items.length - 1];
+      let innerEndCol = lastItem.loc.end.column;
+      if (isInlineItem(lastItem) && isKeyValue(lastItem.item) && isInlineTable(lastItem.item.value)) {
+        innerEndCol = lastItem.item.value.loc.end.column;
+      }
+      const originalEndCol = node.loc.end.column;
+      const originalGap = originalEndCol - lastItem.loc.end.column;
+      const newEndCol = innerEndCol + originalGap;
+      if (newEndCol !== originalEndCol) {
+        node.loc.end.column = newEndCol;
+      }
+    }
+  });
 }
 
 /**
