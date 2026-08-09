@@ -1661,38 +1661,48 @@ function handleStructuralEdit(
  */
 function recalcInlineContainerEnds(root: TreeNode): void {
   traverse(root, {
-    InlineTable: (node) => {
-      if (node.items.length === 0) return;
-      if (node.loc.end.line !== node.loc.start.line) return;
-      const lastItem = node.items[node.items.length - 1];
-      // The InlineItem's own loc.end may be stale when it wraps a
-      // tightened inner table. Look through to the inner table's end.
-      let innerEndCol = lastItem.loc.end.column;
-      if (isInlineItem(lastItem) && isKeyValue(lastItem.item) && isInlineTable(lastItem.item.value)) {
-        innerEndCol = lastItem.item.value.loc.end.column;
-      }
-      const originalEndCol = node.loc.end.column;
-      // Preserve the original gap (bracket spacing etc.) between the
-      // last item's InlineItem end and the closing brace.
-      const originalGap = originalEndCol - lastItem.loc.end.column;
-      const newEndCol = innerEndCol + originalGap;
-      if (newEndCol !== originalEndCol) {
-        node.loc.end.column = newEndCol;
+    InlineTable: {
+      exit: (node) => {
+        if (node.items.length === 0) return;
+        if (node.loc.end.line !== node.loc.start.line) return;
+        const lastItem = node.items[node.items.length - 1];
+        // The InlineItem's own loc.end may be stale when it wraps a
+        // tightened inner container. Look through to the wrapped value's end.
+        let innerEndCol = lastItem.loc.end.column;
+        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
+          const v = lastItem.item.value;
+          if (isInlineTable(v) || isInlineArray(v)) {
+            innerEndCol = v.loc.end.column;
+          }
+        }
+        const originalEndCol = node.loc.end.column;
+        // Preserve the original gap (bracket spacing etc.) between the
+        // last item's InlineItem end and the closing brace.
+        const originalGap = originalEndCol - lastItem.loc.end.column;
+        const newEndCol = innerEndCol + originalGap;
+        if (newEndCol !== originalEndCol) {
+          node.loc.end.column = newEndCol;
+        }
       }
     },
-    InlineArray: (node) => {
-      if (node.items.length === 0) return;
-      if (node.loc.end.line !== node.loc.start.line) return;
-      const lastItem = node.items[node.items.length - 1];
-      let innerEndCol = lastItem.loc.end.column;
-      if (isInlineItem(lastItem) && isKeyValue(lastItem.item) && isInlineTable(lastItem.item.value)) {
-        innerEndCol = lastItem.item.value.loc.end.column;
-      }
-      const originalEndCol = node.loc.end.column;
-      const originalGap = originalEndCol - lastItem.loc.end.column;
-      const newEndCol = innerEndCol + originalGap;
-      if (newEndCol !== originalEndCol) {
-        node.loc.end.column = newEndCol;
+    InlineArray: {
+      exit: (node) => {
+        if (node.items.length === 0) return;
+        if (node.loc.end.line !== node.loc.start.line) return;
+        const lastItem = node.items[node.items.length - 1];
+        let innerEndCol = lastItem.loc.end.column;
+        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
+          const v = lastItem.item.value;
+          if (isInlineTable(v) || isInlineArray(v)) {
+            innerEndCol = v.loc.end.column;
+          }
+        }
+        const originalEndCol = node.loc.end.column;
+        const originalGap = originalEndCol - lastItem.loc.end.column;
+        const newEndCol = innerEndCol + originalGap;
+        if (newEndCol !== originalEndCol) {
+          node.loc.end.column = newEndCol;
+        }
       }
     }
   });
