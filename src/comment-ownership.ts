@@ -49,6 +49,27 @@ export function isCommentedOutEntry(comment: Comment): boolean {
 }
 
 /**
+ * True when a `#` appears outside of quotes after the `=` in a
+ * commented-out-KV line — i.e. the line has an inline trailing comment
+ * (`# key = val # note`).  `#` inside a quoted value (e.g.
+ * `# key = "a # b" extra`) is NOT an inline comment.
+ */
+function hasInlineCommentAfterValue(comment: Comment): boolean {
+  const eqIdx = comment.raw.indexOf('=');
+  if (eqIdx < 0) return false;
+  let inDQuote = false;
+  let inSQuote = false;
+  for (let i = eqIdx + 1; i < comment.raw.length; i++) {
+    const ch = comment.raw[i];
+    if (ch === '\\') { i++; continue; }
+    if (!inSQuote && ch === '"') { inDQuote = !inDQuote; continue; }
+    if (!inDQuote && ch === "'") { inSQuote = !inSQuote; continue; }
+    if (!inDQuote && !inSQuote && ch === '#') return true;
+  }
+  return false;
+}
+
+/**
  * True when the comment looks enough like a KV to act as a barrier in
  * scanSlots.  Broader than `isCommentedOutEntry`: also matches lines with
  * an inline trailing comment (`# key = val # note`) and lines whose value
@@ -58,7 +79,7 @@ function looksLikeKV(comment: Comment): boolean {
   if (isCommentedOutEntry(comment)) return true;
   if (!IS_COMMENTED_OUT_KEY_VALUE.test(comment.raw)) return false;
   // Has an inline comment after the value: `# key = val # note`
-  if (new RegExp(String.raw`^#\s*${KEY_SEGMENT}(?:\s*\.\s*${KEY_SEGMENT})*\s*=\s*${VALUE_TOKEN}\s+#`).test(comment.raw)) return true;
+  if (hasInlineCommentAfterValue(comment)) return true;
   // Short value: `# key = a few words` (not running prose)
   const afterEq = comment.raw.replace(/^[^=]*=\s*/, '');
   const wordCount = afterEq.split(/\s+/).filter(Boolean).length;

@@ -7225,6 +7225,27 @@ describe('identity round-trip normalizations', () => {
     ` + '\n');
   });
 
+  test('does not treat a # inside a quoted value as an inline comment marker', () => {
+    // `# k = "a # b" extra` has a # inside quotes — not an inline comment.
+    // The old broad heuristic /#.*=.*#/ would wrongly classify this as a
+    // barrier and keep the comment; the precise regex correctly treats it
+    // as prose and removes it with z.
+    const input = dedent`
+      # doc for t
+      [t]
+      # k = "a # b" extra
+      z = 9
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.t.z;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # doc for t
+      [t]
+    ` + '\n');
+  });
+
   test('Do include the comment if the commented KV inside the comment is part of a sentence and would not be valid toml if commented out', () => {
     const input = dedent`
       # doc for t
