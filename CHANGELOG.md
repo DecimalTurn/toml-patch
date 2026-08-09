@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: tighten empty single-line inline tables and propagate to parent containers  ([#276])
 - Patching: unwrap InlineArrayItem when inserting into nested inline array ([#276])
 - Patching: adjust commented out kv behavior to match expected behavior of comment ownership rules ([#277])
+- Patching: ensure inline container tightening for deletions ([#278])
 
 ## [3.0.1] - 2026-08-03
 
@@ -373,4 +374,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#274]: https://github.com/DecimalTurn/toml-patch/pull/274
 [#276]: https://github.com/DecimalTurn/toml-patch/pull/276
 [#277]: https://github.com/DecimalTurn/toml-patch/pull/277
+[#278]: https://github.com/DecimalTurn/toml-patch/pull/278
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1

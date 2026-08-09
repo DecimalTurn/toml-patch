@@ -58,7 +58,7 @@ const hadNonLastRemoval: WeakSet<TreeNode> = new WeakSet();
 // Track single-line InlineTables and InlineArrays whose only item was
 // removed, so the caller can tighten the closing bracket and reapply
 // bracket spacing.
-const inlineContainersNeedingTighten: Set<TreeNode> = new Set();
+const inlineContainersNeedingTighten: WeakSet<TreeNode> = new WeakSet();
 export function hasInlineContainerNeedingTighten(node: TreeNode): boolean {
   return inlineContainersNeedingTighten.has(node);
 }
