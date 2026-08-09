@@ -7360,27 +7360,54 @@ describe('float exponent notation round-trip', () => {
 
   // ── Tests documenting issues found by expanded fuzz harness ─────────
 
+  // Regression: deleting a key from a triply-nested single-line inline table
+  // requires post-order recalc so each parent reads the child's already-fixed
+  // end column.  A pre-order traversal would read a stale innerEndCol and
+  // leave trailing whitespace before the outer closing braces.
+  test('recalcInlineContainerEnds post-order: triply nested inline table', () => {
+    const src = dedent`
+      outer = { mid = { inner = { k = "x" } } }
+    ` + '\n';
+
+    const obj = parse(src);
+    delete obj.outer.mid.inner.k;
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      outer = { mid = { inner = {} } }
+    ` + '\n');
+    expect(() => parse(result)).not.toThrow();
+  });
+
   // BUG: Deleting a deeply nested key inside a table with special characters
   // in the path throws "Unsupported parent type for remove".
-  test.fails('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
+  test('BUG: deleting deeply nested key with special chars throws Unsupported parent type for remove', () => {
     const src = dedent`
       [b-v0g]
       h6op4iwf5r = 42
 
-      [*TqS.hbm]
-      Il%aX^Mae.O^oB3/] = { vy2f-nr = { i3wjnp = "delete-me" } }
+      ["*TqS".hbm]
+      "Il%aX^Mae"."O^oB3/]" = { vy2f-nr = { i3wjnp = "delete-me" } }
     ` + '\n';
 
     const obj = parse(src);
     delete obj['*TqS'].hbm['Il%aX^Mae']['O^oB3/]']['vy2f-nr'].i3wjnp;
 
     // Currently throws: Unsupported parent type for remove
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [b-v0g]
+      h6op4iwf5r = 42
+
+      ["*TqS".hbm]
+      "Il%aX^Mae"."O^oB3/]" = { vy2f-nr = {} }
+    ` + '\n');
     expect(() => patch(src, obj)).not.toThrow();
   });
 
   // BUG: Adding an array item inside a deeply nested inline array throws
   // "Unsupported parent type 'InlineItem' for insert".
-  test.fails('BUG: adding to nested inline array throws Unsupported parent type InlineItem for insert', () => {
+  test('BUG: adding to nested inline array throws Unsupported parent type InlineItem for insert', () => {
     const src = dedent`
       KeL = [18:45:20, false, ["a", "b"]]
     ` + '\n';
@@ -7390,6 +7417,41 @@ describe('float exponent notation round-trip', () => {
 
     // Currently throws: Unsupported parent type "InlineItem" for insert
     expect(() => patch(src, obj)).not.toThrow();
+  });
+
+  // BUG: Emptying a single-line inline array leaves trailing whitespace
+  // between the brackets: `a = [   ]` instead of `a = []`.
+  test.fails('BUG: emptying single-line inline array leaves trailing whitespace', () => {
+    const src = dedent`
+      a = ["x"]
+    ` + '\n';
+    expect(patch(src, { a: [] })).toEqual(dedent`
+      a = []
+    ` + '\n');
+  });
+
+  // BUG: Emptying an inline array nested inside an inline table leaves
+  // trailing whitespace before the closing bracket and brace.
+  test.fails('BUG: emptying nested inline array inside inline table leaves trailing whitespace', () => {
+    const src = dedent`
+      a = { b = ["x"] }
+    ` + '\n';
+    expect(patch(src, { a: { b: [] } })).toEqual(dedent`
+      a = { b = [] }
+    ` + '\n');
+  });
+
+  // BUG: Deleting the only key from an inline table inside an inline array
+  // leaves trailing whitespace before the outer closing bracket.
+  test.fails('BUG: tightening inline table inside inline array leaves trailing whitespace', () => {
+    const src = dedent`
+      a = [ { b = "x" } ]
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.a[0].b;
+    expect(patch(src, obj)).toEqual(dedent`
+      a = [ {} ]
+    ` + '\n');
   });
 
   // Changing a dotted-key value from object to empty array works correctly.

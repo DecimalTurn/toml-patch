@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: modifying nested dotted-key values that change from a table to a scalar (e.g. `a.b.c = 1` → `a.b = 42` under `[a.b]`) no longer emits conflicting inline tables or misplaces the value. ([#274])
 - Patching: adding a key to a nested table array element (e.g. `[[a.b]]`) no longer throws "Incompatible child type 'InlineItem'". ([#274])
 - Patching: Move entire AOT entry + owned comments as a unit during reorder so comments follow their entries when updateOrder is enabled.
+- Patching: tighten empty single-line inline tables and propagate to parent containers  ([#276])
+- Patching: unwrap InlineArrayItem when inserting into nested inline array ([#276])
 
 ## [3.0.1] - 2026-08-03
 
@@ -368,4 +370,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#271]: https://github.com/DecimalTurn/toml-patch/pull/271
 [#273]: https://github.com/DecimalTurn/toml-patch/pull/273
 [#274]: https://github.com/DecimalTurn/toml-patch/pull/274
+[#276]: https://github.com/DecimalTurn/toml-patch/pull/276
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
