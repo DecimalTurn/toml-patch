@@ -1683,15 +1683,7 @@ function recalcInlineContainerEnds(root: TreeNode): void {
         if (node.items.length === 0) return;
         if (node.loc.end.line !== node.loc.start.line) return;
         const lastItem = node.items[node.items.length - 1];
-        // The InlineItem's own loc.end may be stale when it wraps a
-        // tightened inner container. Look through to the wrapped value's end.
-        let innerEndCol = lastItem.loc.end.column;
-        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
-          const v = lastItem.item.value;
-          if (isInlineTable(v) || isInlineArray(v)) {
-            innerEndCol = v.loc.end.column;
-          }
-        }
+        const innerEndCol = resolveInnerEndCol(lastItem);
         const originalEndCol = node.loc.end.column;
         // Preserve the original gap (bracket spacing etc.) between the
         // last item's InlineItem end and the closing brace.
@@ -1707,13 +1699,7 @@ function recalcInlineContainerEnds(root: TreeNode): void {
         if (node.items.length === 0) return;
         if (node.loc.end.line !== node.loc.start.line) return;
         const lastItem = node.items[node.items.length - 1];
-        let innerEndCol = lastItem.loc.end.column;
-        if (isInlineItem(lastItem) && isKeyValue(lastItem.item)) {
-          const v = lastItem.item.value;
-          if (isInlineTable(v) || isInlineArray(v)) {
-            innerEndCol = v.loc.end.column;
-          }
-        }
+        const innerEndCol = resolveInnerEndCol(lastItem);
         const originalEndCol = node.loc.end.column;
         const originalGap = originalEndCol - lastItem.loc.end.column;
         const newEndCol = innerEndCol + originalGap;
@@ -1723,6 +1709,31 @@ function recalcInlineContainerEnds(root: TreeNode): void {
       }
     }
   });
+}
+
+/**
+ * Resolve the effective end column of an InlineItem's inner value,
+ * looking through KeyValue wrappers and into tightened InlineTable or
+ * InlineArray containers. Returns lastItem.loc.end.column for items
+ * that don't need or support look-through.
+ */
+function resolveInnerEndCol(lastItem: TreeNode): number {
+  if (!isInlineItem(lastItem)) return lastItem.loc.end.column;
+
+  // InlineTable items: InlineItem<KeyValue> — look through to the value
+  if (isKeyValue(lastItem.item)) {
+    const v = lastItem.item.value;
+    if (isInlineTable(v) || isInlineArray(v)) {
+      return v.loc.end.column;
+    }
+  }
+
+  // InlineArray items: InlineItem<InlineTable|InlineArray> — direct look-through
+  if (isInlineTable(lastItem.item) || isInlineArray(lastItem.item)) {
+    return lastItem.item.loc.end.column;
+  }
+
+  return lastItem.loc.end.column;
 }
 
 /**

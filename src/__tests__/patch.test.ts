@@ -7663,7 +7663,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Emptying a single-line inline array leaves trailing whitespace
   // between the brackets: `a = [   ]` instead of `a = []`.
-  test.fails('BUG: emptying single-line inline array leaves trailing whitespace', () => {
+  test('BUG: emptying single-line inline array leaves trailing whitespace', () => {
     const src = dedent`
       a = ["x"]
     ` + '\n';
@@ -7674,7 +7674,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Emptying an inline array nested inside an inline table leaves
   // trailing whitespace before the closing bracket and brace.
-  test.fails('BUG: emptying nested inline array inside inline table leaves trailing whitespace', () => {
+  test('BUG: emptying nested inline array inside inline table leaves trailing whitespace', () => {
     const src = dedent`
       a = { b = ["x"] }
     ` + '\n';
@@ -7685,7 +7685,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Deleting the only key from an inline table inside an inline array
   // leaves trailing whitespace before the outer closing bracket.
-  test.fails('BUG: tightening inline table inside inline array leaves trailing whitespace', () => {
+  test('BUG: tightening inline table inside inline array leaves trailing whitespace', () => {
     const src = dedent`
       a = [ { b = "x" } ]
     ` + '\n';
