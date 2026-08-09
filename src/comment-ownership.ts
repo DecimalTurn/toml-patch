@@ -137,7 +137,32 @@ function scanSlots(
       const adjacent = runEndLine + 1 === item.loc.start.line;
       const allDead = pendingRun.every(isCommentedOutEntry);
       if (adjacent && isEligibleForLeading(item) && !allDead) {
-        // R2, subject to R6.
+        // R2, subject to R6.  When the run contains dead entries
+        // (commented-out KVs) but ends with an alive comment (prose),
+        // only the suffix after the LAST dead entry belongs to the KV.
+        // The dead entries and anything before them are pinned — they
+        // look like their own "section" of commented-out content.
+        // If the run ends with a dead entry, the whole run belongs
+        // to the KV (one prose line defeats R6).
+        const lastComment = last(pendingRun)!;
+        if (!isCommentedOutEntry(lastComment)) {
+          let lastDeadIdx = -1;
+          for (let i = pendingRun.length - 2; i >= 0; i--) {
+            if (isCommentedOutEntry(pendingRun[i])) {
+              lastDeadIdx = i;
+              break;
+            }
+          }
+          if (lastDeadIdx >= 0) {
+            const pinned = pendingRun.splice(0, lastDeadIdx + 1);
+            slots.push({
+              kind: 'pinned',
+              items: pinned,
+              startLine: pinned[0].loc.start.line,
+              endLine: last(pinned)!.loc.end.line
+            });
+          }
+        }
         leading = pendingRun;
         pendingRun = [];
       } else {
