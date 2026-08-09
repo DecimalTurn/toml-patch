@@ -4165,7 +4165,7 @@ describe('undefined handling in patch', () => {
 
   });
 
-  test.fails('reordering of AOT entries with comments - with table header', () => {
+  test('reordering of AOT entries with comments - with table header', () => {
     const src = dedent`
       [a]
       # first entry comment
@@ -4192,11 +4192,38 @@ describe('undefined handling in patch', () => {
     ` + '\n');
   });
 
+    test('reordering of AOT entries with comments - with table header - compact form', () => {
+    const src = dedent`
+      [a]
+
+      # first entry comment
+      [[a.b]]
+      n = 1
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+
+      # second entry comment
+      [[a.b]]
+      n = 2
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
   // We want to keep the comments with their respective entries
   // even if there is no table header for the parent table, and even 
   // if the order of the entries is changed , so the order of the comments 
   // should follow the order of the entries.  
-  test.fails('reordering of AOT entries with comments', () => {
+  test('reordering of AOT entries with comments', () => {
     const src = dedent`
       # first entry comment
       [[a.b]]
@@ -4218,6 +4245,133 @@ describe('undefined handling in patch', () => {
       # first entry comment
       [[a.b]]
       n = 1
+    ` + '\n');
+  });
+
+  // Blank line between comment and its entry on both entries.
+  // A blank line severs comment ownership (R3), so comments stay
+  // in their original positions and the second entry moves up to the first position.
+  // This looks like the comment remains at the end.
+  test('reordering of AOT entries with comments - blank lines between comments and entries', () => {
+    const src = dedent`
+      [a]
+
+      # first entry comment
+
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+
+      # first entry comment
+
+      [[a.b]]
+      n = 2
+
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+    ` + '\n');
+
+      
+  });
+
+  // Mixed: first entry has blank between comment and entry (severed),
+  // second doesn't (comment travels with entry).
+  test('reordering of AOT entries with comments - mixed blank lines', () => {
+    const src = dedent`
+      [a]
+
+      # first entry comment
+
+      [[a.b]]
+      n = 1
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    // # first is severed by blank line, stays in place.
+    // # second travels with its entry.
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      [a]
+
+      # first entry comment
+      
+      # second entry comment
+      [[a.b]]
+      n = 2
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
+  // No table header, compact form
+  test('reordering of AOT entries with comments - no header compact form', () => {
+    const src = dedent`
+      # first entry comment
+      [[a.b]]
+      n = 1
+      # second entry comment
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      # second entry comment
+      [[a.b]]
+      n = 2
+      # first entry comment
+      [[a.b]]
+      n = 1
+    ` + '\n');
+  });
+
+  // No table header, blank lines between comments and entries.
+  // Blank lines sever ownership — comments stay, entries swap.
+  test('reordering of AOT entries with comments - no header blank lines between comments and entries', () => {
+    const src = dedent`
+      # first entry comment
+
+      [[a.b]]
+      n = 1
+
+      # second entry comment
+
+      [[a.b]]
+      n = 2
+    ` + '\n';
+
+    const fmt = TomlFormat.default();
+    fmt.updateOrder = true;
+
+    expect(patch(src, { a: { b: [ { n: 2 }, { n: 1 } ] } }, fmt )).toEqual(dedent`
+      # first entry comment
+
+      [[a.b]]
+      n = 2
+
+      [[a.b]]
+      n = 1
+
+      # second entry comment
     ` + '\n');
   });
 

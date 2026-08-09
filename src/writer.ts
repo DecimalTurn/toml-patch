@@ -149,7 +149,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param index - The index at which to insert the child (optional)
  * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[]) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[], leadingLines?: number) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -167,7 +167,8 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
       root,
       parent as Document | Table | TableArray,
       child as KeyValue | Comment,
-      index
+      index,
+      leadingLines
     ));
   }
 
@@ -223,7 +224,8 @@ function insertOnNewLine(
   root: Root,
   parent: Document | Table | TableArray,
   child: Block,
-  index: number
+  index: number,
+  leadingLinesOverride?: number
 ): { shift: Span; offset: Span } {
 
   if (!isBlock(child)) {
@@ -268,7 +270,9 @@ function insertOnNewLine(
   
   const isSquareBracketsStructure = isTable(child) || isTableArray(child);
   let leading_lines = 0;
-  if (use_first_line || prepend_to_document) {
+  if (leadingLinesOverride !== undefined) {
+    leading_lines = leadingLinesOverride;
+  } else if (use_first_line || prepend_to_document) {
     // 0 leading lines — item starts at line 1
   } else if (isSquareBracketsStructure) {
     leading_lines = 2;

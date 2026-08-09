@@ -34,8 +34,8 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode } from './writer';
-import { removeMember, moveInlineElement, findHostContainer } from './comment-ownership';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY } from './tokenizer';
@@ -153,6 +153,50 @@ function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: 
     if (!Object.prototype.hasOwnProperty.call(reordered, key)) reordered[key] = updated_js[key];
   }
   return reordered;
+}
+
+/**
+ * The parser's table-body loop consumes comments between consecutive [[x]] entries
+ * as trailing children of the first entry (it sees `# comment` before the next
+ * `[[x]]` header). This function promotes those trailing comments to Document-level
+ * siblings so that resolveSlots can assign them to the correct entry.
+ */
+function normalizeAotEntryComments(doc: Document): void {
+  const items = doc.items as TreeNode[];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    // Handle both Table and TableArray: comments between a section header
+    // and its next sibling AOT entry, or between consecutive AOT entries,
+    // are parsed as trailing children of the first section. Promote them.
+    if (!((isTable(item) || isTableArray(item)) && hasItems(item))) continue;
+
+    const containerItems = item.items as TreeNode[];
+    // Find trailing comments at the end of this entry
+    let commentStart = containerItems.length;
+    while (commentStart > 0 && isComment(containerItems[commentStart - 1])) {
+      commentStart--;
+    }
+
+    if (commentStart < containerItems.length) {
+      // Check if the next Document item is another TableArray with a
+      // matching key prefix (for Tables: child AOT; for TableArrays: sibling AOT)
+      const nextItem = items[i + 1];
+      if (nextItem && isTableArray(nextItem)) {
+        const thisKey = (item as Table | TableArray).key.item.value;
+        const nextKey = (nextItem as TableArray).key.item.value;
+        if (arraysEqual(thisKey, nextKey.slice(0, thisKey.length))) {
+          // Promote trailing comments to Document level
+          const comments = containerItems.splice(commentStart);
+          const nextIdx = items.indexOf(nextItem);
+          for (const comment of [...comments].reverse()) {
+            items.splice(nextIdx, 0, comment);
+          }
+          // Fix up loc.end
+          recalcContainerEnd(item);
+        }
+      }
+    }
+  }
 }
 
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
@@ -1212,17 +1256,143 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
-        // Find source entry, remove it, then re-insert at the target position.
-        const fromNode = findByPath(original, change.path.concat(change.from));
-        remove(original, original, fromNode);
+        //
+        // First, normalize: the parser's table-body loop consumes comments
+        // between consecutive [[x]] entries as trailing children of the first
+        // entry. Promote those to Document-level siblings and fix up loc.end
+        // so resolveSlots assigns them to the correct entry.
+        normalizeAotEntryComments(original);
 
-        // After removal, the entry now at virtual index change.to gives us the
-        // Document.items insertion point.
+        // Find source entry.
+        const fromNode = findByPath(original, change.path.concat(change.from));
+
+        // Move the entire slot (entry + its comments) as a single unit.
+        const docSlots = resolveSlots(original);
+        const fromSlot = docSlots.find(s => s.member === fromNode);
+        const slotItems = fromSlot ? [...fromSlot.items] : [fromNode];
+
+        // Save original positions before removal so we can restore spacing.
+        const slotOriginalPos = slotItems.map(item => ({
+          startLine: item.loc.start.line,
+          endLine: item.loc.end.line
+        }));
+
+        // Record original position of the document item just after the slot,
+        // for exit-offset compensation after insertion.
+        const slotFirstIdx = original.items.indexOf((fromSlot ? fromSlot.items[0] : fromNode) as any);
+
+        // Also compute the original gap between the last slot item and
+        // whatever comes after it in line order, for exit-offset compensation.
+        const lastSlotEnd = slotOriginalPos[slotOriginalPos.length - 1].endLine;
+        let originalAfterGap: number | undefined;
+        for (let k = 0; k < original.items.length; k++) {
+          const item = original.items[k];
+          if (item.loc.start.line > lastSlotEnd) {
+            originalAfterGap = item.loc.start.line - lastSlotEnd;
+            break;
+          }
+        }
+        // If no item follows in line order (slot was at document end),
+        // use the gap from the item just before the slot to the first
+        // slot item — this is the spacing between the two entries that
+        // should be preserved between the moved entry and what follows.
+        if (originalAfterGap === undefined && slotFirstIdx > 0) {
+          const beforeSlot = original.items[slotFirstIdx - 1];
+          originalAfterGap = slotOriginalPos[0].startLine - beforeSlot.loc.end.line;
+        }
+
+        // Remove each slot item from the Document (same discipline as removeMember).
+        const memberIdx = fromSlot ? fromSlot.items.indexOf(fromNode) : 0;
+        for (let i = 0; i <= memberIdx; i++) {
+          if (!(original.items as TreeNode[]).includes(slotItems[i])) continue;
+          remove(original, original, slotItems[i]);
+        }
+        for (let i = memberIdx + 1; i < slotItems.length; i++) {
+          const idx = (original.items as TreeNode[]).indexOf(slotItems[i]);
+          if (idx >= 0) (original.items as TreeNode[]).splice(idx, 1);
+        }
+
+        // Find insertion point. Use tryFindByPath to locate the target member.
+        // If BOTH source and target slots have leading comments, insert before
+        // the target slot's first item so the comments stay with their members
+        // after the swap. Otherwise use the member's own index.
         const toEntry = tryFindByPath(original, change.path.concat(change.to));
-        const toIndex = toEntry
-          ? original.items.indexOf(toEntry as any)
-          : original.items.length;
-        insert(original, original, fromNode, toIndex);
+        let toIndex: number;
+        let targetHasLeadingComment = false;
+        const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
+        if (toEntry) {
+          const postSlots = resolveSlots(original);
+          const targetSlot = postSlots.find(s => s.member === toEntry);
+          targetHasLeadingComment = !!(targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]));
+          if (targetHasLeadingComment && sourceHadLeadingComment) {
+            toIndex = original.items.indexOf(targetSlot!.items[0] as any);
+          } else {
+            toIndex = original.items.indexOf(toEntry as any);
+          }
+        } else {
+          toIndex = original.items.length;
+        }
+
+        // Capture the original gap at the target position so we can
+        // reproduce it for the first slot item.
+        const targetPrevEnd = toIndex > 0
+          ? original.items[toIndex - 1].loc.end.line
+          : 0;
+        const targetFirstLine = toIndex < original.items.length
+          ? original.items[toIndex].loc.start.line
+          : undefined;
+
+        // Insert slot items in forward order at incrementing indices.
+        // Compute leadingLines from the original spacing so blank lines
+        // are preserved exactly as they were in the source document.
+        // Only override when both slots have leading comments (a true swap
+        // of commented entries); otherwise let insertOnNewLine decide.
+        const isCommentedSwap = targetHasLeadingComment && sourceHadLeadingComment;
+        let insertIdx = toIndex;
+        for (let i = 0; i < slotItems.length; i++) {
+          const item = slotItems[i];
+
+          let itemLeadingLines: number | undefined;
+          // Override leadingLines when the original spacing differs from
+          // insert()'s defaults. This applies when:
+          // a) Both slots have leading comments (a commented swap), or
+          // b) The source has comments and a pinned comment sits right
+          //    before the insertion point (mixed blank lines case).
+          const shouldOverride = isCommentedSwap || (sourceHadLeadingComment && toIndex > 0 && toIndex < original.items.length);
+          if (shouldOverride && insertIdx > 0) {
+            const prevEnd = i === 0 ? targetPrevEnd : slotOriginalPos[i - 1].endLine;
+            const origLeading = (i === 0 && targetFirstLine !== undefined)
+              ? targetFirstLine - targetPrevEnd
+              : slotOriginalPos[i].startLine - prevEnd;
+            const isSquare = isTable(item) || isTableArray(item);
+            const defaultLeading = isSquare ? 2 : 1;
+            if (origLeading !== defaultLeading) {
+              itemLeadingLines = origLeading;
+            }
+          }
+
+          insert(original, original, item, insertIdx, undefined, undefined, itemLeadingLines);
+          insertIdx++;
+        }
+
+        // Restore the original gap between the last slot item and the
+        // next document item, since overriding leadingLines changes the
+        // exit offset and may misposition subsequent items.
+        if (originalAfterGap !== undefined) {
+          applyWrites(original);
+          const lastItem = slotItems[slotItems.length - 1];
+          const afterStart = original.items.indexOf(lastItem as any) + 1;
+          if (afterStart < original.items.length) {
+            const nextItem = original.items[afterStart];
+            const newGap = nextItem.loc.start.line - lastItem.loc.end.line;
+            const delta = originalAfterGap - newGap;
+            if (delta !== 0) {
+              for (let j = afterStart; j < original.items.length; j++) {
+                shiftNode(original.items[j], { lines: delta, columns: 0 });
+              }
+            }
+          }
+        }
       }
     } else if (isRename(change)) {
       const sourcePath = change.path.concat(change.from);
