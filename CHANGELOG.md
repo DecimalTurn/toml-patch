@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-08-09
+
 ### Fixed
 
 - Patching: add an element to an inline array of tables (`xs = [{ ... }]`) as an inline element rather than emitting a `[[xs]]` section alongside it, which defined the key twice. ([#267])
