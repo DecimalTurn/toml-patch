@@ -7422,24 +7422,36 @@ describe('float exponent notation round-trip', () => {
   // BUG: Emptying a single-line inline array leaves trailing whitespace
   // between the brackets: `a = [   ]` instead of `a = []`.
   test.fails('BUG: emptying single-line inline array leaves trailing whitespace', () => {
-    const src = 'a = ["x"]\n';
-    expect(patch(src, { a: [] })).toBe('a = []\n');
+    const src = dedent`
+      a = ["x"]
+    ` + '\n';
+    expect(patch(src, { a: [] })).toEqual(dedent`
+      a = []
+    ` + '\n');
   });
 
   // BUG: Emptying an inline array nested inside an inline table leaves
   // trailing whitespace before the closing bracket and brace.
   test.fails('BUG: emptying nested inline array inside inline table leaves trailing whitespace', () => {
-    const src = 'a = { b = ["x"] }\n';
-    expect(patch(src, { a: { b: [] } })).toBe('a = { b = [] }\n');
+    const src = dedent`
+      a = { b = ["x"] }
+    ` + '\n';
+    expect(patch(src, { a: { b: [] } })).toEqual(dedent`
+      a = { b = [] }
+    ` + '\n');
   });
 
   // BUG: Deleting the only key from an inline table inside an inline array
   // leaves trailing whitespace before the outer closing bracket.
   test.fails('BUG: tightening inline table inside inline array leaves trailing whitespace', () => {
-    const src = 'a = [ { b = "x" } ]\n';
+    const src = dedent`
+      a = [ { b = "x" } ]
+    ` + '\n';
     const obj = parse(src);
     delete obj.a[0].b;
-    expect(patch(src, obj)).toBe('a = [ {} ]\n');
+    expect(patch(src, obj)).toEqual(dedent`
+      a = [ {} ]
+    ` + '\n');
   });
 
   // Changing a dotted-key value from object to empty array works correctly.
