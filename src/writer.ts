@@ -55,14 +55,15 @@ const dirty_roots: WeakSet<Root> = new WeakSet();
 const emptiedByRemove: WeakMap<TreeNode, boolean> = new WeakMap();
 const hadNonLastRemoval: WeakSet<TreeNode> = new WeakSet();
 
-// Track single-line InlineTables whose only item was removed, so the
-// caller can tighten the closing bracket and reapply bracket spacing.
-const inlineTablesNeedingTighten: Set<TreeNode> = new Set();
-export function hasInlineTableNeedingTighten(node: TreeNode): boolean {
-  return inlineTablesNeedingTighten.has(node);
+// Track single-line InlineTables and InlineArrays whose only item was
+// removed, so the caller can tighten the closing bracket and reapply
+// bracket spacing.
+const inlineContainersNeedingTighten: Set<TreeNode> = new Set();
+export function hasInlineContainerNeedingTighten(node: TreeNode): boolean {
+  return inlineContainersNeedingTighten.has(node);
 }
-export function deleteInlineTableNeedingTighten(node: TreeNode): void {
-  inlineTablesNeedingTighten.delete(node);
+export function deleteInlineContainerNeedingTighten(node: TreeNode): void {
+  inlineContainersNeedingTighten.delete(node);
 }
 
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
@@ -653,11 +654,12 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     offset.lines = 0;
     offset.columns = 0;
 
-    // When the only item is removed from a single-line InlineTable, mark it
-    // so the caller can tighten the closing bracket later. The exit offset
-    // that carried the `}` spacing was on the removed item and is now lost.
-    if (isInlineTable(parent) && parent.loc.end.line === parent.loc.start.line) {
-      inlineTablesNeedingTighten.add(parent);
+    // When the only item is removed from a single-line InlineTable or
+    // InlineArray, mark it so the caller can tighten the closing bracket
+    // later. The exit offset that carried the bracket spacing was on the
+    // removed item and is now lost.
+    if ((isInlineTable(parent) || isInlineArray(parent)) && parent.loc.end.line === parent.loc.start.line) {
+      inlineContainersNeedingTighten.add(parent);
     }
 
     // When a Table, TableArray, or the root Document becomes completely

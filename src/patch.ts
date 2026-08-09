@@ -25,6 +25,7 @@ import {
   hasItems,
   InlineItem,
   InlineTable,
+  InlineArray,
   CST,
   Table,
   TableArray,
@@ -34,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineTableNeedingTighten, deleteInlineTableNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -1504,23 +1505,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     }
   }
 
-  // Fix up InlineTables that lost their only item to remove(). The exit
-  // offset that carried the closing-bracket space was on the removed item
-  // and is now lost. Tighten the end column and reapply bracket spacing.
+  // Fix up InlineTables and InlineArrays that lost their only item to
+  // remove(). The exit offset that carried the closing-bracket space was
+  // on the removed item and is now lost. Tighten the end column and
+  // reapply bracket spacing.
   let hasTightened = false;
   traverse(original, {
     InlineTable: (node) => {
-      if (hasInlineTableNeedingTighten(node)) {
-        if (node.items.length > 0) {
-          const lastItem = node.items[node.items.length - 1];
-          node.loc.end.column = lastItem.loc.end.column + 1;
-        } else {
-          // Empty table: close the brace right after the opening brace.
-          // loc.end is exclusive (} is written at end.column - 1), so
-          // we need end.column = start.column + 2 to produce "{}".
-          node.loc.end.column = node.loc.start.column + 2;
-        }
-        deleteInlineTableNeedingTighten(node);
+      if (hasInlineContainerNeedingTighten(node)) {
+        tightenInlineContainerEnd(node);
+        deleteInlineContainerNeedingTighten(node);
+        applyBracketSpacing(original, node, format.bracketSpacing);
+        hasTightened = true;
+      }
+    },
+    InlineArray: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) {
+        tightenInlineContainerEnd(node);
+        deleteInlineContainerNeedingTighten(node);
         applyBracketSpacing(original, node, format.bracketSpacing);
         hasTightened = true;
       }
@@ -1528,9 +1530,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) {
     applyWrites(original);
-    // Nested InlineTable tightening doesn't propagate through the offset
-    // system (the removed item's offset was zeroed), so parent container
-    // end positions must be recalculated explicitly.
+    // Nested inline container tightening doesn't propagate through the
+    // offset system (the removed item's offset was zeroed), so parent
+    // container end positions must be recalculated explicitly.
     recalcInlineContainerEnds(original);
   }
 
@@ -1650,6 +1652,21 @@ function handleStructuralEdit(
   // replacementKV stands in for a pre-existing entry, so it keeps that entry's R2
   // eligibility for adopting an adjacent leading comment during an updateOrder reorder.
   commentEligibleNodes.add(replacementKV);
+}
+
+/**
+ * Tighten the end column of a single-line InlineTable or InlineArray whose
+ * only item was removed by remove(). When items remain, the end is tightened
+ * to just after the last item; when empty, to start + 2 so brackets touch
+ * (e.g. `[]` or `{}`). loc.end is exclusive.
+ */
+function tightenInlineContainerEnd(node: InlineTable | InlineArray): void {
+  if (node.items.length > 0) {
+    const lastItem = node.items[node.items.length - 1];
+    node.loc.end.column = lastItem.loc.end.column + 1;
+  } else {
+    node.loc.end.column = node.loc.start.column + 2;
+  }
 }
 
 /**
