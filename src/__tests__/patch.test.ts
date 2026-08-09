@@ -7388,7 +7388,7 @@ describe('float exponent notation round-trip', () => {
 
   // BUG: Adding an array item inside a deeply nested inline array throws
   // "Unsupported parent type 'InlineItem' for insert".
-  test.fails('BUG: adding to nested inline array throws Unsupported parent type InlineItem for insert', () => {
+  test('BUG: adding to nested inline array throws Unsupported parent type InlineItem for insert', () => {
     const src = dedent`
       KeL = [18:45:20, false, ["a", "b"]]
     ` + '\n';

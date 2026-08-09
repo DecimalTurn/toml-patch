@@ -690,6 +690,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parent = parent.item.value;
         } else if (isInlineItem(parent) && isInlineTable(parent.item)) {
           parent = parent.item;
+        } else if (isInlineItem(parent) && isInlineArray(parent.item)) {
+          // Unwrap InlineArrayItem to the inner InlineArray so insert()
+          // sees a container with items, e.g. adding to ["a","b"] inside
+          // [18:45:20, false, ["a","b"]]
+          parent = parent.item;
         }
       }
 
