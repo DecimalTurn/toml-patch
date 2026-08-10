@@ -248,12 +248,16 @@ function insertOnNewLine(
   // appear after a KeyValue in the items array but are physically positioned
   // before the KeyValue's closing bracket in the source.
   //
-  // Fast path: when the immediate predecessor is not a comment, it IS the
-  // furthest item — skip the O(n) scan.  Comments don't exist during
-  // stringify (parseJS never creates them), so the fast path always applies.
+  // Fast path: when no comments precede the insertion point, the immediate
+  // predecessor's end is the furthest — skip the full scan.  This is always
+  // true during stringify (parseJS never creates Comment nodes).
   let furthestPrevious: TreeNode | undefined;
   if (previous !== undefined) {
-    if (!isComment(previous)) {
+    let hasComment = false;
+    for (let i = 0; i < index; i++) {
+      if (isComment(parent.items[i])) { hasComment = true; break; }
+    }
+    if (!hasComment) {
       furthestPrevious = previous;
     } else {
       let maxEndLine = -1;
