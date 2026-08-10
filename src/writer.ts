@@ -50,6 +50,15 @@ type Offsets = WeakMap<TreeNode, Span>;
 // Track which roots have pending offsets to avoid unnecessary applyWrites traversals
 const dirty_roots: WeakSet<Root> = new WeakSet();
 
+// Roots whose items arrays are known to contain no Comment nodes.
+// Set by parseJS (stringify path) to skip comment-related scans during insert.
+const noComments: WeakSet<Root> = new WeakSet();
+
+/** Mark a root as containing no Comment nodes — allows insert to skip comment scans. */
+export function markNoComments(root: Root): void {
+  noComments.add(root);
+}
+
 // Track Tables/TableArrays whose last item was removed via remove().
 // Also track whether a non-last removal occurred (multiple items removed).
 const emptiedByRemove: WeakMap<TreeNode, boolean> = new WeakMap();
@@ -248,27 +257,31 @@ function insertOnNewLine(
   // appear after a KeyValue in the items array but are physically positioned
   // before the KeyValue's closing bracket in the source.
   //
-  // Fast path: when no comments precede the insertion point, the immediate
-  // predecessor's end is the furthest — skip the full scan.  This is always
-  // true during stringify (parseJS never creates Comment nodes).
+  // Fast path: when the root is known to have no Comment nodes (e.g. during
+  // stringify where parseJS never creates them), the immediate predecessor
+  // is the furthest — skip all scanning.
   let furthestPrevious: TreeNode | undefined;
   if (previous !== undefined) {
-    let hasComment = false;
-    for (let i = 0; i < index; i++) {
-      if (isComment(parent.items[i])) { hasComment = true; break; }
-    }
-    if (!hasComment) {
+    if (noComments.has(root)) {
       furthestPrevious = previous;
     } else {
-      let maxEndLine = -1;
-      let maxEndColumn = -1;
+      let hasComment = false;
       for (let i = 0; i < index; i++) {
-        const item = parent.items[i];
-        const end = item.loc.end;
-        if (end.line > maxEndLine || (end.line === maxEndLine && end.column > maxEndColumn)) {
-          maxEndLine = end.line;
-          maxEndColumn = end.column;
-          furthestPrevious = item;
+        if (isComment(parent.items[i])) { hasComment = true; break; }
+      }
+      if (!hasComment) {
+        furthestPrevious = previous;
+      } else {
+        let maxEndLine = -1;
+        let maxEndColumn = -1;
+        for (let i = 0; i < index; i++) {
+          const item = parent.items[i];
+          const end = item.loc.end;
+          if (end.line > maxEndLine || (end.line === maxEndLine && end.column > maxEndColumn)) {
+            maxEndLine = end.line;
+            maxEndColumn = end.column;
+            furthestPrevious = item;
+          }
         }
       }
     }
