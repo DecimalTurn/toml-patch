@@ -12,7 +12,8 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   dts: true,
-  minify: true,
+  // Skip minification for profiling builds so function names are readable.
+  minify: !process.env.PROFILE_BUILD,
   fixedExtension: false,
   banner: {
     js: `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${pkg.license}`,
