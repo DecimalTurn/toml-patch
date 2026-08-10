@@ -15,7 +15,7 @@ import {
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
-import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markNoComments } from './writer';
+import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot } from './writer';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -27,8 +27,8 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
   value = toJSON(value);
 
   const document = generateDocument();
-  // parseJS never creates Comment nodes — tell the writer to skip comment scans.
-  markNoComments(document);
+  // Enable stringify fast paths in the writer — no comments, no removals.
+  markStringifyRoot(document);
   for (const item of walkObject(value, format)) {
     insert(document, document, item);
   }

@@ -50,13 +50,14 @@ type Offsets = WeakMap<TreeNode, Span>;
 // Track which roots have pending offsets to avoid unnecessary applyWrites traversals
 const dirty_roots: WeakSet<Root> = new WeakSet();
 
-// Roots whose items arrays are known to contain no Comment nodes.
-// Set by parseJS (stringify path) to skip comment-related scans during insert.
-const noComments: WeakSet<Root> = new WeakSet();
+// Roots being built by parseJS (stringify path, not patch).
+// These never contain Comment nodes, never have items removed, and
+// inserts are always sequential — letting us skip patch-only code paths.
+const stringifyRoots: WeakSet<Root> = new WeakSet();
 
-/** Mark a root as containing no Comment nodes — allows insert to skip comment scans. */
-export function markNoComments(root: Root): void {
-  noComments.add(root);
+/** Mark a root as being built by parseJS — enables stringify fast paths. */
+export function markStringifyRoot(root: Root): void {
+  stringifyRoots.add(root);
 }
 
 // Track Tables/TableArrays whose last item was removed via remove().
@@ -257,12 +258,11 @@ function insertOnNewLine(
   // appear after a KeyValue in the items array but are physically positioned
   // before the KeyValue's closing bracket in the source.
   //
-  // Fast path: when the root is known to have no Comment nodes (e.g. during
-  // stringify where parseJS never creates them), the immediate predecessor
-  // is the furthest — skip all scanning.
+  // Fast path: when the root is a stringify root (parseJS, no comments),
+  // the immediate predecessor is the furthest — skip all scanning.
   let furthestPrevious: TreeNode | undefined;
   if (previous !== undefined) {
-    if (noComments.has(root)) {
+    if (stringifyRoots.has(root)) {
       furthestPrevious = previous;
     } else {
       let hasComment = false;
@@ -323,7 +323,8 @@ function insertOnNewLine(
   // emptied by remove(), decide based on whether multiple items were removed:
   // - Single item: skip the extra blank line (the original separator is intact).
   // - Multiple items: use normal offset (compensates accumulated removal shifts).
-  const wasEmptied = previous === undefined
+  // Track empty/multi-removal state — only needed during patching.
+  const wasEmptied = !stringifyRoots.has(root) && previous === undefined
     && (isTable(parent) || isTableArray(parent) || isDocument(parent))
     && emptiedByRemove.has(parent);
   const wasSingleRemoval = wasEmptied && !hadNonLastRemoval.has(parent);
