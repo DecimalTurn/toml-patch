@@ -966,6 +966,13 @@ export function applyWrites(root: TreeNode) {
       }
       case NodeType.InlineArray: {
         const ia = node as InlineArray;
+        // Fast path: no offsets on this subtree — skip WeakMap lookups.
+        if (!enter.get(ia) && !exit.get(ia)) {
+          shiftPositionsNoOffsets(ia);
+          for (let i = 0; i < ia.items.length; i++) visitNode(ia.items[i]);
+          shiftPositionsNoOffsetsEnd(ia);
+          break;
+        }
         shiftLoc(ia);
         for (let i = 0; i < ia.items.length; i++) visitNode(ia.items[i]);
         shiftEnd(ia);
@@ -973,6 +980,12 @@ export function applyWrites(root: TreeNode) {
       }
       case NodeType.InlineTable: {
         const it = node as InlineTable;
+        if (!enter.get(it) && !exit.get(it)) {
+          shiftPositionsNoOffsets(it);
+          for (let i = 0; i < it.items.length; i++) visitNode(it.items[i]);
+          shiftPositionsNoOffsetsEnd(it);
+          break;
+        }
         shiftLoc(it);
         for (let i = 0; i < it.items.length; i++) visitNode(it.items[i]);
         shiftEnd(it);
@@ -1025,6 +1038,18 @@ export function applyWrites(root: TreeNode) {
       offsetColumns[node.loc.end.line] =
         (offsetColumns[node.loc.end.line] || 0) + exiting.columns;
     }
+  }
+
+  // Simplified shift helpers for clean subtrees — apply accumulated
+  // offsets without checking for enter/exit offsets (there are none).
+  function shiftPositionsNoOffsets(node: TreeNode) {
+    node.loc.start.line += offsetLines;
+    node.loc.start.column += (offsetColumns[node.loc.start.line] || 0);
+  }
+
+  function shiftPositionsNoOffsetsEnd(node: TreeNode) {
+    node.loc.end.line += offsetLines;
+    node.loc.end.column += (offsetColumns[node.loc.end.line] || 0);
   }
 
   visitNode(root);
