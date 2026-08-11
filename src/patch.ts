@@ -1160,6 +1160,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       } else {
         let parent = findParent(original, change.path);
+        // When findParent returns the node itself via dotted-key prefix
+        // matching (e.g. path ['t','a','b'] matching key ['a','b']),
+        // re-resolve from one segment higher so we get the actual
+        // container (the Table/Document) rather than the KV's value.
+        if (parent === node) {
+          parent = findParent(original, change.path.slice(0, -1));
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         }

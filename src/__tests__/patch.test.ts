@@ -8252,7 +8252,14 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Deleting the first segment of a dotted key combined with other
   // mutations throws "Unsupported parent type 'String' for remove".
   // Reproduced from fuzz seed 484 with 5 simultaneous mutations.
-  test.fails('BUG: multi-mutation delete of dotted-key prefix throws Unsupported parent type (fuzz #484)', () => {
+  //
+  // FIXED (partial): The crash is resolved by detecting when findParent
+  // returns the node itself via dotted-key prefix match and re-resolving
+  // from one path segment higher.
+  //
+  // TODO: Implicit parent "y" (created by dotted key y.ic83) does not
+  // survive when its last child is removed — "y": {} is dropped.
+  test.fails('BUG: implicit parent of dotted KV does not survive child removal (fuzz #484)', () => {
     const src = dedent`
       y3.u9jt4 = 0b111101
       "pEjJDgj/n".y = 0xeb5034c
