@@ -143,7 +143,7 @@ console.log('═'.repeat(80));
 console.log('  V8 CPU PROFILE — stringify hot paths');
 console.log('═'.repeat(80));
 
-const sfData = readFileSync(join(benchDir, '0C-scaling-table-inline-1000.toml'), 'utf8');
+const sfData = readFileSync(join(benchDir, '0A-spec-01-example-v0.4.0.toml'), 'utf8');
 const sfObj = smolToml.parse(sfData);
 
 const sfSession = new Session();
@@ -152,8 +152,8 @@ sfSession.connect();
 await sfSession.post('Profiler.enable');
 await sfSession.post('Profiler.start');
 
-console.log('\n  Profiling stringify (2000 iterations)...');
-for (let i = 0; i < 2000; i++) tomlPatch.stringify(sfObj);
+console.log('\n  Profiling stringify (50000 iterations)...');
+for (let i = 0; i < 50000; i++) tomlPatch.stringify(sfObj);
 
 const { profile: sfProfile } = await sfSession.post('Profiler.stop');
 

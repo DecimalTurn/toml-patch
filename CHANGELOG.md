@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Improve stringification performance ([#280])
+
 ## [3.0.2] - 2026-08-09
 
 ### Fixed
@@ -377,4 +380,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#276]: https://github.com/DecimalTurn/toml-patch/pull/276
 [#277]: https://github.com/DecimalTurn/toml-patch/pull/277
 [#278]: https://github.com/DecimalTurn/toml-patch/pull/278
+[#280]: https://github.com/DecimalTurn/toml-patch/pull/280
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1

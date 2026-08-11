@@ -50,6 +50,16 @@ type Offsets = WeakMap<TreeNode, Span>;
 // Track which roots have pending offsets to avoid unnecessary applyWrites traversals
 const dirty_roots: WeakSet<Root> = new WeakSet();
 
+// Roots being built by parseJS (stringify path, not patch).
+// These never contain Comment nodes, never have items removed, and
+// inserts are always sequential — letting us skip patch-only code paths.
+const stringifyRoots: WeakSet<Root> = new WeakSet();
+
+/** Mark a root as being built by parseJS — enables stringify fast paths. */
+export function markStringifyRoot(root: Root): void {
+  stringifyRoots.add(root);
+}
+
 // Track Tables/TableArrays whose last item was removed via remove().
 // Also track whether a non-last removal occurred (multiple items removed).
 const emptiedByRemove: WeakMap<TreeNode, boolean> = new WeakMap();
@@ -247,17 +257,32 @@ function insertOnNewLine(
   // all preceding items (up to index). This handles extracted comments that
   // appear after a KeyValue in the items array but are physically positioned
   // before the KeyValue's closing bracket in the source.
+  //
+  // Fast path: when the root is a stringify root (parseJS, no comments),
+  // the immediate predecessor is the furthest — skip all scanning.
   let furthestPrevious: TreeNode | undefined;
   if (previous !== undefined) {
-    let maxEndLine = -1;
-    let maxEndColumn = -1;
-    for (let i = 0; i < index; i++) {
-      const item = parent.items[i];
-      const end = item.loc.end;
-      if (end.line > maxEndLine || (end.line === maxEndLine && end.column > maxEndColumn)) {
-        maxEndLine = end.line;
-        maxEndColumn = end.column;
-        furthestPrevious = item;
+    if (stringifyRoots.has(root)) {
+      furthestPrevious = previous;
+    } else {
+      let hasComment = false;
+      for (let i = 0; i < index; i++) {
+        if (isComment(parent.items[i])) { hasComment = true; break; }
+      }
+      if (!hasComment) {
+        furthestPrevious = previous;
+      } else {
+        let maxEndLine = -1;
+        let maxEndColumn = -1;
+        for (let i = 0; i < index; i++) {
+          const item = parent.items[i];
+          const end = item.loc.end;
+          if (end.line > maxEndLine || (end.line === maxEndLine && end.column > maxEndColumn)) {
+            maxEndLine = end.line;
+            maxEndColumn = end.column;
+            furthestPrevious = item;
+          }
+        }
       }
     }
   }
@@ -298,7 +323,8 @@ function insertOnNewLine(
   // emptied by remove(), decide based on whether multiple items were removed:
   // - Single item: skip the extra blank line (the original separator is intact).
   // - Multiple items: use normal offset (compensates accumulated removal shifts).
-  const wasEmptied = previous === undefined
+  // Track empty/multi-removal state — only needed during patching.
+  const wasEmptied = !stringifyRoots.has(root) && previous === undefined
     && (isTable(parent) || isTableArray(parent) || isDocument(parent))
     && emptiedByRemove.has(parent);
   const wasSingleRemoval = wasEmptied && !hadNonLastRemoval.has(parent);
@@ -940,6 +966,13 @@ export function applyWrites(root: TreeNode) {
       }
       case NodeType.InlineArray: {
         const ia = node as InlineArray;
+        // Fast path: no offsets on this subtree — skip WeakMap lookups.
+        if (!enter.get(ia) && !exit.get(ia)) {
+          shiftPositionsNoOffsets(ia);
+          for (let i = 0; i < ia.items.length; i++) visitNode(ia.items[i]);
+          shiftPositionsNoOffsetsEnd(ia);
+          break;
+        }
         shiftLoc(ia);
         for (let i = 0; i < ia.items.length; i++) visitNode(ia.items[i]);
         shiftEnd(ia);
@@ -947,6 +980,12 @@ export function applyWrites(root: TreeNode) {
       }
       case NodeType.InlineTable: {
         const it = node as InlineTable;
+        if (!enter.get(it) && !exit.get(it)) {
+          shiftPositionsNoOffsets(it);
+          for (let i = 0; i < it.items.length; i++) visitNode(it.items[i]);
+          shiftPositionsNoOffsetsEnd(it);
+          break;
+        }
         shiftLoc(it);
         for (let i = 0; i < it.items.length; i++) visitNode(it.items[i]);
         shiftEnd(it);
@@ -999,6 +1038,18 @@ export function applyWrites(root: TreeNode) {
       offsetColumns[node.loc.end.line] =
         (offsetColumns[node.loc.end.line] || 0) + exiting.columns;
     }
+  }
+
+  // Simplified shift helpers for clean subtrees — apply accumulated
+  // offsets without checking for enter/exit offsets (there are none).
+  function shiftPositionsNoOffsets(node: TreeNode) {
+    node.loc.start.line += offsetLines;
+    node.loc.start.column += (offsetColumns[node.loc.start.line] || 0);
+  }
+
+  function shiftPositionsNoOffsetsEnd(node: TreeNode) {
+    node.loc.end.line += offsetLines;
+    node.loc.end.column += (offsetColumns[node.loc.end.line] || 0);
   }
 
   visitNode(root);
