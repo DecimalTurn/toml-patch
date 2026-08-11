@@ -1020,15 +1020,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = findParent(original, change.path);
       } else {
         parent = findParent(original, change.path);
-        // Special handling for array element edits
+        // Unwrap InlineItem parents to the actual container
+        // (mirrors the Add handler unwrapping at L690-698).
+        // For nested arrays, findParent returns the InlineArrayItem
+        // wrapper; we need the inner InlineArray so replace() splices
+        // into .items instead of overwriting .item.
         if (isKeyValue(parent)) {
-          // Check if we're actually editing an array element
           const parentPath = change.path.slice(0, -1);
           const arrayNode = findByPath(original, parentPath);
           if (isKeyValue(arrayNode) && isInlineArray(arrayNode.value)) {
             parent = arrayNode.value;
           }
+        } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
+          parent = parent.item.value;
+        } else if (isInlineItem(parent) && isInlineTable(parent.item)) {
+          parent = parent.item;
+        } else if (isInlineItem(parent) && isInlineArray(parent.item)) {
+          parent = parent.item;
         }
+      }
+
+      // When replacing an InlineItem that wraps a scalar (e.g. editing a
+      // string inside a nested array), preserve the existing item's comma
+      // flag so the replacement doesn't introduce an unwanted trailing comma.
+      if (isInlineItem(existing) && isInlineItem(replacement)) {
+        replacement.comma = existing.comma;
       }
 
       if (inlineTableRowContext) {

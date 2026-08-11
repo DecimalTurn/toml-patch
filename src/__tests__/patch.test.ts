@@ -8205,7 +8205,7 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing a value inside a nested array within a multiline array
   // produces consecutive commas in the output (found by fuzz seed 485).
-  test.fails('BUG: changing nested array element in multiline array produces consecutive commas (fuzz #485)', () => {
+  test('BUG: changing nested array element in multiline array produces consecutive commas (fuzz #485)', () => {
     const src = dedent`
       a = [
           1,
@@ -8228,7 +8228,7 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing a value inside a nested array where the inner array
   // contains a multiline string also produces consecutive commas (fuzz #485).
-  test.fails('BUG: changing nested array with multiline string produces consecutive commas (fuzz #485)', () => {
+  test('BUG: changing nested array with multiline string produces consecutive commas (fuzz #485)', () => {
     const src = dedent`
       a = [
           1,
@@ -8384,7 +8384,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Changing a value inside a nested array within a multiline array
   // that contains a wider inner array also produces consecutive commas.
   // Found by fuzz seed 485 (multi-mutation scenario).
-  test.fails('BUG: changing nested array element in wide multiline array produces bad output (fuzz #485 multi)', () => {
+  test('BUG: changing nested array element in wide multiline array produces bad output (fuzz #485 multi)', () => {
     const src = dedent`
       kdp2j91 = [
           1265.69395,
