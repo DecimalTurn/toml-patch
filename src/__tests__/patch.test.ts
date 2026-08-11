@@ -7733,3 +7733,442 @@ describe('float exponent notation round-trip', () => {
     ` + '\n');
     expect(() => parse(patch(src, obj))).not.toThrow();
   });
+
+// ---------------------------------------------------------------------------
+// Copilot review #280: wasEmptied / hadNonLastRemoval compensation
+//
+// These tests exercise the insertOnNewLine path that compensates for
+// accumulated removal offsets when a parent is emptied by remove() and
+// then re-filled by insert() during patching.
+//
+// Key scenarios:
+//  - Single removal (last item): skip extra blank line
+//  - Multiple removal (non-last items): use full offset compensation
+//  - Sequential patches: offsets accumulate across patch() calls
+// ---------------------------------------------------------------------------
+
+describe('wasEmptied compensation — empty table then add keys', () => {
+
+  test('should add a single key to a table emptied by removing its only key', () => {
+    const src = dedent`
+      [server]
+      host = "localhost"
+    ` + '\n';
+
+    const patched = patch(src, { server: { port: 8080 } });
+
+    expect(patched).toEqual(dedent`
+      [server]
+      port = 8080
+    ` + '\n');
+    expect(parse(patched)).toEqual({ server: { port: 8080 } });
+  });
+
+  test('should add multiple keys to a table emptied by removing its only key', () => {
+    const src = dedent`
+      [server]
+      host = "localhost"
+    ` + '\n';
+
+    const patched = patch(src, { server: { host: 'remote', port: 8080 } });
+
+    expect(patched).toEqual(dedent`
+      [server]
+      host = "remote"
+      port = 8080
+    ` + '\n');
+    expect(parse(patched)).toEqual({ server: { host: 'remote', port: 8080 } });
+  });
+
+  test('should add a key to a table emptied by removing ALL its keys (multiple removal)', () => {
+    const src = dedent`
+      [db]
+      host = "localhost"
+      port = 5432
+      enabled = true
+    ` + '\n';
+
+    const patched = patch(src, { db: { name: 'prod' } });
+
+    expect(patched).toEqual(dedent`
+      [db]
+      name = "prod"
+    ` + '\n');
+    expect(parse(patched)).toEqual({ db: { name: 'prod' } });
+  });
+
+  test('should add multiple keys to a table emptied by removing ALL its keys', () => {
+    const src = dedent`
+      [db]
+      host = "localhost"
+      port = 5432
+      enabled = true
+    ` + '\n';
+
+    const patched = patch(src, { db: { host: 'remote', port: 3306 } });
+
+    expect(patched).toEqual(dedent`
+      [db]
+      host = "remote"
+      port = 3306
+    ` + '\n');
+    expect(parse(patched)).toEqual({ db: { host: 'remote', port: 3306 } });
+  });
+
+});
+
+describe('wasEmptied compensation — remove non-last items, add keys', () => {
+
+  test('should remove first key and add a new key to the same table', () => {
+    const src = dedent`
+      [s]
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    const patched = patch(src, { s: { b: 2, c: 3, d: 4 } });
+
+    expect(patched).toEqual(dedent`
+      [s]
+      b = 2
+      c = 3
+      d = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ s: { b: 2, c: 3, d: 4 } });
+  });
+
+  test('should remove middle key and add a new key to the same table', () => {
+    const src = dedent`
+      [s]
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    const patched = patch(src, { s: { a: 1, c: 3, d: 4 } });
+
+    expect(patched).toEqual(dedent`
+      [s]
+      a = 1
+      c = 3
+      d = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ s: { a: 1, c: 3, d: 4 } });
+  });
+
+  test('should remove multiple non-last keys and add keys to the same table', () => {
+    const src = dedent`
+      [s]
+      a = 1
+      b = 2
+      c = 3
+      d = 4
+    ` + '\n';
+
+    // Remove a and c, keep b and d, add e
+    const patched = patch(src, { s: { b: 2, d: 4, e: 5 } });
+
+    expect(patched).toEqual(dedent`
+      [s]
+      b = 2
+      d = 4
+      e = 5
+    ` + '\n');
+    expect(parse(patched)).toEqual({ s: { b: 2, d: 4, e: 5 } });
+  });
+
+  test('should remove first and middle keys, modify last, add new key', () => {
+    const src = dedent`
+      [s]
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    const patched = patch(src, { s: { c: 99, d: 4 } });
+
+    expect(patched).toEqual(dedent`
+      [s]
+      c = 99
+      d = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ s: { c: 99, d: 4 } });
+  });
+
+});
+
+describe('wasEmptied compensation — document root', () => {
+
+  test('should remove all root KVs and add new ones', () => {
+    const src = dedent`
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    const patched = patch(src, { x: 10, y: 20 });
+
+    expect(patched).toEqual(dedent`
+      x = 10
+      y = 20
+    ` + '\n');
+    expect(parse(patched)).toEqual({ x: 10, y: 20 });
+  });
+
+  test('should remove all root KVs and a table, add new root KVs', () => {
+    const src = dedent`
+      a = 1
+      [s]
+      k = "v"
+    ` + '\n';
+
+    const patched = patch(src, { x: 10 });
+
+    expect(patched).toEqual(dedent`
+      x = 10
+    ` + '\n');
+    expect(parse(patched)).toEqual({ x: 10 });
+  });
+
+  test('should remove a root KV, keep others, add a new root KV', () => {
+    const src = dedent`
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    const patched = patch(src, { a: 1, c: 3, d: 4 });
+
+    expect(patched).toEqual(dedent`
+      a = 1
+      c = 3
+      d = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ a: 1, c: 3, d: 4 });
+  });
+
+});
+
+describe('wasEmptied compensation — sequential patches (offset accumulation)', () => {
+
+  test('should handle multiple sequential patches that remove then add to the same table', () => {
+    let src = dedent`
+      [t]
+      a = 1
+      b = 2
+      c = 3
+    ` + '\n';
+
+    // Patch 1: remove a and c
+    src = patch(src, { t: { b: 2 } });
+
+    // Patch 2: add d and e
+    src = patch(src, { t: { b: 2, d: 4, e: 5 } });
+
+    expect(src).toEqual(dedent`
+      [t]
+      b = 2
+      d = 4
+      e = 5
+    ` + '\n');
+    expect(parse(src)).toEqual({ t: { b: 2, d: 4, e: 5 } });
+  });
+
+  test('should handle sequential patches: empty table, add back different keys', () => {
+    let src = dedent`
+      [t]
+      a = 1
+      b = 2
+    ` + '\n';
+
+    // Patch 1: empty the table entirely
+    src = patch(src, { t: {} });
+
+    // Patch 2: add new keys to the empty table
+    src = patch(src, { t: { x: 10, y: 20 } });
+
+    expect(src).toEqual(dedent`
+      [t]
+      x = 10
+      y = 20
+    ` + '\n');
+    expect(parse(src)).toEqual({ t: { x: 10, y: 20 } });
+  });
+
+  test('should handle sequential patches: remove all, add single key', () => {
+    let src = dedent`
+      [db]
+      host = "old"
+      port = 1234
+      name = "legacy"
+    ` + '\n';
+
+    // Patch 1: remove all keys
+    src = patch(src, { db: {} });
+
+    // Patch 2: add just one key
+    src = patch(src, { db: { host: 'new' } });
+
+    expect(src).toEqual(dedent`
+      [db]
+      host = "new"
+    ` + '\n');
+    expect(parse(src)).toEqual({ db: { host: 'new' } });
+  });
+
+  test('should handle three sequential patches with mixed operations', () => {
+    let src = dedent`
+      [cfg]
+      debug = true
+      verbose = false
+      path = "/tmp"
+      mode = "auto"
+    ` + '\n';
+
+    // Patch 1: remove debug and verbose (non-last items)
+    src = patch(src, { cfg: { path: '/tmp', mode: 'auto' } });
+
+    // Patch 2: change mode, add timeout
+    src = patch(src, { cfg: { path: '/tmp', mode: 'manual', timeout: 30 } });
+
+    // Patch 3: remove path, add retries
+    src = patch(src, { cfg: { mode: 'manual', timeout: 30, retries: 3 } });
+
+    expect(src).toEqual(dedent`
+      [cfg]
+      mode = "manual"
+      timeout = 30
+      retries = 3
+    ` + '\n');
+    expect(parse(src)).toEqual({ cfg: { mode: 'manual', timeout: 30, retries: 3 } });
+  });
+
+});
+
+describe('wasEmptied compensation — with comments', () => {
+
+  test('should remove all keys and comments, then add a new key', () => {
+    const src = dedent`
+      # server config
+      [server]
+      # the hostname
+      host = "localhost"
+      # the port number
+      port = 8080
+    ` + '\n';
+
+    const patched = patch(src, { server: { name: 'main' } });
+
+    // Comments owned by removed keys should be gone. The server header survives.
+    expect(patched).toEqual(dedent`
+      # server config
+      [server]
+      name = "main"
+    ` + '\n');
+    expect(parse(patched)).toEqual({ server: { name: 'main' } });
+  });
+
+  test('should remove non-last key (with its comment), keep others, add new key', () => {
+    const src = dedent`
+      [s]
+      # doc for a
+      a = 1
+      # doc for b
+      b = 2
+      # doc for c
+      c = 3
+    ` + '\n';
+
+    // Remove b (middle, non-last), keep a and c, add d
+    const patched = patch(src, { s: { a: 1, c: 3, d: 4 } });
+
+    expect(patched).toEqual(dedent`
+      [s]
+      # doc for a
+      a = 1
+      # doc for c
+      c = 3
+      d = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ s: { a: 1, c: 3, d: 4 } });
+  });
+
+});
+
+describe('wasEmptied compensation — multiple tables', () => {
+
+  test.fails('should empty one table and add keys to another in the same patch', () => {
+    const src = dedent`
+      [a]
+      x = 1
+      y = 2
+
+      [b]
+      u = 3
+      v = 4
+    ` + '\n';
+
+    // Empty table a, modify table b
+    const patched = patch(src, { a: {}, b: { u: 33, w: 5 } });
+
+    // BUG: extra blank line — emptied [a] accumulates an extra \n before [b].
+    // Expected: one blank line between sections.
+    // Actual:   two blank lines (offset compensation not applied across tables).
+    expect(patched).toEqual(dedent`
+      [a]
+
+      [b]
+      u = 33
+      w = 5
+    ` + '\n');
+    expect(parse(patched)).toEqual({ a: {}, b: { u: 33, w: 5 } });
+  });
+
+  test.fails('should empty two tables and add keys to a third', () => {
+    const src = dedent`
+      [x]
+      p = 1
+
+      [y]
+      q = 2
+
+      [z]
+      r = 3
+    ` + '\n';
+
+    const patched = patch(src, { x: {}, y: {}, z: { r: 33, s: 4 } });
+
+    // BUG: same extra-blank-line issue — emptying two tables accumulates
+    // extra \n before [z].
+    expect(patched).toEqual(dedent`
+      [x]
+
+      [y]
+
+      [z]
+      r = 33
+      s = 4
+    ` + '\n');
+    expect(parse(patched)).toEqual({ x: {}, y: {}, z: { r: 33, s: 4 } });
+  });
+
+  test('should replace a table with a scalar and add a new table', () => {
+    const src = dedent`
+      [old]
+      a = 1
+      b = 2
+    ` + '\n';
+
+    const patched = patch(src, { replaced: 42, newTable: { k: 'v' } });
+
+    expect(patched).toEqual(dedent`
+      replaced = 42
+
+      [newTable]
+      k = "v"
+    ` + '\n');
+    expect(parse(patched)).toEqual({ replaced: 42, newTable: { k: 'v' } });
+  });
+
+});
