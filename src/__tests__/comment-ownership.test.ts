@@ -659,15 +659,11 @@ describe('combinations', () => {
     const value = parse(input);
     delete value.t.a;
 
-    // Two blank lines (not one) is a pre-existing quirk of emptying a table
-    // that sits directly before another, with nothing re-inserted afterward
-    // (reproducible with a single plain key and no comment at all) —
-    // unrelated to comment ownership, not asserted as desirable.
+    // The table [t] is emptied; only one blank line separates it from [u].
     expect(patch(input, value)).toEqual(dedent`
       # doc for t
       [t]
-      
-      
+
       [u]
       z = 9
     ` + '\n');

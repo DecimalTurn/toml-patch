@@ -1505,6 +1505,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     }
   }
 
+  // Fix up blank lines after tables emptied during this patch.  Removing
+  // items from a table leaves the offset chain short by one line (the last
+  // removal's contribution is zeroed).  Close the extra gap to the next
+  // section so only one blank line separates them.
+  for (let i = 0; i < (original.items as TreeNode[]).length - 1; i++) {
+    const curr = original.items[i];
+    const next = original.items[i + 1];
+    if ((isTable(curr) || isTableArray(curr)) && curr.items.length === 0
+        && (isTable(next) || isTableArray(next))) {
+      const gap = next.loc.start.line - curr.loc.end.line - 1;
+      if (gap > 1) {
+        shiftNode(next, { lines: 1 - gap, columns: 0 });
+      }
+    }
+  }
+
   // Fix up InlineTables and InlineArrays that lost their only item to
   // remove(). The exit offset that carried the closing-bracket space was
   // on the removed item and is now lost. Tighten the end column and
