@@ -186,30 +186,42 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
  * when they are at a depth less than the inlineTableStart threshold.
  */
 function processTableForNestedInlines(table: Table | TableArray, additionalTables: Table[], format: TomlFormat): void {
-  // Process from end to beginning to avoid index issues when removing items
-  for (let i = table.items.length - 1; i >= 0; i--) {
+  // Collect all inline tables that need extraction, then process in forward order
+  // to preserve the original key order in the output.
+  const toExtract: { index: number; item: KeyValue; nestedTableKey: string[] }[] = [];
+  for (let i = 0; i < table.items.length; i++) {
     const item = table.items[i];
     if (isKeyValue(item) && isInlineTable(item.value)) {
-      // Calculate the depth of this nested table
       const nestedTableKey = [...table.key.item.value, ...item.key.value];
       const depth = calculateTableDepth(nestedTableKey);
-      
-      // Only convert to separate table if depth is less than inlineTableStart
       if (depth < (format.inlineTableStart ?? 1)) {
-        const separateTable = generateTable(nestedTableKey);
-        
-        for (const inlineItem of item.value.items) {
-          insert(separateTable, separateTable, inlineItem.item);
-        }
-        
-        remove(table, table, item);
-        postInlineItemRemovalAdjustment(table);
-        
-        additionalTables.push(separateTable);
-        
-        processTableForNestedInlines(separateTable, additionalTables, format);
+        toExtract.push({ index: i, item, nestedTableKey });
       }
     }
+  }
+
+  // Process in forward order. We collected items by index before any removals,
+  // so the item references are still valid even after previous removals shift indices.
+  for (const { item, nestedTableKey } of toExtract) {
+    const separateTable = generateTable(nestedTableKey);
+
+    for (const inlineItem of item.value.items) {
+      insert(separateTable, separateTable, inlineItem.item);
+    }
+    // Update the table's end position to cover all inserted items so the
+    // span is accurate when this table is later inserted into the document.
+    if (separateTable.items.length > 0) {
+      const lastItem = separateTable.items[separateTable.items.length - 1];
+      separateTable.loc.end.line = lastItem.loc.end.line;
+      separateTable.loc.end.column = lastItem.loc.end.column;
+    }
+
+    remove(table, table, item);
+    postInlineItemRemovalAdjustment(table);
+
+    additionalTables.push(separateTable);
+
+    processTableForNestedInlines(separateTable, additionalTables, format);
   }
 }
 

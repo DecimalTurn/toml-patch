@@ -762,12 +762,9 @@ test('stringifyRoots fast-path: mixed inline tables and plain keys at root', () 
   expect(result).toEqual(expected);
 });
 
-test.fails('stringifyRoots fast-path: nested inline tables extracted at depth 2', () => {
+test('stringifyRoots fast-path: nested inline tables extracted at depth 2', () => {
   // Nested inline tables need extraction from their parent table via
   // processTableForNestedInlines — remove from parent table, insert into document.
-  // NOTE: known pre-existing bug — second key in multi-key inline tables
-  // extracted at depth 2 is lost (e.g. 'ttl' missing, blank line missing).
-  // This is NOT caused by stringifyRoots; it reproduces identically without it.
   const obj = {
     server: {
       name: 'main',
