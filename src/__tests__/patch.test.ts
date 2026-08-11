@@ -8216,7 +8216,13 @@ describe('wasEmptied compensation — multiple tables', () => {
     const obj = parse(src);
     obj.a[1][1] = 'new';
     const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
+    expect(result).toEqual(dedent`
+      a = [
+          1,
+          [true, "new"],
+          2,
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual(obj);
   });
 
@@ -8233,7 +8239,13 @@ describe('wasEmptied compensation — multiple tables', () => {
     const obj = parse(src);
     obj.a[1][1] = -1990;
     const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
+    expect(result).toEqual(dedent`
+      a = [
+          1,
+          ["""multiline""", -1990],
+          2,
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual(obj);
   });
 
@@ -8242,17 +8254,17 @@ describe('wasEmptied compensation — multiple tables', () => {
   // when combined with other mutations in the same patch call.
   // Simple single-mutation cases work, but the fuzzer found failures with
   // multi-mutation scenarios (seeds 484, 487, 488, 489, 490, 493).
-  // These tests document the expected behavior for the simple case.
-  test('BUG: deleting dotted-key prefix should work (simple case, fuzz #484)', () => {
+  test('BUG: deleting dotted-key prefix should empty the document (simple case, fuzz #484)', () => {
     const src = dedent`
       "pEjJDgj/n".y = 0xeb5034c
     ` + '\n';
     const obj = parse(src);
     delete obj['pEjJDgj/n'];
+    expect(patch(src, obj)).toEqual('\n');
     expect(parse(patch(src, obj))).toEqual({});
   });
 
-  test('BUG: deleting dotted-key prefix inside table should work (simple case, fuzz #489)', () => {
+  test('BUG: deleting dotted-key prefix inside table should remove the key (simple case, fuzz #489)', () => {
     const src = dedent`
       [sittwg3wnr]
       "a".b = true
@@ -8260,17 +8272,23 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n';
     const obj = parse(src);
     delete obj.sittwg3wnr.a;
-    const reparsed = parse(patch(src, obj));
-    expect(reparsed.sittwg3wnr).toEqual({ c: 1 });
+    expect(patch(src, obj)).toEqual(dedent`
+      [sittwg3wnr]
+      c = 1
+    ` + '\n');
+    expect(parse(patch(src, obj))).toEqual({ sittwg3wnr: { c: 1 } });
   });
 
-  test('BUG: deleting deep key with special chars should work (simple case, fuzz #487)', () => {
+  test('BUG: deleting deep key with special chars should leave empty table (simple case, fuzz #487)', () => {
     const src = dedent`
       [hk_rk19w]
       "3HgKlM".a-_oown55 = "@X[lLOCm2kr[P1iH%04I$vK7#Y68yO-75Q7.#q"
     ` + '\n';
     const obj = parse(src);
     delete obj.hk_rk19w['3HgKlM'];
+    expect(patch(src, obj)).toEqual(dedent`
+      [hk_rk19w]
+    ` + '\n');
     expect(parse(patch(src, obj))).toEqual({ hk_rk19w: {} });
   });
 
@@ -8279,31 +8297,35 @@ describe('wasEmptied compensation — multiple tables', () => {
   // that inline table can produce a duplicate table header.
   // Simple single-mutation cases work, but the fuzzer found failures with
   // deeper nesting and multiple mutations (seeds 464, 473, 477, 479, 495).
-  test('BUG: changing nested inline table value under section header should work (simple case, fuzz #464)', () => {
+  test('BUG: changing nested inline table value should update inline (simple case, fuzz #464)', () => {
     const src = dedent`
       [kaes3f6]
       rrc4z = { "r-dr3h3" = { bksb = 1 } }
     ` + '\n';
     const obj = parse(src);
     obj.kaes3f6.rrc4z['r-dr3h3'].bksb = 42;
-    const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
-    expect(parse(result)).toEqual(obj);
+    expect(patch(src, obj)).toEqual(dedent`
+      [kaes3f6]
+      rrc4z = { "r-dr3h3" = { bksb = 42 } }
+    ` + '\n');
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
-  test('BUG: changing deeply nested inline table under section header should work (simple case, fuzz #464 deep)', () => {
+  test('BUG: changing deeply nested inline table value should update inline (simple case, fuzz #464 deep)', () => {
     const src = dedent`
       [kaes3f6]
       rrc4z = { "r-dr3h3" = { aavr = { dvk1s = { hiza = 1 } } } }
     ` + '\n';
     const obj = parse(src);
     obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s.hiza = 2;
-    const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
-    expect(parse(result)).toEqual(obj);
+    expect(patch(src, obj)).toEqual(dedent`
+      [kaes3f6]
+      rrc4z = { "r-dr3h3" = { aavr = { dvk1s = { hiza = 2 } } } }
+    ` + '\n');
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
-  test('BUG: changing value under implicit table should work (simple case, fuzz #473)', () => {
+  test('BUG: changing value under implicit table should update inline (simple case, fuzz #473)', () => {
     const src = dedent`
       abjl."$+l| I0-M3" = [
           -9117400000000669182,
@@ -8314,29 +8336,37 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n';
     const obj = parse(src);
     obj.abjl['$+l| I0-M3'][0] = 42;
-    const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
-    expect(parse(result)).toEqual(obj);
+    expect(patch(src, obj)).toEqual(dedent`
+      abjl."$+l| I0-M3" = [
+          42,
+          "sXZHq@p@",
+          false,
+          1995-06-12,
+      ]
+    ` + '\n');
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
   // BUG: Deleting a key from a nested inline table inside an array
   // can throw "Node not found in parent for removal" with certain
   // format options. Simple single-mutation works, but the fuzzer
   // found failures with format options like minimumDecimals (seed 483).
-  test('BUG: deleting key from nested inline table in array should work (simple case, fuzz #483)', () => {
+  test('BUG: deleting key from nested inline table in array should leave empty subtable (simple case, fuzz #483)', () => {
     const src = dedent`
       i6i6d5cuwt = [{ "ZQG<xH>I8" = { sgshmg = { k92 = 1 } } }]
     ` + '\n';
     const obj = parse(src);
     delete obj.i6i6d5cuwt[0]['ZQG<xH>I8'].sgshmg.k92;
-    const reparsed = parse(patch(src, obj));
-    expect(reparsed.i6i6d5cuwt[0]['ZQG<xH>I8'].sgshmg).toEqual({});
+    expect(patch(src, obj)).toEqual(dedent`
+      i6i6d5cuwt = [{ "ZQG<xH>I8" = { sgshmg = {} } }]
+    ` + '\n');
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
-  // BUG: Deleting all keys from an inline table that started with
-  // a single key can produce an array with consecutive commas
-  // or broken structure. Found by fuzz seed 485 (multi-mutation).
-  test.fails('BUG: emptying nested inline table in multiline array leaves bad structure (fuzz #485 multi)', () => {
+  // BUG: Changing a value inside a nested array within a multiline array
+  // that contains a wider inner array also produces consecutive commas.
+  // Found by fuzz seed 485 (multi-mutation scenario).
+  test.fails('BUG: changing nested array element in wide multiline array produces bad output (fuzz #485 multi)', () => {
     const src = dedent`
       kdp2j91 = [
           1265.69395,
@@ -8345,10 +8375,15 @@ describe('wasEmptied compensation — multiple tables', () => {
       ]
     ` + '\n';
     const obj = parse(src);
-    // Change element [1][3] (the string) to a number, then see if it round-trips
     obj.kdp2j91[1][2] = -1990;
     const result = patch(src, obj);
-    expect(() => parse(result)).not.toThrow();
+    expect(result).toEqual(dedent`
+      kdp2j91 = [
+          1265.69395,
+          [true, 761028, -1990, 6924.16041],
+          1996-05-17T21:40:33Z,
+      ]
+    ` + '\n');
     expect(parse(result)).toEqual(obj);
   });
 
