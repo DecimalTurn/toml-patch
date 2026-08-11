@@ -8335,11 +8335,9 @@ describe('wasEmptied compensation — multiple tables', () => {
   // section header produces a duplicate [kaes3f6] header.
   // Reproduced from fuzz seed 464 with 3 simultaneous mutations.
   //
-  // The bug triggers when structural type changes (dotted-key table→scalar,
-  // string→object, object→array) are applied to a deeply nested inline table
-  // under a section header. The patcher emits a second [kaes3f6] header
-  // instead of modifying the inline table in place.
-  test.fails('BUG: structural changes in nested inline table under section produce duplicate header (fuzz #464)', () => {
+  // Edits that truncate dotted keys inside inline tables (changing nested
+  // objects to scalars/arrays/objects) should produce a single valid section.
+  test('structural changes in nested inline table under section (fuzz #464)', () => {
     const src = dedent`
       [kaes3f6]
       rrc4z.r-dr3h3 = { bksb.eca7itb61.ismjjcc = false, aavr = { dvk1s.hiza = "x", 0.y2k2_.tgo = "" } }

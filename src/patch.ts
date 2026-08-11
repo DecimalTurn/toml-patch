@@ -886,6 +886,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // the longest suffix of change.path that matches a prefix of the
         // existing key — this handles cases where parseJS restructured keys
         // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
+        let keyTruncated = false;
         if (existing.key.value.length > 1) {
           let matchLen = 0;
           const max = Math.min(change.path.length, existing.key.value.length);
@@ -911,6 +912,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existing.value.loc.start.column += delta;
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+            keyTruncated = true;
           }
         }
         
@@ -922,9 +924,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;
+
+        // When the key was truncated, the replacement value from the updated CST
+        // carries stale coordinate-system data that corrupts applyWrites' offset
+        // resolution.  Regenerate a fresh value through parseJS for clean loc values
+        // (same approach as handleStructuralEdit).
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshDoc = parseJS({ __tmp__: jsValue }, format);
+            const freshKV = freshDoc.items[0] as KeyValue;
+            replacement = freshKV.value;
+          }
+        }
       } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
         // Truncate the existing key if the path matched via prefix (same
         // logic as the isKeyValue && isKeyValue branch above).
+        let keyTruncated = false;
         if (existing.key.value.length > 1) {
           let matchLen = 0;
           const max = Math.min(change.path.length, existing.key.value.length);
@@ -950,12 +967,26 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existing.value.loc.start.column += delta;
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+            keyTruncated = true;
           }
         }
 
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
+
+        // When the key was truncated, regenerate the replacement value with clean
+        // loc values (same approach as handleStructuralEdit) to avoid applyWrites
+        // corruption from stale updated-CST coordinate-system data.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshDoc = parseJS({ __tmp__: jsValue }, format);
+            const freshKV = freshDoc.items[0] as KeyValue;
+            replacement = freshKV.value;
+          }
+        }
       } else if (isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)) {
         // Editing inline table item: existing is InlineItem, replacement is a block-style KeyValue.
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
@@ -966,12 +997,56 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         existing = existingKeyValue.value;
         replacement = replacement.value;
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
-        // Both are InlineItems wrapping KeyValues (nested inline table edits)
+        // Both are InlineItems wrapping KeyValues (nested inline table edits).
+        
+        // If the path matched via prefix (shorter than the existing dotted key),
+        // truncate the key.  Same logic as the isKeyValue branches above.
+        let keyTruncated = false;
+        const existingKV = existing.item;
+        if (existingKV.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existingKV.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existingKV.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existingKV.key.value.length) {
+            existingKV.key.value = existingKV.key.value.slice(0, matchLen);
+            existingKV.key.raw = generateKey(existingKV.key.value).raw;
+            const oldEndCol = existingKV.key.loc.end.column;
+            const newEndCol = existingKV.key.loc.start.column + existingKV.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existingKV.key.loc.end.column = newEndCol;
+            existingKV.equals += delta;
+            existingKV.value.loc.start.column += delta;
+            if (existingKV.value.loc.end.line === existingKV.value.loc.start.line) existingKV.value.loc.end.column += delta;
+            if (existingKV.loc.end.line === existingKV.loc.start.line) existingKV.loc.end.column += delta;
+            keyTruncated = true;
+          }
+        }
+
         // Preserve formatting and edit the value within
-        preserveFormatting(existing.item.value, replacement.item.value);
-        parent = existing.item;
-        existing = existing.item.value;
+        preserveFormatting(existingKV.value, replacement.item.value);
+        parent = existingKV;
+        existing = existingKV.value;
         replacement = replacement.item.value;
+
+        // When the key was truncated, regenerate the replacement value with clean
+        // loc values (same approach as handleStructuralEdit) to avoid applyWrites
+        // corruption from stale updated-CST coordinate-system data.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshDoc = parseJS({ __tmp__: jsValue }, format);
+            const freshKV = freshDoc.items[0] as KeyValue;
+            replacement = freshKV.value;
+          }
+        }
       } else if (isTable(existing)) {
         // Type change: a block table section (e.g: [x.y.z.w]) is being replaced by a scalar value.
         // The diff produces an Edit at path e.g. ['x','y','z','w'], where `existing` is the Table
