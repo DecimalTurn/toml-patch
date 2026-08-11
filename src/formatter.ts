@@ -204,17 +204,14 @@ function processTableForNestedInlines(table: Table | TableArray, additionalTable
   // so the item references are still valid even after previous removals shift indices.
   for (const { item, nestedTableKey } of toExtract) {
     const separateTable = generateTable(nestedTableKey);
+    const inlineTable = item.value as InlineTable;
 
-    for (const inlineItem of item.value.items) {
+    for (const inlineItem of inlineTable.items) {
       insert(separateTable, separateTable, inlineItem.item);
     }
-    // Update the table's end position to cover all inserted items so the
-    // span is accurate when this table is later inserted into the document.
-    if (separateTable.items.length > 0) {
-      const lastItem = separateTable.items[separateTable.items.length - 1];
-      separateTable.loc.end.line = lastItem.loc.end.line;
-      separateTable.loc.end.column = lastItem.loc.end.column;
-    }
+    // Finalize the separateTable's internal offsets and recalculate its span
+    // so it can be safely inserted into the document later.
+    applyWrites(separateTable);
 
     remove(table, table, item);
     postInlineItemRemovalAdjustment(table);
@@ -222,6 +219,11 @@ function processTableForNestedInlines(table: Table | TableArray, additionalTable
     additionalTables.push(separateTable);
 
     processTableForNestedInlines(separateTable, additionalTables, format);
+  }
+  // Apply removal offsets accumulated on this table so remaining items
+  // (if any) are shifted to the correct positions.
+  if (toExtract.length > 0) {
+    applyWrites(table);
   }
 }
 
