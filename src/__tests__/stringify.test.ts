@@ -701,3 +701,125 @@ test('should stringify emoji as raw character (not unicode escape) from fresh JS
   const parsed = parse(result);
   expect(parsed.text).toBe('hello ☺');
 });
+
+// --- Copilot review #280: stringifyRoots fast-path safety ---
+// These tests exercise the formatter's remove()+insert() sequence during stringify,
+// verifying that skipping emptiedByRemove/hadNonLastRemoval for stringify roots
+// does NOT produce incorrect output.
+
+test('stringifyRoots fast-path: multiple inline tables extracted to sections', () => {
+  // All root-level values are inline tables needing extraction (formatTopLevel).
+  // The formatter calls remove() then insert() for each, but the document never
+  // becomes empty between operations — the wasEmptied compensation is never needed.
+  const obj = {
+    alpha: { x: 1 },
+    beta: { y: 2 },
+    gamma: { z: 3 },
+  };
+
+  const result = stringify(obj, { inlineTableStart: 1 });
+
+  const expected = dedent`
+    [alpha]
+    x = 1
+
+    [beta]
+    y = 2
+
+    [gamma]
+    z = 3
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('stringifyRoots fast-path: mixed inline tables and plain keys at root', () => {
+  // Some root values are inline tables, some are scalars. The formatter
+  // must remove+insert the tables while leaving scalars in place.
+  const obj = {
+    title: 'My App',
+    version: '1.0',
+    database: { host: 'localhost', port: 5432 },
+    cache: { type: 'redis' },
+    debug: true,
+  };
+
+  const result = stringify(obj, { inlineTableStart: 1 });
+
+  const expected = dedent`
+    title = "My App"
+    version = "1.0"
+    debug = true
+
+    [database]
+    host = "localhost"
+    port = 5432
+
+    [cache]
+    type = "redis"
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test.fails('stringifyRoots fast-path: nested inline tables extracted at depth 2', () => {
+  // Nested inline tables need extraction from their parent table via
+  // processTableForNestedInlines — remove from parent table, insert into document.
+  // NOTE: known pre-existing bug — second key in multi-key inline tables
+  // extracted at depth 2 is lost (e.g. 'ttl' missing, blank line missing).
+  // This is NOT caused by stringifyRoots; it reproduces identically without it.
+  const obj = {
+    server: {
+      name: 'main',
+      database: { host: 'db1', port: 5432 },
+      cache: { backend: 'redis', ttl: 3600 },
+    },
+  };
+
+  const result = stringify(obj, { inlineTableStart: 2 });
+
+  const expected = dedent`
+    [server]
+    name = "main"
+
+    [server.database]
+    host = "db1"
+    port = 5432
+
+    [server.cache]
+    backend = "redis"
+    ttl = 3600
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
+
+test('stringifyRoots fast-path: all inline tables extracted, no scalars at root', () => {
+  // Edge case: root has ONLY inline tables, all extracted. The document
+  // iterates through remove+insert for every item — maximum stress on
+  // the offset accumulation path.
+  const obj = {
+    section_a: { key: 'a' },
+    section_b: { key: 'b' },
+    section_c: { key: 'c' },
+    section_d: { key: 'd' },
+  };
+
+  const result = stringify(obj, { inlineTableStart: 1 });
+
+  const expected = dedent`
+    [section_a]
+    key = "a"
+
+    [section_b]
+    key = "b"
+
+    [section_c]
+    key = "c"
+
+    [section_d]
+    key = "d"
+    ` + '\n';
+
+  expect(result).toEqual(expected);
+});
