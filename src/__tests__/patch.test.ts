@@ -8201,4 +8201,168 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(patched)).toEqual({ replaced: 42, newTable: { k: 'v' } });
   });
 
+  // ─── Fuzz-discovered bugs ───────────────────────────────────────────
+
+  // BUG: Changing a value inside a nested array within a multiline array
+  // produces consecutive commas in the output (found by fuzz seed 485).
+  test.fails('BUG: changing nested array element in multiline array produces consecutive commas (fuzz #485)', () => {
+    const src = dedent`
+      a = [
+          1,
+          [true, "old"],
+          2,
+      ]
+    ` + '\n';
+    const obj = parse(src);
+    obj.a[1][1] = 'new';
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // BUG: Changing a value inside a nested array where the inner array
+  // contains a multiline string also produces consecutive commas (fuzz #485).
+  test.fails('BUG: changing nested array with multiline string produces consecutive commas (fuzz #485)', () => {
+    const src = dedent`
+      a = [
+          1,
+          ["""multiline""", "old"],
+          2,
+      ]
+    ` + '\n';
+    const obj = parse(src);
+    obj.a[1][1] = -1990;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // BUG: Deleting the first segment of a dotted key (e.g. deleting "a"
+  // when the CST has "a".b) throws "Unsupported parent type for remove"
+  // because the path resolves to a Key node whose parent is not a container
+  // with items. Found by fuzz seeds 484, 487, 488, 489, 490, 493.
+  test.fails('BUG: deleting dotted-key prefix throws Unsupported parent type for remove (fuzz #484)', () => {
+    const src = dedent`
+      "pEjJDgj/n".y = 0xeb5034c
+    ` + '\n';
+    const obj = parse(src);
+    delete obj['pEjJDgj/n'];
+    expect(() => patch(src, obj)).not.toThrow();
+    expect(parse(patch(src, obj))).toEqual({});
+  });
+
+  // BUG: Deleting the first segment of a dotted key inside a table
+  // also throws "Unsupported parent type for remove". (fuzz #489 variant)
+  test.fails('BUG: deleting dotted-key prefix inside table throws Unsupported parent type (fuzz #489)', () => {
+    const src = dedent`
+      [sittwg3wnr]
+      "a".b = true
+      c = 1
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.sittwg3wnr.a;
+    expect(() => patch(src, obj)).not.toThrow();
+    const reparsed = parse(patch(src, obj));
+    expect(reparsed.sittwg3wnr).toEqual({ c: 1 });
+  });
+
+  // BUG: Deleting a deeply nested key with mixed special characters
+  // throws "Unsupported parent type for remove" when the path contains
+  // quoted keys with special characters. Found by fuzz seed 487.
+  test.fails('BUG: deleting deep key with special chars throws Unsupported parent type (fuzz #487)', () => {
+    const src = dedent`
+      [hk_rk19w]
+      "3HgKlM".a-_oown55 = "@X[lLOCm2kr[P1iH%04I$vK7#Y68yO-75Q7.#q"
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.hk_rk19w['3HgKlM'];
+    expect(() => patch(src, obj)).not.toThrow();
+    expect(parse(patch(src, obj))).toEqual({ hk_rk19w: {} });
+  });
+
+  // BUG: When a table section header exists and the only key-value
+  // inside it is an inline table, changing a deeply nested value inside
+  // that inline table can produce a duplicate table header.
+  // Found by fuzz seeds 464, 473, 477, 479, 495.
+  test.fails('BUG: changing nested inline table value under section header duplicates header (fuzz #464)', () => {
+    const src = dedent`
+      [kaes3f6]
+      rrc4z = { "r-dr3h3" = { bksb = 1 } }
+    ` + '\n';
+    const obj = parse(src);
+    obj.kaes3f6.rrc4z['r-dr3h3'].bksb = 42;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // BUG: Same duplicate header pattern with deeper nesting
+  // (fuzz seed 464 variant with 4 levels of inline tables).
+  test.fails('BUG: changing deeply nested inline table under section header duplicates header (fuzz #464 deep)', () => {
+    const src = dedent`
+      [kaes3f6]
+      rrc4z = { "r-dr3h3" = { aavr = { dvk1s = { hiza = 1 } } } }
+    ` + '\n';
+    const obj = parse(src);
+    obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s.hiza = 2;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // BUG: When an implicit table (created by dotted key assignment) is
+  // followed by mutation, a duplicate header can be generated.
+  // Found by fuzz seeds 473, 477, 479.
+  test.fails('BUG: changing value under implicit table produces duplicate header (fuzz #473)', () => {
+    const src = dedent`
+      abjl."$+l| I0-M3" = [
+          -9117400000000669182,
+          "sXZHq@p@",
+          false,
+          1995-06-12,
+      ]
+    ` + '\n';
+    const obj = parse(src);
+    obj.abjl['$+l| I0-M3'][0] = 42;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // BUG: Deleting a key from a nested inline table inside an array
+  // throws "Node not found in parent for removal" when using
+  // format options like minimumDecimals. Found by fuzz seed 483.
+  test.fails('BUG: deleting key from nested inline table in array throws Node not found (fuzz #483)', () => {
+    const src = dedent`
+      i6i6d5cuwt = [{ "ZQG<xH>I8" = { sgshmg = { k92 = 1 } } }]
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.i6i6d5cuwt[0]['ZQG<xH>I8'].sgshmg.k92;
+    const fmt = new TomlFormat(
+      '\n', 2, false, true, 2, true, false, 2, false, true
+    );
+    expect(() => patch(src, obj, fmt)).not.toThrow();
+    const reparsed = parse(patch(src, obj, fmt));
+    expect(reparsed.i6i6d5cuwt[0]['ZQG<xH>I8'].sgshmg).toEqual({});
+  });
+
+  // BUG: Deleting all keys from an inline table that started with
+  // a single key can produce an array with consecutive commas
+  // or broken structure. Found by fuzz seed 485 (multi-mutation).
+  test.fails('BUG: emptying nested inline table in multiline array leaves bad structure (fuzz #485 multi)', () => {
+    const src = dedent`
+      kdp2j91 = [
+          1265.69395,
+          [true, 761028, ",,sYY(,N<1]=,+<g", 6924.16041],
+          1996-05-17T21:40:33Z,
+      ]
+    ` + '\n';
+    const obj = parse(src);
+    // Change element [1][3] (the string) to a number, then see if it round-trips
+    obj.kdp2j91[1][2] = -1990;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+  });
+
 });
