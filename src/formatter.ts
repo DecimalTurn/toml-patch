@@ -188,20 +188,21 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
 function processTableForNestedInlines(table: Table | TableArray, additionalTables: Table[], format: TomlFormat): void {
   // Collect all inline tables that need extraction, then process in forward order
   // to preserve the original key order in the output.
-  const toExtract: { index: number; item: KeyValue; nestedTableKey: string[] }[] = [];
+  const toExtract: { item: KeyValue; nestedTableKey: string[] }[] = [];
   for (let i = 0; i < table.items.length; i++) {
     const item = table.items[i];
     if (isKeyValue(item) && isInlineTable(item.value)) {
       const nestedTableKey = [...table.key.item.value, ...item.key.value];
       const depth = calculateTableDepth(nestedTableKey);
       if (depth < (format.inlineTableStart ?? 1)) {
-        toExtract.push({ index: i, item, nestedTableKey });
+        toExtract.push({ item, nestedTableKey });
       }
     }
   }
 
-  // Process in forward order. We collected items by index before any removals,
-  // so the item references are still valid even after previous removals shift indices.
+  // Process in forward order.  Each item reference captured above is stable
+  // even after previous iterations call remove() — the KeyValue node itself
+  // stays valid regardless of index shifts.
   for (const { item, nestedTableKey } of toExtract) {
     const separateTable = generateTable(nestedTableKey);
     const inlineTable = item.value as InlineTable;
