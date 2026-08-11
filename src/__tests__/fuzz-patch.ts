@@ -5,7 +5,7 @@
  * Usage: npx tsx src/__tests__/fuzz-patch.ts [--count N] [--seed SEED] [--mutations M]
  */
 import { randomToml, SeededRandom } from './randomizer';
-import { parse, patch } from '../';
+import { parse, patch, TomlFormat } from '../';
 import { inspect } from 'util';
 
 // ─── Mutation helpers ────────────────────────────────────────────────────
@@ -287,6 +287,53 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
   }
 }
 
+// ─── Random TomlFormat generator ─────────────────────────────────────────
+
+function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
+  // 50% chance: no format override (use library defaults)
+  if (rng.chance(0.5)) return undefined;
+
+  const format: Partial<TomlFormat> = {};
+
+  // inlineTableStart: 0, 1, 2, or undefined (default 1)
+  const itsRoll = rng.next();
+  if (itsRoll < 0.25) format.inlineTableStart = 0;
+  else if (itsRoll < 0.5) format.inlineTableStart = 1;
+  else if (itsRoll < 0.75) format.inlineTableStart = 2;
+  // else undefined → use default
+
+  format.trailingComma = rng.chance(0.5);
+  format.bracketSpacing = rng.chance(0.5);
+  format.updateOrder = rng.chance(0.5);
+
+  // trailingNewline: 0, 1, 2
+  const tnRoll = rng.next();
+  if (tnRoll < 0.33) format.trailingNewline = 0;
+  else if (tnRoll < 0.66) format.trailingNewline = 1;
+  else format.trailingNewline = 2;
+
+  format.newLine = rng.chance(0.5) ? '\r\n' : '\n';
+  format.leadingBom = rng.chance(0.3);
+  format.truncateZeroTimeInDates = rng.chance(0.5);
+  format.useTabsForIndentation = rng.chance(0.3);
+
+  // minimumDecimals: mostly 0 (default), sometimes 1 or 2
+  const mdRoll = rng.next();
+  if (mdRoll >= 0.7 && mdRoll < 0.85) format.minimumDecimals = 1;
+  else if (mdRoll >= 0.85) format.minimumDecimals = 2;
+
+  return format;
+}
+
+function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
+  if (!fmt) return 'default';
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(fmt)) {
+    parts.push(`${k}=${JSON.stringify(v)}`);
+  }
+  return parts.join(', ') || 'empty';
+}
+
 // ─── Fuzz runner ─────────────────────────────────────────────────────────
 
 interface PatchFuzzResult {
@@ -299,6 +346,7 @@ interface PatchFuzzResult {
   modifiedObj?: unknown;
   reParsedObj?: unknown;
   mutationDescs?: string[];
+  formatDesc?: string;
 }
 
 function fuzzOne(
@@ -321,7 +369,12 @@ function fuzzOne(
     // 2. Deep clone
     let obj2 = deepClone(obj1) as any;
 
-    // 3. Apply mutations using a seeded RNG (offset from doc seed
+    // 3. Generate random TomlFormat (deterministic from seed)
+    const formatRng = new SeededRandom(seed + 500000);
+    const format = randomTomlFormat(formatRng);
+    const formatDesc = describeFormat(format);
+
+    // 4. Apply mutations using a seeded RNG (offset from doc seed
     //    so mutationCount changes don't alter the same-seed sequence)
     const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
     const mutationDescs: string[] = [];
@@ -336,20 +389,21 @@ function fuzzOne(
       return { seed, mutations: mutationCount, status: 'ok' };
     }
 
-    // 4. Apply patch
+    // 5. Apply patch
     let patchedToml: string;
     try {
-      patchedToml = patch(generated.toml, obj2);
+      patchedToml = patch(generated.toml, obj2, format);
     } catch (e: any) {
       result.status = 'patch-fail';
       result.error = `patch() threw: ${e.message}`;
       result.originalToml = generated.toml;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
+      result.formatDesc = formatDesc;
       return result;
     }
 
-    // 5. Parse the patched result
+    // 6. Parse the patched result
     let reParsed: any;
     try {
       reParsed = parse(patchedToml);
@@ -360,10 +414,11 @@ function fuzzOne(
       result.patchedToml = patchedToml;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
+      result.formatDesc = formatDesc;
       return result;
     }
 
-    // 6. Compare
+    // 7. Compare
     if (!deepEqual(obj2, reParsed)) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
@@ -372,6 +427,7 @@ function fuzzOne(
       result.modifiedObj = obj2;
       result.reParsedObj = reParsed;
       result.mutationDescs = mutationDescs;
+      result.formatDesc = formatDesc;
       return result;
     }
 
@@ -416,6 +472,9 @@ function main() {
 
     if (result.status !== 'ok') {
       console.log(`\nFAIL [seed=${seed}]: ${result.status} — ${result.error}`);
+      if (result.formatDesc) {
+        console.log(`Format: ${result.formatDesc}`);
+      }
       if (result.mutationDescs) {
         console.log('Mutations:');
         result.mutationDescs.forEach(d => console.log(`  ${d}`));
