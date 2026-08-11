@@ -8368,6 +8368,33 @@ describe('wasEmptied compensation — multiple tables', () => {
     obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s = { hiza: true };
     obj.kaes3f6.rrc4z['r-dr3h3'].aavr['0'].y2k2_ = [1];
     const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      q0sdn9y.g = true
+      qk = 2070-06-26
+      CLz = "L}hOJ6l-](WQ9xU>iJpxJ@}Ude3,"
+      v6y9m7.bvseemd6h = 2082-01-12T22:45:49Z
+      nb-m.z4qw6fn."\x60n5" = 63978.2595
+      vrtpjx_xc = 'BkVbst^u_T]9'
+      "=DU6:" = 1661400000000230991
+      "" = 812850
+      j5vw.k0-."E6.hi%J." = 323644
+      ":".or.ml = true
+      txzfbjavh_.kvbi.pd-xy = "H^e\x60c98d|(hM"
+      aepnl_.s14p94.aj = 2083-03-16T16:45:34.292249Z
+      "*6gGwO"."wHF&u|#pzI" = "d_S<<a2f;a4V$Q?G=lp>0@tt&(Jm.y7{"
+      pks_rkw6md.c = [
+          "OR$[,}Ii8C6M!kdB#4MYi:N&Bch5UR",
+          -17841.42303,
+          '[mwF>&9dOe=hfpk6AsL=f',
+      ]
+
+      [[r0d.civqzg2hhh.c]]
+      r61."7wH\x60M,z" = 1987-10-25T04:05:05.941053Z
+      t3kch.f."O~Qh" = 2065-12-05
+
+      [kaes3f6]
+      rrc4z = { r-dr3h3 = { aavr = { 0 = { y2k2_ = [1] }, dvk1s = { hiza = true, },}, bksb = -454861,} }
+    ` + '\n');
     expect(() => parse(result)).not.toThrow();
     expect(parse(result)).toEqual(obj);
   });
