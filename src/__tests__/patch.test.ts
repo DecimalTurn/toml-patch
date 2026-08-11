@@ -8153,7 +8153,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(patched)).toEqual({ x: {}, y: {}, z: { r: 33, s: 4 } });
   });
 
-  test.fails('should empty first table without doubling gap to third table', () => {
+  test('should empty first table without doubling gap to third table', () => {
     const src = dedent`
       [a]
       x = 1
@@ -8170,9 +8170,6 @@ describe('wasEmptied compensation — multiple tables', () => {
     // Empty table a, leave b and c as-is
     const patched = patch(src, { a: {}, b: { u: 3, v: 4 }, c: { z: 9 } });
 
-    // BUG: the blank-line fixup after applyWrites only shifts the immediate
-    // next table (b).  Any tables after it (c) stay at their old line
-    // numbers, creating an extra blank line between b and c.
     expect(patched).toEqual(dedent`
       [a]
 

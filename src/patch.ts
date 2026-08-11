@@ -1509,14 +1509,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // items from a table leaves the offset chain short by one line (the last
   // removal's contribution is zeroed).  Close the extra gap to the next
   // section so only one blank line separates them.
-  for (let i = 0; i < (original.items as TreeNode[]).length - 1; i++) {
-    const curr = original.items[i];
-    const next = original.items[i + 1];
+  const rootItems = original.items as TreeNode[];
+  for (let i = 0; i < rootItems.length - 1; i++) {
+    const curr = rootItems[i];
+    const next = rootItems[i + 1];
     if ((isTable(curr) || isTableArray(curr)) && curr.items.length === 0
         && (isTable(next) || isTableArray(next))) {
       const gap = next.loc.start.line - curr.loc.end.line - 1;
       if (gap > 1) {
-        shiftNode(next, { lines: 1 - gap, columns: 0 });
+        const delta = 1 - gap;
+        for (let j = i + 1; j < rootItems.length; j++) {
+          shiftNode(rootItems[j], { lines: delta, columns: 0 });
+        }
       }
     }
   }
