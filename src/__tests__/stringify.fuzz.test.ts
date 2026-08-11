@@ -152,9 +152,7 @@ describe('stringify fuzz — formatting options', () => {
   }
 });
 
-// Known bug: inlineTableStart=2 produces invalid TOML for nested objects.
-// Tracked in stringify.test.ts "stringifyRoots fast-path: nested inline tables extracted at depth 2"
-describe('stringify fuzz — formatting options (known bug)', () => {
+describe('stringify fuzz — formatting options (inlineTableStart=2)', () => {
   const ITERATIONS = 10;
   const DEPTH = 3;
 
@@ -162,7 +160,7 @@ describe('stringify fuzz — formatting options (known bug)', () => {
     seed = 300 + i;
     const obj = randomObject(DEPTH);
 
-    test.skip(`inlineTableStart=2 iteration ${i + 1}`, () => {
+    test(`inlineTableStart=2 iteration ${i + 1}`, () => {
       let toml: string;
       expect(() => { toml = stringify(obj, { inlineTableStart: 2 }); }).not.toThrow();
       let parsed: any;

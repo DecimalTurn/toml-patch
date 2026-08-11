@@ -8098,7 +8098,7 @@ describe('wasEmptied compensation — with comments', () => {
 
 describe('wasEmptied compensation — multiple tables', () => {
 
-  test.fails('should empty one table and add keys to another in the same patch', () => {
+  test('should empty one table and add keys to another in the same patch', () => {
     const src = dedent`
       [a]
       x = 1
@@ -8125,7 +8125,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(patched)).toEqual({ a: {}, b: { u: 33, w: 5 } });
   });
 
-  test.fails('should empty two tables and add keys to a third', () => {
+  test('should empty two tables and add keys to a third', () => {
     const src = dedent`
       [x]
       p = 1
@@ -8151,6 +8151,36 @@ describe('wasEmptied compensation — multiple tables', () => {
       s = 4
     ` + '\n');
     expect(parse(patched)).toEqual({ x: {}, y: {}, z: { r: 33, s: 4 } });
+  });
+
+  test('should empty first table without doubling gap to third table', () => {
+    const src = dedent`
+      [a]
+      x = 1
+      y = 2
+
+      [b]
+      u = 3
+      v = 4
+
+      [c]
+      z = 9
+    ` + '\n';
+
+    // Empty table a, leave b and c as-is
+    const patched = patch(src, { a: {}, b: { u: 3, v: 4 }, c: { z: 9 } });
+
+    expect(patched).toEqual(dedent`
+      [a]
+
+      [b]
+      u = 3
+      v = 4
+
+      [c]
+      z = 9
+    ` + '\n');
+    expect(parse(patched)).toEqual({ a: {}, b: { u: 3, v: 4 }, c: { z: 9 } });
   });
 
   test('should replace a table with a scalar and add a new table', () => {

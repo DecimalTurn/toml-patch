@@ -273,7 +273,6 @@ name = "test"
 
         [slides.MultipleChoice]
         title = "What is this bird species?"
-
         introduce_question = 5000
         time_limit = 30000
         points_awarded = 1000

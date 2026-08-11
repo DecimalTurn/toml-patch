@@ -186,30 +186,45 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
  * when they are at a depth less than the inlineTableStart threshold.
  */
 function processTableForNestedInlines(table: Table | TableArray, additionalTables: Table[], format: TomlFormat): void {
-  // Process from end to beginning to avoid index issues when removing items
-  for (let i = table.items.length - 1; i >= 0; i--) {
+  // Collect all inline tables that need extraction, then process in forward order
+  // to preserve the original key order in the output.
+  const toExtract: { item: KeyValue; nestedTableKey: string[] }[] = [];
+  for (let i = 0; i < table.items.length; i++) {
     const item = table.items[i];
     if (isKeyValue(item) && isInlineTable(item.value)) {
-      // Calculate the depth of this nested table
       const nestedTableKey = [...table.key.item.value, ...item.key.value];
       const depth = calculateTableDepth(nestedTableKey);
-      
-      // Only convert to separate table if depth is less than inlineTableStart
       if (depth < (format.inlineTableStart ?? 1)) {
-        const separateTable = generateTable(nestedTableKey);
-        
-        for (const inlineItem of item.value.items) {
-          insert(separateTable, separateTable, inlineItem.item);
-        }
-        
-        remove(table, table, item);
-        postInlineItemRemovalAdjustment(table);
-        
-        additionalTables.push(separateTable);
-        
-        processTableForNestedInlines(separateTable, additionalTables, format);
+        toExtract.push({ item, nestedTableKey });
       }
     }
+  }
+
+  // Process in forward order.  Each item reference captured above is stable
+  // even after previous iterations call remove() — the KeyValue node itself
+  // stays valid regardless of index shifts.
+  for (const { item, nestedTableKey } of toExtract) {
+    const separateTable = generateTable(nestedTableKey);
+    const inlineTable = item.value as InlineTable;
+
+    for (const inlineItem of inlineTable.items) {
+      insert(separateTable, separateTable, inlineItem.item);
+    }
+    // Finalize the separateTable's internal offsets and recalculate its span
+    // so it can be safely inserted into the document later.
+    applyWrites(separateTable);
+
+    remove(table, table, item);
+    postInlineItemRemovalAdjustment(table);
+
+    additionalTables.push(separateTable);
+
+    processTableForNestedInlines(separateTable, additionalTables, format);
+  }
+  // Apply removal offsets accumulated on this table so remaining items
+  // (if any) are shifted to the correct positions.
+  if (toExtract.length > 0) {
+    applyWrites(table);
   }
 }
 
