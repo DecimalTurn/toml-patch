@@ -8098,7 +8098,7 @@ describe('wasEmptied compensation — with comments', () => {
 
 describe('wasEmptied compensation — multiple tables', () => {
 
-  test.fails('should empty one table and add keys to another in the same patch', () => {
+  test('should empty one table and add keys to another in the same patch', () => {
     const src = dedent`
       [a]
       x = 1
@@ -8125,7 +8125,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(patched)).toEqual({ a: {}, b: { u: 33, w: 5 } });
   });
 
-  test.fails('should empty two tables and add keys to a third', () => {
+  test('should empty two tables and add keys to a third', () => {
     const src = dedent`
       [x]
       p = 1
