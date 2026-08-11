@@ -821,7 +821,7 @@ test('stringifyRoots fast-path: all inline tables extracted, no scalars at root'
   expect(result).toEqual(expected);
 });
 
-test.fails('table removal and reordering due to inlineTableStart', () => {
+test('table removal and reordering due to inlineTableStart', () => {
 
     const src = dedent`
     [a]
