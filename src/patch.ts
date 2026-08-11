@@ -927,15 +927,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         // When the key was truncated, the replacement value from the updated CST
         // carries stale coordinate-system data that corrupts applyWrites' offset
-        // resolution.  Regenerate a fresh value through parseJS for clean loc values
-        // (same approach as handleStructuralEdit).
+        // resolution.  Regenerate a fresh value through a TOML round-trip for
+        // clean loc values, and re-apply formatting preservation on the fresh node.
         if (keyTruncated && rawUpdated !== undefined) {
           let jsValue: any = rawUpdated;
           for (const k of change.path) jsValue = jsValue?.[k];
           if (jsValue !== undefined) {
-            const freshDoc = parseJS({ __tmp__: jsValue }, format);
-            const freshKV = freshDoc.items[0] as KeyValue;
-            replacement = freshKV.value;
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing, replacement);
+            }
           }
         }
       } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
@@ -976,15 +978,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         replacement = replacement.item.value;
 
         // When the key was truncated, regenerate the replacement value with clean
-        // loc values (same approach as handleStructuralEdit) to avoid applyWrites
-        // corruption from stale updated-CST coordinate-system data.
+        // loc values through a TOML round-trip to avoid applyWrites corruption
+        // from stale updated-CST coordinate-system data.
         if (keyTruncated && rawUpdated !== undefined) {
           let jsValue: any = rawUpdated;
           for (const k of change.path) jsValue = jsValue?.[k];
           if (jsValue !== undefined) {
-            const freshDoc = parseJS({ __tmp__: jsValue }, format);
-            const freshKV = freshDoc.items[0] as KeyValue;
-            replacement = freshKV.value;
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) replacement = freshValue;
           }
         }
       } else if (isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)) {
@@ -1036,15 +1037,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         replacement = replacement.item.value;
 
         // When the key was truncated, regenerate the replacement value with clean
-        // loc values (same approach as handleStructuralEdit) to avoid applyWrites
-        // corruption from stale updated-CST coordinate-system data.
+        // loc values through a TOML round-trip to avoid applyWrites corruption
+        // from stale updated-CST coordinate-system data, and re-apply formatting
+        // preservation on the fresh node.
         if (keyTruncated && rawUpdated !== undefined) {
           let jsValue: any = rawUpdated;
           for (const k of change.path) jsValue = jsValue?.[k];
           if (jsValue !== undefined) {
-            const freshDoc = parseJS({ __tmp__: jsValue }, format);
-            const freshKV = freshDoc.items[0] as KeyValue;
-            replacement = freshKV.value;
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing, replacement);
+            }
           }
         }
       } else if (isTable(existing)) {
@@ -2003,6 +2007,25 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
   for (const table of additionalTables) {
     insert(original, original, table, undefined);
   }
+}
+
+/**
+ * Regenerate a replacement Value node with clean loc values through a
+ * TOML round-trip.  Handles both KeyValue and Table output from parseJS
+ * (formatTopLevel may convert a root-level key to a [section] when
+ * inlineTableStart is 0).  Returns undefined when the value cannot be
+ * safely regenerated.
+ */
+function regenerateValue(jsValue: any, format: TomlFormat): Value | undefined {
+  const freshDoc = parseJS({ __tmp__: jsValue }, format);
+  const replacementToml = toTOML(freshDoc.items, format);
+  const replacementCst = Array.from(parseTOML(replacementToml));
+  const freshItem = replacementCst[0];
+  if (isKeyValue(freshItem)) return freshItem.value;
+  if (isTable(freshItem)
+      && freshItem.items.length > 0
+      && isKeyValue(freshItem.items[0])) return freshItem.items[0].value;
+  return undefined;
 }
 
 function findEnclosingInlineTableRowContext(
