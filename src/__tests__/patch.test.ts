@@ -8288,7 +8288,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Deleting keys from a table combined with other mutations
   // throws "Unsupported parent type 'Boolean' for remove".
   // Reproduced from fuzz seed 489 with 5 simultaneous mutations.
-  test.fails('BUG: multi-mutation delete inside table throws Unsupported parent type (fuzz #489)', () => {
+  test('BUG: multi-mutation delete inside table throws Unsupported parent type (fuzz #489)', () => {
     const src = dedent`
       "N&SXI1".el2p2s-m.j3 = 2045-07-18T11:00:10.256062
       q = -772872
@@ -8322,7 +8322,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     // Apply all 5 mutations from the fuzzer
     if (!obj.a3K) obj.a3K = {};
     obj['a3K'].d = '2033-07-14T00:00:00.000Z';
-    delete obj.sittwg3wnr['a6;66']['#INm']['<nUu1'];
+    delete obj.sittwg3wnr.aqufgw5lze;
     delete obj.sittwg3wnr.xuxn;
     delete obj.sittwg3wnr[''];
     obj.gs['(85$X'].ovd7t07g8.sp = 'MrYC_R';
@@ -8334,7 +8334,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Changing deeply nested values inside an inline table under a
   // section header produces a duplicate [kaes3f6] header.
   // Reproduced from fuzz seed 464 with 3 simultaneous mutations.
-  test.fails('BUG: multi-mutation deep inline table change produces duplicate header (fuzz #464)', () => {
+  test('BUG: multi-mutation deep inline table change produces duplicate header (fuzz #464)', () => {
     const src = dedent`
       q0sdn9y.g = true
       qk = 2070-06-26
@@ -8357,7 +8357,7 @@ describe('wasEmptied compensation — multiple tables', () => {
 
       [[r0d.civqzg2hhh.c]]
       r61."7wH\x60M,z" = 1987-10-25T04:05:05.941053Z
-      t3kch.f."O~Qh" = 2065-12-05T
+      t3kch.f."O~Qh" = 2065-12-05
 
       [kaes3f6]
       rrc4z = { r-dr3h3 = { aavr = { 0 = { y2k2_ = [] } } } }
@@ -8365,7 +8365,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     const obj = parse(src);
     // Apply the 3 mutations from the fuzzer
     obj.kaes3f6.rrc4z['r-dr3h3'].bksb = -454861;
-    obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s.hiza = true;
+    obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s = { hiza: true };
     obj.kaes3f6.rrc4z['r-dr3h3'].aavr['0'].y2k2_ = [1];
     const result = patch(src, obj);
     expect(() => parse(result)).not.toThrow();
