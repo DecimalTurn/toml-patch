@@ -8356,7 +8356,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
       [kaes3f6]
-      rrc4z.r-dr3h3 = { bksb = -454861                  , aavr = { dvk1s.hiza = true, 0.y2k2_ = [ 1 ]     } }
+      rrc4z.r-dr3h3 = { bksb = -454861 , aavr = { dvk1s.hiza = true, 0.y2k2_ = [ 1 ] } }
     ` + '\n');
   });
 
@@ -8376,7 +8376,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     // 'new' should be literal-quoted like 'old', not basic-quoted "new"
     expect(result).toEqual(dedent`
       [s]
-      x = { a = 'new'   }
+      x = { a = 'new' }
     ` + '\n');
   });
 
