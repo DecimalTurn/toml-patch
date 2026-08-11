@@ -8354,6 +8354,10 @@ describe('wasEmptied compensation — multiple tables', () => {
     // Should produce valid TOML with a single [kaes3f6] header
     expect(() => parse(result)).not.toThrow();
     expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [kaes3f6]
+      rrc4z.r-dr3h3 = { bksb = -454861                  , aavr = { dvk1s.hiza = true, 0.y2k2_ = [ 1 ]     } }
+    ` + '\n');
   });
 
   // Key truncation inside an inline table should preserve string formatting
@@ -8370,8 +8374,10 @@ describe('wasEmptied compensation — multiple tables', () => {
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
     // 'new' should be literal-quoted like 'old', not basic-quoted "new"
-    expect(result).toContain("'new'");
-    expect(result).not.toContain('"new"');
+    expect(result).toEqual(dedent`
+      [s]
+      x = { a = 'new'   }
+    ` + '\n');
   });
 
   // BUG: Deleting a key from a nested inline table inside an array
