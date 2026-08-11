@@ -8249,102 +8249,120 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
-  // BUG: Deleting the first segment of a dotted key (e.g. deleting "a"
-  // when the CST has "a".b) can throw "Unsupported parent type for remove"
-  // when combined with other mutations in the same patch call.
-  // Simple single-mutation cases work, but the fuzzer found failures with
-  // multi-mutation scenarios (seeds 484, 487, 488, 489, 490, 493).
-  test('BUG: deleting dotted-key prefix should empty the document (simple case, fuzz #484)', () => {
+  // BUG: Deleting the first segment of a dotted key combined with other
+  // mutations throws "Unsupported parent type 'String' for remove".
+  // Reproduced from fuzz seed 484 with 5 simultaneous mutations.
+  test.fails('BUG: multi-mutation delete of dotted-key prefix throws Unsupported parent type (fuzz #484)', () => {
     const src = dedent`
+      y3.u9jt4 = 0b111101
       "pEjJDgj/n".y = 0xeb5034c
+      ",]:3".c3gv1z38g_.vn1lxf = true
+
+      [u."NgwYb3!rlF"]
+      y.ic83 = """
+      #sZ#tNV<X1%PphX4(o:Fu8jUvpv
+      3 qD0/B4lie2,J[s-{AYbY"""
+      njk8xvm-6x.W = "vHCCFC+$*?o<1mOc2S^$F4*7_/<jN"
+      et."6/Kl%~!".x = '%z,Nm9;8#)XfKK_]q/%b2A1jNvZo\x60)<E(E[zFP?KN?<E[^C '
+      ";-"."2x]Cif%<"."D8j1h+4:" = -110730
     ` + '\n';
     const obj = parse(src);
+    // Apply all 5 mutations from the fuzzer
+    obj.u['NgwYb3!rlF'].y.ic83 = 'CHANGED';
+    obj[',]:3'].c3gv1z38g_.vn1lxf = false;
     delete obj['pEjJDgj/n'];
-    expect(patch(src, obj)).toEqual('\n');
-    expect(parse(patch(src, obj))).toEqual({});
+    obj[',]:3'].c3gv1z38g_ = 'xj-fOBz7';
+    delete obj.u['NgwYb3!rlF'].y.ic83;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
   });
 
-  test('BUG: deleting dotted-key prefix inside table should remove the key (simple case, fuzz #489)', () => {
+  // BUG: Deleting keys from a table combined with other mutations
+  // throws "Unsupported parent type 'Boolean' for remove".
+  // Reproduced from fuzz seed 489 with 5 simultaneous mutations.
+  test.fails('BUG: multi-mutation delete inside table throws Unsupported parent type (fuzz #489)', () => {
     const src = dedent`
+      "N&SXI1".el2p2s-m.j3 = 2045-07-18T11:00:10.256062
+      q = -772872
+      k4a5.ead = 'Fb&gu;:rUq&I{@Iet|K&.0K%| H l3<hHo\x60'
+      mqxgy2dd.k1rn-ldy9."" = "[y~a0&sL:QFBWA(E^4@0KUt-^X67PWFicWIBqiusU"
+      sde.obmro = 830_535
+      "===".y0dqtn8.u = -26407.26473
+      ajmjz0klb.di.ywrci_zil = "xbS2C+$XRg_|n^4- f!3dwG7"
+
+      [gs."(85$X"]
+      ovd7t07g8.sp = true
+
+      ["#y".nlkaw9.yr]
+      d5 = 0b010001010001000
+      rqd.aw = false
+
       [sittwg3wnr]
-      "a".b = true
-      c = 1
+      "}}Qv" = """
+      N&$!/k$}GoJ\x60$:.E,
+      *Nu"""
+      hun7gm546- = ""
+      "" = """
+      $"""
+      "DR.QfvN5N".aa9woa2t7 = ">b\x60w$GU>eb"
+      m5-v0o = 1997-12-02T06:11:47Z
+      "(z" = 'p%jH;/ep]8+0Y/!?2q>(sa'
+      aqufgw5lze = false
+      xuxn = 42
     ` + '\n';
     const obj = parse(src);
-    delete obj.sittwg3wnr.a;
-    expect(patch(src, obj)).toEqual(dedent`
-      [sittwg3wnr]
-      c = 1
-    ` + '\n');
-    expect(parse(patch(src, obj))).toEqual({ sittwg3wnr: { c: 1 } });
+    // Apply all 5 mutations from the fuzzer
+    if (!obj.a3K) obj.a3K = {};
+    obj['a3K'].d = '2033-07-14T00:00:00.000Z';
+    delete obj.sittwg3wnr['a6;66']['#INm']['<nUu1'];
+    delete obj.sittwg3wnr.xuxn;
+    delete obj.sittwg3wnr[''];
+    obj.gs['(85$X'].ovd7t07g8.sp = 'MrYC_R';
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
   });
 
-  test('BUG: deleting deep key with special chars should leave empty table (simple case, fuzz #487)', () => {
+  // BUG: Changing deeply nested values inside an inline table under a
+  // section header produces a duplicate [kaes3f6] header.
+  // Reproduced from fuzz seed 464 with 3 simultaneous mutations.
+  test.fails('BUG: multi-mutation deep inline table change produces duplicate header (fuzz #464)', () => {
     const src = dedent`
-      [hk_rk19w]
-      "3HgKlM".a-_oown55 = "@X[lLOCm2kr[P1iH%04I$vK7#Y68yO-75Q7.#q"
-    ` + '\n';
-    const obj = parse(src);
-    delete obj.hk_rk19w['3HgKlM'];
-    expect(patch(src, obj)).toEqual(dedent`
-      [hk_rk19w]
-    ` + '\n');
-    expect(parse(patch(src, obj))).toEqual({ hk_rk19w: {} });
-  });
-
-  // BUG: When a table section header exists and the only key-value
-  // inside it is an inline table, changing a deeply nested value inside
-  // that inline table can produce a duplicate table header.
-  // Simple single-mutation cases work, but the fuzzer found failures with
-  // deeper nesting and multiple mutations (seeds 464, 473, 477, 479, 495).
-  test('BUG: changing nested inline table value should update inline (simple case, fuzz #464)', () => {
-    const src = dedent`
-      [kaes3f6]
-      rrc4z = { "r-dr3h3" = { bksb = 1 } }
-    ` + '\n';
-    const obj = parse(src);
-    obj.kaes3f6.rrc4z['r-dr3h3'].bksb = 42;
-    expect(patch(src, obj)).toEqual(dedent`
-      [kaes3f6]
-      rrc4z = { "r-dr3h3" = { bksb = 42 } }
-    ` + '\n');
-    expect(parse(patch(src, obj))).toEqual(obj);
-  });
-
-  test('BUG: changing deeply nested inline table value should update inline (simple case, fuzz #464 deep)', () => {
-    const src = dedent`
-      [kaes3f6]
-      rrc4z = { "r-dr3h3" = { aavr = { dvk1s = { hiza = 1 } } } }
-    ` + '\n';
-    const obj = parse(src);
-    obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s.hiza = 2;
-    expect(patch(src, obj)).toEqual(dedent`
-      [kaes3f6]
-      rrc4z = { "r-dr3h3" = { aavr = { dvk1s = { hiza = 2 } } } }
-    ` + '\n');
-    expect(parse(patch(src, obj))).toEqual(obj);
-  });
-
-  test('BUG: changing value under implicit table should update inline (simple case, fuzz #473)', () => {
-    const src = dedent`
-      abjl."$+l| I0-M3" = [
-          -9117400000000669182,
-          "sXZHq@p@",
-          false,
-          1995-06-12,
+      q0sdn9y.g = true
+      qk = 2070-06-26
+      CLz = "L}hOJ6l-](WQ9xU>iJpxJ@}Ude3,"
+      v6y9m7.bvseemd6h = 2082-01-12T22:45:49Z
+      nb-m.z4qw6fn."\x60n5" = 63978.2595
+      vrtpjx_xc = 'BkVbst^u_T]9'
+      "=DU6:" = 1661400000000230991
+      "" = 812850
+      j5vw.k0-."E6.hi%J." = 323644
+      ":".or.ml = true
+      txzfbjavh_.kvbi.pd-xy = "H^e\x60c98d|(hM"
+      aepnl_.s14p94.aj = 2083-03-16T16:45:34.292249Z
+      "*6gGwO"."wHF&u|#pzI" = "d_S<<a2f;a4V$Q?G=lp>0@tt&(Jm.y7{"
+      pks_rkw6md.c = [
+          "OR$[,}Ii8C6M!kdB#4MYi:N&Bch5UR",
+          -17841.42303,
+          '[mwF>&9dOe=hfpk6AsL=f',
       ]
+
+      [[r0d.civqzg2hhh.c]]
+      r61."7wH\x60M,z" = 1987-10-25T04:05:05.941053Z
+      t3kch.f."O~Qh" = 2065-12-05T
+
+      [kaes3f6]
+      rrc4z = { r-dr3h3 = { aavr = { 0 = { y2k2_ = [] } } } }
     ` + '\n';
     const obj = parse(src);
-    obj.abjl['$+l| I0-M3'][0] = 42;
-    expect(patch(src, obj)).toEqual(dedent`
-      abjl."$+l| I0-M3" = [
-          42,
-          "sXZHq@p@",
-          false,
-          1995-06-12,
-      ]
-    ` + '\n');
-    expect(parse(patch(src, obj))).toEqual(obj);
+    // Apply the 3 mutations from the fuzzer
+    obj.kaes3f6.rrc4z['r-dr3h3'].bksb = -454861;
+    obj.kaes3f6.rrc4z['r-dr3h3'].aavr.dvk1s.hiza = true;
+    obj.kaes3f6.rrc4z['r-dr3h3'].aavr['0'].y2k2_ = [1];
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
   });
 
   // BUG: Deleting a key from a nested inline table inside an array

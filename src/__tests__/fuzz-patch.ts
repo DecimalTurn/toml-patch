@@ -479,6 +479,11 @@ function main() {
         console.log('Mutations:');
         result.mutationDescs.forEach(d => console.log(`  ${d}`));
       }
+      if (result.modifiedObj) {
+        console.log('--- Modified object (JSON) ---');
+        console.log(JSON.stringify(result.modifiedObj, (k, v) =>
+          typeof v === 'bigint' ? Number(v) : v, 2));
+      }
       if (result.originalToml) {
         console.log('--- Original TOML ---');
         console.log(result.originalToml.substring(0, 600));
