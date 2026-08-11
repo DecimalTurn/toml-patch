@@ -18,10 +18,6 @@ function randomInt(min: number, max: number): number {
   return Math.floor(random() * (max - min + 1)) + min;
 }
 
-function randomPick<T>(arr: T[]): T {
-  return arr[randomInt(0, arr.length - 1)];
-}
-
 const safeChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ ';
 function randomString(minLen = 0, maxLen = 20): string {
   const len = randomInt(minLen, maxLen);
@@ -86,30 +82,6 @@ function randomArray(depth: number): any[] {
 // ---------------------------------------------------------------------------
 // Assertion helpers
 // ---------------------------------------------------------------------------
-
-function deepNormalize(obj: any): any {
-  // Normalize values that TOML can't perfectly round-trip
-  if (obj === null) return obj;
-  if (obj === undefined) return obj;
-  if (typeof obj === 'number') {
-    if (Number.isNaN(obj)) return 'NaN';
-    if (obj === Infinity) return 'Infinity';
-    if (obj === -Infinity) return '-Infinity';
-    if (Object.is(obj, -0)) return '-0';
-    // TOML integers vs floats — normalize to number
-    return obj;
-  }
-  if (obj instanceof Date) return obj.toISOString();
-  if (Array.isArray(obj)) return obj.map(deepNormalize);
-  if (typeof obj === 'object') {
-    const out: Record<string, any> = {};
-    for (const key of Object.keys(obj).sort()) {
-      out[key] = deepNormalize(obj[key]);
-    }
-    return out;
-  }
-  return obj;
-}
 
 function sortedKeys(obj: any): any {
   if (obj === null || obj === undefined) return obj;
