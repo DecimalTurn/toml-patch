@@ -1505,10 +1505,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     }
   }
 
-  // Fix up blank lines after tables emptied during this patch.  Removing
-  // items from a table leaves the offset chain short by one line (the last
-  // removal's contribution is zeroed).  Close the extra gap to the next
-  // section so only one blank line separates them.
+  // Fix up blank lines after empty tables.  Removing items from a table can
+  // leave the offset chain short by one line (the last removal's contribution
+  // is zeroed).  Close the extra gap to the next section so only one blank line
+  // separates them.
   const rootItems = original.items as TreeNode[];
   for (let i = 0; i < rootItems.length - 1; i++) {
     const curr = rootItems[i];
