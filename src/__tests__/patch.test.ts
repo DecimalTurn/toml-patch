@@ -8356,6 +8356,24 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
+  // Key truncation inside an inline table should preserve string formatting
+  // (e.g. literal quotes, multiline style) from the existing value.
+  // Without the preserveFormatting re-application after value regeneration,
+  // the replacement would fall back to a basic double-quoted string.
+  test('key truncation in inline table preserves string formatting', () => {
+    const src = dedent`
+      [s]
+      x = { a.b = 'old' }
+    ` + '\n';
+    const obj = parse(src);
+    obj.s.x.a = 'new';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    // 'new' should be literal-quoted like 'old', not basic-quoted "new"
+    expect(result).toContain("'new'");
+    expect(result).not.toContain('"new"');
+  });
+
   // BUG: Deleting a key from a nested inline table inside an array
   // can throw "Node not found in parent for removal" with certain
   // format options. Simple single-mutation works, but the fuzzer
