@@ -8564,4 +8564,32 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Materialisation scope for the same operation: the emptied parent must
+  // be materialised as a sub-table of the SAME AOT entry — relative to the
+  // entry key (no numeric index in the key), inserted before the next
+  // entry so it doesn't leak into a later entry's scope.
+  test('materialised dotted parent stays in the AOT entry scope', () => {
+    const src = dedent`
+      [["7<L:".b32uvhdz]]
+      n = 1
+      z0ncoh.y.eam = 0xd50d56
+
+      [["7<L:".b32uvhdz]]
+      n = 2
+    ` + '\n';
+    const obj = parse(src);
+    delete obj['7<L:'].b32uvhdz[0].z0ncoh.y.eam;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [["7<L:".b32uvhdz]]
+      n = 1
+
+      ["7<L:".b32uvhdz.z0ncoh.y]
+
+      [["7<L:".b32uvhdz]]
+      n = 2
+      ` + '\n');
+  });
+
 });
