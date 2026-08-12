@@ -8861,4 +8861,30 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 22: deleting the last segment of a dotted key INSIDE an inline
+  // table (TOML 1.1) empties its prefix, e.g. `p = { a.b = "x" }` with a.b
+  // removed leaves a = {}.  The emptied prefix was dropped entirely, and the
+  // pending removal offset then corrupted the re-inserted item's position.
+  test('emptied dotted prefix inside inline table re-emits prefix = {} (seed 22)', () => {
+    const src = `p = { a.b = "x", c = 1 }
+`;
+    const obj = parse(src);
+    delete obj.p.a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`p = { a = {}, c = 1 }
+`);
+  });
+
+  // Same operation one nesting level deeper: the emptied prefix lives in an
+  // inline table that is itself an inline-table value.
+  test('emptied dotted prefix in nested inline table (seed 22)', () => {
+    const src = `p = { q = { a.b = "x", c = 1 } }
+`;
+    const obj = parse(src);
+    delete obj.p.q.a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
 });

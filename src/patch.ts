@@ -1536,6 +1536,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         const nodeIndex = isDocument(parent) && hasItems(parent)
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
+        const containerItemIndex = hasItems(parent) && !isDocument(parent)
+          ? (parent.items as TreeNode[]).indexOf(node)
+          : -1;
+        const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
 
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
@@ -1565,16 +1569,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Dotted-key KeyValues follow the same implicit-parent materialisation
         // rule: when removing the last segment of a dotted key (e.g. y.ic83
         // → y), and no other items share the parent prefix, materialise the
-        // parent as an empty table header so the key isn't silently dropped.
-        if (!materialisedInPlace &&
-            change.path.length > 1 && isKeyValue(node) && rawUpdated !== undefined) {
-          const kv = node as KeyValue;
+        // parent as an empty table header (or empty inline table, for dotted
+        // keys inside an inline table) so the key isn't silently dropped.
+        if (!materialisedInPlace && change.path.length > 1 && rawUpdated !== undefined) {
+          const kv = isKeyValue(node)
+            ? node as KeyValue
+            : isInlineItem(node) && isKeyValue(node.item)
+              ? node.item as KeyValue
+              : undefined;
           // Only for dotted keys with 2+ segments.
-          if (kv.key.value.length > 1) {
+          if (kv && kv.key.value.length > 1) {
             const parentPath = change.path.slice(0, -1);
-            // Search the node's own container (Table / Document / AOT entry)
-            // for remaining siblings whose key starts with the parent prefix.
-            const container = isDocument(parent) || isTable(parent) || isTableArray(parent)
+            // Search the node's own container (Table / Document / AOT entry /
+            // InlineTable) for remaining siblings whose key starts with the
+            // parent prefix.
+            const container = isDocument(parent) || isTable(parent) || isTableArray(parent) || isInlineTable(parent)
               ? parent
               : original;
             if (hasItems(container)) {
@@ -1582,17 +1591,25 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // key from the path.  For an AOT entry the numeric entry index is
               // also stripped.  Deriving it from parentPath (not kv.key.value)
               // matters when a middle segment of the dotted key was removed.
+              // For InlineTable items the key is relative to the table itself.
               let relativePrefix: string[];
               if (isTable(container)) {
                 relativePrefix = parentPath.slice((container as Table).key.item.value.length) as string[];
               } else if (isTableArray(container)) {
                 relativePrefix = parentPath.slice((container as TableArray).key.item.value.length + 1) as string[];
+              } else if (isInlineTable(container)) {
+                relativePrefix = kv.key.value.slice(0, -1) as string[];
               } else {
                 relativePrefix = parentPath as string[];
               }
               const remaining = (container.items as TreeNode[]).filter(item => {
-                if (!isKeyValue(item)) return false;
-                return arraysEqual((item as KeyValue).key.value.slice(0, relativePrefix.length), relativePrefix);
+                const key = isKeyValue(item)
+                  ? (item as KeyValue).key.value
+                  : isInlineItem(item) && isKeyValue(item.item)
+                    ? item.item.key.value
+                    : undefined;
+                if (!key) return false;
+                return arraysEqual(key.slice(0, relativePrefix.length), relativePrefix);
               });
               // An AOT entry can also own sub-tables stored as document-level
               // siblings whose keys extend the entry's own key.
@@ -1608,6 +1625,37 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
+                  if (isInlineTable(container)) {
+                    // Emptied dotted prefix inside an inline table: re-emit it
+                    // as `prefix = {}` at the removed item's position, keeping
+                    // the comma setting the removed item carried (fuzz seed 22).
+                    // parseJS strips empty objects, so regenerateValue() can't
+                    // build the value — parse a literal instead, which yields
+                    // proper single-line locs for the empty inline table.
+                    const freshKey = relativePrefix
+                      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+                      .join('.');
+                    const freshKv = Array.from(parseTOML(`${freshKey} = {}`))[0];
+                    if (isKeyValue(freshKv)) {
+                      const inlineItem = generateInlineItem(freshKv);
+                      inlineItem.comma = removedInlineComma ?? false;
+                      // The removal above left a pending enter offset on the
+                      // inline table (first-item removals register there),
+                      // which applyWrites would apply to the new item too.
+                      // Resolve it first so the insert positions the item
+                      // against final coordinates (fuzz seed 22).
+                      applyWrites(original);
+                      insert(original, container, inlineItem, containerItemIndex >= 0 ? containerItemIndex : undefined);
+                      // insert() reserves one column for the opening-brace
+                      // space; with bracket spacing enabled that column is
+                      // already the space after `{`, so align the item with
+                      // the original bracket style.
+                      if (format.bracketSpacing) {
+                        shiftNode(inlineItem, { lines: 0, columns: 1 });
+                      }
+                    }
+                    return;
+                  }
                   // Table key: container key + relative prefix.  For a root
                   // KV that's just the relative prefix; for an AOT entry the
                   // numeric index is NOT part of the key.
