@@ -9008,4 +9008,22 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
+  // Fuzz seed 128: deleting a MIDDLE segment of a dotted key inside an
+  // inline table (`6U.booay.o563zkr` → delete `booay`, leaving 6U = {}).
+  // The materialisation derived the emptied prefix from the key's last
+  // segment (`6U.booay`) instead of the removed path (`6U`), and computed
+  // it AFTER the removal — when the node's absolute path can no longer be
+  // resolved by walking the tree.  It now captures the path before the
+  // removal and derives the prefix from parentPath.
+  test('deleting a middle dotted segment in an inline table keeps the parent (seed 128)', () => {
+    const src = `-Juc6-.i8_zae = { 6U.booay.o563zkr = "x", ip1f-7.k = 0x8f923b58 }
+`;
+    const obj = parse(src);
+    delete obj['-Juc6-'].i8_zae['6U'].booay;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain('6U = {}');
+    expect(result).not.toContain('booay');
+  });
+
 });

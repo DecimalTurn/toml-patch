@@ -1582,6 +1582,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
         const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
+        // Absolute lookup path of the node (or its inner KV for InlineItems),
+        // captured while it is still in the tree — the materialisation block
+        // below runs AFTER the removal and needs it to derive the emptied
+        // parent's prefix relative to an inline-table container (seed 128).
+        const nodeAbsolutePath = absolutePathOf(
+          isInlineItem(node) && isKeyValue(node.item) ? node.item : node
+        );
 
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
@@ -1632,15 +1639,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // The prefix relative to the container: strip the container's own
               // key from the path.  For an AOT entry the numeric entry index is
               // also stripped.  Deriving it from parentPath (not kv.key.value)
-              // matters when a middle segment of the dotted key was removed.
-              // For InlineTable items the key is relative to the table itself.
+              // matters when a middle segment of the dotted key was removed
+              // (e.g. deleting `booay` from `6U.booay.o563zkr` must leave the
+              // prefix `6U`, not `6U.booay` — fuzz seed 128).
               let relativePrefix: string[];
               if (isTable(container)) {
                 relativePrefix = parentPath.slice((container as Table).key.item.value.length) as string[];
               } else if (isTableArray(container)) {
                 relativePrefix = parentPath.slice((container as TableArray).key.item.value.length + 1) as string[];
               } else if (isInlineTable(container)) {
-                relativePrefix = kv.key.value.slice(0, -1) as string[];
+                // InlineTable items are relative to the table itself; the
+                // table's own key path is the node's absolute path minus its
+                // key segments (captured before the removal).
+                const containerKeyLen = nodeAbsolutePath
+                  ? nodeAbsolutePath.length - kv.key.value.length
+                  : parentPath.length - (kv.key.value.length - 1);
+                relativePrefix = parentPath.slice(containerKeyLen) as string[];
               } else {
                 relativePrefix = parentPath as string[];
               }
