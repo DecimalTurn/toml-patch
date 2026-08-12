@@ -196,13 +196,22 @@ function deepEqual(a: unknown, b: unknown): boolean {
  *   before comparing, since the patched TOML drops the zero time component.
  * - `minimumDecimals`: rounds numbers to the specified decimal places before
  *   comparing, since the patched TOML adds trailing zeros.
+ * - `newLine`: treats \r\n and \n as equivalent inside string values, since
+ *   the patched TOML normalises ALL line endings — including multiline string
+ *   content — to the requested style.  Only active when the option is set;
+ *   without it the document keeps its original newlines and untouched
+ *   strings are not rewritten.
  */
 function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>): boolean {
   const truncateDates = fmt?.truncateZeroTimeInDates === true;
   const minDec = fmt?.minimumDecimals ?? 0;
+  const normalizeNewlines = fmt?.newLine !== undefined;
 
   function normalise(val: unknown): unknown {
     if (val == null) return val;
+    if (normalizeNewlines && typeof val === 'string') {
+      return val.replace(/\r\n/g, '\n');
+    }
     if (truncateDates && val instanceof Date) {
       // `truncateZeroTimeInDates` drops time when it's midnight UTC.
       // Re-parsing a date-only TOML value gives a LocalDate-like object,
@@ -233,7 +242,7 @@ function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>):
   // Normalise both sides when the format would affect the comparison, then
   // use plain deepEqual on the normalised values.  When no normalising
   // options are active this degrades to a regular deepEqual.
-  if (truncateDates || minDec > 0) {
+  if (truncateDates || minDec > 0 || normalizeNewlines) {
     return deepEqual(normalise(a), normalise(b));
   }
   return deepEqual(a, b);
