@@ -9026,4 +9026,20 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).not.toContain('booay');
   });
 
+  // Fuzz seed 137: replacing a whole dotted key inside an inline table with
+  // a differently-shaped value (`u3chwmmvk."g{dXAvRV]1".oe1zht` → `[]`).
+  // The edit branch for InlineItem-existing / KV-replacement only swapped
+  // the VALUE, keeping the old full dotted key — the key-truncation logic
+  // the other edit branches have was missing.
+  test('inline dotted key truncated when its whole subtree changes shape (seed 137)', () => {
+    const src = `es8 = { u3chwmmvk."g{dXAvRV]1".oe1zht = 2026-03-27T00:01:35Z }
+`;
+    const obj = parse(src);
+    obj.es8.u3chwmmvk = [];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain('u3chwmmvk = []');
+    expect(result).not.toContain('oe1zht');
+  });
+
 });

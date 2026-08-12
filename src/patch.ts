@@ -1242,10 +1242,55 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
         // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
         const existingKeyValue = existing.item;
+
+        // If the path matched via prefix (shorter than the existing dotted
+        // key), truncate the key — same logic as the branches above
+        // (fuzz seed 137: `u3chwmmvk.g{…}.oe1zht` → `u3chwmmvk = []`).
+        let keyTruncated = false;
+        if (existingKeyValue.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existingKeyValue.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existingKeyValue.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existingKeyValue.key.value.length) {
+            existingKeyValue.key.value = existingKeyValue.key.value.slice(0, matchLen);
+            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value).raw;
+            const oldEndCol = existingKeyValue.key.loc.end.column;
+            const newEndCol = existingKeyValue.key.loc.start.column + existingKeyValue.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existingKeyValue.key.loc.end.column = newEndCol;
+            existingKeyValue.equals += delta;
+            existingKeyValue.value.loc.start.column += delta;
+            if (existingKeyValue.value.loc.end.line === existingKeyValue.value.loc.start.line) existingKeyValue.value.loc.end.column += delta;
+            if (existingKeyValue.loc.end.line === existingKeyValue.loc.start.line) existingKeyValue.loc.end.column += delta;
+            addExitOffset(original, existingKeyValue, { lines: 0, columns: delta });
+            keyTruncated = true;
+          }
+        }
+
         preserveFormatting(existingKeyValue.value, replacement.value);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
+
+        // Same regenerate discipline as the truncation paths above.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing as Value, replacement as Value);
+            }
+          }
+        }
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
         // Both are InlineItems wrapping KeyValues (nested inline table edits).
         
