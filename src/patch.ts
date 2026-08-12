@@ -1395,23 +1395,59 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // Only for dotted keys with 2+ segments.
           if (kv.key.value.length > 1) {
             const parentPath = change.path.slice(0, -1);
-            // Search the node's own container (Table / Document) for remaining
-            // siblings whose key starts with the parent prefix.
+            // Search the node's own container (Table / Document / AOT entry)
+            // for remaining siblings whose key starts with the parent prefix.
             const container = isDocument(parent) || isTable(parent) || isTableArray(parent)
               ? parent
               : original;
             if (hasItems(container)) {
+              // The prefix relative to the container: strip the container's own
+              // key from the path.  For an AOT entry the numeric entry index is
+              // also stripped.  Deriving it from parentPath (not kv.key.value)
+              // matters when a middle segment of the dotted key was removed.
+              let relativePrefix: string[];
+              if (isTable(container)) {
+                relativePrefix = parentPath.slice((container as Table).key.item.value.length) as string[];
+              } else if (isTableArray(container)) {
+                relativePrefix = parentPath.slice((container as TableArray).key.item.value.length + 1) as string[];
+              } else {
+                relativePrefix = parentPath as string[];
+              }
               const remaining = (container.items as TreeNode[]).filter(item => {
                 if (!isKeyValue(item)) return false;
-                return arraysEqual((item as KeyValue).key.value.slice(0, parentPath.length), parentPath);
+                return arraysEqual((item as KeyValue).key.value.slice(0, relativePrefix.length), relativePrefix);
               });
-              if (remaining.length === 0) {
+              // An AOT entry can also own sub-tables stored as document-level
+              // siblings whose keys extend the entry's own key.
+              const isAotEntry = isTableArray(container);
+              let docSiblings: TreeNode[] = [];
+              if (isAotEntry && remaining.length === 0) {
+                docSiblings = findDocumentItemsByKeyPrefix(
+                  original,
+                  (container as TableArray).key.item.value.concat(relativePrefix)
+                );
+              }
+              if (remaining.length === 0 && docSiblings.length === 0) {
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
-                  const emptyTable = generateTable(parentPath as string[]);
+                  // Table key: container key + relative prefix.  For a root
+                  // KV that's just the relative prefix; for an AOT entry the
+                  // numeric index is NOT part of the key.
+                  const tableKey = isAotEntry
+                    ? (container as TableArray).key.item.value.concat(relativePrefix)
+                    : isTable(container)
+                      ? (container as Table).key.item.value.concat(relativePrefix)
+                      : relativePrefix;
+                  const emptyTable = generateTable(tableKey as string[]);
                   materialisedTables.add(emptyTable);
-                  const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+                  let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+                  if (isAotEntry) {
+                    // Insert right after the entry so the sub-table stays in
+                    // the entry's scope.
+                    const entryIdx = (original.items as TreeNode[]).indexOf(container);
+                    insertIdx = entryIdx >= 0 ? entryIdx + 1 : original.items.length;
+                  }
                   insert(original, original, emptyTable, insertIdx);
                 }
               }
