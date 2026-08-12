@@ -661,10 +661,19 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
       if (end > precedingEndLine) precedingEndLine = end;
     }
 
+    // When `previous` already has a pending exit offset (from a prior removal
+    // in the same applyChanges batch), `node.loc.start.line` is stale — it
+    // hasn't been shifted yet by that offset.  The whole point of extra is to
+    // measure the physical gap between the furthest preceding item and this
+    // section's header, so it must use the post-offset position of `node`.
+    // Compensate by adding the pending offset (which is always negative for
+    // removals) to `node.loc.start.line` so the gap computation isn't inflated
+    // by lines that were already accounted for.
+    const prevPendingExit = previous ? getExitOffsets(root).get(previous) : undefined;
     const extra = previous
       // Only a section carries a leading separator, so only removing one frees a blank line.
       // A key-value sits flush against the line above and frees nothing extra.
-      ? (removedIsSection ? node.loc.start.line - precedingEndLine - 1 : 0)
+      ? (removedIsSection ? (node.loc.start.line + (prevPendingExit?.lines ?? 0)) - precedingEndLine - 1 : 0)
       // Nothing above: `next` is pulled to the top of the container, where the separator it
       // was carrying becomes a spurious leading blank.
       : (nextIsSection ? next.loc.start.line - node.loc.end.line - 1 : 0);

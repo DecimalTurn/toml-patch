@@ -8452,37 +8452,59 @@ describe('wasEmptied compensation — multiple tables', () => {
   // When structural edits create new table sections (via inlineTableStart
   // or handleStructuralEdit), the insert() positioning can produce
   // overlapping loc values that cause toTOML to write garbled output.
-  // Found by fuzz harness seed 176.
+  // Found by fuzz harness seed 176.  Deleting a section and then emptying an
+  // AOT caused `remove()` to over-count the blank-line reclaim (`extra`),
+  // because `node.loc.start.line` was stale from a prior removal's pending
+  // exit offset.  The inflated `extra` pulled subsequent sections up too far,
+  // overlapping their headers with preceding content.
+  test('writer position after section removal plus AOT emptying (seed 176)', () => {
+    const src = dedent`
+      ouud3l2 = "CHPCI3,bKbr|;!]Mr"
 
-  test.fails('BUG: writer position corruption with inlineTableStart=2 (seed 176 full repro)', () => {
-    const src = 'ouud3l2 = "CHPCI3,bKbr|;!]Mr"\n' +
-      '\n' +
-      '[["AciQ!}@)".m]]\n' +
-      'eydt.iqb25ww2.uKV = true\n' +
-      'uz-8.x0zmi.nycv = -80107.11299\n' +
-      'w079g8 = "E?Ne|T7(8i.Vvu+P?"\n' +
-      'is6x08yl.m.p = 2031-11-16T16:50:32\n' +
-      'yzn3ck = 13:50:59.491731\n' +
-      'y0ro = \'9\'\n' +
-      'QDRogRh.u.wrfxsa3wx = false\n' +
-      'gk8r-hf3.flyet.y7kx = -81798100000000091262\n' +
-      '[mhv6z.hpd_iu9zs5."2<w"]\n' +
-      '"lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z\n' +
-      '\n' +
-      '[[""]]\n' +
-      'lnb2_kse1.gpei2kd94x = 0b01\n' +
-      '\n' +
-      '[g]\n';
+      [["AciQ!}@)".m]]
+      eydt.iqb25ww2.uKV = true
+      uz-8.x0zmi.nycv = -80107.11299
+      w079g8 = "E?Ne|T7(8i.Vvu+P?"
+      is6x08yl.m.p = 2031-11-16T16:50:32
+      yzn3ck = 13:50:59.491731
+      y0ro = '9'
+      QDRogRh.u.wrfxsa3wx = false
+      gk8r-hf3.flyet.y7kx = -81798100000000091262
+      [mhv6z.hpd_iu9zs5."2<w"]
+      "lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
+
+      [[""]]
+      lnb2_kse1.gpei2kd94x = 0b01
+
+      [g]
+    ` + '\n';
     const obj = parse(src);
     delete obj.mhv6z;
     obj['AciQ!}@)'].m[0]['QDRogRh'].u = 4152;
     obj[''] = [];
     const result = patch(src, obj, {
       inlineTableStart: 2, trailingComma: true, bracketSpacing: false,
-      updateOrder: false, trailingNewline: 2, newLine: '\n', leadingBom: true,
+      updateOrder: false, trailingNewline: 2, newLine: '\n', leadingBom: false,
       truncateZeroTimeInDates: true, useTabsForIndentation: false, minimumDecimals: 1
     });
-    expect(() => parse(result)).not.toThrow();
+    expect(parse(result)).toEqual(obj);
+    // Double trailing newline for trailingNewline: 2 — dedent gives one, append the second.
+    expect(result).toEqual(dedent`
+      ouud3l2 = "CHPCI3,bKbr|;!]Mr"
+      "" = []
+
+      [["AciQ!}@)".m]]
+      eydt.iqb25ww2.uKV = true
+      uz-8.x0zmi.nycv = -80107.11299
+      w079g8 = "E?Ne|T7(8i.Vvu+P?"
+      is6x08yl.m.p = 2031-11-16T16:50:32
+      yzn3ck = 13:50:59.491731
+      y0ro = '9'
+      QDRogRh.u = 4152.0
+      gk8r-hf3.flyet.y7kx = -81798100000000091262
+
+      [g]
+      ` + '\n\n');
   });
 
 });
