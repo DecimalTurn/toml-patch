@@ -1182,7 +1182,7 @@ export function shiftNode(
   return node;
 }
 
-function perLine(array: InlineArray | InlineTable): boolean {
+export function perLine(array: InlineArray | InlineTable): boolean {
   if (!array.items.length) return false;
 
   const span = getSpan(array.loc);

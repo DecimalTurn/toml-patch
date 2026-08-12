@@ -628,6 +628,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     return abs !== undefined && abs.length > probe.length;
   }
 
+  // The immediate structural container holding `target` in its `.items`
+  // array — any container type (Document/Table/TableArray/InlineTable/
+  // InlineArray), descending through KeyValue values and InlineItem
+  // wrappers.  Used when path-based parent resolution lands on a container
+  // that doesn't physically contain the node (fuzz seed 50: a dotted KV
+  // inside an inline table that is itself an inline-array element).
+  function findStructuralParent(root: TreeNode, target: TreeNode): TreeNode | undefined {
+    function walk(node: TreeNode): TreeNode | undefined {
+      if (isKeyValue(node)) return walk(node.value);
+      if (isInlineItem(node)) return walk(node.item);
+      if (!hasItems(node)) return undefined;
+      const items = node.items as TreeNode[];
+      for (const item of items) {
+        if (item === target) return node;
+        if (isInlineItem(item) && item.item === target) return node;
+      }
+      for (const item of items) {
+        const found = walk(isInlineItem(item) ? item.item : item);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    return walk(root);
+  }
+
   // When an Add's path traverses intermediate key segments that do not exist in the
   // original document (their KV was removed by an earlier change in this same patch),
   // findParent resolves to the nearest existing ancestor and the inserted child would
@@ -1491,9 +1516,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
         // The logical (JS-object) parent may differ from the CST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
-        // Fall back to the document root when the parent doesn't contain the node.
+        // Fall back to the node's structural container when the parent doesn't
+        // contain it (keeps document-sibling behaviour, and handles inline
+        // containers nested inside values).
         if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {
-          parent = original;
+          parent = findStructuralParent(original, node) ?? original;
         }
 
         // R2 extension: when the last child of an implicit parent is removed,

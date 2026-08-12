@@ -8887,4 +8887,43 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
+  // Fuzz seed 50: same operation when the inline table is an inline-array
+  // element.  findHostContainer only returns block containers, so the
+  // parent fallback landed on the Document and remove() crashed with
+  // "Node not found in parent for removal".  The structural container
+  // (the inline table inside the array element) must be found instead.
+  test('emptied dotted prefix in inline table inside array element (seed 50)', () => {
+    const src = `t = [{ a.b = 1, c = 2 }]
+`;
+    const obj = parse(src);
+    delete obj.t[0].a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // Fuzz seed 50: splicing an element out of an inline array that contains
+  // a multiline string.  The diff expresses the splice as Moves + a Remove;
+  // moveInlineElement re-inserted the multiline string with the writer's
+  // span math (which assumes the next sibling sits at the moved node's
+  // first-line column), corrupting every item after it and the closing
+  // bracket — the string's closing delimiter was overwritten by the
+  // following date.  Items after a moved multi-line value are now
+  // realigned sequentially after the move.
+  test('array splice around multiline string keeps rows aligned (seed 50)', () => {
+    const src = dedent`
+      a = [1, "x", 2, '''
+      m
+      t''', 2020-01-01]
+    ` + '\n';
+    const obj = parse(src);
+    obj.a.splice(2, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      a = [1, "x", '''
+      m
+      t''', 2020-01-01]
+      ` + '\n');
+  });
+
 });

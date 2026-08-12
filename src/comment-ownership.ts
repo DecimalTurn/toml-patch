@@ -14,11 +14,12 @@ import {
   isDocument,
   isInlineTable,
   isInlineArray,
-  isInlineItem
+  isInlineItem,
+  hasItems
 } from './cst';
 import { last } from './utils';
 import { clonePosition } from './location';
-import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, Root } from './writer';
+import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, perLine, Root } from './writer';
 
 // See docs/PLAN-Comment-Ownership.md for the full model (rules R1-R6).
 
@@ -319,6 +320,26 @@ export function resolveInlineElementSlots(
  * deeply `target` is nested inside other inline containers, they always
  * flatten up to the same enclosing Document/Table.
  */
+/**
+ * Finds the InlineItem that wraps `target` (an InlineTable/InlineArray)
+ * inside its own parent container's items, searching the whole tree.
+ */
+function findWrapperItem(root: TreeNode, target: TreeNode): InlineItem | undefined {
+  function walk(node: TreeNode): InlineItem | undefined {
+    if (isKeyValue(node)) return walk(node.value);
+    if (!hasItems(node)) return undefined;
+    for (const item of node.items as TreeNode[]) {
+      if (isInlineItem(item) && item.item === target) return item;
+    }
+    for (const item of node.items as TreeNode[]) {
+      const found = walk(isInlineItem(item) ? item.item : item);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  return walk(root);
+}
+
 export function findHostContainer(root: Document, target: TreeNode): Document | Table | TableArray | undefined {
   function searchValue(value: TreeNode, container: Document | Table | TableArray): Document | Table | TableArray | undefined {
     if (value === target) return container;
@@ -579,6 +600,13 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       }
 
       remove(root, parent, node, hostContainer.items as TreeNode[]);
+      // Resolve the removal's offsets before re-inserting, so insert()
+      // measures against final positions.  Otherwise insert() absorbs the
+      // removal's pending exit offset into the inserted item's own offset,
+      // which then leaks into the container's end column (and any wrapper
+      // InlineItem's end) — a comma or closing bracket lands inside the
+      // last value on that line (fuzz seed 50).
+      applyWrites(root);
       insert(root, parent, node, toIndex, undefined, hostContainer.items as TreeNode[]);
 
       // Flush before reading anything back out below. Every other element's
@@ -588,6 +616,19 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // means any FURTHER change in this patch touching the same container
       // starts from a fully-resolved, non-stale state.
       applyWrites(root);
+
+      // insert() translates the node rigidly: every line of a multi-line
+      // node receives the first line's column delta.  A multi-line value's
+      // content columns below the first line are part of its raw text and
+      // must not move — the writer only reads the END column on the last
+      // line, so restore just that, on both the wrapper InlineItem and the
+      // inner value node it wraps (fuzz seed 50).
+      if (nodeOwnStart && nodeOwnEnd && node.loc.end.line > node.loc.start.line) {
+        node.loc.end.column = nodeOwnEnd.column;
+        if (isInlineItem(node) && node.item.loc.end.line > node.item.loc.start.line) {
+          node.item.loc.end.column = nodeOwnEnd.column;
+        }
+      }
 
       for (const { owner, ownerOriginalStart, comments } of detached) {
         let delta: { lines: number; columns: number };
@@ -614,6 +655,50 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           );
           if (insertAt === -1) (hostContainer.items as TreeNode[]).push(comment);
           else (hostContainer.items as TreeNode[]).splice(insertAt, 0, comment);
+        }
+      }
+
+      // The writer's offset model assumes the next sibling sits at the moved
+      // node's first-line column.  When the moved node wraps lines (a
+      // multiline string) inside a container whose items share lines, that
+      // assumption breaks and every item after the moved one lands in the
+      // wrong place, dragging the container's (and any wrapper InlineItem's)
+      // end column with it.  Realign the tail sequentially: each item starts
+      // right after the previous one's end (fuzz seed 50).
+      const container = parent as InlineTable | InlineArray;
+      if (!perLine(container)) {
+        let tailAnchor: { line: number; column: number } | undefined;
+        for (const item of container.items as TreeNode[]) {
+          if (item === node) {
+            tailAnchor = { line: node.loc.end.line, column: node.loc.end.column + 2 };
+            continue;
+          }
+          if (!tailAnchor) continue;
+          const delta = {
+            lines: tailAnchor.line - item.loc.start.line,
+            columns: tailAnchor.column - item.loc.start.column
+          };
+          if (delta.lines !== 0 || delta.columns !== 0) {
+            shiftNode(item, delta);
+            if (item.loc.end.line > item.loc.start.line) {
+              item.loc.end.column -= delta.columns;
+              if (isInlineItem(item) && item.item.loc.end.line > item.item.loc.start.line) {
+                item.item.loc.end.column -= delta.columns;
+              }
+            }
+          }
+          tailAnchor = { line: item.loc.end.line, column: item.loc.end.column + 2 };
+        }
+        if (tailAnchor) {
+          container.loc.end = { line: tailAnchor.line, column: tailAnchor.column - 1 };
+
+          // The container may itself be an element of another inline
+          // container; the wrapper InlineItem's end must track the
+          // container's end or its comma lands inside the last value.
+          const wrapper = findWrapperItem(root, container as TreeNode);
+          if (wrapper) {
+            wrapper.loc.end = { line: container.loc.end.line, column: container.loc.end.column };
+          }
         }
       }
 
