@@ -9,6 +9,7 @@
  */
 import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
+import { NodeType } from '../cst';
 import { inspect } from 'util';
 
 // ─── Mutation helpers ────────────────────────────────────────────────────
@@ -451,12 +452,40 @@ function fuzzOne(
     // 4. Apply mutations using a seeded RNG (offset from doc seed
     //    so mutationCount changes don't alter the same-seed sequence)
     const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
+
+    // Entries of an array-of-tables must be tables — a scalar/array/date
+    // element cannot be represented in TOML at all, so mutations that
+    // would write one into an AOT array are skipped (fuzz seed 52).
+    const aotKeyPaths = new Set<string>();
+    (function collectAotKeys(node: any) {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === NodeType.TableArray && node.key && node.key.item) {
+        aotKeyPaths.add((node.key.item.value as string[]).join('.'));
+      }
+      if (Array.isArray(node.items)) for (const item of node.items) collectAotKeys(item);
+      if (node.value) collectAotKeys(node.value);
+      if (node.item) collectAotKeys(node.item);
+    })(generated.document);
+    const isTableLike = (v: unknown) =>
+      v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+
     const mutationDescs: string[] = [];
-    for (let i = 0; i < mutationCount; i++) {
+    let applied = 0;
+    let attempts = 0;
+    while (applied < mutationCount && attempts < mutationCount * 5) {
+      attempts++;
       const mutation = generateMutation(obj2, mutationRng);
       if (!mutation) break;
+      if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
+        const lastSeg = mutation.path[mutation.path.length - 1];
+        const parentPath = mutation.path.slice(0, -1);
+        if (typeof lastSeg === 'number' && aotKeyPaths.has(parentPath.join('.'))) {
+          continue; // unrepresentable in TOML — retry
+        }
+      }
       applyMutation(obj2, mutation);
       mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);
+      applied++;
     }
 
     if (mutationDescs.length === 0) {
