@@ -621,6 +621,39 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
     }
   }
 
+  // Capture the container's bracket gaps before the move so they can be
+  // restored afterwards.  remove()+insert() uses writer offsets that do
+  // not perfectly cancel over consecutive Moves on the same container,
+  // which corrupts the leading gap (space after `[`/`{`) and trailing gap
+  // (space before `]`/`}`).
+  const container = parent as InlineTable | InlineArray;
+  const itemsBefore = container.items as TreeNode[];
+  const firstBefore = itemsBefore[0];
+  const lastBefore = itemsBefore[itemsBefore.length - 1];
+  const originalLeadingGap = firstBefore.loc.start.column - container.loc.start.column - 1;
+  const originalTrailingGap = container.loc.end.column - 1 - lastBefore.loc.end.column;
+
   remove(root, parent, node);
   insert(root, parent, node, toIndex);
+
+  // Flush so consecutive Moves start from resolved positions (prevents
+  // exit-offset accumulation on the same target) and so the gap
+  // measurements below see final positions.
+  applyWrites(root);
+
+  // Restore bracket gaps corrupted by the move's offsets.
+  const itemsAfter = container.items as TreeNode[];
+  const firstAfter = itemsAfter[0];
+  const leadingGap = firstAfter.loc.start.column - container.loc.start.column - 1;
+  if (leadingGap !== originalLeadingGap) {
+    shiftNode(firstAfter, {
+      lines: 0,
+      columns: originalLeadingGap - leadingGap
+    });
+  }
+  const lastAfter = itemsAfter[itemsAfter.length - 1];
+  const trailingGap = container.loc.end.column - 1 - lastAfter.loc.end.column;
+  if (trailingGap !== originalTrailingGap) {
+    container.loc.end.column = lastAfter.loc.end.column + 1 + originalTrailingGap;
+  }
 }
