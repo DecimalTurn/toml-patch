@@ -8592,4 +8592,38 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 20 (remaining diff): with newLine = "\r\n", a multiline
+  // string's content newlines are normalised to the structural line
+  // endings, so re-parsing the patched output no longer deep-equals the
+  // input object.  The library intentionally normalises value newlines
+  // (no mixed line endings in the output); the fuzz harness comparison
+  // must normalise \r\n vs \n in strings the same way.
+  test('multiline literal string content follows newLine (seed 20)', () => {
+    const src = dedent`
+      ["?"]
+      j16ata5 = '''
+      Z(4jxV:VdbXcB<t
+      H4T.1
+      JW[f*l/O!KyD
+      '''
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj['?'].j16ata5).toEqual('Z(4jxV:VdbXcB<t\nH4T.1\nJW[f*l/O!KyD\n');
+    const result = patch(src, obj, { newLine: '\r\n' });
+    expect(result).toEqual([
+      '["?"]',
+      "j16ata5 = '''",
+      'Z(4jxV:VdbXcB<t',
+      'H4T.1',
+      'JW[f*l/O!KyD',
+      "'''",
+      '',
+    ].join('\r\n'));
+    expect(parse(result)).toEqual({
+      '?': {
+        j16ata5: 'Z(4jxV:VdbXcB<t\r\nH4T.1\r\nJW[f*l/O!KyD\r\n',
+      },
+    });
+  });
+
 });
