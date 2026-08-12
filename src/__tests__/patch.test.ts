@@ -9042,4 +9042,33 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).not.toContain('oe1zht');
   });
 
+  // Fuzz seed 139: truncating a dotted key whose value is a MULTILINE
+  // string inside a multiline inline table (`w.cauh0."GDwQX)kv*" = """…"""`
+  // → `w.cauh0 = 699`).  The key-truncation exit offset was registered
+  // unconditionally and landed on the KV's END line — whose content
+  // columns did not move — shifting the wrapper InlineItem's end (the
+  // trailing comma's position) far away from the value.  The exit offset
+  // is now only registered for single-line KVs.
+  test('truncating a multiline-string inline key keeps the comma (seed 139)', () => {
+    const src = dedent`
+      t = {
+          w.cauh0."GDwQX)kv*" = """
+      CB
+      vE
+      D.7[ub%aLY""",
+          bc.vqe5 = nan,
+      }
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.w.cauh0 = 699;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      t = {
+          w.cauh0 = 699,
+          bc.vqe5 = nan,
+      }
+      ` + '\n');
+  });
+
 });

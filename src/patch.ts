@@ -1269,7 +1269,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existingKeyValue.value.loc.start.column += delta;
             if (existingKeyValue.value.loc.end.line === existingKeyValue.value.loc.start.line) existingKeyValue.value.loc.end.column += delta;
             if (existingKeyValue.loc.end.line === existingKeyValue.loc.start.line) existingKeyValue.loc.end.column += delta;
-            addExitOffset(original, existingKeyValue, { lines: 0, columns: delta });
+            // Record an exit offset at the KV so applyWrites shifts
+            // everything after it (sibling items, closing brace) by the
+            // key-size delta — but only for a single-line KV: for a
+            // multiline value the exit offset would land on the KV's END
+            // line, whose content columns did not move (fuzz seed 139).
+            if (existingKeyValue.loc.end.line === existingKeyValue.loc.start.line) {
+              addExitOffset(original, existingKeyValue, { lines: 0, columns: delta });
+            }
             keyTruncated = true;
           }
         }
@@ -1321,11 +1328,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existingKV.value.loc.end.line === existingKV.value.loc.start.line) existingKV.value.loc.end.column += delta;
             if (existingKV.loc.end.line === existingKV.loc.start.line) existingKV.loc.end.column += delta;
             // Record an exit offset at the KV so applyWrites shifts
-            // everything after the KV (InlineTableItem end, sibling
-            // items, closing brace) by the key-size delta.  The direct
-            // adjustments above only fix positions inside the KV; the
-            // offset system handles everything downstream.
-            addExitOffset(original, existingKV, { lines: 0, columns: delta });
+            // everything after the KV (sibling items, closing brace) by
+            // the key-size delta — single-line KVs only (see the
+            // InlineItem-KV branch, fuzz seed 139).
+            if (existingKV.loc.end.line === existingKV.loc.start.line) {
+              addExitOffset(original, existingKV, { lines: 0, columns: delta });
+            }
             keyTruncated = true;
           }
         }
