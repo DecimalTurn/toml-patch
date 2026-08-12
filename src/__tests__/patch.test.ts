@@ -8536,7 +8536,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
-      a = [ [2, 3  ] ]
+      a = [ [ 2, 3 ] ]
       ` + '\n');
   });
 
