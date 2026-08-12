@@ -1624,6 +1624,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                     // the entry's scope.
                     const entryIdx = (original.items as TreeNode[]).indexOf(container);
                     insertIdx = entryIdx >= 0 ? entryIdx + 1 : original.items.length;
+                  } else if (isDocument(container)) {
+                    // Root-scope materialisation: a [table] header claims every
+                    // key-value below it, so it must land after all root KVs —
+                    // before the first existing section, or at the very end —
+                    // never at the removed KV's index (fuzz seed 11).
+                    const headerIdx = firstSectionHeaderIndex(original);
+                    insertIdx = headerIdx >= 0 ? headerIdx : original.items.length;
                   }
                   insert(original, original, emptyTable, insertIdx);
                 }

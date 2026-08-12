@@ -8816,4 +8816,49 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 11: deleting the last segment of a ROOT-level dotted KV
+  // materialises the emptied parent as a section.  A [table] header claims
+  // every key-value below it, so the section must land AFTER the remaining
+  // root KVs — inserting it at the removed KV's index (the top of the file)
+  // nested all following root KVs under it.
+  test('materialised root dotted parent lands after root KVs (seed 11)', () => {
+    const src = dedent`
+      nduxrs6pz.ek = 597081
+      other = true
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.nduxrs6pz.ek;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      other = true
+
+      [nduxrs6pz]
+      ` + '\n');
+  });
+
+  // Same operation when a section already exists: the materialised header
+  // goes before the first existing section so the root KVs stay root-level.
+  test('materialised root dotted parent lands before first section (seed 11)', () => {
+    const src = dedent`
+      nduxrs6pz.ek = 597081
+      other = true
+
+      [late]
+      x = 1
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.nduxrs6pz.ek;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      other = true
+
+      [nduxrs6pz]
+
+      [late]
+      x = 1
+      ` + '\n');
+  });
+
 });
