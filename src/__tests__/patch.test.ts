@@ -8926,4 +8926,22 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seeds 70/73/79: with useTabsForIndentation, toTOML converted
+  // leading spaces to tabs on EVERY line — including the content lines of
+  // multiline string literals, silently changing the value (' A' became
+  // '\tA').  Indentation inside multiline strings is value content and
+  // must never be converted.
+  test('tabs indentation never touches multiline string content (seed 70)', () => {
+    const src = dedent`
+      x = '''
+       A
+      i'''
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj.x).toEqual(' A\ni');
+    const result = patch(src, obj, { useTabsForIndentation: true });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain(' A\n');
+  });
+
 });
