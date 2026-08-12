@@ -177,6 +177,55 @@ function deepEqual(a: unknown, b: unknown): boolean {
   );
 }
 
+/**
+ * Like `deepEqual` but normalises values that formatting options can change:
+ * - `truncateZeroTimeInDates`: converts Date objects to date-only ISO strings
+ *   before comparing, since the patched TOML drops the zero time component.
+ * - `minimumDecimals`: rounds numbers to the specified decimal places before
+ *   comparing, since the patched TOML adds trailing zeros.
+ */
+function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>): boolean {
+  const truncateDates = fmt?.truncateZeroTimeInDates === true;
+  const minDec = fmt?.minimumDecimals ?? 0;
+
+  function normalise(val: unknown): unknown {
+    if (val == null) return val;
+    if (truncateDates && val instanceof Date) {
+      // `truncateZeroTimeInDates` drops time when it's midnight UTC.
+      // Re-parsing a date-only TOML value gives a LocalDate-like object,
+      // so normalise both sides to a date-only ISO string for comparison.
+      if (val.getUTCHours() === 0 && val.getUTCMinutes() === 0 &&
+          val.getUTCSeconds() === 0 && val.getUTCMilliseconds() === 0) {
+        const y = val.getUTCFullYear();
+        const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(val.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      return val.toISOString();
+    }
+    if (minDec > 0 && typeof val === 'number' && Number.isFinite(val)) {
+      return Number(val.toFixed(minDec));
+    }
+    if (Array.isArray(val)) return val.map(normalise);
+    if (val && typeof val === 'object' && !(val instanceof Date)) {
+      const acc: Record<string, unknown> = {};
+      for (const k of Object.keys(val as object)) {
+        acc[k] = normalise((val as any)[k]);
+      }
+      return acc;
+    }
+    return val;
+  }
+
+  // Normalise both sides when the format would affect the comparison, then
+  // use plain deepEqual on the normalised values.  When no normalising
+  // options are active this degrades to a regular deepEqual.
+  if (truncateDates || minDec > 0) {
+    return deepEqual(normalise(a), normalise(b));
+  }
+  return deepEqual(a, b);
+}
+
 // ─── Random value generator for mutations ────────────────────────────────
 
 function randomMutationValue(rng: SeededRandom): JsonValue {
@@ -421,8 +470,9 @@ function fuzzOne(
       return result;
     }
 
-    // 7. Compare
-    if (!deepEqual(obj2, reParsed)) {
+    // 7. Compare — uses format-aware comparison so that
+    // truncateZeroTimeInDates / minimumDecimals don't cause false positives.
+    if (!deepEqualWithFormat(obj2, reParsed, format)) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
       result.originalToml = generated.toml;
