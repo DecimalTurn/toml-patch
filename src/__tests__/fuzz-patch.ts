@@ -3,6 +3,9 @@
  * applies patch(), and verifies the result round-trips correctly.
  *
  * Usage: npx tsx src/__tests__/fuzz-patch.ts [--count N] [--seed SEED] [--mutations M]
+ *
+ * To inspect a single seed's TOML, format, mutations and output:
+ *   npx tsx src/__tests__/inspect-fuzz-seed.ts <seed> [--mutations M]
  */
 import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
