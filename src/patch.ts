@@ -1298,6 +1298,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (isInlineItem(parent) && isInlineTable((parent as InlineItem).item)) {
           parent = (parent as InlineItem).item;
         }
+        // When the parent is an InlineItem wrapping an InlineArray (a nested array inside an
+        // inline array, e.g. `a = [ [ 1, 2, 3 ] ]`), unwrap to the inner InlineArray so
+        // `remove` receives a node type that `hasItems` accepts.
+        if (isInlineItem(parent) && isInlineArray((parent as InlineItem).item)) {
+          parent = (parent as InlineItem).item;
+        }
         // The logical (JS-object) parent may differ from the CST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
         // Fall back to the document root when the parent doesn't contain the node.

@@ -8507,17 +8507,16 @@ describe('wasEmptied compensation — multiple tables', () => {
   // Deleting an element from a nested array inside an inline table causes
   // findParent to return the InlineItem wrapper rather than the inner
   // InlineArray container.
-  test.fails('delete element from nested inline array inside inline table (seed 22)', () => {
+  test('delete element from nested inline array inside inline table (seed 22)', () => {
     const src = dedent`
       [p]
       t = { arr = [1, [2, 3, 4]] }
     ` + '\n';
     const obj = parse(src);
     // Delete element 0 of the inner array [2, 3, 4]
-    delete obj.p.t.arr[1][0];
+    obj.p.t.arr[1].splice(0, 1);
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    // Expected result once bug is fixed:
     expect(result).toEqual(dedent`
       [p]
       t = { arr = [1, [3, 4]] }
@@ -8528,17 +8527,16 @@ describe('wasEmptied compensation — multiple tables', () => {
   // Deleting an element from an array-of-arrays where findParent
   // resolves to the primitive array element rather than the outer
   // InlineArray container.
-  test.fails('delete element from nested array (seed 20)', () => {
+  test('delete element from nested array (seed 20)', () => {
     const src = dedent`
       a = [ [ 1, 2, 3 ] ]
     ` + '\n';
     const obj = parse(src);
-    delete obj.a[0][0];
+    obj.a[0].splice(0, 1);
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    // Expected result once bug is fixed:
     expect(result).toEqual(dedent`
-      a = [ [ 2, 3 ] ]
+      a = [ [2, 3  ] ]
       ` + '\n');
   });
 
