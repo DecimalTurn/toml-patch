@@ -76,6 +76,16 @@ export function deleteInlineContainerNeedingTighten(node: TreeNode): void {
   inlineContainersNeedingTighten.delete(node);
 }
 
+/**
+ * Add an exit offset at `node` so that applyWrites shifts everything
+ * after the node in depth-first order by `span`.  Used by key-truncation
+ * in the Edit handler to account for a shortened key without having to
+ * manually adjust every downstream position.
+ */
+export function addExitOffset(root: Root, node: TreeNode, span: Span): void {
+  addOffset(span, getExitOffsets(root), node);
+}
+
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
 const getEnterOffsets = (root: Root) => {
   if (!enter_offsets.has(root)) {

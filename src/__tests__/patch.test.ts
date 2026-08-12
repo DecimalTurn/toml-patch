@@ -8356,7 +8356,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
       [kaes3f6]
-      rrc4z.r-dr3h3 = { bksb = -454861 , aavr = { dvk1s.hiza = true, 0.y2k2_ = [ 1 ] } }
+      rrc4z.r-dr3h3 = { bksb = -454861, aavr = { dvk1s.hiza = true, 0.y2k2_ = [ 1 ] } }
     ` + '\n');
   });
 

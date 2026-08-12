@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -1026,6 +1026,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existingKV.value.loc.start.column += delta;
             if (existingKV.value.loc.end.line === existingKV.value.loc.start.line) existingKV.value.loc.end.column += delta;
             if (existingKV.loc.end.line === existingKV.loc.start.line) existingKV.loc.end.column += delta;
+            // Record an exit offset at the KV so applyWrites shifts
+            // everything after the KV (InlineTableItem end, sibling
+            // items, closing brace) by the key-size delta.  The direct
+            // adjustments above only fix positions inside the KV; the
+            // offset system handles everything downstream.
+            addExitOffset(original, existingKV, { lines: 0, columns: delta });
             keyTruncated = true;
           }
         }
