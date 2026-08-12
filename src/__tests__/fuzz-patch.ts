@@ -122,7 +122,7 @@ function deleteAt(obj: any, path: (string | number)[]): void {
 
 // ─── Deep clone (handles Date subclasses, BigInt, arrays) ────────────────
 
-function deepClone(obj: unknown): unknown {
+export function deepClone(obj: unknown): unknown {
   if (obj == null || typeof obj !== 'object') return obj;
   if (typeof obj === 'bigint') return obj;
 
@@ -282,7 +282,7 @@ function randomMutationValue(rng: SeededRandom): JsonValue {
 
 // ─── Mutation generator ──────────────────────────────────────────────────
 
-function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
+export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
   const paths = collectPaths(obj);
 
   const mutablePaths = paths.filter(p => {
@@ -328,7 +328,7 @@ function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | nul
   return { path, kind: 'add-key', newValue: randomMutationValue(rng) };
 }
 
-function applyMutation(obj: any, mutation: RandomMutation): void {
+export function applyMutation(obj: any, mutation: RandomMutation): void {
   switch (mutation.kind) {
     case 'add-key':
       setAt(obj, mutation.path, mutation.newValue);
@@ -364,7 +364,7 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
 
 // ─── Random TomlFormat generator ─────────────────────────────────────────
 
-function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
+export function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
   // 50% chance: no format override (use library defaults)
   if (rng.chance(0.5)) return undefined;
 
@@ -400,7 +400,7 @@ function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
   return format;
 }
 
-function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
+export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
   if (!fmt) return 'default';
   const parts: string[] = [];
   for (const [k, v] of Object.entries(fmt)) {
@@ -424,7 +424,7 @@ interface PatchFuzzResult {
   formatDesc?: string;
 }
 
-function fuzzOne(
+export function fuzzOne(
   seed: number,
   mutationCount: number
 ): PatchFuzzResult {
@@ -619,4 +619,8 @@ function main() {
   }
 }
 
-main();
+// Only run the CLI fuzz loop when executed directly, so local scripts can
+// import the helpers (fuzzOne, generateMutation, …) without side effects.
+if (import.meta.main) {
+  main();
+}

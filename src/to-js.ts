@@ -342,12 +342,16 @@ function validateKey(
   // Pre-compute all candidate key strings incrementally to avoid repeated
   // prefix.concat(key.slice(0, i)) + join allocations.
   // candidates[i] = joinKey(prefix.concat(key.slice(0, i + 1)))
-  const prefixStr = prefix.length > 0 ? joinKey(prefix) : '';
+  // The accumulation must be structural, not string-truthiness based: an
+  // empty-string key segment (e.g. the first segment of `""`.lt = …) makes
+  // the accumulated string '' and would silently drop the segment — then
+  // lookups like state.table_arrays (registered with joinKey) miss and
+  // valid AOT sub-table headers are rejected (fuzz seed 103).
+  const parts: string[] = prefix.length > 0 ? [...prefix] : [];
   const candidates: string[] = new Array(key.length);
-  let running = prefixStr;
   for (let i = 0; i < key.length; i++) {
-    running = running ? running + '.' + key[i] : key[i];
-    candidates[i] = running;
+    parts.push(key[i]);
+    candidates[i] = parts.join('.');
   }
   const joined_full_key = candidates[key.length - 1];
 

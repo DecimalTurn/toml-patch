@@ -8978,4 +8978,34 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 103: a table header that extends an array-of-tables entry
+  // whose key starts with an EMPTY segment (`["".lt.pcz8w994u.q]` after
+  // `[["".lt.pcz8w994u]]`).  toJS's validateKey built candidate key
+  // strings with a string-truthiness check, which dropped the empty first
+  // segment ("lt.pcz8w994u" instead of ".lt.pcz8w994u") — the lookup in
+  // table_arrays missed and the header was rejected as "Cannot add to
+  // static array".
+  test('AOT sub-table under an empty first key segment parses (seed 103)', () => {
+    const src = dedent`
+      [""]
+
+      [["".lt.pcz8w994u]]
+      y = 2
+
+      ["".lt.pcz8w994u.q]
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj[''].lt.pcz8w994u).toEqual([{ y: 2, q: {} }]);
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [""]
+
+      [["".lt.pcz8w994u]]
+      y = 2
+
+      ["".lt.pcz8w994u.q]
+      ` + '\n');
+    expect(parse(result)).toEqual(obj);
+  });
+
 });
