@@ -8540,4 +8540,28 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 20 (3 mutations): delete-key at 7<L:.b32uvhdz.0.z0ncoh.y.eam.
+  // Removing the last segment of a dotted key inside an AOT entry.  Every
+  // prefix of the change path matches the dotted key via prefix-matching,
+  // so findParent returns the KV itself (even after re-resolving one
+  // segment higher) and the handler previously unwrapped its Integer value
+  // as the parent — crashing with "Unsupported parent type 'Integer' for
+  // remove".  The KV must be removed from the AOT entry and the emptied
+  // parent materialised as a sub-table inside the entry's scope.
+  test('delete last segment of dotted key inside AOT entry (seed 20)', () => {
+    const src = dedent`
+      [["7<L:".b32uvhdz]]
+      z0ncoh.y.eam = 0xd50d56
+    ` + '\n';
+    const obj = parse(src);
+    delete obj['7<L:'].b32uvhdz[0].z0ncoh.y.eam;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [["7<L:".b32uvhdz]]
+
+      ["7<L:".b32uvhdz.z0ncoh.y]
+      ` + '\n');
+  });
+
 });
