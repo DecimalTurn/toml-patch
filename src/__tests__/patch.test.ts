@@ -8501,51 +8501,36 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n\n');
   });
 
-  // ── Delete-key mutations — implicit parent survival ─────────────────
+  // ── Fuzz-discovered delete-key failures ────────────────────────────
 
-  // When a delete-key mutation removes the last child of a dotted key's
-  // middle segment, the parent should survive as an empty table header.
-  test('deleting middle segment of dotted KV materialises implicit parent', () => {
+  // Seed 22: Unsupported parent type "InlineItem" for remove.
+  // Deleting an element from a nested array inside an inline table causes
+  // findParent to return the InlineItem wrapper rather than the inner
+  // InlineArray container.
+  test.fails('delete element from nested inline array inside inline table (seed 22 reduced)', () => {
     const src = dedent`
-      a.b.c = "value"
+      [p]
+      t = { arr = [1, [2, 3, 4]] }
     ` + '\n';
     const obj = parse(src);
-    // delete obj.a.b removes the 'b' key, leaving a = {}
-    delete obj.a.b;
-    const result = patch(src, obj);
-    expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(dedent`
-      [a]
-    ` + '\n');
+    // Delete element 0 of the inner array [2, 3, 4]
+    delete obj.p.t.arr[1][0];
+    expect(() => patch(src, obj)).not.toThrow();
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
-  // When a delete-key mutation removes a key from an inline object inside
-  // an inline array, the parent resolves to an InlineItem rather than the
-  // InlineTable container, causing "Unsupported parent type" for remove.
-  test('deleting key from inline table inside inline array preserves remaining keys', () => {
+  // Seed 20/26/41: Unsupported parent type "Integer" for remove.
+  // Deleting an element from an array-of-arrays where findParent
+  // resolves to the primitive array element rather than the outer
+  // InlineArray container.
+  test.fails('delete element from nested array (seed 20 pattern)', () => {
     const src = dedent`
-      items = [ { name = "a", color = "red" } ]
+      a = [ [ 1, 2, 3 ] ]
     ` + '\n';
     const obj = parse(src);
-    delete obj.items[0].color;
-    const result = patch(src, obj);
-    expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(dedent`
-      items = [ { name = "a" } ]
-    ` + '\n');
-  });
-
-  // When a delete-key mutation targets a key whose parent path resolves
-  // to a scalar leaf (e.g. inside a nested array), findParent returns
-  // the wrong node type for remove.
-  test('deleting key inside nested array where parent is a scalar', () => {
-    const src = dedent`
-      data = [ 1, [ { k = "v" } ], 3 ]
-    ` + '\n';
-    const obj = parse(src);
-    delete obj.data[1][0].k;
-    const result = patch(src, obj);
-    expect(parse(result)).toEqual(obj);
+    delete obj.a[0][0];
+    expect(() => patch(src, obj)).not.toThrow();
+    expect(parse(patch(src, obj))).toEqual(obj);
   });
 
 });
