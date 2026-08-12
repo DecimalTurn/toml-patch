@@ -8420,4 +8420,25 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
+  // ── Re-parse failures: patch produces invalid TOML ──────────────────
+  //
+  // Found by the fuzz harness.  Seeds 92, 139, 176 require the full
+  // random TOML context to trigger; only seed 187 reproduces in isolation.
+
+  // BUG: Changing a dotted key to a scalar under a section header
+  // leaves a conflicting key-value in the output, producing
+  // "Value already defined" on re-parse.
+  test.fails('BUG: dotted-to-scalar edit under section leaves duplicate key (seed 187)', () => {
+    const src = dedent`
+      [cso]
+      g.bq5g = "D"
+      v.jp = -0.128
+      v.e4.c6 = false
+    ` + '\n';
+    const obj = parse(src);
+    obj.cso.v = 42;
+    const result = patch(src, obj);
+    expect(() => parse(result)).not.toThrow();
+  });
+
 });
