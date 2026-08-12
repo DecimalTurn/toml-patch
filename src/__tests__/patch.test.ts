@@ -4972,6 +4972,152 @@ describe('Mixed line endings', () => {
     // LF because the original document format is LF.
     expect(patch(existing, obj)).toEqual('key = """updated\nvalue"""\n');
   });
+
+  test('should warn when patching a mixed line ending document normalizes to LF', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document with \r\n inside the multiline literal string.
+    const existing = [
+      'name = "before"', '\n',
+      "multi = '''", '\n',
+      'line1', '\r\n',
+      'line2', '\r\n',
+      "'''", '\n',
+      'unrelated = 1', '\n'
+    ].join('');
+
+    const obj = parse(existing);
+    expect(obj.multi).toEqual('line1\r\nline2\r\n');
+    obj.unrelated = 2;
+
+    const result = patch(existing, obj);
+
+    // The literal string content is normalized to the document's LF endings.
+    expect(result).toEqual([
+      'name = "before"', '\n',
+      "multi = '''", '\n',
+      'line1', '\n',
+      'line2', '\n',
+      "'''", '\n',
+      'unrelated = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+  test('should warn when patching a mixed line ending document normalizes to CRLF', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // CRLF document with bare \n inside the multiline literal string.
+    const existing = [
+      'name = "before"', '\r\n',
+      "multi = '''", '\r\n',
+      'line1', '\n',
+      'line2', '\n',
+      "'''", '\r\n',
+      'unrelated = 1', '\r\n'
+    ].join('');
+
+    const obj = parse(existing);
+    obj.unrelated = 2;
+
+    patch(existing, obj);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to CRLF');
+
+    spy.mockRestore();
+  });
+
+  test('should warn even when the patch makes no changes', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // A no-op patch still rewrites the document, so it still normalizes.
+    
+    const existing = [
+      'a = 1', '\n',
+      'b = """x', '\r\n',
+      '"""', '\n'
+    ].join('');
+    const obj = parse(existing);
+
+    patch(existing, obj);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+  test('should not warn when the document has uniform line endings', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const existing = dedent`
+      name = "before"
+      unrelated = 1
+    ` + '\n';
+
+    patch(existing, { unrelated: 2 });
+
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+
+  // Any mixed line ending conversion warns, even when the only difference
+  // sits in the trailing newline run.
+  test('should warn when only the trailing newline uses a different line ending', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document whose only \r\n is the trailing newline.
+    const existing = [
+      'a = 1', '\n',
+      'b = 2', '\r\n'
+    ].join('');
+
+    const result = patch(existing, { a: 3, b: 2 });
+
+    expect(result).toEqual([
+      'a = 3', '\n',
+      'b = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+    test('should warn when only the middle newline uses a different line ending', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document whose only \r\n is in the middle of the content.
+    const existing = [
+      'a = 1', '\n',
+      'b = 2', '\r\n',
+      'c = 2', '\n'
+    ].join('');
+
+    const result = patch(existing, { a: 3, b: 2, c: 2 });
+
+    expect(result).toEqual([
+      'a = 3', '\n',
+      'b = 2', '\n',
+      'c = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
 });
 
 describe('Root key-value placement', () => {

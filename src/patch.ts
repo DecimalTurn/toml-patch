@@ -39,7 +39,7 @@ import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineCon
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
-import { IS_BARE_KEY } from './tokenizer';
+import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
@@ -69,11 +69,22 @@ import traverse from './traverse';
  * @returns A new TOML string with the changes applied
  */
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
+  // The tokenizer flags mixed line endings as it scans, so this requires no
+  // separate pass over the input.
+  const newlineState = createNewlineScanState();
+  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing), newlineState));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
+
+  if (newlineState.mixed) {
+    const normalized = fmt.newLine === '\r\n' ? 'CRLF' : 'LF';
+    console.warn(
+      `toml-patch: Mixed line endings detected. ` +
+      `Line endings in the output will be normalized to ${normalized}`
+    );
+  }
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;

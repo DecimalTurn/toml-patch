@@ -18,7 +18,7 @@ import {
   CST,
   Block
 } from './cst';
-import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE } from './tokenizer';
+import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
 import { clonePosition, cloneLocation } from './location';
@@ -250,9 +250,9 @@ export {
   DateFormatHelper
 } from './date-format';
 
-export default function* parseTOML(input: string): CST {
+export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
-  const cursor = new Cursor(tokenize(input));
+  const cursor = new Cursor(tokenize(input, newlineState));
   
   while (!cursor.next().done) {
     const blocks = walkBlock(cursor, input);
