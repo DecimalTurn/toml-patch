@@ -936,7 +936,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing, replacement);
+              preserveFormatting(existing as Value, replacement as Value);
             }
           }
         }
@@ -1053,7 +1053,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing, replacement);
+              preserveFormatting(existing as Value, replacement as Value);
             }
           }
         }
