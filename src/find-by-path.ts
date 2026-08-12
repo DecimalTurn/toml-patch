@@ -91,6 +91,13 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
           // as a structural edit.
           found = item;
           return true;
+        } else if (isInlineItem(item) && isKeyValue(item.item) && key.length > path.length && arraysEqual(key.slice(0, path.length), path)) {
+          // Path is a prefix of a dotted key inside an InlineTableItem
+          // (e.g. path ['bksb'] matching inline key ['bksb','eca7itb61','ismjjcc']).
+          // The path is fully consumed — return the InlineItem so the caller
+          // can handle the key-length mismatch as a structural edit.
+          found = item;
+          return true;
         } else {
           return false;
         }

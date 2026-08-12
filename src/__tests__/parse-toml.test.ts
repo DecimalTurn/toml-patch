@@ -184,6 +184,12 @@ describe('ParseError messages', () => {
     }).toThrow(/day 30 invalid for 2024-02/);
   });
 
+  test('should show correct error for date with trailing T but no time', () => {
+    expect(() => {
+      Array.from(parseTOML('a = 2065-12-05T'));
+    }).toThrow(/'T' requires time component/);
+  });
+
   test('should show correct error for invalid month', () => {
     expect(() => {
       Array.from(parseTOML('a = 2024-13-01'));

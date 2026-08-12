@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -886,6 +886,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // the longest suffix of change.path that matches a prefix of the
         // existing key — this handles cases where parseJS restructured keys
         // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
+        let keyTruncated = false;
         if (existing.key.value.length > 1) {
           let matchLen = 0;
           const max = Math.min(change.path.length, existing.key.value.length);
@@ -911,6 +912,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existing.value.loc.start.column += delta;
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+            keyTruncated = true;
           }
         }
         
@@ -922,9 +924,26 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = existing;
         existing = existing.value;
         replacement = replacement.value;
+
+        // When the key was truncated, the replacement value from the updated CST
+        // carries stale coordinate-system data that corrupts applyWrites' offset
+        // resolution.  Regenerate a fresh value through a TOML round-trip for
+        // clean loc values, and re-apply formatting preservation on the fresh node.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing as Value, replacement as Value);
+            }
+          }
+        }
       } else if (isKeyValue(existing) && isInlineItem(replacement) && isKeyValue(replacement.item)) {
         // Truncate the existing key if the path matched via prefix (same
         // logic as the isKeyValue && isKeyValue branch above).
+        let keyTruncated = false;
         if (existing.key.value.length > 1) {
           let matchLen = 0;
           const max = Math.min(change.path.length, existing.key.value.length);
@@ -950,12 +969,25 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             existing.value.loc.start.column += delta;
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
+            keyTruncated = true;
           }
         }
 
         parent = existing;
         existing = existing.value;
         replacement = replacement.item.value;
+
+        // When the key was truncated, regenerate the replacement value with clean
+        // loc values through a TOML round-trip to avoid applyWrites corruption
+        // from stale updated-CST coordinate-system data.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) replacement = freshValue;
+          }
+        }
       } else if (isInlineItem(existing) && isKeyValue(existing.item) && isKeyValue(replacement)) {
         // Editing inline table item: existing is InlineItem, replacement is a block-style KeyValue.
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
@@ -966,12 +998,65 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         existing = existingKeyValue.value;
         replacement = replacement.value;
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
-        // Both are InlineItems wrapping KeyValues (nested inline table edits)
+        // Both are InlineItems wrapping KeyValues (nested inline table edits).
+        
+        // If the path matched via prefix (shorter than the existing dotted key),
+        // truncate the key.  Same logic as the isKeyValue branches above.
+        let keyTruncated = false;
+        const existingKV = existing.item;
+        if (existingKV.key.value.length > 1) {
+          let matchLen = 0;
+          const max = Math.min(change.path.length, existingKV.key.value.length);
+          for (let i = 1; i <= max; i++) {
+            if (arraysEqual(
+              change.path.slice(change.path.length - i) as string[],
+              existingKV.key.value.slice(0, i)
+            )) {
+              matchLen = i;
+            }
+          }
+          if (matchLen > 0 && matchLen < existingKV.key.value.length) {
+            existingKV.key.value = existingKV.key.value.slice(0, matchLen);
+            existingKV.key.raw = generateKey(existingKV.key.value).raw;
+            const oldEndCol = existingKV.key.loc.end.column;
+            const newEndCol = existingKV.key.loc.start.column + existingKV.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existingKV.key.loc.end.column = newEndCol;
+            existingKV.equals += delta;
+            existingKV.value.loc.start.column += delta;
+            if (existingKV.value.loc.end.line === existingKV.value.loc.start.line) existingKV.value.loc.end.column += delta;
+            if (existingKV.loc.end.line === existingKV.loc.start.line) existingKV.loc.end.column += delta;
+            // Record an exit offset at the KV so applyWrites shifts
+            // everything after the KV (InlineTableItem end, sibling
+            // items, closing brace) by the key-size delta.  The direct
+            // adjustments above only fix positions inside the KV; the
+            // offset system handles everything downstream.
+            addExitOffset(original, existingKV, { lines: 0, columns: delta });
+            keyTruncated = true;
+          }
+        }
+
         // Preserve formatting and edit the value within
-        preserveFormatting(existing.item.value, replacement.item.value);
-        parent = existing.item;
-        existing = existing.item.value;
+        preserveFormatting(existingKV.value, replacement.item.value);
+        parent = existingKV;
+        existing = existingKV.value;
         replacement = replacement.item.value;
+
+        // When the key was truncated, regenerate the replacement value with clean
+        // loc values through a TOML round-trip to avoid applyWrites corruption
+        // from stale updated-CST coordinate-system data, and re-apply formatting
+        // preservation on the fresh node.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing as Value, replacement as Value);
+            }
+          }
+        }
       } else if (isTable(existing)) {
         // Type change: a block table section (e.g: [x.y.z.w]) is being replaced by a scalar value.
         // The diff produces an Edit at path e.g. ['x','y','z','w'], where `existing` is the Table
@@ -1020,15 +1105,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         parent = findParent(original, change.path);
       } else {
         parent = findParent(original, change.path);
-        // Special handling for array element edits
+        // Unwrap InlineItem parents to the actual container
+        // (mirrors the Add handler unwrapping at L690-698).
+        // For nested arrays, findParent returns the InlineArrayItem
+        // wrapper; we need the inner InlineArray so replace() splices
+        // into .items instead of overwriting .item.
         if (isKeyValue(parent)) {
-          // Check if we're actually editing an array element
           const parentPath = change.path.slice(0, -1);
           const arrayNode = findByPath(original, parentPath);
           if (isKeyValue(arrayNode) && isInlineArray(arrayNode.value)) {
             parent = arrayNode.value;
           }
+        } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
+          parent = parent.item.value;
+        } else if (isInlineItem(parent) && isInlineTable(parent.item)) {
+          parent = parent.item;
+        } else if (isInlineItem(parent) && isInlineArray(parent.item)) {
+          parent = parent.item;
         }
+      }
+
+      // When replacing an InlineItem that wraps a scalar (e.g. editing a
+      // string inside a nested array), preserve the existing item's comma
+      // flag so the replacement doesn't introduce an unwanted trailing comma.
+      if (isInlineItem(existing) && isInlineItem(replacement)) {
+        replacement.comma = existing.comma;
       }
 
       if (inlineTableRowContext) {
@@ -1144,6 +1245,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       } else {
         let parent = findParent(original, change.path);
+        // When findParent returns the node itself via dotted-key prefix
+        // matching (e.g. path ['t','a','b'] matching key ['a','b']),
+        // re-resolve from one segment higher so we get the actual
+        // container (the Table/Document) rather than the KV's value.
+        if (parent === node) {
+          parent = findParent(original, change.path.slice(0, -1));
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         }
@@ -1905,6 +2013,25 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
   for (const table of additionalTables) {
     insert(original, original, table, undefined);
   }
+}
+
+/**
+ * Regenerate a replacement Value node with clean loc values through a
+ * TOML round-trip.  Handles both KeyValue and Table output from parseJS
+ * (formatTopLevel may convert a root-level key to a [section] when
+ * inlineTableStart is 0).  Returns undefined when the value cannot be
+ * safely regenerated.
+ */
+function regenerateValue(jsValue: any, format: TomlFormat): Value | undefined {
+  const freshDoc = parseJS({ __tmp__: jsValue }, format);
+  const replacementToml = toTOML(freshDoc.items, format);
+  const replacementCst = Array.from(parseTOML(replacementToml));
+  const freshItem = replacementCst[0];
+  if (isKeyValue(freshItem)) return freshItem.value;
+  if (isTable(freshItem)
+      && freshItem.items.length > 0
+      && isKeyValue(freshItem.items[0])) return freshItem.items[0].value;
+  return undefined;
 }
 
 function findEnclosingInlineTableRowContext(
