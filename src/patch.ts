@@ -1371,6 +1371,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
+        // Dotted-key KeyValues follow the same implicit-parent materialisation
+        // rule: when removing the last segment of a dotted key (e.g. y.ic83
+        // → y), and no other items share the parent prefix, materialise the
+        // parent as an empty table header so the key isn't silently dropped.
+        if (!materialisedInPlace &&
+            change.path.length > 1 && isKeyValue(node) && rawUpdated !== undefined) {
+          const kv = node as KeyValue;
+          // Only for dotted keys with 2+ segments.
+          if (kv.key.value.length > 1) {
+            const parentPath = change.path.slice(0, -1);
+            // Search the node's own container (Table / Document) for remaining
+            // siblings whose key starts with the parent prefix.
+            const container = isDocument(parent) || isTable(parent) || isTableArray(parent)
+              ? parent
+              : original;
+            if (hasItems(container)) {
+              const remaining = (container.items as TreeNode[]).filter(item => {
+                if (!isKeyValue(item)) return false;
+                return arraysEqual((item as KeyValue).key.value.slice(0, parentPath.length), parentPath);
+              });
+              if (remaining.length === 0) {
+                let value: any = rawUpdated;
+                for (const k of parentPath) value = value?.[k];
+                if (isObject(value) && Object.keys(value).length === 0) {
+                  const emptyTable = generateTable(parentPath as string[]);
+                  materialisedTables.add(emptyTable);
+                  const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+                  insert(original, original, emptyTable, insertIdx);
+                }
+              }
+            }
+          }
+        }
+
         // Track AOT keys whose entries may have been fully removed — again only when the
         // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
         if (isTableArray(node)) {

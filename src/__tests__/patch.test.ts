@@ -8249,17 +8249,11 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
-  // BUG: Deleting the first segment of a dotted key combined with other
-  // mutations throws "Unsupported parent type 'String' for remove".
-  // Reproduced with 5 simultaneous mutations.
-  //
-  // FIXED (partial): The crash is resolved by detecting when findParent
-  // returns the node itself via dotted-key prefix match and re-resolving
-  // from one path segment higher.
-  //
-  // TODO: Implicit parent "y" (created by dotted key y.ic83) does not
-  // survive when its last child is removed — "y": {} is dropped.
-  test.fails('BUG: implicit parent of dotted KV does not survive child removal', () => {
+  // When a dotted KeyValue's last segment is removed inside a table,
+  // the implicit parent segments should survive as an empty table header.
+  // This exercises the KeyValue branch of the implicit-parent materialisation
+  // added alongside the existing Table/TableArray materialisation.
+  test('implicit parent of dotted KV survives child removal', () => {
     const src = dedent`
       y3.u9jt4 = 0b111101
       "pEjJDgj/n".y = 0xeb5034c
