@@ -8428,7 +8428,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Changing a dotted key to a scalar under a section header
   // leaves a conflicting key-value in the output, producing
   // "Value already defined" on re-parse.
-  test.fails('BUG: dotted-to-scalar edit under section leaves duplicate key (seed 187)', () => {
+  test('dotted-to-scalar edit under section (seed 187)', () => {
     const src = dedent`
       [cso]
       g.bq5g = "D"

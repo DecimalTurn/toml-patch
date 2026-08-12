@@ -913,6 +913,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
             keyTruncated = true;
+
+            // When a dotted key is truncated (e.g. v.jp → v), any
+            // sibling KVs that were children of the old implicit table
+            // (e.g. v.e4.c6) must be removed — v is no longer a table.
+            const truncatedPrefix = existing.key.value;
+            if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+              const parentItems = (containerParent as Table | Document | TableArray).items as Block[];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                if (isKeyValue(sibling)
+                    && sibling.key.value.length > truncatedPrefix.length
+                    && arraysEqual(sibling.key.value.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, containerParent, sibling);
+                }
+              }
+            }
           }
         }
         
@@ -970,6 +987,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
             keyTruncated = true;
+
+            // Remove sibling KVs that were children of the old implicit table.
+            const truncatedPrefix = existing.key.value;
+            if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+              const parentItems = (containerParent as Table | Document | TableArray).items as Block[];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                if (isKeyValue(sibling)
+                    && sibling.key.value.length > truncatedPrefix.length
+                    && arraysEqual(sibling.key.value.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, containerParent, sibling);
+                }
+              }
+            }
           }
         }
 
