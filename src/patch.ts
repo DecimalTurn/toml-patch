@@ -1284,6 +1284,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (parent === node) {
           parent = findParent(original, change.path.slice(0, -1));
         }
+        // Every prefix of the path can itself match a dotted key (e.g.
+        // removing the last segment of `z0ncoh.y.eam` inside an AOT entry),
+        // in which case both resolutions above return the node itself.
+        // Fall back to the node's structural container instead.
+        if (parent === node) {
+          const host = findHostContainer(original, node);
+          if (host) parent = host;
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         }
