@@ -126,13 +126,26 @@ function deepClone(obj: unknown): unknown {
   if (typeof obj === 'bigint') return obj;
 
   // Date subclasses from toml-patch — use originalFormat if available,
-  // otherwise fall back to getTime()
+  // otherwise reconstruct through the subclass's own constructor so its
+  // toISOString() override survives.
+  //
+  // `LocalDate` has no originalFormat property; falling back to
+  // `new Date(getTime())` would produce a plain Date whose ISO form
+  // (2057-08-11T00:00:00.000Z) differs from the LocalDate's own
+  // (2057-08-11), making the library's diff treat an untouched value
+  // as edited.
   if (obj instanceof Date) {
     const format = (obj as any).originalFormat;
     if (format && typeof format === 'string') {
       try {
         const Ctor = obj.constructor as new (value: string) => Date;
         return new Ctor(format);
+      } catch { /* fall through */ }
+    }
+    if (obj.constructor !== Date) {
+      try {
+        const Ctor = obj.constructor as new (value: string) => Date;
+        return new Ctor(obj.toISOString());
       } catch { /* fall through */ }
     }
     return new Date(obj.getTime());
