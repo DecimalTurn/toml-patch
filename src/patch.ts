@@ -1003,10 +1003,25 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               restoredKeySegments = true;
             }
           }
+          // Adding the first item back into an inline array emptied by
+          // earlier removals in this same patch has the same pending-offset
+          // hazard as the inline-table case below (fuzz seed 92).
+          if (isInlineArray(parent) && parent.items.length === 0) {
+            applyWrites(original);
+          }
           insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
           if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       } else if (isInlineTable(parent)) {
+        // Adding the first item back into an inline table emptied by
+        // earlier removals in this same patch: the removal registered an
+        // enter offset on the table itself, which applyWrites would also
+        // apply to the new items — dragging them into the preceding key
+        // area (fuzz seed 92).  Resolve it first so insert() positions
+        // against final coordinates.
+        if (parent.items.length === 0) {
+          applyWrites(original);
+        }
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
         const originalHadTrailingCommas = tableHadTrailingCommas(parent);

@@ -8944,4 +8944,38 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toContain(' A\n');
   });
 
+  // Fuzz seed 92: replacing every key of an inline table (dotted KV value)
+  // emits Removes for the old keys and Adds for the new ones.  The removal
+  // of the first old key registers an enter offset on the inline table
+  // itself, which applyWrites would also apply to the newly added items —
+  // dragging them left into the preceding key area and corrupting the row.
+  // Adds into an inline container emptied by the same patch now flush the
+  // pending offsets before positioning the new items.
+  test('replacing all keys of an inline table value keeps rows aligned (seed 92)', () => {
+    const src = dedent`
+      [[wm07fzxt.m-etxqo]]
+      b5drwvd1na.rx-8xie4."h*7*Al&" = { fc.j."pl<Dl" = false, "cI3%|".unr6 = -982143 }
+      "y0DG]J2[".ivh-16w.wjlufe = 100613
+      osjez."ec+C" = 0x5d7b7fb2
+    ` + '\n';
+    const obj = parse(src);
+    obj.wm07fzxt['m-etxqo'][0].b5drwvd1na['rx-8xie4']['h*7*Al&'] = {
+      k568: ['G', 1997, '2004-09-21'],
+      k96: 'wSC8rLyhs9vuAiZhKp',
+      k34: -1339.1474424861372,
+    };
+    const result = patch(src, obj, {
+      inlineTableStart: 2,
+      bracketSpacing: false,
+      trailingComma: false,
+    });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[wm07fzxt.m-etxqo]]
+      b5drwvd1na.rx-8xie4."h*7*Al&" = {k568 = ["G", 1997, "2004-09-21"], k96 = "wSC8rLyhs9vuAiZhKp", k34 = -1339.1474424861372}
+      "y0DG]J2[".ivh-16w.wjlufe = 100613
+      osjez."ec+C" = 0x5d7b7fb2
+      ` + '\n');
+  });
+
 });
