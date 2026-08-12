@@ -8204,8 +8204,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   // ─── Fuzz-discovered bugs ───────────────────────────────────────────
 
   // BUG: Changing a value inside a nested array within a multiline array
-  // produces consecutive commas in the output (found by fuzz seed 485).
-  test('BUG: changing nested array element in multiline array produces consecutive commas (fuzz #485)', () => {
+  // produces consecutive commas in the output (found by fuzzing).
+  test('BUG: changing nested array element in multiline array produces consecutive commas', () => {
     const src = dedent`
       a = [
           1,
@@ -8227,8 +8227,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   });
 
   // BUG: Changing a value inside a nested array where the inner array
-  // contains a multiline string also produces consecutive commas (fuzz #485).
-  test('BUG: changing nested array with multiline string produces consecutive commas (fuzz #485)', () => {
+  // contains a multiline string also produces consecutive commas.
+  test('BUG: changing nested array with multiline string produces consecutive commas', () => {
     const src = dedent`
       a = [
           1,
@@ -8251,7 +8251,7 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Deleting the first segment of a dotted key combined with other
   // mutations throws "Unsupported parent type 'String' for remove".
-  // Reproduced from fuzz seed 484 with 5 simultaneous mutations.
+  // Reproduced with 5 simultaneous mutations.
   //
   // FIXED (partial): The crash is resolved by detecting when findParent
   // returns the node itself via dotted-key prefix match and re-resolving
@@ -8259,7 +8259,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   //
   // TODO: Implicit parent "y" (created by dotted key y.ic83) does not
   // survive when its last child is removed — "y": {} is dropped.
-  test.fails('BUG: implicit parent of dotted KV does not survive child removal (fuzz #484)', () => {
+  test.fails('BUG: implicit parent of dotted KV does not survive child removal', () => {
     const src = dedent`
       y3.u9jt4 = 0b111101
       "pEjJDgj/n".y = 0xeb5034c
@@ -8287,8 +8287,8 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Deleting keys from a table combined with other mutations
   // throws "Unsupported parent type 'Boolean' for remove".
-  // Reproduced from fuzz seed 489 with 5 simultaneous mutations.
-  test('BUG: multi-mutation delete inside table throws Unsupported parent type (fuzz #489)', () => {
+  // Reproduced with 5 simultaneous mutations.
+  test('BUG: multi-mutation delete inside table throws Unsupported parent type', () => {
     const src = dedent`
       "N&SXI1".el2p2s-m.j3 = 2045-07-18T11:00:10.256062
       q = -772872
@@ -8333,11 +8333,11 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing deeply nested values inside an inline table under a
   // section header produces a duplicate [kaes3f6] header.
-  // Reproduced from fuzz seed 464 with 3 simultaneous mutations.
+  // Reproduced with 3 simultaneous mutations.
   //
   // Edits that truncate dotted keys inside inline tables (changing nested
   // objects to scalars/arrays/objects) should produce a single valid section.
-  test('structural changes in nested inline table under section (fuzz #464)', () => {
+  test('structural changes in nested inline table under section', () => {
     const src = dedent`
       [kaes3f6]
       rrc4z.r-dr3h3 = { bksb.eca7itb61.ismjjcc = false, aavr = { dvk1s.hiza = "x", 0.y2k2_.tgo = "" } }
@@ -8383,8 +8383,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Deleting a key from a nested inline table inside an array
   // can throw "Node not found in parent for removal" with certain
   // format options. Simple single-mutation works, but the fuzzer
-  // found failures with format options like minimumDecimals (seed 483).
-  test('BUG: deleting key from nested inline table in array should leave empty subtable (simple case, fuzz #483)', () => {
+  // found failures with format options like minimumDecimals.
+  test('BUG: deleting key from nested inline table in array should leave empty subtable (simple case)', () => {
     const src = dedent`
       i6i6d5cuwt = [{ "ZQG<xH>I8" = { sgshmg = { k92 = 1 } } }]
     ` + '\n';
@@ -8398,8 +8398,8 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing a value inside a nested array within a multiline array
   // that contains a wider inner array also produces consecutive commas.
-  // Found by fuzz seed 485 (multi-mutation scenario).
-  test('BUG: changing nested array element in wide multiline array produces bad output (fuzz #485 multi)', () => {
+  // Found by fuzzing (multi-mutation scenario).
+  test('BUG: changing nested array element in wide multiline array produces bad output', () => {
     const src = dedent`
       kdp2j91 = [
           1265.69395,
