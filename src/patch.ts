@@ -33,8 +33,8 @@ import {
   isDateTime
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
-import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
+import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
@@ -570,6 +570,130 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     }
   }
 
+  // Compute the absolute lookup path of a node by walking the document tree.
+  // Used to tell whether findByPath matched a dotted KeyValue exactly or by
+  // key-prefix (the key is longer than the consumed path segments).
+  const absolutePathCache = new WeakMap<TreeNode, Path>();
+  function absolutePathOf(target: TreeNode): Path | undefined {
+    const cached = absolutePathCache.get(target);
+    if (cached) return cached;
+    const indexes: Record<string, number> = {};
+    function walk(node: TreeNode, path: Path): Path | undefined {
+      if (node === target) return path;
+      if (isKeyValue(node)) return walk(node.value, path);
+      if (isInlineItem(node)) return walk(node.item, path);
+      if (!hasItems(node)) return undefined;
+      for (let i = 0; i < node.items.length; i++) {
+        const item = node.items[i];
+        let key: Path = [];
+        if (isKeyValue(item)) {
+          key = item.key.value;
+        } else if (isTable(item) || isTableArray(item)) {
+          key = item.key.item.value;
+          if (isTableArray(item)) {
+            const ks = stableStringify(key);
+            indexes[ks] = (indexes[ks] ?? -1) + 1;
+            key = key.concat(indexes[ks]);
+          }
+        } else if (isInlineItem(item)) {
+          if (isKeyValue(item.item)) {
+            key = item.item.key.value;
+          } else {
+            key = [i];
+          }
+        }
+        const full = key.length ? path.concat(key) : path;
+        const found = walk(item, full);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    const result = walk(original, []);
+    if (result) absolutePathCache.set(target, result);
+    return result;
+  }
+
+  // findByPath returns a dotted KeyValue (or its InlineItem wrapper) when the
+  // probe path is a PREFIX of the key (the key is longer than the path). Such
+  // a match is not a real location: the node's value belongs to a different
+  // subtree, so Adds must resolve past it to the shared ancestor container.
+  function isPrefixMatchedNode(candidate: TreeNode, probe: Path): boolean {
+    const kv = isKeyValue(candidate)
+      ? candidate
+      : isInlineItem(candidate) && isKeyValue(candidate.item)
+        ? candidate.item
+        : undefined;
+    if (!kv) return false;
+    const abs = absolutePathOf(kv);
+    return abs !== undefined && abs.length > probe.length;
+  }
+
+  // When an Add's path traverses intermediate key segments that do not exist in the
+  // original document (their KV was removed by an earlier change in this same patch),
+  // findParent resolves to the nearest existing ancestor and the inserted child would
+  // keep only its own key — silently dropping the missing prefix.  Replacing
+  // `ak.b.c = 1` with `ak = { k99 = 1 }` would emit `k99 = 1` at the parent level
+  // (fuzz seed 4).  Extend the child's key with the missing segments instead.
+  // Returns a fresh KV to insert, or null when no extension is needed.
+  function restoreMissingKeySegments(parent_path: Path, child: KeyValue, change_path: Path): KeyValue | null {
+    const direct = tryFindByPath(original, parent_path);
+    if (direct && !isPrefixMatchedNode(direct, parent_path)) return null;
+
+    // Longest prefix of parent_path that resolves to a real location in the
+    // original document.  Prefix-matched dotted KVs don't count — they are the
+    // very situation we are restoring around.
+    let prefixLen = parent_path.length;
+    while (prefixLen > 0) {
+      const node = tryFindByPath(original, parent_path.slice(0, prefixLen));
+      if (node && !isPrefixMatchedNode(node, parent_path.slice(0, prefixLen))) break;
+      prefixLen--;
+    }
+    const missing = parent_path.slice(prefixLen) as string[];
+    if (missing.length === 0 || !missing.every(seg => typeof seg === 'string')) return null;
+
+    // The child's value comes from the updated document, whose coordinates are
+    // unrelated to the insertion target.  Regenerate it from the JS value with
+    // clean locs first (same discipline as the key-truncation branch in the Edit
+    // handler), then build a fresh KV with the extended dotted key.
+    if (rawUpdated !== undefined) {
+      let jsValue: any = rawUpdated;
+      for (const k of change_path) jsValue = jsValue?.[k];
+      if (jsValue !== undefined) {
+        const freshValue = regenerateValue(jsValue, format);
+        if (freshValue !== undefined) {
+          return generateKeyValue([...missing, ...child.key.value], freshValue);
+        }
+      }
+    }
+
+    // Fallback: extend the key in place and shift the value's first line right by
+    // the added width.  Later lines of a multiline value keep their absolute
+    // columns — insert() translates the whole subtree rigidly afterwards.
+    const oldKey = child.key;
+    const newRaw = [...missing, ...oldKey.value]
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const colDelta = newRaw.length - oldKey.raw.length;
+    oldKey.raw = newRaw;
+    oldKey.value = [...missing, ...oldKey.value];
+    oldKey.loc.end.column = oldKey.loc.start.column + newRaw.length;
+    child.equals += colDelta;
+    child.value.loc.start.column += colDelta;
+    if (child.value.loc.end.line === child.value.loc.start.line) {
+      child.value.loc.end.column += colDelta;
+    }
+    if (child.loc.end.line === child.loc.start.line) {
+      child.loc.end.column += colDelta;
+    }
+    return child;
+  }
+
+  // Containers that already received a KV whose key was extended by
+  // restoreMissingKeySegments.  A second such insert into the same container
+  // must resolve the first insert's pending offsets before measuring its target
+  // position, or the two rows overlap (fuzz seed 4).
+  const restoredInsertContainers = new Set<TreeNode>();
+
   // Multi-line inline containers already inserted into during this patch. The stale-position
   // problem only arises on the SECOND insertion into the same container, so this lets the
   // flush be paid just-in-time there rather than after every insertion — a patch touching
@@ -695,7 +819,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           index = document.items.length;
         }
       } else {
-        parent = findParent(original, change.path);
+        // Walk change.path prefixes from longest to shortest to find the
+        // insertion container.  A dotted KeyValue matched by prefix (its key
+        // is longer than the consumed path, e.g. `ak` matching `ak.k99`) is
+        // NOT the parent: its value belongs to a different subtree, and
+        // consecutive adds under the same dotted prefix must land in the
+        // shared ancestor (fuzz seed 4).  restoreMissingKeySegments then
+        // re-attaches the missing prefix to the child's key.
+        parent = original;
+        for (let pLen = change.path.length - 1; pLen >= 0; pLen--) {
+          const candidate = tryFindByPath(original, change.path.slice(0, pLen));
+          if (!candidate) continue;
+          if (isPrefixMatchedNode(candidate, change.path.slice(0, pLen))) continue;
+          parent = candidate;
+          break;
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
@@ -827,7 +965,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
             childToInsert = child.item;
           }
+          // Restore intermediate key segments the path traverses that no longer
+          // exist in the original document (fuzz seed 4).
+          let restoredKeySegments = false;
+          if ((isTableArray(parent) || isDocument(parent)) && isKeyValue(childToInsert)) {
+            const restored = restoreMissingKeySegments(parent_path, childToInsert, change.path);
+            if (restored) {
+              if (restoredInsertContainers.has(parent)) {
+                applyWrites(original);
+              }
+              childToInsert = restored;
+              restoredKeySegments = true;
+            }
+          }
           insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
+          if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       } else if (isInlineTable(parent)) {
         // Special handling for adding KeyValue to InlineTable
@@ -866,7 +1018,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineItem(child) && (isTable(parent) || isTableArray(parent) || isDocument(parent))) {
             childToInsert = child.item;
           }
+          // Restore intermediate key segments the path traverses that no longer
+          // exist in the original document (fuzz seed 4).
+          let restoredKeySegments = false;
+          if (isTable(parent) && isKeyValue(childToInsert)) {
+            const restored = restoreMissingKeySegments(parent_path, childToInsert, change.path);
+            if (restored) {
+              if (restoredInsertContainers.has(parent)) {
+                applyWrites(original);
+              }
+              childToInsert = restored;
+              restoredKeySegments = true;
+            }
+          }
           insert(original, parent, childToInsert);
+          if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       }
 

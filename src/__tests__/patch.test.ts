@@ -8772,4 +8772,48 @@ describe('wasEmptied compensation — multiple tables', () => {
     });
   });
 
+  // Fuzz seed 4: replacing the first segment of a dotted KV with an object
+  // produces adds under the (no longer existing) prefix, e.g.
+  //   ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+  // becomes
+  //   ak = { k99: [310, "74m", false], k36: "2012-06-06" }
+  // After the first add created `ak.k99`, the second add's findParent
+  // matched `ak` as a PREFIX of the dotted key and unwrapped the KV's
+  // value (the array) as the parent — merging `k36` into the array line.
+  // Both adds must land in the shared table with the `ak` prefix restored.
+  test('replacing dotted KV with object restores the key prefix (seed 4)', () => {
+    const src = dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.iHv.o4umx0u5w_.ak = { k99: [310, '74m', false], k36: '2012-06-06' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.k99 = [ 310, "74m", false ]
+      ak.k36 = "2012-06-06"
+      ` + '\n');
+  });
+
+  // Same operation with scalar values: the second add used to crash with
+  // "Unsupported parent type 'Integer' for insert" because the prefix
+  // match resolved the dotted KV and unwrapped its scalar value.
+  test('consecutive scalar adds under a restored dotted prefix (seed 4)', () => {
+    const src = dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.iHv.o4umx0u5w_.ak = { k99: 1, k36: 2 };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.k99 = 1
+      ak.k36 = 2
+      ` + '\n');
+  });
+
 });
