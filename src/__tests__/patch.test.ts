@@ -8438,6 +8438,12 @@ describe('wasEmptied compensation — multiple tables', () => {
     const obj = parse(src);
     obj.cso.v = 42;
     const result = patch(src, obj);
+    // Currently produces conflicting v = 42 and v.e4.c6 = false
+    expect(result).toEqual(dedent`
+      [cso]
+      g.bq5g = "D"
+      v = 42
+    ` + '\n');
     expect(() => parse(result)).not.toThrow();
   });
 
