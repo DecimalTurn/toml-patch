@@ -1603,6 +1603,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           while ((entry = nextAotEntry())) {
             removeMember(original, original, entry);
           }
+          // [table] sections extending the same prefix belong to the removed
+          // key too — deleting `""` must remove `["". "aV^16c`G"]` as well,
+          // or the re-parse revives the key (fuzz seed 3463).
+          for (const tableNode of findDocumentItemsByKeyPrefix(original, change.path).filter(isTable)) {
+            removeMember(original, original, tableNode);
+          }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
           // "Emptied to []" and "deleted outright" both arrive here as a Remove of every

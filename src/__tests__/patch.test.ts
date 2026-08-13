@@ -9600,4 +9600,21 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('deleting a root key removes section siblings even with no dotted KV (seed 3463)', () => {
+    const src = dedent`
+      ev0 = true
+      ["". "aV^16c`G"]
+      a = 1
+      [["".ijq3]]
+      b = 2
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj[''];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      ev0 = true
+    ` + '\n');
+  });
+
 });
