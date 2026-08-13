@@ -975,20 +975,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // the last one. Clamp to the end of the root table scope instead.
           // For non-KV children (e.g. table-array entries) the index was already
           // resolved to a correct integer above, so leave it as-is.
+          //
+          // Unwrap InlineItem first: a KV added under the document root arrives
+          // wrapped in an InlineItem (it was resolved inside an inline table in
+          // the updated CST), and the clamp below must see the inner KV to
+          // recognise a root-level key-value (fuzz seed 297).
+          let childToInsert = child;
+          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
+            childToInsert = child.item;
+          }
           let resolvedIndex = index;
-          if (isDocument(parent) && isKeyValue(child)) {
+          if (isDocument(parent) && isKeyValue(childToInsert)) {
             const rootTableEnd = (parent as Document).items.findIndex(
               item => isTable(item) || isTableArray(item)
             );
             if (rootTableEnd !== -1) {
               resolvedIndex = rootTableEnd;
             }
-          }
-          // Unwrap InlineItem when adding to a TableArray or Document —
-          // InlineItems are only valid inside InlineTables/InlineArrays.
-          let childToInsert = child;
-          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
-            childToInsert = child.item;
           }
           // Restore intermediate key segments the path traverses that no longer
           // exist in the original document (fuzz seed 4).

@@ -9108,4 +9108,35 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).not.toContain('tvbin');
   });
 
+  // Fuzz seed 297: with inlineTableStart 0, replacing a dotted-key value
+  // (`"%jadD;hO+#".o993b.tf0q1c`) with an inline table (`{ k77 = false }`)
+  // becomes a Remove of the old dotted key plus an Add of the inline-table
+  // child.  The added child arrives wrapped in an InlineItem, so the
+  // root-scope index clamp (keep root KVs before the first section header)
+  // never fired — `index` stayed the string key `k77`, insert() treated it
+  // as "not a number" and appended at document end, silently nesting the
+  // key inside the following [[dbfv3.acx]] section.
+  test('added root KV from inline table lands before first section (seed 297)', () => {
+    const src = `vli9.pyfi4 = true
+bojx."" = "x"
+"%jadD;hO+#".o993b.tf0q1c = nan
+un9gn0vga.l6."C` + '`' + `UgZ,?x=" = 61505.74328
+
+[[dbfv3.acx]]
+h829.d8ua = -710262
+ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
+fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
+`;
+    const obj = parse(src) as any;
+    obj.vli9 = false;
+    obj.bojx[''] = 'BFNriKFvsK';
+    obj['%jadD;hO+#'] = { k77: false };
+    const result = patch(src, obj, { inlineTableStart: 0 });
+    expect(parse(result)).toEqual(obj);
+    // The restored key must sit before the first section header, not
+    // after the AOT contents.
+    expect(result.indexOf('"%jadD;hO+#".k77')).toBeGreaterThan(-1);
+    expect(result.indexOf('"%jadD;hO+#".k77')).toBeLessThan(result.indexOf('[[dbfv3.acx]]'));
+  });
+
 });
