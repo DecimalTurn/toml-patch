@@ -9078,16 +9078,17 @@ describe('wasEmptied compensation — multiple tables', () => {
   // table, and must then materialise the emptied implicit parent `[mhv6z]`
   // so the empty-object key isn't dropped from the document.
   test('implicit prefix removed with longer dotted table key materialises parent (seed 176)', () => {
-    const src = `[mhv6z.hpd_iu9zs5."2<w"]
-"lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
-`;
+    const src = dedent`
+      [mhv6z.hpd_iu9zs5."2<w"]
+      "lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
+    ` + '\n';
     const obj = parse(src) as any;
     delete obj.mhv6z.hpd_iu9zs5;
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(obj.mhv6z).toEqual({});
-    expect(result).toContain('[mhv6z]');
-    expect(result).not.toContain('hpd_iu9zs5');
+    expect(result).toEqual(dedent`
+      [mhv6z]
+    ` + '\n');
   });
 
   // Fuzz seed 185: removing a dotted key whose FIRST segment is the empty
@@ -9097,15 +9098,17 @@ describe('wasEmptied compensation — multiple tables', () => {
   // threw "Unsupported parent type Boolean".  A parent without items can
   // never contain the node — fall back to the structural container.
   test('removing empty-string dotted key falls back to structural parent (seed 185)', () => {
-    const src = `"".vf = true
-"".tvbin = '&^I}x7)'
-`;
+    const src = dedent`
+      "".vf = true
+      "".tvbin = '&^I}x7)'
+    ` + '\n';
     const obj = parse(src) as any;
     delete obj[''].tvbin;
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toContain('"".vf = true');
-    expect(result).not.toContain('tvbin');
+    expect(result).toEqual(dedent`
+      "".vf = true
+    ` + '\n');
   });
 
   // Fuzz seed 297: with inlineTableStart 0, replacing a dotted-key value
@@ -9117,26 +9120,34 @@ describe('wasEmptied compensation — multiple tables', () => {
   // as "not a number" and appended at document end, silently nesting the
   // key inside the following [[dbfv3.acx]] section.
   test('added root KV from inline table lands before first section (seed 297)', () => {
-    const src = `vli9.pyfi4 = true
-bojx."" = "x"
-"%jadD;hO+#".o993b.tf0q1c = nan
-un9gn0vga.l6."C` + '`' + `UgZ,?x=" = 61505.74328
+    const src = dedent`
+      vli9.pyfi4 = true
+      bojx."" = "x"
+      "%jadD;hO+#".o993b.tf0q1c = nan
+      un9gn0vga.l6."C\`UgZ,?x=" = 61505.74328
 
-[[dbfv3.acx]]
-h829.d8ua = -710262
-ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
-fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
-`;
+      [[dbfv3.acx]]
+      h829.d8ua = -710262
+      ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
+      fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
+    ` + '\n';
     const obj = parse(src) as any;
     obj.vli9 = false;
     obj.bojx[''] = 'BFNriKFvsK';
     obj['%jadD;hO+#'] = { k77: false };
     const result = patch(src, obj, { inlineTableStart: 0 });
     expect(parse(result)).toEqual(obj);
-    // The restored key must sit before the first section header, not
-    // after the AOT contents.
-    expect(result.indexOf('"%jadD;hO+#".k77')).toBeGreaterThan(-1);
-    expect(result.indexOf('"%jadD;hO+#".k77')).toBeLessThan(result.indexOf('[[dbfv3.acx]]'));
+    expect(result).toEqual(dedent`
+      vli9 = false
+      bojx."" = "BFNriKFvsK"
+      un9gn0vga.l6."C\`UgZ,?x=" = 61505.74328
+      "%jadD;hO+#".k77 = false
+
+      [[dbfv3.acx]]
+      h829.d8ua = -710262
+      ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
+      fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
+    ` + '\n');
   });
 
 });
