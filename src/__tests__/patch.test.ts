@@ -9208,4 +9208,31 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 590: replacing a root-level KV with an object renders the
+  // replacement as a [g86] section.  A section header captures every
+  // key-value that follows it in the document, so the root KVs after the
+  // original position (fofc/y3n/"<w") would be swallowed into the new
+  // table.  The new section must sink below the root-table scope.
+  test('root KV replaced by a section does not swallow following keys (seed 590)', () => {
+    const src = dedent`
+      g86 = "str"
+      fofc.clf.xt7-l54a9- = 1989-03-20T04:37:52.698492
+      y3n = "a"
+      "<w" = 590118
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.g86 = { k31: 'AZ', k50: { k63: 3334, k55: '5epJmJ51' } };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fofc.clf.xt7-l54a9- = 1989-03-20T04:37:52.698492
+      y3n = "a"
+      "<w" = 590118
+
+      [g86]
+      k31 = "AZ"
+      k50 = { k63 = 3334, k55 = "5epJmJ51" }
+    ` + '\n');
+  });
+
 });

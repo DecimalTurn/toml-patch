@@ -1476,6 +1476,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
       replace(original, parent, existing, replacement);
+
+      // A section header captures every key-value that follows it, so an
+      // edit that turns a root-level KV into a Table must not leave root
+      // KVs after the new header (fuzz seed 590: `g86 = "str"` → `[g86]`
+      // while `fofc`/`y3n`/`"<w"` followed it — they were swallowed into
+      // the new table).  Sink the new section below the root-table scope.
+      if (isDocument(parent) && isKeyValue(existing) &&
+          (isTable(replacement) || isTableArray(replacement))) {
+        sinkTableBelowRootKeyValues(original, replacement);
+      }
     } else if (isRemove(change)) {
       const node = tryFindByPath(original, change.path);
 
@@ -2237,6 +2247,34 @@ function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
 
   remove(doc, doc, kv);
   insert(doc, doc, kv, firstTableIndex);
+}
+
+/**
+ * The converse of hoistRootKeyValueAboveTables: an edit that turned a
+ * root-level KeyValue into a Table section inserts a section header where
+ * the KV was — and a section header captures every key-value that follows it
+ * in the document.  If any root KV comes after the new header (and before the
+ * next section), move the table below the root-table scope (fuzz seed 590:
+ * `g86 = "str"` became `[g86]` while `fofc`/`y3n`/`"<w"` followed it).
+ */
+function sinkTableBelowRootKeyValues(doc: Document, table: Table | TableArray): void {
+  const tableIndex = doc.items.indexOf(table);
+  if (tableIndex < 0) return;
+
+  const nextSectionIndex = doc.items.findIndex(
+    (item, i) => i > tableIndex && (isTable(item) || isTableArray(item))
+  );
+  const hasFollowingRootKV = doc.items.some(
+    (item, i) =>
+      i > tableIndex &&
+      isKeyValue(item) &&
+      (nextSectionIndex === -1 || i < nextSectionIndex)
+  );
+  if (!hasFollowingRootKV) return;
+
+  const target = nextSectionIndex === -1 ? doc.items.length : nextSectionIndex;
+  remove(doc, doc, table);
+  insert(doc, doc, table, target - 1);
 }
 
 /**

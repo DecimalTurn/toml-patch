@@ -778,7 +778,13 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   const removed_offset = node_offsets.get(node);
   if (removed_offset) {
     offset.lines += removed_offset.lines;
-    offset.columns += removed_offset.columns;
+    // Column offsets only matter when the removed node shared its line with
+    // following inline content.  Folding them into a block-level removal
+    // shifts whole subsequent lines sideways — e.g. moving a freshly
+    // replaced Table (which carries replace()'s column delta) to the end of
+    // the document indented the next root KV by the table's width (fuzz
+    // seed 590).
+    if (keep_line) offset.columns += removed_offset.columns;
   }
 
   target_offsets.set(target, offset);
