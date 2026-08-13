@@ -1446,6 +1446,49 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
         // Could not resolve the JS value — fall back to generic handling
         parent = findParent(original, change.path);
+      } else if (isTableArray(existing)) {
+        // Same situation as the isTable branch above, but for an array-of-tables:
+        // the diff edits the entry (path [..., 0]), and the replacement — an
+        // InlineItem from the updated doc — carries no key.  Splicing it in for
+        // the [[a]] node emits a bare value with no key at all (fuzz seed 3333).
+        // Regenerate the array as a fresh KV instead.
+        const updated_js = toJS(updated.items, '', { temporal });
+        const existingAotKey = (existing as TableArray).key.item.value;
+        let jsValue: any = updated_js;
+        for (const key of change.path.slice(0, existingAotKey.length)) {
+          jsValue = jsValue?.[key];
+        }
+
+        if (jsValue !== undefined) {
+          const lastSegment = existingAotKey.slice(-1);
+          const parentKey = existingAotKey.slice(0, -1);
+          const tableParent = findParent(original, change.path);
+
+          // Regenerate a fresh KV using parseJS on just the single key-value
+          const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
+          const freshKV = freshDoc.items[0] as KeyValue;
+
+          if (parentKey.length > 0) {
+            const newTable = generateTable(parentKey);
+            materialisedTables.add(newTable);
+            insert(original, newTable, freshKV, 0);
+            replace(original, tableParent, existing, newTable);
+            // newTable stands in for the pre-existing `existing` AOT, so it should stay
+            // eligible for the leading comment run `existing` would have owned via R2.
+            commentEligibleNodes.add(newTable);
+          } else {
+            // Single-segment [[w]] — KV belongs directly in the Document.
+            replace(original, tableParent, existing, freshKV);
+            // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
+            commentEligibleNodes.add(freshKV);
+
+            hoistRootKeyValueAboveTables(original, freshKV);
+          }
+          return; // handled; skip the generic replace() below
+        }
+
+        // Could not resolve the JS value — fall back to generic handling
+        parent = findParent(original, change.path);
       } else {
         parent = findParent(original, change.path);
         // Unwrap InlineItem parents to the actual container

@@ -9569,4 +9569,19 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('replacing an array-of-tables with a plain array keeps the key (seed 3333)', () => {
+    const src = dedent`
+      [[rxhh_-guv5.cj.na92rw23n]]
+      d = inf
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj['rxhh_-guv5'].cj.na92rw23n = [new Date('2000-06-07T00:00:00.000Z')];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [rxhh_-guv5.cj]
+      na92rw23n = [ 2000-06-07T00:00:00.000Z ]
+    ` + '\n');
+  });
+
 });
