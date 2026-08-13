@@ -9693,4 +9693,13 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('removing a scalar from a multiline inline array keeps the multiline string intact (seed 4765)', () => {
+    const src = 'ie7 = ["a", 1, 2, 29780.85246, "jgl", { k = """\n=F\nsK\nTijp\nb *8#fBchs>""" }]\n';
+    const obj = parse(src) as any;
+    obj.ie7.splice(3, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('ie7 = ["a", 1, 2, "jgl", { k = """\n=F\nsK\nTijp\nb *8#fBchs>""" }]\n');
+  });
+
 });

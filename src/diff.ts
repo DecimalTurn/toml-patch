@@ -245,6 +245,20 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   const before_stable = before.map(stableStringify);
   const after_stable = after.map(stableStringify);
 
+  // The writer corrupts multiline inline content when elements are relocated
+  // (moves of elements holding multiline strings drop content lines — fuzz
+  // seed 4765).  Only for such arrays, prefer resolving a true deletion in
+  // place over drifting the element right through a chain of Moves.
+  const hasMultilineValue = (v: any): boolean => {
+    if (typeof v === 'string') return v.includes('\n');
+    if (Array.isArray(v)) return v.some(hasMultilineValue);
+    if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
+      return Object.values(v).some(hasMultilineValue);
+    }
+    return false;
+  };
+  const multilineArray = before.some(hasMultilineValue) || after.some(hasMultilineValue);
+
   // Simulation of the actual VALUES, mutated in lockstep with before_stable.
   // The "removed -> edited in place" branch below must diff the element the
   // move simulation left at this index, not the untouched original: after a
@@ -256,18 +270,44 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // the leftover string).
   const before_sim = before.slice();
 
+  // Elements spliced out of `before` while walking the loop (the deletion
+  // branch below).  Remove paths are source coordinates — indices in the
+  // ORIGINAL array — because the patcher applies same-array removals in
+  // descending index order (see reorder() in patch.ts), so each emitted
+  // index must stay valid against the un-shifted array.
+  let removedBefore = 0;
+
   // 2. Step through after array making changes to before array as-needed
-  after_stable.forEach((value, index) => {
+  for (let index = 0; index < after_stable.length; index++) {
+    const value = after_stable[index];
     const overflow = index >= before_stable.length;
 
     // Check if items are the same
     if (!overflow && before_stable[index] === value) {
-      return;
+      continue;
     }
 
     // Check if item has been moved -> shift into place
-    const from = before_stable.indexOf(value, index + 1);
-    if (!overflow && from > -1) {
+    const from = overflow ? -1 : before_stable.indexOf(value, index + 1);
+    if (from > -1) {
+      // A true deletion in move shape: the element at this position is
+      // absent from `after` entirely, while the after-value sits later in
+      // `before`.  Without this the element only gets resolved at the end,
+      // after a chain of Moves that relocates multiline elements — and the
+      // writer corrupts their content (fuzz seed 4765: removing one scalar
+      // from a multiline inline array dropped a line of a multiline string).
+      if (multilineArray && after_stable.indexOf(before_stable[index]) === -1) {
+        changes.push({
+          type: ChangeType.Remove,
+          path: path.concat(index + removedBefore)
+        });
+        before_stable.splice(index, 1);
+        before_sim.splice(index, 1);
+        removedBefore++;
+        index--;
+        continue;
+      }
+
       changes.push({
         type: ChangeType.Move,
         path,
@@ -280,7 +320,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       const moveValues = before_sim.splice(from, 1);
       before_sim.splice(index, 0, ...moveValues);
 
-      return;
+      continue;
     }
 
     // Check if item is removed -> assume it's been edited and replace.
@@ -314,7 +354,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       before_stable[index] = value;
       before_sim[index] = after[index];
 
-      return;
+      continue;
     }
 
     // Add as new item and shift existing
@@ -324,13 +364,13 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     });
     before_stable.splice(index, 0, value);
     before_sim.splice(index, 0, after[index]);
-  });
+  }
 
   // 3. Remove any remaining overflow items
   for (let i = after_stable.length; i < before_stable.length; i++) {
     changes.push({
       type: ChangeType.Remove,
-      path: path.concat(i)
+      path: path.concat(i + removedBefore)
     });
   }
 

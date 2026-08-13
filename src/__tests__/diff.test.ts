@@ -225,4 +225,20 @@ describe('array moves with duplicate values', () => {
       { type: 'Edit', path: ['x', 1] }
     ]);
   });
+
+  test('removes a deleted element in place instead of a Move chain when multiline values are present (fuzz seed 4765)', () => {
+    // Removing one scalar from an array whose other elements include a
+    // multiline string: the element only resolved at the end, after a chain
+    // of Moves, and the writer dropped a content line of the multiline
+    // string while relocating it.
+    const changes = diff(
+      ['a', 1, 2, 29780.85246, 'jgl', { k: '=F\nsK\nTijp\nb *8#fBchs>' }],
+      ['a', 1, 2, 'jgl', { k: '=F\nsK\nTijp\nb *8#fBchs>' }],
+      ['x']
+    );
+
+    expect(changes).toEqual([
+      { type: 'Remove', path: ['x', 3] }
+    ]);
+  });
 });
