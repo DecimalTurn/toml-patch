@@ -762,6 +762,15 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     } else {
       (previous as InlineArrayItem | InlineTableItem).comma = false;
     }
+
+    // The container's closing bracket moves to right after the REMAINING
+    // previous item, so the column shift is the end-to-end gap — not the
+    // removed item's width, which is wrong when the previous item is
+    // multiline and ends AFTER the removed item's stale start (fuzz seed
+    // 706: the bracket slid inside the preceding nested array).
+    if (previous_on_same_line) {
+      offset.columns = previous.loc.end.column - node.loc.end.column;
+    }
   }
 
   // Apply offsets after preceding node or before remaining siblings.

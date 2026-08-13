@@ -9263,4 +9263,27 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 706: removing an item whose neighbour is a MULTILINE element
+  // inside a moved nested array.  The rigid translation of the moved subtree
+  // shifted every line's columns, so the items after a multiline string slid
+  // sideways onto its closing quotes, and the outer array's closing bracket
+  // followed the removed item's width instead of the remaining previous
+  // item's end — landing inside the nested array.
+  test('removing an item next to a multiline string keeps rows aligned (seed 706)', () => {
+    const src = dedent`
+      x = [1, "rem", ['''
+      a
+      b''', 5, 6]]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [1, ['''
+      a
+      b''', 5, 6]]
+    ` + '\n');
+  });
+
 });

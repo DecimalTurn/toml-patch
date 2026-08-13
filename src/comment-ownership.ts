@@ -572,6 +572,53 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       const detached: Array<{ owner: TreeNode; ownerOriginalStart: { line: number; column: number }; comments: Comment[] }> = [];
       let nodeOwnStart: { line: number; column: number } | undefined;
       let nodeOwnEnd: { line: number; column: number } | undefined;
+      let nodeInnerEnd: { line: number; column: number } | undefined;
+
+      // Snapshot descendants of the moved node that start BELOW its first
+      // line and follow another item on that same line.  insert()'s rigid
+      // translation shifts every line of the subtree by the first line's
+      // column delta, but these items are anchored to their predecessor's
+      // END column — which did not move.  Without restoring them they slide
+      // sideways onto the preceding content (fuzz seed 706: `, 5, 6` after a
+      // multiline string inside a moved nested array slid left onto the
+      // string's closing quotes).
+      const anchoredDescendants: Array<{ node: TreeNode; start: { line: number; column: number }; end: { line: number; column: number }; endOnly?: boolean }> = [];
+      const collectAnchored = (container: TreeNode, firstLine: number) => {
+        if (!hasItems(container)) return;
+        const items = container.items as TreeNode[];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const prev = items[i - 1];
+          const follows = prev !== undefined && prev.loc.end.line === item.loc.start.line;
+          const below = item.loc.start.line > firstLine;
+          if (below && follows) {
+            anchoredDescendants.push({ node: item, start: clonePosition(item.loc.start), end: clonePosition(item.loc.end) });
+          }
+          // A multiline element's wrapper END (where its comma lands) is
+          // anchored to the element's own end column, which the leaf path of
+          // the rigid translation leaves alone — but the wrapper's end is
+          // shifted with the first line.  Restore it too.
+          if (item.loc.end.line > firstLine && item.loc.end.line > item.loc.start.line) {
+            anchoredDescendants.push({ node: item, start: clonePosition(item.loc.start), end: clonePosition(item.loc.end), endOnly: true });
+          }
+          if (isInlineItem(item)) {
+            const inner = item.item;
+            if (below && follows) {
+              anchoredDescendants.push({ node: inner, start: clonePosition(inner.loc.start), end: clonePosition(inner.loc.end) });
+            }
+            // A multiline STRING's own end column is what its closing quotes
+            // follow — offsets can nudge it while the wrapper's end (with the
+            // comma) stays put, making toTOML's multiline writer consume the
+            // columns between them (fuzz seed 706).  Restore it independently.
+            if (inner.loc.end.line > firstLine && inner.loc.end.line > inner.loc.start.line) {
+              anchoredDescendants.push({ node: inner, start: clonePosition(inner.loc.start), end: clonePosition(inner.loc.end), endOnly: true });
+            }
+            collectAnchored(inner, firstLine);
+          } else if (hasItems(item)) {
+            collectAnchored(item, firstLine);
+          }
+        }
+      };
 
       for (const slot of slots) {
         if (slot.kind !== 'member' || !slot.member) continue;
@@ -580,6 +627,10 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         if (slot.member === node) {
           nodeOwnStart = clonePosition(node.loc.start);
           nodeOwnEnd = clonePosition(node.loc.end);
+          if (isInlineItem(node)) {
+            nodeInnerEnd = clonePosition(node.item.loc.end);
+          }
+          collectAnchored(isInlineItem(node) ? node.item : node, nodeOwnStart.line);
           if (comments.length) {
             // Extend node's own loc to the full group span so the bare
             // remove()+insert() below accounts for the combined height —
@@ -625,8 +676,26 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // inner value node it wraps (fuzz seed 50).
       if (nodeOwnStart && nodeOwnEnd && node.loc.end.line > node.loc.start.line) {
         node.loc.end.column = nodeOwnEnd.column;
-        if (isInlineItem(node) && node.item.loc.end.line > node.item.loc.start.line) {
-          node.item.loc.end.column = nodeOwnEnd.column;
+        // The inner value keeps its OWN original end — for a multiline
+        // string the wrapper's end includes the comma that follows, and
+        // assigning it to the string makes toTOML's multiline writer
+        // consume the columns between the closing quotes and the next item
+        // (fuzz seed 706).
+        if (isInlineItem(node) && nodeInnerEnd && node.item.loc.end.line > node.item.loc.start.line) {
+          node.item.loc.end.column = nodeInnerEnd.column;
+        }
+      }
+
+      // Restore the columns of anchored below-first-line descendants that the
+      // rigid translation shifted horizontally (see the snapshot comment above).
+      for (const { node: descendant, start, end, endOnly } of anchoredDescendants) {
+        if (endOnly) {
+          descendant.loc.end.column = end.column;
+          continue;
+        }
+        descendant.loc.start.column = start.column;
+        if (descendant.loc.end.line === descendant.loc.start.line) {
+          descendant.loc.end.column = end.column;
         }
       }
 
