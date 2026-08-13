@@ -245,6 +245,17 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   const before_stable = before.map(stableStringify);
   const after_stable = after.map(stableStringify);
 
+  // Simulation of the actual VALUES, mutated in lockstep with before_stable.
+  // The "removed -> edited in place" branch below must diff the element the
+  // move simulation left at this index, not the untouched original: after a
+  // Move, `before[index]` can hold a DIFFERENT element than the one whose
+  // stable form sits at `before_stable[index]`, and diffing the wrong one
+  // silently drops the edit (fuzz seed 340: `['4', …, true, …]` →
+  // `[true, …]` moved `true` from 4 to 0, then diffed the original
+  // `before[4]` — which was `true` — against `true`, emitting nothing for
+  // the leftover string).
+  const before_sim = before.slice();
+
   // 2. Step through after array making changes to before array as-needed
   after_stable.forEach((value, index) => {
     const overflow = index >= before_stable.length;
@@ -266,6 +277,8 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
 
       const move = before_stable.splice(from, 1);
       before_stable.splice(index, 0, ...move);
+      const moveValues = before_sim.splice(from, 1);
+      before_sim.splice(index, 0, ...moveValues);
 
       return;
     }
@@ -273,8 +286,9 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     // Check if item is removed -> assume it's been edited and replace
     const removed = !after_stable.includes(before_stable[index]);
     if (!overflow && removed) {
-      merge(changes, diff(before[index], after[index], path.concat(index), options));
+      merge(changes, diff(before_sim[index], after[index], path.concat(index), options));
       before_stable[index] = value;
+      before_sim[index] = after[index];
 
       return;
     }
@@ -285,6 +299,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       path: path.concat(index)
     });
     before_stable.splice(index, 0, value);
+    before_sim.splice(index, 0, after[index]);
   });
 
   // 3. Remove any remaining overflow items

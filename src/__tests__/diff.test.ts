@@ -192,3 +192,20 @@ describe('updateOrder option (docs/PLAN-Update-Order.md)', () => {
     );
   });
 });
+
+describe('array moves with duplicate values', () => {
+  test('edits the displaced item, not the original at the same index (fuzz seed 340)', () => {
+    // Replacing index 0 with a value equal to index 3 moves `true` from 3 to 0,
+    // leaving 'a' at index 3.  The edit must diff the SIMULATED element ('a')
+    // against the target (true) — diffing the untouched original `before[3]`
+    // (true) against true emitted nothing and the leftover 'a' stayed in place.
+    const changes = diff(['a', 1, 2, true], [true, 1, 2, true], ['x']);
+
+    expect(changes).toEqual([
+      { type: 'Move', path: ['x'], from: 3, to: 0 },
+      { type: 'Move', path: ['x'], from: 2, to: 1 },
+      { type: 'Move', path: ['x'], from: 3, to: 2 },
+      { type: 'Edit', path: ['x', 3] }
+    ]);
+  });
+});
