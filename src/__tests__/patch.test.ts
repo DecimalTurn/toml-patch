@@ -9632,4 +9632,27 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('adding into a multiline inline table whose brace shares the last row keeps it inside (seed 3632)', () => {
+    const src = dedent`
+      [[ildq2.g08p]]
+      "~<i".js-uda0fp0 = {
+          a = 1,
+          b = [
+              2,
+          ] }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.ildq2.g08p[0]['~<i']['js-uda0fp0'].c = 3;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[ildq2.g08p]]
+      "~<i".js-uda0fp0 = {
+          a = 1,
+          b = [
+              2,
+          ], c = 3 }
+    ` + '\n');
+  });
+
 });

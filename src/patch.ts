@@ -633,8 +633,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         ? candidate.item
         : undefined;
     if (!kv) return false;
-    const abs = absolutePathOf(kv);
-    return abs !== undefined && abs.length > probe.length;
+    const keyLen = kv.key.value.length;
+    // The probe fully consumed the key's prefix and the key continues past
+    // it (e.g. ['ak'] matching key ['ak','k99']).
+    if (keyLen > probe.length) return true;
+    // An exact match consumes the key's own segments as the probe's tail —
+    // for nodes under an array-of-tables the absolute path carries the
+    // entry's numeric index, which the probe doesn't, so comparing absolute
+    // lengths misflags exact matches as prefix matches (fuzz seed 3632:
+    // adding under `js-uda0fp0` skipped the KV and inserted at the entry
+    // level, right after the closing `}` of the multiline inline table).
+    return !arraysEqual(kv.key.value, probe.slice(probe.length - keyLen));
   }
 
   // The immediate structural container holding `target` in its `.items`

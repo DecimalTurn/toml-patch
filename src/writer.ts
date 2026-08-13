@@ -547,6 +547,14 @@ function insertInline(
     previous.loc.end.line > previous.loc.start.line &&
     next.loc.start.line === previous.loc.end.line &&
     next.loc.start.column >= previous.loc.end.column
+  ) && !(
+    // Inserting at the end while the closing brace shares the last row's
+    // line: a new-line insert would start one line PAST the brace and emit
+    // the new row outside the table (`}  k = 1` — fuzz seed 3632).  Stay
+    // on the last row's line instead; the exit offset then pushes the
+    // brace down a line.
+    !next && previous &&
+    previous.loc.end.line === parent.loc.end.line
   );
   const has_trailing_comma = is_last && child.comma === true;
 
