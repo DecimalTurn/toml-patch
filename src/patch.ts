@@ -2167,16 +2167,28 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // prefix, emitting `[z]`. Refuse instead: these shapes threw before this branch
       // understood sections at all, and a clear failure beats a corrupted document.
       if (parentKey.value.length !== replacementKey.value.length) {
+        const fullSourcePath = change.path.concat(change.from);
         // When the existing node is a Table/TableArray whose key shares a prefix with
         // change.path + change.from, and the replacement is a plain KeyValue, we're
         // renaming one segment of a dotted section header rather than replacing the
         // whole key (e.g. [a.b] -> [a.y]).  Rename just the matching segment in place.
-        const fullSourcePath = change.path.concat(change.from);
         if ((isTable(parent) || isTableArray(parent)) &&
             isKeyValue(replacement) &&
             arraysEqual(parentKey.value.slice(0, fullSourcePath.length), fullSourcePath)) {
           const segmentIndex = fullSourcePath.length - 1;
           parentKey.value[segmentIndex] = change.to;
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
+          return;
+        }
+
+        // Same situation for a dotted KeyValue: renaming the last segment of
+        // `y3.mklbjj.kb16my_18h` to `k30` renames just that segment — the KV
+        // keeps the `y3.mklbjj` prefix (fuzz seed 3214).
+        if (isKeyValue(parent) && isKeyValue(replacement) &&
+            parentKey.value.length <= fullSourcePath.length &&
+            arraysEqual(parentKey.value, fullSourcePath.slice(fullSourcePath.length - parentKey.value.length))) {
+          parentKey.value[parentKey.value.length - 1] = change.to;
           parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           return;

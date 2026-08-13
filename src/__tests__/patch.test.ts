@@ -9552,4 +9552,21 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('renaming the last segment of a dotted key keeps the prefix (seed 3214)', () => {
+    const src = dedent`
+      [[ir.hfh1c4]]
+      y3.mklbjj.kb16my_18h = true
+    ` + '\n';
+    const obj = parse(src) as any;
+    const entry = obj.ir.hfh1c4[0].y3.mklbjj;
+    entry.k30 = entry.kb16my_18h;
+    delete entry.kb16my_18h;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[ir.hfh1c4]]
+      y3.mklbjj.k30        = true
+    ` + '\n');
+  });
+
 });
