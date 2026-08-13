@@ -9603,7 +9603,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   test('deleting a root key removes section siblings even with no dotted KV (seed 3463)', () => {
     const src = dedent`
       ev0 = true
-      ["". "aV^16c`G"]
+      ["". "aV^16c\`G"]
       a = 1
       [["".ijq3]]
       b = 2
