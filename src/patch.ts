@@ -2318,7 +2318,6 @@ function handleStructuralEdit(
   const freshDoc = parseJS(nested, format);
   const replacementToml = toTOML(freshDoc.items, format);
   const replacementCst = Array.from(parseTOML(replacementToml));
-  const replacementKV = replacementCst[0] as KeyValue;
 
   // Insert above the first remaining section header: a key-value placed after one would
   // bind to that section instead of the root table.
@@ -2330,7 +2329,17 @@ function handleStructuralEdit(
   // until flushed, leaving the emitted node pointing past the end of the output buffer.
   if (insertIndex !== undefined) applyWrites(original);
 
-  insert(original, original, replacementKV, insertIndex);
+  // parseJS can render the nested value as MORE than one root item — e.g. a
+  // [section] followed by the key-values that belong to it when the depth
+  // exceeds inlineTableStart (fuzz seed 724: { n: { h9nvi6w: { gfjsfiy } } }
+  // came back as `[n]` + `h9nvi6w = { … }`).  Insert ALL of them, in order;
+  // dropping everything after the first lost the value entirely.
+  for (let i = 0; i < replacementCst.length; i++) {
+    const item = replacementCst[i];
+    insert(original, original, item, i === 0 ? insertIndex : undefined);
+  }
+
+  const replacementKV = replacementCst[0] as KeyValue;
 
   // Track for blank-line fixup after applyWrites.
   if (isTable(replacementKV)) {

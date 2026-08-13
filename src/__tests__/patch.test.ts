@@ -9286,4 +9286,26 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 724: replacing an array-of-tables with a nested object when
+  // the replacement depth exceeds inlineTableStart.  parseJS renders the
+  // nested value as MORE than one root item (`[n]` plus the key-values
+  // under it), and handleStructuralEdit only inserted the first — dropping
+  // the value entirely.
+  test('structural AOT replacement inserts all rendered items (seed 724)', () => {
+    const src = dedent`
+      [[n.h9nvi6w.gfjsfiy]]
+      lxonelscfi.oiz = 2006-09-08T21:16:26
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.n.h9nvi6w = { gfjsfiy: true };
+    const result = patch(src, obj, { inlineTableStart: 2 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [n]
+
+      [n.h9nvi6w]
+      gfjsfiy = true
+    ` + '\n');
+  });
+
 });
