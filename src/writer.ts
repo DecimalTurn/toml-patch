@@ -95,12 +95,16 @@ const getEnterOffsets = (root: Root) => {
 };
 
 const exit_offsets: WeakMap<Root, Offsets> = new WeakMap();
-const getExitOffsets = (root: Root) => {
+/**
+ * The pending exit-offset map for a root.  Exposed so moveInlineElement can
+ * cancel a removal's offset before it leaks past the container (fuzz seed 900).
+ */
+export function getExitOffsets(root: Root): Offsets {
   if (!exit_offsets.has(root)) {
     exit_offsets.set(root, new WeakMap());
   }
   return exit_offsets.get(root)!;
-};
+}
 
 //TODO: Add getOffsets function to get all offsets contained in the tree
 export function replace(root: Root, parent: TreeNode, existing: TreeNode, replacement: TreeNode) {

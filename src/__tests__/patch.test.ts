@@ -9352,4 +9352,29 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 900: removing an array item that sits BEFORE a multiline
+  // string shifts the string left (a Move).  The removal's bracket-slide
+  // offset mixed the multiline item's last line with the previous item's
+  // line, and the re-insert's span-based offset could not cancel it — the
+  // pair leaked past the container and the rows after the array slid onto
+  // the multiline string's content (`m,sd"=]` garbage).  moveInlineElement
+  // now drops both offsets for a multiline last item and lets the tail
+  // realignment re-anchor everything after the container.
+  test('removing an array item before a multiline string keeps following rows (seed 900)', () => {
+    const src = dedent`
+      r = { q = { a = [1, true, 2000-01-01, false, 9, 7.25, """
+      mls"""], d = """
+      D""", k = 1 } }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.r.q.a.splice(5, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      r = { q = { a = [1, true, 2000-01-01, false, 9, """
+      mls"""], d = """
+      D""", k = 1 } }
+    ` + '\n');
+  });
+
 });

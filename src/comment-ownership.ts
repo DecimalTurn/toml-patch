@@ -19,7 +19,7 @@ import {
 } from './cst';
 import { last } from './utils';
 import { clonePosition } from './location';
-import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, perLine, Root } from './writer';
+import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, perLine, getExitOffsets, addExitOffset, Root } from './writer';
 
 // See docs/PLAN-Comment-Ownership.md for the full model (rules R1-R6).
 
@@ -650,7 +650,33 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
+      // For a multiline item removed from the END of a shared-line container,
+      // remove()'s bracket-slide offset (fuzz seed 706) mixes the removed
+      // item's LAST line with the previous item's line.  The re-insert below
+      // cannot cancel it — its own span-based offset has the same cross-line
+      // defect — so the pair leaks past the container and corrupts every
+      // subsequent node on the flush (fuzz seed 900: the rows after the array
+      // slid onto the multiline string's content).  Drop both; the tail
+      // realignment below repositions the container's interior explicitly.
+      const nodeIndexBeforeRemove = (parent.items as TreeNode[]).indexOf(node);
+      const removedWasLast = nodeIndexBeforeRemove === (parent.items as TreeNode[]).length - 1;
+      const prevBeforeRemove = nodeIndexBeforeRemove > 0
+        ? (parent.items as TreeNode[])[nodeIndexBeforeRemove - 1]
+        : undefined;
+
       remove(root, parent, node, hostContainer.items as TreeNode[]);
+
+      let cancelMultilineLastRemovalOffsets = false;
+      if (removedWasLast && prevBeforeRemove !== undefined &&
+          node.loc.end.line > node.loc.start.line &&
+          !perLine(parent as InlineArray | InlineTable)) {
+        const prevPending = getExitOffsets(root).get(prevBeforeRemove);
+        if (prevPending) {
+          getExitOffsets(root).delete(prevBeforeRemove);
+          cancelMultilineLastRemovalOffsets = true;
+        }
+      }
+
       // Resolve the removal's offsets before re-inserting, so insert()
       // measures against final positions.  Otherwise insert() absorbs the
       // removal's pending exit offset into the inserted item's own offset,
@@ -659,6 +685,14 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // last value on that line (fuzz seed 50).
       applyWrites(root);
       insert(root, parent, node, toIndex, undefined, hostContainer.items as TreeNode[]);
+
+      if (cancelMultilineLastRemovalOffsets) {
+        const childPending = getExitOffsets(root).get(node);
+        if (childPending) {
+          childPending.lines = 0;
+          childPending.columns = 0;
+        }
+      }
 
       // Flush before reading anything back out below. Every other element's
       // own loc (an untouched sibling that nonetheless shifted because this
@@ -759,6 +793,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           tailAnchor = { line: item.loc.end.line, column: item.loc.end.column + 2 };
         }
         if (tailAnchor) {
+          const endBeforeRealign = clonePosition(container.loc.end);
           container.loc.end = { line: tailAnchor.line, column: tailAnchor.column - 1 };
 
           // The container may itself be an element of another inline
@@ -767,6 +802,22 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           const wrapper = findWrapperItem(root, container as TreeNode);
           if (wrapper) {
             wrapper.loc.end = { line: container.loc.end.line, column: container.loc.end.column };
+          }
+
+          // Nodes AFTER the container (same-line followers, enclosing
+          // table rows, the table's own end) were positioned by the writer
+          // offsets this realignment has just replaced.  Re-anchor them to
+          // the new end with a pending exit offset so a later flush shifts
+          // them by exactly the end delta (fuzz seed 900: the row following
+          // the moved array would otherwise sit on the moved item's stale
+          // column and the subsequent removal then slides it sideways onto
+          // the multiline string's content).
+          const endDelta = {
+            lines: container.loc.end.line - endBeforeRealign.line,
+            columns: container.loc.end.column - endBeforeRealign.column
+          };
+          if (endDelta.lines !== 0 || endDelta.columns !== 0) {
+            addExitOffset(root, wrapper ?? (container as TreeNode), endDelta);
           }
         }
       }
