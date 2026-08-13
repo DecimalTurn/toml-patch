@@ -119,6 +119,8 @@ try {
 } catch (e) {
   log('THREW: ' + (e as Error).message);
   log('stack: ' + ((e as Error).stack ?? '').split('\n').slice(0, 12).join('\n'));
+  log('--- FULL ORIGINAL ---');
+  generated.toml.split('\n').forEach((l, i) => log(`${i + 1}: [${l}]`));
 }
 
 const text = report.join('\n') + '\n';

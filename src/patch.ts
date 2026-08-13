@@ -1104,12 +1104,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
     } else if (isEdit(change)) {
       let existing = tryFindByPath(original, change.path);
-      let replacement = findByPath(updated, change.path);
+      let replacement: TreeNode | undefined;
+      try {
+        replacement = findByPath(updated, change.path);
+      } catch {
+        replacement = undefined;
+      }
 
-      // When the existing node can't be found, this is likely a structural
-      // type change (e.g. table→scalar, AOT→scalar, array→empty).
+      // When the existing node can't be found — or the replacement can't be
+      // resolved in the updated CST (e.g. `one = { … }` became an array of
+      // tables, whose entries live at path [one, 0] so the bare path [one]
+      // resolves nowhere — fuzz seed 477) — this is a structural type change
+      // (table→scalar, implicit-table→AOT, array→empty, …).
       // Handle by removing old nodes and inserting fresh KV.
-      if (!existing) {
+      if (!existing || !replacement) {
         handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes, materialisedTables);
         return; // skip generic edit handling
       }

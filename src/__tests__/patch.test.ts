@@ -9186,4 +9186,26 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 477: replacing an implicit table created by a dotted key
+  // (`one.ehl."Yv[" = false`) with an array of objects.  The diff emits an
+  // Edit at the bare path [one], but the updated CST renders the new value
+  // as [[one]] array-of-tables entries whose lookup paths are [one, 0],
+  // so the generic edit path threw "Node not found at one".  Such edits
+  // now fall back to the structural-change handling.
+  test('implicit table replaced by array of tables uses structural handling (seed 477)', () => {
+    const src = dedent`
+      one.ehl."Yv[" = false
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.one = [{ k62: -3175, k98: 1753, k59: -1488 }];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[one]]
+      k62 = -3175
+      k98 = 1753
+      k59 = -1488
+    ` + '\n');
+  });
+
 });
