@@ -1873,6 +1873,75 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           removeMember(original, parent, node);
         }
 
+        // Removing the LAST item of a single-line inline container while an
+        // earlier edit left a pending exit offset on the new last item makes
+        // the writer's column arithmetic go stale: the container's end (and
+        // thus the closing bracket) ends up inside the surviving item's span
+        // (fuzz seed 3780: `[[], true, -3125, 755_394]` edited and truncated
+        // emitted `-312,` with `]` eating the last digit).  Flush the pending
+        // offsets, then fix the end from the surviving item, preserving the
+        // original gap to the bracket.
+        if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
+            parent.loc.end.line === parent.loc.start.line) {
+          const remaining = (parent as InlineArray | InlineTable).items as TreeNode[];
+          // Only for the LAST item: the bracket follows the removed item, so
+          // the end can be recomputed from the new last item + the original
+          // bracket gap.  For middle removals the writer's own offset
+          // arithmetic collapses the gap correctly.
+          if (remaining.length > 0 && containerItemIndex === remaining.length) {
+            const gap = parent.loc.end.column - node.loc.end.column;
+            applyWrites(original);
+            const targetEnd = last(remaining)!.loc.end.column + gap;
+            if (parent.loc.end.column !== targetEnd) {
+              parent.loc.end.column = targetEnd;
+            }
+            // The owning KV's end mirrors the value's end; without it the
+            // KV's own row comma (inside an enclosing inline table) is
+            // written at the stale column, overwriting the value's tail.
+            let owner: KeyValue | undefined;
+            const findOwner = (n: TreeNode): KeyValue | undefined => {
+              if (isKeyValue(n)) {
+                if (n.value === parent) return n;
+                return findOwner(n.value);
+              }
+              if (isInlineItem(n)) return findOwner(n.item);
+              if (!hasItems(n)) return undefined;
+              for (const item of n.items as TreeNode[]) {
+                const found = findOwner(isInlineItem(item) ? item.item : item);
+                if (found) return found;
+              }
+              return undefined;
+            };
+            owner = findOwner(original);
+            if (owner && owner.loc.end.line === parent.loc.end.line) {
+              owner.loc.end.column = parent.loc.end.column;
+              // The InlineItem row wrapping the KV carries the row's comma;
+              // its end must track the KV's end too.
+              const findWrapper = (n: TreeNode): InlineItem | undefined => {
+                if (isKeyValue(n)) return findWrapper(n.value);
+                if (isInlineItem(n)) {
+                  if (n.item === owner) return n;
+                  return findWrapper(n.item);
+                }
+                if (!hasItems(n)) return undefined;
+                for (const item of n.items as TreeNode[]) {
+                  const found = findWrapper(item);
+                  if (found) return found;
+                }
+                return undefined;
+              };
+              const wrapper = findWrapper(original);
+              if (wrapper) {
+                // Register the row's growth as an exit offset so the next
+                // row of the enclosing table shifts past the comma+space.
+                const delta = parent.loc.end.column - wrapper.loc.end.column;
+                wrapper.loc.end.column = parent.loc.end.column;
+                if (delta !== 0) addExitOffset(original, wrapper, { lines: 0, columns: delta });
+              }
+            }
+          }
+        }
+
         // When removing a node whose key has an implicit parent, check whether
         // the parent should survive as an empty table header.  Table nodes are
         // handled in-place above; only TableArray falls through to generate+insert.
@@ -2355,6 +2424,25 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // remove(). The exit offset that carried the closing-bracket space was
   // on the removed item and is now lost. Tighten the end column and
   // reapply bracket spacing.
+  //
+  // Resolve pending offsets BEFORE measuring: an earlier edit may have left
+  // an exit offset on the surviving last item, so the item's pre-offset
+  // position isn't where it will actually render.  Tightening against the
+  // stale position leaves the container end inside the item's span, and the
+  // closing bracket overwrites the item's content (fuzz seed 3780: an edit
+  // plus a remove on the same inline array emitted `-312,` with `]` eating
+  // the value's last digit).
+  let needsTighten = false;
+  traverse(original, {
+    InlineTable: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) needsTighten = true;
+    },
+    InlineArray: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) needsTighten = true;
+    }
+  });
+  if (needsTighten) applyWrites(original);
+
   let hasTightened = false;
   traverse(original, {
     InlineTable: (node) => {

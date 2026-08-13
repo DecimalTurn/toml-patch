@@ -9655,4 +9655,18 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('editing then truncating an inline array keeps the closing bracket (seed 3780)', () => {
+    const src = dedent`
+      lynqrjp5 = { lxt = [[], true, 0x7253b, 755_394], gt53.ho = 0o076124 }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.lynqrjp5.lxt[2] = -3125;
+    obj.lynqrjp5.lxt.length = 3;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      lynqrjp5 = { lxt = [[], true, -3125], gt53.ho = 0o076124 }
+    ` + '\n');
+  });
+
 });

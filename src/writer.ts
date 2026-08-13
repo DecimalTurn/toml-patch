@@ -84,6 +84,11 @@ export function deleteInlineContainerNeedingTighten(node: TreeNode): void {
  */
 export function addExitOffset(root: Root, node: TreeNode, span: Span): void {
   addOffset(span, getExitOffsets(root), node);
+  // Ensure a later applyWrites() actually walks the tree: offsets registered
+  // outside insert()/remove()/replace() (e.g. the post-removal end fixup in
+  // patch.ts, fuzz seed 3780) would otherwise be ignored because the dirty
+  // flag was cleared by an intermediate flush.
+  dirty_roots.add(root);
 }
 
 const enter_offsets: WeakMap<Root, Offsets> = new WeakMap();
