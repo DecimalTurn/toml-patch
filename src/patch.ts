@@ -1575,6 +1575,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 const emptyTable = generateTable(parentPath as string[]);
                 materialisedTables.add(emptyTable);
                 const insertIdx = firstIndex >= 0 ? firstIndex : original.items.length;
+                // Same pending-offset hazard as the implicit-key branch
+                // below: insert after the removals are resolved so the new
+                // header can't absorb the document's enter offset (fuzz
+                // seed 1172).
+                applyWrites(original);
                 insert(original, original, emptyTable, insertIdx);
               }
             }
@@ -1606,6 +1611,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                   const emptyTable = generateTable(parentPath as string[]);
                   materialisedTables.add(emptyTable);
                   const insertIdx = firstPrefixIndex >= 0 ? firstPrefixIndex : original.items.length;
+                  // The removals above left pending offsets on the document
+                  // (or a preceding item).  Inserting before resolving them
+                  // lets the new header absorb the document's pending enter
+                  // offset and land above line 1 (fuzz seed 1172).
+                  applyWrites(original);
                   insert(original, original, emptyTable, insertIdx);
                 }
               }
@@ -1738,6 +1748,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // Insert at the original position so preceding comments
               // stay adjacent without a spurious blank line.
               const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+              // Resolve the removal's pending offsets first — an insert at
+              // index 0 otherwise absorbs the document's enter offset and
+              // lands above line 1 (fuzz seed 1172).
+              applyWrites(original);
               insert(original, original, emptyTable, insertIdx);
             }
           }
@@ -1805,7 +1819,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                   (container as TableArray).key.item.value.concat(relativePrefix)
                 );
               }
-              if (remaining.length === 0 && docSiblings.length === 0) {
+              // When the removed dotted key sits directly inside an explicit
+              // [table] (or [[entry]]) header, that header already IS the
+              // materialised parent — generating another one duplicates it
+              // and the re-parse fails with "Table already defined" (fuzz
+              // seed 1098).  Nothing to do; the emptied header stays.
+              const containerAlreadyIsParent =
+                relativePrefix.length === 0 &&
+                (isTable(container) || isTableArray(container));
+              if (remaining.length === 0 && docSiblings.length === 0 && !containerAlreadyIsParent) {
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
@@ -1864,6 +1886,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                     const headerIdx = firstSectionHeaderIndex(original);
                     insertIdx = headerIdx >= 0 ? headerIdx : original.items.length;
                   }
+                  // The removal above registered its line/column offset on
+                  // the parent (or a preceding item).  insert() measures
+                  // against sibling locs, not pending offsets, so an insert
+                  // at index 0 would absorb the document's pending enter
+                  // offset and land above line 1 (fuzz seed 1028).  Resolve
+                  // first, like every other just-in-time flush in this file.
+                  applyWrites(original);
                   insert(original, original, emptyTable, insertIdx);
                 }
               }

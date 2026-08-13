@@ -9377,4 +9377,59 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 1028: removing the last segment of the FIRST root key (a
+  // dotted key whose prefix becomes an implicit parent) materialises a
+  // section header at document index 0.  The removal's pending enter offset
+  // was still on the document, so the inserted header absorbed it and
+  // landed above line 1, crashing the writer.  The materialisation now
+  // resolves pending offsets before inserting.
+  test('materialised parent header lands at line 1 after removing the first root key (seed 1028)', () => {
+    const src = dedent`
+      r8e."O|zw=".xsc = -50438.91602
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.r8e['O|zw='].xsc;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [r8e."O|zw="]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1098: removing the only key of an explicit [table] must not
+  // materialise a second copy of the header — the table itself already is
+  // the (now empty) parent.  The duplicate made the re-parse fail with
+  // "Table already defined".
+  test('emptied explicit table is not duplicated (seed 1098)', () => {
+    const src = dedent`
+      [em2-0u.is]
+      WdkQS.dbh = 0b10011100100011
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj['em2-0u'].is.WdkQS;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [em2-0u.is]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1172: removing an implicit key prefix (a table whose key
+  // extends the removed path) materialises the parent as an empty table at
+  // the removed section's index.  Same pending-offset hazard as seed 1028 —
+  // the fresh header absorbed the document's enter offset and landed above
+  // line 1.
+  test('materialised parent header stays in bounds when a prefix table is removed (seed 1172)', () => {
+    const src = dedent`
+      [c.s0k825_vp.p-e95lg61w]
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.c.s0k825_vp;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [c]
+    ` + '\n');
+  });
+
 });
