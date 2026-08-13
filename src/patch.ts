@@ -2363,12 +2363,32 @@ function handleStructuralEdit(
   // exceeds inlineTableStart (fuzz seed 724: { n: { h9nvi6w: { gfjsfiy } } }
   // came back as `[n]` + `h9nvi6w = { … }`).  Insert ALL of them, in order;
   // dropping everything after the first lost the value entirely.
+  let firstInserted: TreeNode | undefined;
   for (let i = 0; i < replacementCst.length; i++) {
     const item = replacementCst[i];
+    // The replacement can re-render a table header whose key is ALREADY
+    // present in the document: the prefix cleanup above removed a sibling
+    // structure (e.g. an [[array]] header) for the same logical parent, but
+    // an explicit [table] with that key survives.  Inserting the rendered
+    // header would duplicate it and fail the re-parse with "Table already
+    // defined" (fuzz seed 1219).  Merge the rendered rows into the
+    // surviving table instead.
+    const existingTable = isTable(item)
+      ? (original.items as TreeNode[]).find(t =>
+        isTable(t) && arraysEqual((t as Table).key.item.value, (item as Table).key.item.value))
+      : undefined;
+    if (existingTable) {
+      for (const row of (item as Table).items as TreeNode[]) {
+        insert(original, existingTable, row, undefined);
+      }
+      if (!firstInserted) firstInserted = existingTable;
+      continue;
+    }
     insert(original, original, item, i === 0 ? insertIndex : undefined);
+    if (!firstInserted) firstInserted = item;
   }
 
-  const replacementKV = replacementCst[0] as KeyValue;
+  const replacementKV = firstInserted as KeyValue;
 
   // Track for blank-line fixup after applyWrites.
   if (isTable(replacementKV)) {

@@ -9432,4 +9432,33 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 1219: an [[array]] header and an explicit [table] share the
+  // same logical parent key.  Replacing the array with a scalar makes the
+  // structural edit re-render a [table] header for that parent — which
+  // already exists — and the duplicate failed the re-parse with "Table
+  // already defined".  The rendered rows now merge into the surviving
+  // table instead of re-inserting the header.
+  test('structural edit merges rows into a surviving same-key table (seed 1219)', () => {
+    const src = dedent`
+      [["".dmt6_v]]
+      ""."*XC=]" = 1996-02-17
+
+      [""]
+      q = 53961
+      jz.rjs = 1
+      "" = -18275
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj[''].dmt6_v = -4026.25;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [""]
+      q = 53961
+      jz.rjs = 1
+      "" = -18275
+      dmt6_v = -4026.25
+    ` + '\n');
+  });
+
 });
