@@ -9090,4 +9090,22 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).not.toContain('hpd_iu9zs5');
   });
 
+  // Fuzz seed 185: removing a dotted key whose FIRST segment is the empty
+  // string (`"".tvbin`), when an EARLIER sibling also starts with that
+  // prefix (`"".vf = true`).  findParent(original, [""]) prefix-matched
+  // `"".vf` first, unwrapped it to its Boolean VALUE, and removeMember
+  // threw "Unsupported parent type Boolean".  A parent without items can
+  // never contain the node — fall back to the structural container.
+  test('removing empty-string dotted key falls back to structural parent (seed 185)', () => {
+    const src = `"".vf = true
+"".tvbin = '&^I}x7)'
+`;
+    const obj = parse(src) as any;
+    delete obj[''].tvbin;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain('"".vf = true');
+    expect(result).not.toContain('tvbin');
+  });
+
 });

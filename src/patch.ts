@@ -1614,9 +1614,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // For example, [server.tls] lives in document.items, not [server].items.
         // Fall back to the node's structural container when the parent doesn't
         // contain it (keeps document-sibling behaviour, and handles inline
-        // containers nested inside values).
-        if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {
-          parent = findStructuralParent(original, node) ?? original;
+        // containers nested inside values).  This also covers resolution
+        // landing on an unrelated sibling: removing `"".tvbin` resolves its
+        // prefix [""] to the FIRST key starting with "" (e.g. `"".vf = true`),
+        // whose unwrapped value is a Boolean — not a container at all
+        // (fuzz seed 185).
+        if (!hasItems(parent) || !(parent.items as TreeNode[]).includes(node)) {
+          const structural = findStructuralParent(original, node);
+          parent = structural ?? (hasItems(parent) ? original : findHostContainer(original, node) ?? original);
         }
 
         // R2 extension: when the last child of an implicit parent is removed,
