@@ -283,9 +283,33 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       return;
     }
 
-    // Check if item is removed -> assume it's been edited and replace
-    const removed = !after_stable.includes(before_stable[index]);
-    if (!overflow && removed) {
+    // Check if item is removed -> assume it's been edited and replace.
+    //
+    // `after.includes(value)` alone is not enough: when the value also
+    // occurs later in the array, the element is read as "kept", so the
+    // mismatch becomes an Add plus a chain of Moves that re-finds the
+    // duplicate — a pathological diff for a plain in-place edit (fuzz seed
+    // 1406: `true` → `'4'` with another `true` later emitted Add(1) + six
+    // Moves + Remove(10), and the writer corrupted a multiline string).
+    // A duplicate further along in `before` can serve the later `after`
+    // slot, so this occurrence is surplus whenever `before`'s unmatched
+    // suffix holds more copies of the value than `after`'s does — then the
+    // element is genuinely gone from its position and edited in place.
+    let surplus = false;
+    if (!overflow) {
+      const value = before_stable[index];
+      let beforeCount = 0;
+      for (let i = index; i < before_stable.length; i++) {
+        if (before_stable[i] === value) beforeCount++;
+      }
+      let afterCount = 0;
+      for (let i = index; i < after_stable.length; i++) {
+        if (after_stable[i] === value) afterCount++;
+      }
+      surplus = beforeCount > afterCount;
+    }
+    const removed = !overflow && surplus;
+    if (removed) {
       merge(changes, diff(before_sim[index], after[index], path.concat(index), options));
       before_stable[index] = value;
       before_sim[index] = after[index];

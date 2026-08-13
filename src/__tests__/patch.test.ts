@@ -9462,14 +9462,12 @@ describe('wasEmptied compensation — multiple tables', () => {
   });
 
   // Fuzz seed 1406: replacing a duplicated `true` inside a multiline array
-  // (the same value occurs again later, so the diff expresses the edit as
-  // an Add plus a chain of Moves) slides the date row that follows the
-  // multiline string's closing quotes onto them, and the re-parse fails
-  // with an unterminated string.  Marked .fails until the writer's
-  // same-line column offsets become position-aware (see session notes:
-  // the removal's exit offset on the items-array predecessor also shifts
-  // walk-order successors that are physically BEFORE it on that line).
-  test.fails('editing a duplicated array item keeps the multiline-string tail (seed 1406)', () => {
+  // (the same value occurs again later) used to diff as an Add plus a chain
+  // of Moves, because compareArrays read the element as "kept" — and the
+  // move chain slid the date row that follows the multiline string's
+  // closing quotes onto them.  compareArrays now counts surplus occurrences
+  // in the unmatched suffixes and edits the element in place instead.
+  test('editing a duplicated array item keeps the multiline-string tail (seed 1406)', () => {
     const src = dedent`
       dgzj3t = ["2Htn5AGYQ4KHFejd{3,G)hZ%a>nS4q", true, "d{Tz[RsD!:6bn*80Pd", "+fXxjsRtucWI5.P]}Me6R3*Nl|1L:!nz4(skHf' ", 0x35e6e402, true, ["Lx1t$zO9sow'.zUt", 0x810fd, 2010-09-14, '''
       9GI|4>''', [1984-12-03, 388209]], 6767, "nCdDq3_ZwB,<}7Lp?V#1", true]

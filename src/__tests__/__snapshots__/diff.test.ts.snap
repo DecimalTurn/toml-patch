@@ -12,13 +12,7 @@ Array [
     "path": Array [
       2,
     ],
-    "type": "Add",
-  },
-  Object {
-    "path": Array [
-      3,
-    ],
-    "type": "Remove",
+    "type": "Edit",
   },
 ]
 `;

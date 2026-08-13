@@ -208,4 +208,21 @@ describe('array moves with duplicate values', () => {
       { type: 'Edit', path: ['x', 3] }
     ]);
   });
+
+  test('edits a duplicated value in place instead of an Add + Move chain (fuzz seed 1406)', () => {
+    // `true` at index 1 becomes '4' but another `true` remains later in the
+    // array.  Reading the element as "kept" made the diff fall through to
+    // Add(1) plus a chain of Moves and a trailing Remove — and the writer
+    // then slid the multiline string's following row onto its closing
+    // quotes.  The surplus occurrence is now edited in place.
+    const changes = diff(
+      ['a', true, 'b', 'c', 'd', true, 'nested', 'inner', 6767, 'n', true],
+      ['a', '4', 'b', 'c', 'd', true, 'nested', 'inner', 6767, 'n', true],
+      ['x']
+    );
+
+    expect(changes).toEqual([
+      { type: 'Edit', path: ['x', 1] }
+    ]);
+  });
 });
