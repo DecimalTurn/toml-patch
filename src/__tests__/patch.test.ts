@@ -9235,4 +9235,32 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 620: adding an item right after a MULTILINE string inside a
+  // one-item-per-line array whose next item continues on the string's END
+  // line.  The new-line insert placed the new item on the FOLLOWING row —
+  // inside the nested array that occupied it.  The insert must stay on the
+  // multiline string's end line instead.
+  test('perLine insert after multiline string stays on its end line (seed 620)', () => {
+    const src = dedent`
+      x = [
+          [1, 2],
+          '''
+      a
+      b''', "y",
+      ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.splice(2, 0, false);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [
+          [1, 2],
+          '''
+      a
+      b''', false, "y",
+      ]
+    ` + '\n');
+  });
+
 });

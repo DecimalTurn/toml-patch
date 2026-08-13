@@ -513,6 +513,7 @@ function insertInline(
   // Store preceding node and insert
   const previous = index != null ? parent.items[index - 1] : last(parent.items as TreeNode[]);
   const is_last = index == null || index === parent.items.length;
+  const next = index != null ? parent.items[index] : undefined;
 
   parent.items.splice(index, 0, child);
 
@@ -526,8 +527,23 @@ function insertInline(
     child.comma = true;
   }
 
-  // Use new line for arrays/tables that span multiple lines (one item per line)
-  const use_new_line = perLine(parent);
+  // Use new line for arrays/tables that span multiple lines (one item per line).
+  // A MULTILINE item (e.g. a multiline string) can end mid-line while the NEXT
+  // item continues on that same line — a new-line insert would then land on
+  // the following row, inside whatever occupies it (fuzz seed 620: inserting
+  // after a multiline string dropped the new item into the next row's nested
+  // array).  In that case stay on the same line as the previous item.
+  //
+  // The sibling locs must look settled before trusting them: during comment
+  // realignment / removal re-inserts `next` can start INSIDE the previous
+  // item's span (pending offsets not yet applied) — treating that as
+  // "same line" corrupts the insert (fuzz seed 203).
+  const use_new_line = perLine(parent) && !(
+    previous && next &&
+    previous.loc.end.line > previous.loc.start.line &&
+    next.loc.start.line === previous.loc.end.line &&
+    next.loc.start.column >= previous.loc.end.column
+  );
   const has_trailing_comma = is_last && child.comma === true;
 
   return calculateInlinePositioning(parent, child, index, {
