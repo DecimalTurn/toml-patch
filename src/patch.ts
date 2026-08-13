@@ -1449,9 +1449,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       if (!node) {
         // The path likely refers to all entries of a TableArray sequence
-        // (e.g. path ['tasks'] when the CST stores entries at ['tasks',0], ['tasks',1]…).
-        // Remove all entries by repeatedly pulling the one at index 0.
-        const first = tryFindByPath(original, change.path.concat(0));
+        // (e.g. path ['tasks'] when the CST stores entries at ['tasks',0], ['tasks',1]…),
+        // or is a strict prefix of a longer AOT key (e.g. path ['a','b'] when
+        // the entry key is ['a','b','c'] — fuzz seed 176).
+        // Remove all entries by repeatedly pulling the next matching one.
+        const nextAotEntry = (): TreeNode | undefined => {
+          const direct = tryFindByPath(original, change.path.concat(0));
+          if (direct) return direct;
+          const prefixed = findDocumentItemsByKeyPrefix(original, change.path)
+            .filter(isTableArray) as TableArray[];
+          return prefixed[0];
+        };
+        const first = nextAotEntry();
         if (first) {
           const firstIndex = (original.items as TreeNode[]).indexOf(first);
 
@@ -1497,7 +1506,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // Remove remaining AOT entries.  If the first was converted in place
           // it no longer matches change.path, so the loop naturally skips it.
           let entry: TreeNode | undefined;
-          while ((entry = tryFindByPath(original, change.path.concat(0)))) {
+          while ((entry = nextAotEntry())) {
             removeMember(original, original, entry);
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
@@ -1537,8 +1546,27 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // starts with the change path and remove them.
           const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
           if (prefixNodes.length > 0) {
+            const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
               removeMember(original, original, prefixNode);
+            }
+            // When the removed prefix items were the sole children of an
+            // implicit parent (e.g. [mhv6z.hpd_iu9zs5."2<w"] removed at
+            // path [mhv6z, hpd_iu9zs5] -> { mhv6z: {} }), materialise the
+            // parent as an empty table so the key isn't dropped (seed 176).
+            if (change.path.length > 1 && rawUpdated !== undefined) {
+              const parentPath = change.path.slice(0, -1);
+              const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+              if (remainingSiblings.length === 0) {
+                let value: any = rawUpdated;
+                for (const k of parentPath) value = value?.[k];
+                if (isObject(value) && Object.keys(value).length === 0) {
+                  const emptyTable = generateTable(parentPath as string[]);
+                  materialisedTables.add(emptyTable);
+                  const insertIdx = firstPrefixIndex >= 0 ? firstPrefixIndex : original.items.length;
+                  insert(original, original, emptyTable, insertIdx);
+                }
+              }
             }
           } else {
             // Not a table array or implicit key — let findByPath throw the descriptive error.

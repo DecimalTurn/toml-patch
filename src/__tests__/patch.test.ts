@@ -9071,4 +9071,23 @@ describe('wasEmptied compensation — multiple tables', () => {
       ` + '\n');
   });
 
+  // Fuzz seed 176: removing the intermediate path of a LONGER dotted table
+  // key.  `[mhv6z.hpd_iu9zs5."2<w"]` produces a Table with key
+  // ["mhv6z", "hpd_iu9zs5", "2<w"], so a Remove at ["mhv6z", "hpd_iu9zs5"]
+  // has no exact node match — the prefix-removal branch drops the whole
+  // table, and must then materialise the emptied implicit parent `[mhv6z]`
+  // so the empty-object key isn't dropped from the document.
+  test('implicit prefix removed with longer dotted table key materialises parent (seed 176)', () => {
+    const src = `[mhv6z.hpd_iu9zs5."2<w"]
+"lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
+`;
+    const obj = parse(src) as any;
+    delete obj.mhv6z.hpd_iu9zs5;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(obj.mhv6z).toEqual({});
+    expect(result).toContain('[mhv6z]');
+    expect(result).not.toContain('hpd_iu9zs5');
+  });
+
 });
