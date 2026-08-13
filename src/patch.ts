@@ -1737,6 +1737,39 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           isInlineItem(node) && isKeyValue(node.item) ? node.item : node
         );
 
+        // When the probe path matched a dotted key by PREFIX (the key is
+        // longer than the path), removing only that KV leaves the key's
+        // other segments behind.  E.g. deleting `l` when the CST holds
+        // `l.l` and `l.utc.xme7` must remove both, or the re-parse revives
+        // `l` from the surviving sibling (fuzz seed 2926).
+        const removePrefixKv = isKeyValue(node)
+          ? node as KeyValue
+          : isInlineItem(node) && isKeyValue(node.item)
+            ? node.item as KeyValue
+            : undefined;
+        if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
+          const containerAbsLen = nodeAbsolutePath.length - removePrefixKv.key.value.length;
+          const relativePrefix = change.path.slice(containerAbsLen) as Path;
+          if (relativePrefix.length > 0 && relativePrefix.length < removePrefixKv.key.value.length) {
+            const siblings = (parent as { items: TreeNode[] }).items;
+            // Collect matches first, then remove by identity: removeMember
+            // splices the live array (member + its leading comments), so
+            // mutating it inside the scan loop corrupts the indices.
+            const toRemove: TreeNode[] = [];
+            for (const sibling of siblings) {
+              if (sibling === node) continue;
+              if (isKeyValue(sibling)
+                  && sibling.key.value.length > relativePrefix.length
+                  && arraysEqual(sibling.key.value.slice(0, relativePrefix.length), relativePrefix)) {
+                toRemove.push(sibling);
+              }
+            }
+            for (const sibling of toRemove) {
+              removeMember(original, parent, sibling);
+            }
+          }
+        }
+
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
         }

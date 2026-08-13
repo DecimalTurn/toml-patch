@@ -9533,4 +9533,23 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('removing a dotted key also removes its longer sibling segments (seed 2926)', () => {
+    const src = dedent`
+      [[c38az_8-.OCq]]
+      kl98l94l = 02:17:12.89
+      l.l = "Z^G:B1mn+m<{H{soK&wO]HQ9O>[R}0G2k_=yI!uqpS-<R/YKI"
+      l.utc.xme7 = 734_926
+      yp7.si6_r."LL}~=*NuC" = -40986000000000356972
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj['c38az_8-'].OCq[0].l;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[c38az_8-.OCq]]
+      kl98l94l = 02:17:12.89
+      yp7.si6_r."LL}~=*NuC" = -40986000000000356972
+    ` + '\n');
+  });
+
 });
