@@ -1833,9 +1833,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // materialised parent — generating another one duplicates it
               // and the re-parse fails with "Table already defined" (fuzz
               // seed 1098).  Nothing to do; the emptied header stays.
+              // Same for an inline table: when the parent prefix equals the
+              // inline table's own key, the (now empty) inline table already
+              // renders the emptied object — re-emitting an empty key would
+              // parse `${''} = {}` and crash (fuzz seed 2726).
               const containerAlreadyIsParent =
                 relativePrefix.length === 0 &&
-                (isTable(container) || isTableArray(container));
+                (isTable(container) || isTableArray(container) || isInlineTable(container));
               if (remaining.length === 0 && docSiblings.length === 0 && !containerAlreadyIsParent) {
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];

@@ -9520,4 +9520,17 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('removing the last child of a dotted key in an inline table keeps the empty inline table (seed 2726)', () => {
+    const src = dedent`
+      e.kze = { paq1pnm_.gpucau8w07."{qXi pf" = 2081-09-08 }
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.e.kze.paq1pnm_;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      e.kze = {}
+    ` + '\n');
+  });
+
 });
