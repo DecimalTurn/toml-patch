@@ -1034,6 +1034,27 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
           insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+        } else if (isInlineItem(child) && isKeyValue(child.item)) {
+          // The child was resolved through an inline table in the updated
+          // CST, so it arrives as an InlineItem-wrapped KV.  When the
+          // insertion parent is a shallower ancestor than the change path
+          // (the dotted KV holding the missing intermediate segments was
+          // removed earlier in this same patch — fuzz seed 305: removing
+          // `o247.bjbdmm11-.y773gunzy` then adding `o247.k2`), restore the
+          // missing key segments on the inner KV so the new key lands under
+          // the right dotted prefix instead of at the container's top level.
+          let kv = child.item as KeyValue;
+          const restored = restoreMissingKeySegments(parent_path, kv, change.path);
+          if (restored) {
+            if (restoredInsertContainers.has(parent)) {
+              applyWrites(original);
+            }
+            kv = restored;
+          }
+          const inlineItem = generateInlineItem(kv);
+          inlineItem.comma = originalHadTrailingCommas;
+          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          if (restored) restoredInsertContainers.add(parent);
         } else {
           insert(original, parent, child, undefined, undefined, inlineHostItems);
         }

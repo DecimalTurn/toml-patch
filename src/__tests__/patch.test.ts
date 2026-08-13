@@ -9150,4 +9150,40 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 305: replacing the dotted key `o247.bjbdmm11-.y773gunzy` inside
+  // an inline table with an object.  The diff becomes a Remove of the dotted
+  // key plus Adds of the new object's keys; the Adds resolve into the inline
+  // table whose insertion parent is shallower than the change path, and must
+  // restore the missing `o247.bjbdmm11-` prefix on the new keys — otherwise
+  // they land at the inline table's top level.
+  test('inline-table add restores missing dotted-key prefix (seed 305)', () => {
+    const src = dedent`
+      x = { o247.bjbdmm11-.y773gunzy = 'old' }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.o247['bjbdmm11-'] = { k2: true, k94: 1.5, k50: 'str' };
+    const result = patch(src, obj, { inlineTableStart: 0 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = { o247.bjbdmm11-.k2 = true, o247.bjbdmm11-.k94 = 1.5, o247.bjbdmm11-.k50 = "str" }
+    ` + '\n');
+  });
+
+  // Fuzz seed 340: setting array item 0 to a value that equals a LATER item
+  // (['a', 1, 2, true] -> [true, 1, 2, true]).  The diff moves the later item
+  // into place and edits the displaced one; the old code diffed the untouched
+  // original at that index, emitted nothing, and left 'a' in the output.
+  test('array item edited to a duplicated value removes the old item (seed 340)', () => {
+    const src = dedent`
+      x = ['a', 1, 2, true]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x[0] = true;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [true, 1, 2, true]
+    ` + '\n');
+  });
+
 });
