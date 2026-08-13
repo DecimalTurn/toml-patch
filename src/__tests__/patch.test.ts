@@ -9308,4 +9308,26 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 735: replacing a dotted key inside a table with an object
+  // restores the missing prefix and regenerates the new key-values.  The
+  // regenerated value's loc came from its own round-trip — a line BELOW the
+  // generated key — so the value was emitted on a separate line from its
+  // `=`, producing invalid TOML.  generateKeyValue now aligns the fresh
+  // value onto the key's line.
+  test('restored dotted-key value stays on the key line (seed 735)', () => {
+    const src = dedent`
+      [t]
+      a.b = 2057-09-09
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.t.a = { k6: -2320.491732098162, k98: 'c-zjH' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t]
+      a.k6 = -2320.491732098162
+      a.k98 = "c-zjH"
+    ` + '\n');
+  });
+
 });

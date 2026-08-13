@@ -114,9 +114,13 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
 
   const equals = column + 1;
 
+  // Align the fresh value with the generated key.  The value's loc comes from
+  // its own round-trip (regenerateValue), which can put it on a LATER line
+  // than the key's line 1 — leaving the value one line below the `=` and
+  // producing invalid TOML (fuzz seed 735).
   shiftNode(
     value,
-    { lines: 0, columns: column + 3 - value.loc.start.column },
+    { lines: 1 - value.loc.start.line, columns: column + 3 - value.loc.start.column },
     { first_line_only: true }
   );
 
