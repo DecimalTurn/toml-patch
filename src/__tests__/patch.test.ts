@@ -9669,4 +9669,28 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('materialising an emptied dotted parent under a table stays below the parent rows (seed 4402)', () => {
+    const src = dedent`
+      [kx5z9sjjgp.".(o<1RF&v".mia_m]
+      g5yv2z2."(X" = 821968
+      dykv.svbuxq37tb = 91929
+      d4jl5.mi = 521_854
+      vsqdcqeko.k3i5l."" = true
+      v.lw85f.vrxc00y = -54296.21447
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.kx5z9sjjgp['.(o<1RF&v'].mia_m.dykv.svbuxq37tb;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [kx5z9sjjgp.".(o<1RF&v".mia_m]
+      g5yv2z2."(X" = 821968
+      d4jl5.mi = 521_854
+      vsqdcqeko.k3i5l."" = true
+      v.lw85f.vrxc00y = -54296.21447
+
+      [kx5z9sjjgp.".(o<1RF&v".mia_m.dykv]
+    ` + '\n');
+  });
+
 });

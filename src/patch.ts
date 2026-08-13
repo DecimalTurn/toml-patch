@@ -2100,6 +2100,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                     // the entry's scope.
                     const entryIdx = (original.items as TreeNode[]).indexOf(container);
                     insertIdx = entryIdx >= 0 ? entryIdx + 1 : original.items.length;
+                  } else if (isTable(container)) {
+                    // Same hazard for a [table] container: a sub-table header
+                    // appended at the document end can be pulled up into the
+                    // parent's rows by a later removal's exit offset, and the
+                    // header then captures those rows (fuzz seed 4402).
+                    // Insert directly after the parent so the header stays
+                    // below the parent's own rows.
+                    const parentIdx = (original.items as TreeNode[]).indexOf(container);
+                    insertIdx = parentIdx >= 0 ? parentIdx + 1 : original.items.length;
                   } else if (isDocument(container)) {
                     // Root-scope materialisation: a [table] header claims every
                     // key-value below it, so it must land after all root KVs —
