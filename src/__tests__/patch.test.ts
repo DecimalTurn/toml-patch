@@ -9584,4 +9584,20 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('deleting a root key also removes section siblings sharing its prefix (seed 3392)', () => {
+    const src = dedent`
+      ev0 = true
+      "".p6ydtm-s8 = "L3y"
+      [["". ":?bsQ+"]]
+      x = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj[''];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      ev0 = true
+    ` + '\n');
+  });
+
 });

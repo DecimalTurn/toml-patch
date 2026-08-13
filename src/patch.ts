@@ -1798,12 +1798,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // Collect matches first, then remove by identity: removeMember
             // splices the live array (member + its leading comments), so
             // mutating it inside the scan loop corrupts the indices.
+            // Table/TableArray sections extending the same prefix count too —
+            // a root `""` holds both `"".x = 1` and `[["".y]]` (fuzz seed 3392).
             const toRemove: TreeNode[] = [];
             for (const sibling of siblings) {
               if (sibling === node) continue;
-              if (isKeyValue(sibling)
-                  && sibling.key.value.length > relativePrefix.length
-                  && arraysEqual(sibling.key.value.slice(0, relativePrefix.length), relativePrefix)) {
+              const siblingKey = isKeyValue(sibling)
+                ? sibling.key.value
+                : isTable(sibling) || isTableArray(sibling)
+                  ? sibling.key.item.value
+                  : undefined;
+              if (siblingKey
+                  && siblingKey.length > relativePrefix.length
+                  && arraysEqual(siblingKey.slice(0, relativePrefix.length), relativePrefix)) {
                 toRemove.push(sibling);
               }
             }
