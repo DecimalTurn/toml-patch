@@ -2592,8 +2592,13 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
  * safely regenerated.
  */
 function regenerateValue(jsValue: any, format: TomlFormat): Value | undefined {
-  const freshDoc = parseJS({ __tmp__: jsValue }, format);
-  const replacementToml = toTOML(freshDoc.items, format);
+  // Always render inline: with the caller's inlineTableStart, parseJS may
+  // flatten a nested object into dotted keys (`__tmp__.k28 = …`), and taking
+  // the first item's value then returns the scalar instead of the object
+  // (fuzz seed 735: a restored nested value collapsed to its first leaf).
+  const inlineFmt = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+  const freshDoc = parseJS({ __tmp__: jsValue }, inlineFmt);
+  const replacementToml = toTOML(freshDoc.items, inlineFmt);
   const replacementCst = Array.from(parseTOML(replacementToml));
   const freshItem = replacementCst[0];
   if (isKeyValue(freshItem)) return freshItem.value;

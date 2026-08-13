@@ -9330,4 +9330,26 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 735 (part 2): restoring a NESTED object value.  With the
+  // caller's inlineTableStart, parseJS rendered `__tmp__ = { k28, k10 }`
+  // as dotted keys, so regenerateValue returned the first leaf's scalar and
+  // the object collapsed to a scalar (k10 silently dropped).  The
+  // round-trip now forces inlineTableStart 0 so nested values regenerate as
+  // inline tables.
+  test('restored nested value regenerates as an inline table (seed 735b)', () => {
+    const src = dedent`
+      [t]
+      a.b = 2057-09-09
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.t.a = { k6: { k28: -2320.491732098162, k10: false }, k98: 'c-zjH' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t]
+      a.k6 = { k28 = -2320.491732098162, k10 = false }
+      a.k98 = "c-zjH"
+    ` + '\n');
+  });
+
 });
