@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -1882,13 +1882,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // offsets, then fix the end from the surviving item, preserving the
         // original gap to the bracket.
         if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
-            parent.loc.end.line === parent.loc.start.line) {
+            parent.loc.end.line === parent.loc.start.line &&
+            node.loc.end.line === parent.loc.start.line) {
           const remaining = (parent as InlineArray | InlineTable).items as TreeNode[];
-          // Only for the LAST item: the bracket follows the removed item, so
-          // the end can be recomputed from the new last item + the original
-          // bracket gap.  For middle removals the writer's own offset
-          // arithmetic collapses the gap correctly.
-          if (remaining.length > 0 && containerItemIndex === remaining.length) {
+          // Only for the LAST item, and only when the whole remaining content
+          // is single-line: a multiline child (e.g. a multiline string) keeps
+          // its own lines below the container's line, and the column fixup
+          // would corrupt that layout (fuzz seed 1841).
+          if (remaining.length > 0 && containerItemIndex === remaining.length &&
+              remaining.every(item => item.loc.end.line === parent.loc.start.line)) {
             const gap = parent.loc.end.column - node.loc.end.column;
             applyWrites(original);
             const targetEnd = last(remaining)!.loc.end.column + gap;
@@ -1933,10 +1935,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               const wrapper = findWrapper(original);
               if (wrapper) {
                 // Register the row's growth as an exit offset so the next
-                // row of the enclosing table shifts past the comma+space.
+                // row of the enclosing table shifts past the comma+space,
+                // and resolve it immediately — the earlier flush cleared
+                // the dirty flag, so the final applyWrites would skip it.
                 const delta = parent.loc.end.column - wrapper.loc.end.column;
                 wrapper.loc.end.column = parent.loc.end.column;
-                if (delta !== 0) addExitOffset(original, wrapper, { lines: 0, columns: delta });
+                if (delta !== 0) {
+                  addExitOffset(original, wrapper, { lines: 0, columns: delta });
+                  markDirty(original);
+                  applyWrites(original);
+                }
               }
             }
           }
