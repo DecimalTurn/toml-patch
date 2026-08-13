@@ -2384,6 +2384,45 @@ function handleStructuralEdit(
       if (!firstInserted) firstInserted = existingTable;
       continue;
     }
+
+    // The rendered section may instead collide with an IMPLICIT table: the
+    // document expresses that key through dotted key-values (`"".a = 1`
+    // defines the "" table without a header).  Re-emitting the header
+    // would conflict with the implicit definition and fail the re-parse
+    // with "Implicit table already defined" (fuzz seed 1898).  Convert
+    // each rendered row to a dotted KV under the same prefix and insert
+    // those at the root scope instead.
+    if (isTable(item)) {
+      const tableKey = (item as Table).key.item.value;
+      const implicitChildren = findDocumentItemsByKeyPrefix(original, tableKey)
+        .filter(t => isKeyValue(t));
+      if (implicitChildren.length > 0) {
+        for (const row of (item as Table).items as TreeNode[]) {
+          if (isKeyValue(row)) {
+            const oldRaw = row.key.raw;
+            const dotted = tableKey.concat(row.key.value);
+            row.key.value = dotted;
+            row.key.raw = dotted
+              .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+              .join('.');
+            const delta = row.key.raw.length - oldRaw.length;
+            row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+            row.equals += delta;
+            row.value.loc.start.column += delta;
+            if (row.value.loc.end.line === row.value.loc.start.line) {
+              row.value.loc.end.column += delta;
+            }
+            if (row.loc.end.line === row.loc.start.line) {
+              row.loc.end.column += delta;
+            }
+          }
+          insert(original, original, row, i === 0 ? insertIndex : undefined);
+          if (!firstInserted) firstInserted = row;
+        }
+        continue;
+      }
+    }
+
     insert(original, original, item, i === 0 ? insertIndex : undefined);
     if (!firstInserted) firstInserted = item;
   }

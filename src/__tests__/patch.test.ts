@@ -9482,4 +9482,27 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  // Fuzz seed 1898: replacing a table whose key extends an implicit parent
+  // (""."!lf|D(A".")" under the "" table expressed by the dotted KV
+  // "".cxl5h6l) re-rendered the new scalar as a [""] section — colliding
+  // with the implicit definition and failing the re-parse with "Implicit
+  // table already defined".  handleStructuralEdit now detects the implicit
+  // parent and emits the rendered rows as dotted KVs under that prefix.
+  test('structural edit joins an implicit table as dotted keys (seed 1898)', () => {
+    const src = dedent`
+      "".cxl5h6l = 00:17:37
+
+      [""."!lf|D(A".")"]
+      x = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj['']['!lf|D(A'] = '2002-04-23T00:00:00.000Z';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      "".cxl5h6l = 00:17:37
+      ""."!lf|D(A" = "2002-04-23T00:00:00.000Z"
+    ` + '\n');
+  });
+
 });
