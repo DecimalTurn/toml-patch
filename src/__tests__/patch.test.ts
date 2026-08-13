@@ -9505,4 +9505,19 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('editing a time-only value into a date keeps the date (seed 2583)', () => {
+    const src = dedent`
+      [[qs8lo_a]]
+      dp6t.uhds = 18:06:01
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.qs8lo_a[0].dp6t = new Date('2036-10-16T00:00:00.000Z');
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[qs8lo_a]]
+      dp6t = 2036-10-16T00:00:00.000Z
+    ` + '\n');
+  });
+
 });

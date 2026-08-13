@@ -479,6 +479,15 @@ function preserveFormatting(existing: Value, replacement: Value): void {
       replacement.raw = raw;
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
       // Keep the Temporal object as the value — it will serialize correctly.
+    } else if (DateFormatHelper.IS_TIME_ONLY.test(originalRaw)
+        && newValue instanceof Date && newValue.getUTCFullYear() > 1) {
+      // The existing value is a bare local time, but the replacement carries
+      // a real date component that a time-only format cannot represent.
+      // Converting would silently drop the date (fuzz seed 2583: an implicit
+      // table `dp6t.uhds = 18:06:01` truncated to `dp6t = 2036-10-16` came
+      // back as `00:00:00`).  Keep the replacement's own formatting instead.
+      // Time-only values are represented internally as Date objects with
+      // year 0000, so year > 1 reliably separates real dates from bare times.
     } else {
       // Create a new date with the original format preserved
       const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
