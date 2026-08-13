@@ -671,6 +671,42 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     return walk(root);
   }
 
+  // A table/AOT replaced by a scalar whose PARENT key is expressed implicitly
+  // through dotted key-values (`"".nfh = …` defines the "" table without a
+  // header).  Re-emitting a `[""]` header would conflict with the implicit
+  // definition and fail the re-parse with "Implicit table already defined"
+  // (fuzz seed 6803).  Extend the fresh KV's key with the parent prefix and
+  // swap it in for the old section directly.
+  function extendKeyWithParentAndReplace(
+    freshKV: KeyValue,
+    parentKey: string[],
+    existing: TreeNode,
+    tableParent: TreeNode
+  ): void {
+    const dottedKey = parentKey.concat(freshKV.key.value);
+    const oldRaw = freshKV.key.raw;
+    freshKV.key.value = dottedKey;
+    freshKV.key.raw = dottedKey
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const delta = freshKV.key.raw.length - oldRaw.length;
+    freshKV.key.loc.end.column = freshKV.key.loc.start.column + freshKV.key.raw.length;
+    freshKV.equals += delta;
+    freshKV.value.loc.start.column += delta;
+    if (freshKV.value.loc.end.line === freshKV.value.loc.start.line) {
+      freshKV.value.loc.end.column += delta;
+    }
+    if (freshKV.loc.end.line === freshKV.loc.start.line) {
+      freshKV.loc.end.column += delta;
+    }
+    replace(original, tableParent, existing, freshKV);
+    // The extended dotted KV belongs to the root table — once the old
+    // section header is gone, leaving it in place would bind it to the
+    // nearest surviving section above (fuzz seed 6803: it landed inside
+    // `[l6n1z.f]`).  Hoist it above the first section header.
+    hoistRootKeyValueAboveTables(original, freshKV);
+  }
+
   // When an Add's path traverses intermediate key segments that do not exist in the
   // original document (their KV was removed by an earlier change in this same patch),
   // findParent resolves to the nearest existing ancestor and the inserted child would
@@ -837,6 +873,28 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
           }
+          // The entry value was parsed standalone, so any [table]/[[array]]
+          // sections inside it carry their LOCAL keys (e.g. `[k79]` for
+          // `{ k79: { … } }`).  Inside the parent array-of-tables those
+          // headers must carry the full key (`[d6r6.p.k79]`), or they
+          // re-parse as root-level sections detached from the entry
+          // (fuzz seed 6746).
+          const prefixNestedSectionKeys = (node: TreeNode) => {
+            if (!hasItems(node)) return;
+            for (const item of node.items as TreeNode[]) {
+              if (!isTable(item) && !isTableArray(item)) continue;
+              const holder = item.key;
+              const keyNode = holder.item;
+              const fullKey = tableArrayKey.concat(keyNode.value);
+              keyNode.value = fullKey;
+              keyNode.raw = generateKey(fullKey).raw;
+              keyNode.loc.start.column = holder.loc.start.column + 1;
+              keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
+              holder.loc.end.column = keyNode.loc.start.column + keyNode.raw.length + 1;
+              prefixNestedSectionKeys(item);
+            }
+          };
+          prefixNestedSectionKeys(freshTableArray);
           applyWrites(freshTableArray);
           child = freshTableArray;
         }
@@ -1459,20 +1517,34 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const existingTableKey = (existing as Table).key.item.value;
           const lastSegment = existingTableKey.slice(-1);
           const parentKey = existingTableKey.slice(0, -1);
-          const tableParent = findParent(original, change.path);
+          // Path-based parent resolution can land on an unrelated sibling: the
+          // path prefix (e.g. ['']) prefix-matches an EARLIER dotted key-value
+          // (e.g. `"".nfh`), and replacing through it would overwrite that KV's
+          // value instead of swapping the table (fuzz seed 6803).  Prefer the
+          // node's actual structural container.
+          const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
 
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
 
           if (parentKey.length > 0) {
-            const newTable = generateTable(parentKey);
-            materialisedTables.add(newTable);
-            insert(original, newTable, freshKV, 0);
-            replace(original, tableParent, existing, newTable);
-            // newTable stands in for the pre-existing `existing` table, so it should stay
-            // eligible for the leading comment run `existing` would have owned via R2.
-            commentEligibleNodes.add(newTable);
+            // The parent key may be purely implicit (dotted key-values) —
+            // emitting a literal header would fail the re-parse (fuzz seed
+            // 6803).  Extend the KV's key with the prefix instead.
+            const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+            if (hasImplicitParent) {
+              extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+              commentEligibleNodes.add(freshKV);
+            } else {
+              const newTable = generateTable(parentKey);
+              materialisedTables.add(newTable);
+              insert(original, newTable, freshKV, 0);
+              replace(original, tableParent, existing, newTable);
+              // newTable stands in for the pre-existing `existing` table, so it should stay
+              // eligible for the leading comment run `existing` would have owned via R2.
+              commentEligibleNodes.add(newTable);
+            }
           } else {
             // Single-segment table [w] — KV belongs directly in the Document.
             // Replace the table with the KV, then reposition the KV to before
@@ -1505,20 +1577,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (jsValue !== undefined) {
           const lastSegment = existingAotKey.slice(-1);
           const parentKey = existingAotKey.slice(0, -1);
-          const tableParent = findParent(original, change.path);
+          // Same structural-parent discipline as the isTable branch above
+          // (fuzz seed 6803): the path prefix can prefix-match an unrelated
+          // earlier dotted key-value.
+          const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
 
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
 
           if (parentKey.length > 0) {
-            const newTable = generateTable(parentKey);
-            materialisedTables.add(newTable);
-            insert(original, newTable, freshKV, 0);
-            replace(original, tableParent, existing, newTable);
-            // newTable stands in for the pre-existing `existing` AOT, so it should stay
-            // eligible for the leading comment run `existing` would have owned via R2.
-            commentEligibleNodes.add(newTable);
+            // Same implicit-parent handling as the isTable branch above
+            // (fuzz seed 6803).
+            const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+            if (hasImplicitParent) {
+              extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+              commentEligibleNodes.add(freshKV);
+            } else {
+              const newTable = generateTable(parentKey);
+              materialisedTables.add(newTable);
+              insert(original, newTable, freshKV, 0);
+              replace(original, tableParent, existing, newTable);
+              // newTable stands in for the pre-existing `existing` AOT, so it should stay
+              // eligible for the leading comment run `existing` would have owned via R2.
+              commentEligibleNodes.add(newTable);
+            }
           } else {
             // Single-segment [[w]] — KV belongs directly in the Document.
             replace(original, tableParent, existing, freshKV);
@@ -2589,6 +2672,70 @@ function handleStructuralEdit(
   }
 
   if (jsValue === undefined) return;
+
+  // An object→scalar (or object→array) edit under an array-of-tables entry:
+  // the path carries the entry's numeric index (e.g. ['', 0, ':h9q=2`aO']),
+  // which document-level keys never do.  The generic prefix scan below can't
+  // find the old sub-table/[[sub-array]] entries (their keys lack the index),
+  // so they survive and collide with the rebuilt value — and rebuilding from
+  // the root would emit a `[""]` table next to the surviving [[[""]]] array,
+  // failing the re-parse with "Cannot add Array of Tables to table"
+  // (fuzz seed 6409).  Handle it inside the entry instead: drop the old
+  // sub-entries and insert a fresh key-value for the changed segment.
+  {
+    const aotIndexPos = change.path.findIndex(seg => typeof seg === 'number');
+    if (aotIndexPos > 0 && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
+      const entry = tryFindByPath(original, change.path.slice(0, aotIndexPos + 1));
+      if (entry && isTableArray(entry)) {
+        const entryKey = (entry as TableArray).key.item.value;
+        const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+
+        // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
+        // (the previous object value's children), and any dotted-key rows
+        // inside the entry that start with the changed segment.
+        const toRemove = findDocumentItemsByKeyPrefix(original, entryKey.concat(changedKey));
+        for (const prefixNode of toRemove) {
+          removeMember(original, original, prefixNode);
+        }
+        const entryItems = (entry as TableArray).items as TreeNode[];
+        const inlineToRemove = entryItems.filter(item => {
+          const key = isKeyValue(item) ? item.key.value : undefined;
+          return key
+            && key.length > changedKey.length
+            && arraysEqual(key.slice(0, changedKey.length), changedKey);
+        });
+        for (const item of inlineToRemove) {
+          removeMember(original, entry, item);
+        }
+
+        // Rebuild the tail of the path as a fresh KV (or KVs) and insert
+        // into the entry.
+        let tail: any = jsValue;
+        for (let k = change.path.length - 1; k > aotIndexPos; k--) {
+          tail = { [change.path[k]]: tail };
+        }
+        const tailDoc = parseJS(tail, format);
+        const tailToml = toTOML(tailDoc.items, format);
+        const tailCst = Array.from(parseTOML(tailToml));
+        for (const item of tailCst) {
+          if (isKeyValue(item)) {
+            const kv = item;
+            // The rendered key is relative to the entry; overwrite an
+            // equal-keyed surviving row rather than duplicating it.
+            const existingRow = (entry as TableArray).items.find(row =>
+              isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
+            );
+            if (existingRow) {
+              replace(original, entry as TableArray, existingRow, kv);
+            } else {
+              insert(original, entry, kv, undefined);
+            }
+          }
+        }
+        return;
+      }
+    }
+  }
 
   // Build a nested object matching the change path.
   let nested: any = jsValue;

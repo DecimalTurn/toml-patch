@@ -9723,4 +9723,41 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('")k".sz1ttzn = 2057-09-23T12:58:41Z\nmt = {}\n');
   });
 
+  test('adding an AOT entry with a nested object keeps the nested table under the entry key (seed 6746)', () => {
+    // The regenerated entry was parsed standalone, so its nested section
+    // carried the local key `[k79]` — which re-parses as a ROOT table,
+    // detaching it from the new entry.
+    const src = '[[d6r6.p]]\nn2119ollj = false\n"^hQ".ch = true\n';
+    const obj = parse(src) as any;
+    obj.d6r6.p.unshift({ k39: 381, k79: { k89: 1347, k93: '2003-06-06T00:00:00.000Z' }, k44: '2WRIF ' });
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[[d6r6.p]]\nk39 = 381\nk44 = "2WRIF "\n\n[d6r6.p.k79]\nk89 = 1347\nk93 = "2003-06-06T00:00:00.000Z"\n\n[[d6r6.p]]\nn2119ollj = false\n"^hQ".ch = true\n');
+  });
+
+  test('replacing a table with a scalar extends the dotted key when the parent is implicit (seed 6803)', () => {
+    // The parent "" table is only implicit (`"".nfh`), so re-emitting a
+    // `[""]` header would fail with "Implicit table already defined"; the
+    // replacement must be a dotted KV, and it must stay in the root table
+    // instead of being captured by a preceding section header.
+    const src = '"".nfh = 469650\n\n[l6n1z.f]\n\n[""."61o;$k"]\nkg = 40604.71363\n';
+    const obj = parse(src) as any;
+    obj['']['61o;$k'] = -428.2192816026509;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('"".nfh = 469650\n"".\"61o;$k\" = -428.2192816026509\n\n[l6n1z.f]\n');
+  });
+
+  test('replacing a nested object under an AOT entry with a scalar removes the old sub-sections (seed 6409)', () => {
+    // The path carries the entry's numeric index, which document-level keys
+    // never do — the old sub-[[array]] survived the rebuild and collided
+    // with the new value ("Cannot add Array of Tables to table").
+    const src = 'Zi = 1\n[[""]]\n"EY,?z%" = 990e-10\n[["".":h9q=2`aO".oqu]]\nk = 1\n';
+    const obj = parse(src) as any;
+    obj[''][0][':h9q=2`aO'] = 'iumXK';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('Zi = 1\n[[""]]\n"EY,?z%" = 990e-10\n":h9q=2`aO" = "iumXK"\n');
+  });
+
 });
