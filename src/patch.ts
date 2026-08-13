@@ -1131,6 +1131,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         return; // skip generic edit handling
       }
 
+      // A KV replaced by a Table section whose key already owns sibling
+      // document nodes (e.g. `"" = {…}` becoming `["".y4ywkew]` while the
+      // document also holds `"".9UI = …`) — the generic replace would leave
+      // those siblings behind, and the section would collide with the
+      // implicit table they define on re-parse ("Value already defined",
+      // fuzz seed 3607).  Let the structural-edit path clear the prefix
+      // and rebuild the key instead.
+      if (isKeyValue(existing) && isTable(replacement)) {
+        const tableKey = (replacement as Table).key.item.value;
+        const prefixNodes = findDocumentItemsByKeyPrefix(original, tableKey);
+        if (prefixNodes.some(n => n !== existing)) {
+          handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes, materialisedTables);
+          return; // handled; skip generic edit handling
+        }
+      }
+
       let parent;
       const containerParent = tryFindByPath(original, change.path.slice(0, -1));
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
@@ -1181,9 +1197,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               for (let si = parentItems.length - 1; si >= 0; si--) {
                 const sibling = parentItems[si];
                 if (sibling === existing) continue;
-                if (isKeyValue(sibling)
-                    && sibling.key.value.length > truncatedPrefix.length
-                    && arraysEqual(sibling.key.value.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                // >= (not just >): a sibling holding the exact same key
+                // (`"" = {…}` next to `"".x = 1`) duplicates the truncated
+                // key once it becomes a scalar and fails the re-parse with
+                // "Value already defined" (fuzz seed 3607).  Section
+                // siblings ([table]/[[array]] extending the prefix) conflict
+                // the same way and are removed too.
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
                   removeMember(original, containerParent, sibling);
                 }
               }
@@ -1253,9 +1280,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               for (let si = parentItems.length - 1; si >= 0; si--) {
                 const sibling = parentItems[si];
                 if (sibling === existing) continue;
-                if (isKeyValue(sibling)
-                    && sibling.key.value.length > truncatedPrefix.length
-                    && arraysEqual(sibling.key.value.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                // >= (not just >), and sections count too — see the
+                // isKeyValue/isKeyValue branch above (fuzz seed 3607).
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
                   removeMember(original, containerParent, sibling);
                 }
               }

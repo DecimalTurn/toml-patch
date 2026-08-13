@@ -9617,4 +9617,19 @@ describe('wasEmptied compensation — multiple tables', () => {
     ` + '\n');
   });
 
+  test('truncating a dotted key to a scalar removes conflicting section siblings (seed 3607)', () => {
+    const src = dedent`
+      "".9UI.eu6kd2ym9 = 70864.16394
+      ["".y4ywkew]
+      a = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj[''] = -4201;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      "" = -4201
+    ` + '\n');
+  });
+
 });
