@@ -720,14 +720,25 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   // stay intact so that `applyWrites` shifts the closing bracket up to close the
   // gap left by the removed item.  Single-line containers are fine to zero because
   // the bracket is on the same line as the (now-gone) item.
+  //
+  // Further exception: when the removed item STARTED on the container's own
+  // bracket line (the first item of a multiline inline container), the item's
+  // inclusive span counts that shared line too — shifting by the full span
+  // would drag the closing bracket ABOVE the container and into the previous
+  // row (fuzz seed 5522: `ecq = ["""…"""]` emptied, the bracket escaped into
+  // the preceding key-value).  Zero it like the single-line case and let the
+  // caller tighten the emptied container to `[]`/`{}`.
   const isMultilineInlineContainer =
     (isInlineTable(parent) || isInlineArray(parent)) &&
     parent.loc.end.line > parent.loc.start.line;
+  const emptiedFromContainerLine =
+    isMultilineInlineContainer &&
+    node.loc.start.line === parent.loc.start.line;
 
   if (
     previous === undefined &&
     next === undefined &&
-    !isMultilineInlineContainer
+    (!isMultilineInlineContainer || emptiedFromContainerLine)
   ) {
     offset.lines = 0;
     offset.columns = 0;
@@ -735,8 +746,9 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     // When the only item is removed from a single-line InlineTable or
     // InlineArray, mark it so the caller can tighten the closing bracket
     // later. The exit offset that carried the bracket spacing was on the
-    // removed item and is now lost.
-    if ((isInlineTable(parent) || isInlineArray(parent)) && parent.loc.end.line === parent.loc.start.line) {
+    // removed item and is now lost.  Multiline containers whose only item
+    // started on the bracket line are marked too (see above).
+    if (isInlineTable(parent) || isInlineArray(parent)) {
       inlineContainersNeedingTighten.add(parent);
     }
 

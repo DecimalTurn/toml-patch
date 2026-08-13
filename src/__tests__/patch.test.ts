@@ -9702,4 +9702,25 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('ie7 = ["a", 1, 2, "jgl", { k = """\n=F\nsK\nTijp\nb *8#fBchs>""" }]\n');
   });
 
+  test('emptying a multiline inline array keeps the closing bracket on the array row (seed 5522)', () => {
+    // The only item starts on the array's own bracket line, so its span
+    // includes that line; the removal offset used to drag the closing
+    // bracket into the previous row ("2057]09-23").
+    const src = '")k".sz1ttzn = 2057-09-23T12:58:41Z\necq = ["""\n%eFd&xC>@A*t}\nZNI\n\n:r|:]&S*(/^zd`wc"""]\n';
+    const obj = parse(src) as any;
+    obj.ecq.length = 0;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('")k".sz1ttzn = 2057-09-23T12:58:41Z\necq = []\n');
+  });
+
+  test('emptying a multiline inline table whose only key starts on the brace line tightens to {} (seed 5522 variant)', () => {
+    const src = '")k".sz1ttzn = 2057-09-23T12:58:41Z\nmt = { a = 1,\n}\n';
+    const obj = parse(src) as any;
+    delete obj.mt.a;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('")k".sz1ttzn = 2057-09-23T12:58:41Z\nmt = {}\n');
+  });
+
 });

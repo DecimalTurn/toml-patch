@@ -2712,6 +2712,11 @@ function tightenInlineContainerEnd(node: InlineTable | InlineArray): void {
     const lastItem = node.items[node.items.length - 1];
     node.loc.end.column = lastItem.loc.end.column + 1;
   } else {
+    // The end must land on the container's own line: a multiline container
+    // that was emptied by zeroing the removal offset still carries its old
+    // end line (fuzz seed 5522), and tightening only the column would leave
+    // the bracket floating below the `[]`.
+    node.loc.end.line = node.loc.start.line;
     node.loc.end.column = node.loc.start.column + 2;
   }
 }
