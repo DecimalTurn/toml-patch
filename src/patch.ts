@@ -105,6 +105,27 @@ function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
   return false;
 }
 
+/**
+ * Length of the existing dotted key's prefix that the edit path matches.
+ * Only the path's RELATIVE tail (past the key's container) is eligible:
+ * the absolute path carries the container's own key segments (e.g. the
+ * [mbe.""] header consumes ['mbe',''] before the row key), and matching
+ * against those keeps extra key segments when the container's key echoes
+ * the row's — editing `mbe[""][""]` once truncated the row
+ * `"".""."mfn31vru"` to `"".""` instead of `""` (fuzz seed 13057).
+ */
+function truncationMatchLen(changePath: Path, existingKey: string[], containerAbsLen: number): number {
+  const relPath = changePath.slice(containerAbsLen);
+  let matchLen = 0;
+  const max = Math.min(relPath.length, existingKey.length);
+  for (let i = 1; i <= max; i++) {
+    if (arraysEqual(relPath.slice(relPath.length - i), existingKey.slice(0, i))) {
+      matchLen = i;
+    }
+  }
+  return matchLen;
+}
+
 /** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
 function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
   const nodes = new WeakSet<TreeNode>();
@@ -1233,16 +1254,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
         let keyTruncated = false;
         if (existing.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existing.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existing.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existing);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existing.key.value,
+            absPath ? absPath.length - existing.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
@@ -1318,16 +1335,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // logic as the isKeyValue && isKeyValue branch above).
         let keyTruncated = false;
         if (existing.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existing.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existing.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existing);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existing.key.value,
+            absPath ? absPath.length - existing.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
@@ -1394,16 +1407,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // (fuzz seed 137: `u3chwmmvk.g{…}.oe1zht` → `u3chwmmvk = []`).
         let keyTruncated = false;
         if (existingKeyValue.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existingKeyValue.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existingKeyValue.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existingKeyValue);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existingKeyValue.key.value,
+            absPath ? absPath.length - existingKeyValue.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existingKeyValue.key.value.length) {
             existingKeyValue.key.value = existingKeyValue.key.value.slice(0, matchLen);
             existingKeyValue.key.raw = generateKey(existingKeyValue.key.value).raw;
@@ -1452,16 +1461,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         let keyTruncated = false;
         const existingKV = existing.item;
         if (existingKV.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existingKV.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existingKV.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existingKV);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existingKV.key.value,
+            absPath ? absPath.length - existingKV.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existingKV.key.value.length) {
             existingKV.key.value = existingKV.key.value.slice(0, matchLen);
             existingKV.key.raw = generateKey(existingKV.key.value).raw;

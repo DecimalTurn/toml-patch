@@ -9905,4 +9905,17 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('f = [2093, []]\n');
   });
 
+  test('editing a nested dotted key under an echoing table key truncates only the row segments (seed 13057)', () => {
+    // The path ['mbe','',''] carries the [mbe.""] header's own key; matching
+    // the key prefix against those segments once truncated the row
+    // `"".""."mfn31vru"` to `"".""` instead of `""`, nesting the value one
+    // level too deep.
+    const src = '[mbe.""]\n"".""."mfn31vru" = 0o5514\n';
+    const obj = parse(src) as any;
+    obj.mbe[''][''] = 'F81M5dd6QCL2x';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[mbe.""]\n"" = "F81M5dd6QCL2x"\n');
+  });
+
 });
