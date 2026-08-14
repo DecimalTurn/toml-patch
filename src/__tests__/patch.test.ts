@@ -9879,4 +9879,30 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('a = 1\n[ib]\n');
   });
 
+  test('removing the last array item after editing its predecessor keeps the bracket gap (seed 12237)', () => {
+    // The Edit left a pending column offset on the new previous item; the
+    // removal's end-to-end gap measured against the still-stale removed
+    // item and spliced text over a neighbouring string.
+    const src = 'wuu-qq.se5ev = [false, "kK)3,il5u;@bQ8=PH1ay", ["<I7s", \'+&}{rd\'], false]\n';
+    const obj = parse(src) as any;
+    const a = obj['wuu-qq'].se5ev;
+    a[2].splice(0, 1);
+    a[2][0] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('wuu-qq.se5ev = [false, "kK)3,il5u;@bQ8=PH1ay", [false], false]\n');
+  });
+
+  test('collapsing a multiline array element to a scalar with sibling edits keeps the closing bracket (seed 12894)', () => {
+    // The first element (a multiline array) was replaced by a scalar, the
+    // second by `[]`, and the third removed; the outer bracket's position
+    // was derived from stale offsets and landed inside the array.
+    const src = 'f = [["a", """\nX"""], -488883, \'z\']\n';
+    const obj = parse(src) as any;
+    obj.f = [2093, []];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('f = [2093, []]\n');
+  });
+
 });

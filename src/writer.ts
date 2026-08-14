@@ -806,8 +806,16 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     // removed item's width, which is wrong when the previous item is
     // multiline and ends AFTER the removed item's stale start (fuzz seed
     // 706: the bracket slid inside the preceding nested array).
+    //
+    // When `previous` carries a pending exit offset (e.g. it was just
+    // replaced by an Edit in the same applyChanges batch), `node.loc.end`
+    // is still pre-shift — the raw gap measures across the stale distance.
+    // Compensate with the pending column shift so the bracket lands right
+    // after the surviving item (fuzz seed 12237: a nested array edit plus
+    // a last-item removal spliced `,false,b` into a neighbouring string).
     if (previous_on_same_line) {
-      offset.columns = previous.loc.end.column - node.loc.end.column;
+      const pendingPrevColumns = previous ? (getExitOffsets(root).get(previous)?.columns ?? 0) : 0;
+      offset.columns = previous.loc.end.column - node.loc.end.column - pendingPrevColumns;
     }
   }
 
