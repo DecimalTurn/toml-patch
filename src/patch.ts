@@ -1590,6 +1590,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // node's actual structural container.
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
 
+          // The table's key can be a strict prefix of OTHER document sections
+          // (e.g. `[""]` collapsing to a scalar while `["".hv8lx]` is also a
+          // document-level section extending that prefix).  Those sections
+          // re-define the key on re-parse and fail with "Value already defined"
+          // (fuzz seed 22772).  Remove them before the table becomes a scalar.
+          if (isDocument(tableParent)) {
+            const sectionedSiblings = findDocumentItemsByKeyPrefix(original, existingTableKey)
+              .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
+            for (const sibling of sectionedSiblings) {
+              removeMember(original, tableParent, sibling);
+            }
+          }
+
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;

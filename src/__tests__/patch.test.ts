@@ -5516,6 +5516,33 @@ describe('BigInt handling', () => {
 
 });
 
+describe('non-finite float (inf/nan) array diff', () => {
+
+  test('should not confuse inf and nan when removing an array item (seed 22629)', () => {
+    // `stableStringify` used to collapse `inf` and `nan` (and `null`) to the
+    // same stable string, so the diff misidentified which item to remove —
+    // removing index 1 of `[1, inf, 2, nan]` yielded `[1, 2, inf]`.
+    const src = 'k = [1, inf, 2, nan]\n';
+    const obj = parse(src) as any;
+    obj.k.splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result).k).toEqual([1, 2, NaN]);
+    expect(result).toEqual('k = [1, 2, nan]\n');
+  });
+
+  test('should not confuse inf and nan when removing a nested array item (seed 24018)', () => {
+    // Same `stableStringify` collision, reached through a nested array whose
+    // interior holds adjacent `inf`/`nan` values.
+    const src = 'k = [[inf, 2, nan]]\n';
+    const obj = parse(src) as any;
+    obj.k[0].splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result).k).toEqual([[2, NaN]]);
+    expect(result).toEqual('k = [[2, nan]]\n');
+  });
+
+});
+
 describe('commented multiline array edge cases', () => {
 
   test('should preserve closing bracket when adding new key after commented multiline array', () => {
@@ -5632,6 +5659,23 @@ describe('table to scalar replacement', () => {
 
       foo = 1
     ` + '\n');
+  });
+
+  test('should remove sibling sections extending the collapsed key when a table becomes a scalar (seed 22772)', () => {
+    // `[""]` collapsing to a scalar while `["".hv8lx]` is a document-level
+    // section extending the `""` prefix re-defines the key on re-parse
+    // ("Value already defined").  The sibling section must be removed.
+    const src = dedent`
+      [""]
+      x = 1
+
+      ["".hv8lx]
+      y = 2
+    ` + '\n';
+
+    const result = patch(src, { '': 1884 });
+    expect(parse(result)).toEqual({ '': 1884 });
+    expect(result).toEqual('"" = 1884\n');
   });
 
 });
