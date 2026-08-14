@@ -9796,4 +9796,29 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('d6xdeuwdq."a@" = [\n  [405_276, """\n<K}-|i*iA%r/""", [0o6, false, 1978-12-02, true, """\n>b#ufvG1>O0""", 12:07:06.526966, -57678.90931], """\nwtV+6np[K189t&""", 0x4],\n]\n');
   });
 
+  test('editing and truncating the bracket-row tail of a multiline inline array keeps the bracket (seed 10469)', () => {
+    // The edit left a pending column offset on the new last item; removing
+    // the old last item folded it into a huge shift that dragged the
+    // closing bracket before the surviving tail.
+    const src = 'skc4zmino = [22136, [\n    \'\'\'\n(r8XJB!Yj/XyVxt1\n@Mib\'\'\',\n    false,\n    true,\n    false,\n    false,\n    "!8y",\n    46838.23739,\n], \'-x\', 979896, true, 0b0000000011110, 658559]\n';
+    const obj = parse(src) as any;
+    obj.skc4zmino.splice(5, 1);
+    obj.skc4zmino[5] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('skc4zmino = [22136, [\n    \'\'\'\n(r8XJB!Yj/XyVxt1\n@Mib\'\'\',\n    false,\n    true,\n    false,\n    false,\n    "!8y",\n    46838.23739,\n], \'-x\', 979896, true, false]\n');
+  });
+
+  test('materialising an emptied dotted parent under a table nested in an AOT keeps the full key (seed 10533)', () => {
+    // The table `[y.sl4."m{sHnZ"]` sits inside a [[y]] entry, so the
+    // absolute path carries the entry index; slicing by the key length
+    // alone left a duplicate segment in the materialised header.
+    const src = '[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\nvk.dj8es9 = 0o363511\n';
+    const obj = parse(src) as any;
+    delete obj.y[0].sl4['m{sHnZ'].vk.dj8es9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\n\n[y.sl4."m{sHnZ".vk]\n');
+  });
+
 });

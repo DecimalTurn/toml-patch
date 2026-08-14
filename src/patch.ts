@@ -1907,6 +1907,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
         const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
+        // The bracket gap of a multiline inline container, captured BEFORE the
+        // removal: removeMember flushes pending offsets for multiline inline
+        // containers, so the post-removal fixup below can no longer measure
+        // the original end-to-bracket gap from the container's own loc (fuzz
+        // seed 10469).
+        const bracketGapBefore =
+          isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
+          node.loc.end.line === parent.loc.end.line
+            ? parent.loc.end.column - node.loc.end.column
+            : undefined;
         // Absolute lookup path of the node (or its inner KV for InlineItems),
         // captured while it is still in the tree — the materialisation block
         // below runs AFTER the removal and needs it to derive the emptied
@@ -1967,17 +1977,29 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // emitted `-312,` with `]` eating the last digit).  Flush the pending
         // offsets, then fix the end from the surviving item, preserving the
         // original gap to the bracket.
+        // The same hazard applies to a MULTILINE container when the removed
+        // item ends on the bracket row: the bracket slides before the
+        // surviving tail (fuzz seed 10469).
         if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
-            parent.loc.end.line === parent.loc.start.line &&
-            node.loc.end.line === parent.loc.start.line) {
+            node.loc.end.line === parent.loc.end.line) {
           const remaining = (parent as InlineArray | InlineTable).items as TreeNode[];
-          // Only for the LAST item, and only when the whole remaining content
-          // is single-line: a multiline child (e.g. a multiline string) keeps
-          // its own lines below the container's line, and the column fixup
-          // would corrupt that layout (fuzz seed 1841).
+          const isSingleLineContainer = parent.loc.end.line === parent.loc.start.line;
+          // Only for the LAST item.  For a single-line container the whole
+          // remaining content must be single-line: a multiline child (e.g. a
+          // multiline string) keeps its own lines below the container's
+          // line, and the column fixup would corrupt that layout (fuzz seed
+          // 1841).  For a multiline container only the bracket-row tail
+          // matters — earlier items sit on their own lines above.
+          const tailOnBracketRow = isSingleLineContainer
+            ? remaining.every(item => item.loc.end.line === parent.loc.start.line)
+            : remaining.length > 0 && last(remaining)!.loc.end.line === parent.loc.end.line;
           if (remaining.length > 0 && containerItemIndex === remaining.length &&
-              remaining.every(item => item.loc.end.line === parent.loc.start.line)) {
-            const gap = parent.loc.end.column - node.loc.end.column;
+              tailOnBracketRow) {
+            // For a multiline container the pending offsets were already
+            // flushed by removeMember, so the container's end is stale and
+            // the gap must come from the pre-removal capture (fuzz seed
+            // 10469); the single-line path still measures live.
+            const gap = bracketGapBefore ?? (parent.loc.end.column - node.loc.end.column);
             applyWrites(original);
             const targetEnd = last(remaining)!.loc.end.column + gap;
             if (parent.loc.end.column !== targetEnd) {
@@ -2089,10 +2111,32 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               // (e.g. deleting `booay` from `6U.booay.o563zkr` must leave the
               // prefix `6U`, not `6U.booay` — fuzz seed 128).
               let relativePrefix: string[];
-              if (isTable(container)) {
-                relativePrefix = parentPath.slice((container as Table).key.item.value.length) as string[];
-              } else if (isTableArray(container)) {
-                relativePrefix = parentPath.slice((container as TableArray).key.item.value.length + 1) as string[];
+              if (isTable(container) || isTableArray(container)) {
+                // Strip the container's own key from parentPath, skipping
+                // any numeric AOT entry indexes that appear between its
+                // segments — the absolute path of a table nested inside an
+                // array-of-tables entry interleaves them (e.g. [y, 0, sl4,
+                // m{sHnZ, vk] against the container key [y, sl4, m{sHnZ]),
+                // and slicing by the key length alone leaves the extra
+                // segment behind (fuzz seed 10533).
+                const containerKey = (container as Table | TableArray).key.item.value;
+                let offset = 0;
+                let matched = 0;
+                for (let k = 0; k < containerKey.length && offset < parentPath.length; k++) {
+                  while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                  if (offset >= parentPath.length || parentPath[offset] !== containerKey[k]) break;
+                  matched++;
+                  offset++;
+                }
+                while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                if (matched === containerKey.length) {
+                  relativePrefix = parentPath.slice(offset) as string[];
+                } else {
+                  // Fall back to the historical key-length slice.
+                  relativePrefix = parentPath.slice(
+                    containerKey.length + (isTableArray(container) ? 1 : 0)
+                  ) as string[];
+                }
               } else if (isInlineTable(container)) {
                 // InlineTable items are relative to the table itself; the
                 // table's own key path is the node's absolute path minus its
