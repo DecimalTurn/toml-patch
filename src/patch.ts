@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -2276,6 +2276,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                       // the original bracket style.
                       if (format.bracketSpacing) {
                         shiftNode(inlineItem, { lines: 0, columns: 1 });
+                      }
+                      // An earlier materialisation in the same batch can
+                      // occupy the removed row's original slot, so the new
+                      // row starts LATER than the removed one and insert()'s
+                      // exit offset (span + separator, folded against the
+                      // previous row's pending offsets) no longer puts the
+                      // tail rows exactly after it.  Re-derive the exact
+                      // displacement to just past the new row's comma.
+                      const tailRow = (container as InlineTable).items[containerItemIndex + 1] as TreeNode | undefined;
+                      const pendingInsertOffset = getExitOffsets(original).get(inlineItem);
+                      if (tailRow && pendingInsertOffset && tailRow.loc.start.line === inlineItem.loc.end.line) {
+                        pendingInsertOffset.columns = inlineItem.loc.end.column + 2 - tailRow.loc.start.column;
                       }
                     }
                     return;

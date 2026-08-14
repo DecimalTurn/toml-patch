@@ -9918,4 +9918,23 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('[mbe.""]\n"" = "F81M5dd6QCL2x"\n');
   });
 
+  test('removing a multiline inline-table row keeps the tail rows aligned (seed 14262)', () => {
+    // The removed row's value spans several lines; its next sibling starts
+    // on the row's END line.  The removal's column shift was keyed to the
+    // trigger line and never reached the tail rows, which slid up over the
+    // earlier rows; two emptied-parent materialisations in one batch then
+    // mispositioned the rows after the second replacement.
+    const src = `fo2i.X.bp-nt = { j620-i."6/A8b" = '''
+abc
+def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
+`;
+    const obj = parse(src) as any;
+    delete obj['fo2i'].X['bp-nt']['j620-i']['6/A8b'];
+    delete obj['fo2i'].X['bp-nt'].r9cq39r657['@#ft7'];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`fo2i.X.bp-nt = { j620-i = {},  r9cq39r657 = {}, ZilE9tvZ = 1 }
+`);
+  });
+
 });
