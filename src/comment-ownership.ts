@@ -615,7 +615,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // sideways onto the preceding content (fuzz seed 706: `, 5, 6` after a
       // multiline string inside a moved nested array slid left onto the
       // string's closing quotes).
-      const anchoredDescendants: Array<{ node: TreeNode; start: { line: number; column: number }; end: { line: number; column: number }; endOnly?: boolean }> = [];
+      const anchoredDescendants: Array<{ node: TreeNode; start: { line: number; column: number }; end: { line: number; column: number }; endOnly?: boolean; equals?: number }> = [];
       const collectAnchored = (container: TreeNode, firstLine: number) => {
         if (!hasItems(container)) return;
         const items = container.items as TreeNode[];
@@ -637,7 +637,29 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           if (isInlineItem(item)) {
             const inner = item.item;
             if (below && follows) {
-              anchoredDescendants.push({ node: inner, start: clonePosition(inner.loc.start), end: clonePosition(inner.loc.end) });
+              const kv = isKeyValue(inner) ? inner : undefined;
+              anchoredDescendants.push({
+                node: inner,
+                start: clonePosition(inner.loc.start),
+                end: clonePosition(inner.loc.end),
+                equals: kv ? kv.equals : undefined
+              });
+              // The KV's key and value nodes ride the same rigid translation
+              // as the row, but only the row and the KV are restored above —
+              // the key keeps its shifted column and toTOML writes it at its
+              // own loc, overwriting the preceding content (fuzz seed 19506).
+              if (kv) {
+                anchoredDescendants.push({
+                  node: kv.key,
+                  start: clonePosition(kv.key.loc.start),
+                  end: clonePosition(kv.key.loc.end)
+                });
+                anchoredDescendants.push({
+                  node: kv.value,
+                  start: clonePosition(kv.value.loc.start),
+                  end: clonePosition(kv.value.loc.end)
+                });
+              }
             }
             // A multiline STRING's own end column is what its closing quotes
             // follow — offsets can nudge it while the wrapper's end (with the
@@ -755,7 +777,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
 
       // Restore the columns of anchored below-first-line descendants that the
       // rigid translation shifted horizontally (see the snapshot comment above).
-      for (const { node: descendant, start, end, endOnly } of anchoredDescendants) {
+      for (const { node: descendant, start, end, endOnly, equals } of anchoredDescendants) {
         if (endOnly) {
           descendant.loc.end.column = end.column;
           continue;
@@ -763,6 +785,9 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         descendant.loc.start.column = start.column;
         if (descendant.loc.end.line === descendant.loc.start.line) {
           descendant.loc.end.column = end.column;
+        }
+        if (equals !== undefined && isKeyValue(descendant)) {
+          (descendant as KeyValue).equals = equals;
         }
       }
 

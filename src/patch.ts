@@ -931,6 +931,29 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           index = document.items.indexOf(after);
         } else if (before) {
           index = document.items.indexOf(before) + 1;
+          // Appending a new entry must land after the PREVIOUS entry's full
+          // scope.  Sub-tables of an AOT entry live as document-level items
+          // after the entry header (both pre-existing `[a.b.sub]` sections
+          // and sub-tables materialised in-place by an earlier Remove in the
+          // same batch, e.g. a dotted key emptied to `{}`).  Skipping them
+          // here keeps those sections in the previous entry — otherwise the
+          // new [[entry]] header lands before them and the re-parse swallows
+          // them into the new entry (fuzz seed 21525).
+          if (isTableArray(before)) {
+            const aotKey = (before as TableArray).key.item.value;
+            while (index < document.items.length) {
+              const item = document.items[index];
+              const key = isTable(item) || isTableArray(item)
+                ? (item as Table | TableArray).key.item.value
+                : undefined;
+              if (key && key.length > aotKey.length
+                  && arraysEqual(key.slice(0, aotKey.length), aotKey)) {
+                index++;
+              } else {
+                break;
+              }
+            }
+          }
         } else {
           index = document.items.length;
         }

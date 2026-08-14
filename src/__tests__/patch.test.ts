@@ -9977,4 +9977,49 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
 `);
   });
 
+  test('restoring anchored rows also restores their key and value nodes (seed 19506)', () => {
+    // Removing a leading item moves the inline table left; its interior rows
+    // are anchored to the preceding multiline string's end.  The rigid
+    // shift moved the row and KeyValue back but left the Key value node at
+    // its shifted column, so toTOML wrote it there — `END'''` became `EaD=`
+    // and the re-parse failed with an unterminated multiline string.
+    const src = dedent`
+      k = [false, { x = '''
+      END''', a = 1 }, 9, false]
+    `;
+    const obj = parse(src) as any;
+    obj.k.splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      k = [{ x = '''
+      END''', a = 1 }, 9, false]
+    `);
+  });
+
+  test('appending an AOT entry skips the previous entry sub-tables (seed 21525)', () => {
+    // Deleting the last key of a dotted key (`vyujik.bwe`) empties `vyujik`
+    // to `{}` and materialises `[a.vyujik]` as a document-level sub-table of
+    // entry 0.  Appending entry 1 must land AFTER that sub-table, or the
+    // new [[a]] header cuts in front of it and the re-parse reassigns
+    // vyujik to the new entry.
+    const src = dedent`
+      [[a]]
+      vyujik.bwe = 1
+    `;
+    const obj = parse(src) as any;
+    delete obj.a[0].vyujik.bwe;
+    obj.a.push({ k93: true });
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[a]]
+
+      [a.vyujik]
+
+      [[a]]
+      k93 = true
+    `);
+  });
+
 });
