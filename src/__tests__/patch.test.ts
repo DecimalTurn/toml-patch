@@ -9784,4 +9784,16 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('"".hrw.aa = 1974-09-04\n"".rrjd = { oypetl = 9 }\n');
   });
 
+  test('removing a scalar from an array of multiline-delimited strings keeps the rows intact (seed 8512)', () => {
+    // The strings' VALUES are single-line — only their `"""` delimiters
+    // span rows — so the diff produced a Move chain that relocated the
+    // multiline elements and mangled a nested datetime.
+    const src = 'd6xdeuwdq."a@" = [\n  [405_276, 24084.46770, """\n<K}-|i*iA%r/""", [0o6, false, 1978-12-02, true, """\n>b#ufvG1>O0""", 12:07:06.526966, -57678.90931], """\nwtV+6np[K189t&""", 0x4],\n]\n';
+    const obj = parse(src) as any;
+    obj.d6xdeuwdq['a@'][0].splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('d6xdeuwdq."a@" = [\n  [405_276, """\n<K}-|i*iA%r/""", [0o6, false, 1978-12-02, true, """\n>b#ufvG1>O0""", 12:07:06.526966, -57678.90931], """\nwtV+6np[K189t&""", 0x4],\n]\n');
+  });
+
 });

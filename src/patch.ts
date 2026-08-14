@@ -2242,6 +2242,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (hasItem(parent)) parent = parent.item;
         if (isKeyValue(parent)) parent = parent.value;
 
+        // A Move's from/to are simulation coordinates from the diff walk;
+        // when an in-place Remove earlier in the same array was reordered
+        // ahead of it, the source index can be past the array's end.  The
+        // remaining elements are already in place then — the move is a
+        // simulation artifact and must be skipped (fuzz seed 8138).
+        if (change.from >= (parent as WithItems).items.length) return;
+
         const node = (parent as WithItems).items[change.from];
 
         moveInlineElement(original, parent, node, change.to);

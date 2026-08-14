@@ -249,11 +249,16 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // (moves of elements holding multiline strings drop content lines — fuzz
   // seed 4765).  Only for such arrays, prefer resolving a true deletion in
   // place over drifting the element right through a chain of Moves.
+  // Multiline DELIMITED strings whose content is single-line aren't visible
+  // here (the diff sees only values), but nested arrays/objects are a strong
+  // proxy: those are what carry such formatting, and moving them corrupts
+  // their interior the same way (fuzz seed 8512).
   const hasMultilineValue = (v: any): boolean => {
     if (typeof v === 'string') return v.includes('\n');
-    if (Array.isArray(v)) return v.some(hasMultilineValue);
+    if (Array.isArray(v)) return v.some(x => x !== null && typeof x === 'object') || v.some(hasMultilineValue);
     if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
-      return Object.values(v).some(hasMultilineValue);
+      const vals = Object.values(v);
+      return vals.some(x => x !== null && typeof x === 'object') || vals.some(hasMultilineValue);
     }
     return false;
   };
@@ -306,6 +311,36 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
         removedBefore++;
         index--;
         continue;
+      }
+
+      // A Move emitted after an in-place deletion splice: its from/to are
+      // simulation coordinates, but the patcher applies ALL removes first
+      // (in descending index order) — when a trailing remove follows, the
+      // move's source can be pushed out of bounds (fuzz seed 8138).  When
+      // the displaced element is a surplus duplicate, resolve it as a
+      // removal in place instead of a Move: the remaining occurrences stay
+      // where they are, so nothing needs to move.
+      if (removedBefore > 0) {
+        const valueAt = before_stable[index];
+        let beforeCount = 0;
+        for (let i = index; i < before_stable.length; i++) {
+          if (before_stable[i] === valueAt) beforeCount++;
+        }
+        let afterCount = 0;
+        for (let i = index; i < after_stable.length; i++) {
+          if (after_stable[i] === valueAt) afterCount++;
+        }
+        if (beforeCount > afterCount) {
+          changes.push({
+            type: ChangeType.Remove,
+            path: path.concat(index + removedBefore)
+          });
+          before_stable.splice(index, 1);
+          before_sim.splice(index, 1);
+          removedBefore++;
+          index--;
+          continue;
+        }
       }
 
       changes.push({
