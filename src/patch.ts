@@ -692,10 +692,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     const delta = freshKV.key.raw.length - oldRaw.length;
     freshKV.key.loc.end.column = freshKV.key.loc.start.column + freshKV.key.raw.length;
     freshKV.equals += delta;
-    freshKV.value.loc.start.column += delta;
-    if (freshKV.value.loc.end.line === freshKV.value.loc.start.line) {
-      freshKV.value.loc.end.column += delta;
-    }
+    shiftNode(freshKV.value, { lines: 0, columns: delta }, { first_line_only: true });
     if (freshKV.loc.end.line === freshKV.loc.start.line) {
       freshKV.loc.end.column += delta;
     }
@@ -757,10 +754,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     oldKey.value = [...missing, ...oldKey.value];
     oldKey.loc.end.column = oldKey.loc.start.column + newRaw.length;
     child.equals += colDelta;
-    child.value.loc.start.column += colDelta;
-    if (child.value.loc.end.line === child.value.loc.start.line) {
-      child.value.loc.end.column += colDelta;
-    }
+    shiftNode(child.value, { lines: 0, columns: colDelta }, { first_line_only: true });
     if (child.loc.end.line === child.loc.start.line) {
       child.loc.end.column += colDelta;
     }
@@ -1704,6 +1698,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 while (aotNode.items.length > 0) {
                   removeMember(original, aotNode, last(aotNode.items as TreeNode[])!);
                 }
+                // The item removals above left pending line offsets on the
+                // entry's key.  Shrinking loc.end against pre-offset
+                // positions — and leaving the offsets to bleed through the
+                // entry into later sections — corrupts everything below
+                // (fuzz seed 7379).  Resolve first.
+                applyWrites(original);
                 (aotNode as any).type = NodeType.Table;
                 // Also change the key type so toTOML renders [a] not [[a]].
                 (aotKeyHolder as any).type = NodeType.TableKey;
@@ -1876,6 +1876,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               while (table.items.length > 0) {
                 remove(original, table, last(table.items as TreeNode[])!);
               }
+              // Same pending-offset discipline as materialiseAotInPlace
+              // above (fuzz seed 7379).
+              applyWrites(original);
               const keyHolder = table.key;
               const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
               key.value = parentPath as string[];
@@ -2817,10 +2820,11 @@ function handleStructuralEdit(
             const delta = row.key.raw.length - oldRaw.length;
             row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
             row.equals += delta;
-            row.value.loc.start.column += delta;
-            if (row.value.loc.end.line === row.value.loc.start.line) {
-              row.value.loc.end.column += delta;
-            }
+            // Shifting only the value's own start/end leaves its inner rows
+            // (absolute columns) behind — an inline table's first row then
+            // overwrites the opening brace (fuzz seed 7443).  Shift the
+            // whole first line of the value subtree.
+            shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
             if (row.loc.end.line === row.loc.start.line) {
               row.loc.end.column += delta;
             }
@@ -2832,7 +2836,15 @@ function handleStructuralEdit(
       }
     }
 
-    insert(original, original, item, i === 0 ? insertIndex : undefined);
+    // Subsequent key-value rows belong INSIDE the freshly inserted section
+    // header, not after it at document level: appending at the end leaves
+    // them past unrelated later sections, which capture them on re-parse
+    // (fuzz seed 7379: `aw3axx = {…}` landed inside [[y-g]]).
+    if (i > 0 && firstInserted && isTable(firstInserted) && isKeyValue(item)) {
+      insert(original, firstInserted, item, undefined);
+    } else {
+      insert(original, original, item, i === 0 ? insertIndex : undefined);
+    }
     if (!firstInserted) firstInserted = item;
   }
 
@@ -2989,6 +3001,12 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // root key literally named `a.b` instead of `b` nested under `a`.
     const emptyArrayDoc = parseJS({ [path[path.length - 1]]: [] }, format);
     const emptyKV = generateKeyValue(path, (emptyArrayDoc.items[0] as KeyValue).value);
+    // The removal that emptied the array left pending line offsets on the
+    // preceding siblings.  Inserting against their pre-offset locs and only
+    // then resolving drags the new KV up past line 1 — a negative render
+    // position (fuzz seed 7379).  Flush first, like every other insert that
+    // follows removals in the same patch.
+    applyWrites(doc);
     insert(doc, doc, emptyKV, rootKeyValueInsertIndex(doc));
   }
   applyWrites(doc);

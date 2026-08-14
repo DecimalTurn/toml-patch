@@ -1183,11 +1183,17 @@ export function shiftNode(
       // Move KeyValue
       if (!first_line_only || kv.loc.start.line === start_line) {
         kv.loc.start.column += columns;
-        kv.loc.end.column += columns;
+        // Same-line guard: a multiline string value puts the KV's end on a
+        // different line, whose column must not move with the start.
+        if (kv.loc.end.line === kv.loc.start.line) {
+          kv.loc.end.column += columns;
+        }
       }
       kv.loc.start.line += lines;
       kv.loc.end.line += lines;
-      kv.equals += columns;
+      if (!first_line_only || kv.loc.start.line === start_line) {
+        kv.equals += columns;
+      }
       // Move Key
       const key = kv.key;
       if (!first_line_only || key.loc.start.line === start_line) {
@@ -1200,7 +1206,9 @@ export function shiftNode(
       const val = kv.value;
       if (!first_line_only || val.loc.start.line === start_line) {
         val.loc.start.column += columns;
-        val.loc.end.column += columns;
+        if (val.loc.end.line === val.loc.start.line) {
+          val.loc.end.column += columns;
+        }
       }
       val.loc.start.line += lines;
       val.loc.end.line += lines;
@@ -1212,7 +1220,12 @@ export function shiftNode(
   const move = (node: TreeNode) => {
     if (!first_line_only || node.loc.start.line === start_line) {
       node.loc.start.column += columns;
-      node.loc.end.column += columns;
+      // Only shift end.column when start and end are on the same line:
+      // for a multi-line node the end is on a completely different line and
+      // its column is an absolute position independent of the start line.
+      if (node.loc.end.line === node.loc.start.line) {
+        node.loc.end.column += columns;
+      }
     }
     node.loc.start.line += lines;
     node.loc.end.line += lines;

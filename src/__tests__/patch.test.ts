@@ -9760,4 +9760,28 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('Zi = 1\n[[""]]\n"EY,?z%" = 990e-10\n":h9q=2`aO" = "iumXK"\n');
   });
 
+  test('deleting an AOT and replacing a later AOT with a scalar keeps positions sane (seed 7379)', () => {
+    // The emptied AOT was materialised in place while its inner-row removals
+    // still had pending offsets; the later structural edit's gap arithmetic
+    // then over-shifted the remaining sections above line 1.
+    const src = 'lo = 1\n[[s.u1fhw.htzs]]\nuscet4 = 44241.85347\nqj = -5831.79776\n[[yft.aw3axx.o-3hmn]]\nu1ckvoz."".dzb00402i = 2086-04-27\n[[y-g]]\nw7e = 1\n';
+    const obj = parse(src) as any;
+    delete obj.s.u1fhw.htzs;
+    obj.yft.aw3axx['o-3hmn'] = 9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('lo = 1\n\n[yft]\naw3axx = { o-3hmn = 9 }\n[s.u1fhw]\n[[y-g]]\nw7e = 1\n');
+  });
+
+  test('extending a dotted key shifts the inline-table value rows with the key (seed 7443)', () => {
+    // Extending `rrjd = {…}` into `"".rrjd = {…}` only shifted the value
+    // container, leaving its inner row behind to overwrite the `{`.
+    const src = '"".hrw.aa = 1974-09-04\n[["".rrjd.oypetl]]\ne10 = "x"\n';
+    const obj = parse(src) as any;
+    obj['']['rrjd']['oypetl'] = 9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('"".hrw.aa = 1974-09-04\n"".rrjd = { oypetl = 9 }\n');
+  });
+
 });
