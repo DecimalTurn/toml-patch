@@ -98,6 +98,15 @@ const getEnterOffsets = (root: Root) => {
   }
   return enter_offsets.get(root)!;
 };
+/**
+ * The pending enter-offset map for a root.  Exposed so callers can detect a
+ * block container that still carries a removal's enter offset before
+ * inserting at index 0 (fuzz seed 11557: the new row was dragged above
+ * line 1 by the unresolved removal shift).
+ */
+export function getPendingEnterOffsets(root: Root): Offsets {
+  return enter_offsets.has(root) ? enter_offsets.get(root)! : new WeakMap();
+}
 
 const exit_offsets: WeakMap<Root, Offsets> = new WeakMap();
 /**

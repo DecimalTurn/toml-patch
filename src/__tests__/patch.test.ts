@@ -9821,4 +9821,62 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual('[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\n\n[y.sl4."m{sHnZ".vk]\n');
   });
 
+  test('truncating an empty-string dotted key inside an inline table drops extending sibling rows (seeds 11480, 11799)', () => {
+    // Setting `""` to a scalar truncates the `"".dj9.hi7` row; the sibling
+    // `"".2U]0!Rr([{` row must go too, or the re-parse sees two `""` keys.
+    const src = 'g5we.m.fk0 = { "".dj9.hi7 = 1, ""."2U]0!Rr([{" = 2 }\n';
+    const obj = parse(src) as any;
+    obj.g5we.m.fk0[''] = -1317.3668063245714;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('g5we.m.fk0 = { "" = -1317.3668063245714 }\n');
+  });
+
+  test('truncating a dotted key in a nested inline table drops extending sibling rows (seed 11627)', () => {
+    // The container of the rows is an inline table wrapped by an InlineItem;
+    // the sibling scan must unwrap through the wrapper to see the rows.
+    const src = 'gve = { "5wu[/?=h4"."/uHK&4Y8N" = { "gx/HY[Su,." = false, r."" = 1, r.r2_nxfy88j = 803_452 } }\n';
+    const obj = parse(src) as any;
+    obj.gve['5wu[/?=h4']['/uHK&4Y8N'].r = 'UTjMiCvj2TedF3i5pDM';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('gve = { "5wu[/?=h4"."/uHK&4Y8N" = { "gx/HY[Su,." = false, r = "UTjMiCvj2TedF3i5pDM" } }\n');
+  });
+
+  test('replacing the value of a dotted-KV inline table row drops conflicting empty-key siblings (seed 11480)', () => {
+    // The rows live in a dotted-key KV whose value is the inline table —
+    // the sibling scan must unwrap through the KV to find them.
+    const src = 'i0o-csev.ljw_chub."&$_kB+" = { "".qkghjs82 = -2323.46, ""."%>?!<" = 92499 }\n';
+    const obj = parse(src) as any;
+    obj['i0o-csev'].ljw_chub['&$_kB+'][''] = 42;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('i0o-csev.ljw_chub."&$_kB+" = { "" = 42 }\n');
+  });
+
+  test('re-adding a key at index 0 after removing the first dotted KV flushes the pending enter offset (seed 11557)', () => {
+    // The removal of the first document item leaves a pending enter offset
+    // on the Document; inserting the new dotted KV at index 0 without
+    // flushing dragged it to line -1.
+    const src = 'bi4uus.huofmuw7v = 1\n';
+    const obj = parse(src) as any;
+    delete obj.bi4uus.huofmuw7v;
+    obj.bi4uus.k60 = 'tqW';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('bi4uus.k60 = "tqW"\n');
+  });
+
+  test('materialising an emptied implicit parent as the last document item clamps the insert index (seed 11605)', () => {
+    // Removing the final `[ib.cf_d]` section left a stale index that
+    // inserted the generated `[ib]` header past the end of the document,
+    // stranding it at its (1,0) origin and overwriting line 1.
+    const src = 'a = 1\n[ib.cf_d]\nx = 2\n';
+    const obj = parse(src) as any;
+    delete obj.ib.cf_d;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('a = 1\n[ib]\n');
+  });
+
 });

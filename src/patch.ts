@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -1082,6 +1082,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineArray(parent) && parent.items.length === 0) {
             applyWrites(original);
           }
+          // Inserting at index 0 of a Document/Table/TableArray that still
+          // carries a pending ENTER offset from an earlier removal: the
+          // offset would drag the new row above line 1 (fuzz seed 11557 —
+          // deleting the first dotted KV then re-adding its key emitted the
+          // new row at line -1).  Flush first, like every other insert that
+          // follows removals in the same patch.
+          if (resolvedIndex === 0 && (isDocument(parent) || isTable(parent) || isTableArray(parent)) &&
+              getPendingEnterOffsets(original).has(parent)) {
+            applyWrites(original);
+          }
           insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
           if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
@@ -1471,6 +1481,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               addExitOffset(original, existingKV, { lines: 0, columns: delta });
             }
             keyTruncated = true;
+
+            // Remove sibling rows extending the truncated prefix — a
+            // surviving `"".2U]0!Rr([{` next to the new scalar `""`
+            // duplicates the key on re-parse (fuzz seed 11799).  Same
+            // discipline as the isKeyValue branches (fuzz seed 3607),
+            // with InlineItem row keys included for inline-table
+            // containers.
+            const truncatedPrefix = existingKV.key.value;
+            // The parent may be the InlineItem wrapper around the inline
+            // table holding the rows (fuzz seeds 11627, 11799), or a
+            // dotted-key KV whose value IS the inline table (fuzz seed
+            // 11480) — unwrap either so the sibling scan sees the rows.
+            let scanParent = containerParent;
+            if (isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && hasItems(scanParent)) {
+              const parentItems = (scanParent as { items: TreeNode[] }).items;
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isInlineItem(sibling) && isKeyValue(sibling.item)
+                    ? sibling.item.key.value
+                    : isTable(sibling) || isTableArray(sibling)
+                      ? sibling.key.item.value
+                      : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, scanParent, sibling);
+                }
+              }
+            }
           }
         }
 
@@ -1758,7 +1802,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               if (isObject(value) && Object.keys(value).length === 0) {
                 const emptyTable = generateTable(parentPath as string[]);
                 materialisedTables.add(emptyTable);
-                const insertIdx = firstIndex >= 0 ? firstIndex : original.items.length;
+                // The removals above already spliced the document items, so a
+                // stale index (e.g. the removed entry was the last item) must
+                // be clamped — inserting past the end leaves the generated
+                // header at its (1,0) origin, corrupting line 1 (fuzz seed
+                // 11605).
+                const insertIdx = firstIndex >= 0
+                  ? Math.min(firstIndex, original.items.length)
+                  : original.items.length;
                 // Same pending-offset hazard as the implicit-key branch
                 // below: insert after the removals are resolved so the new
                 // header can't absorb the document's enter offset (fuzz
@@ -1794,7 +1845,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 if (isObject(value) && Object.keys(value).length === 0) {
                   const emptyTable = generateTable(parentPath as string[]);
                   materialisedTables.add(emptyTable);
-                  const insertIdx = firstPrefixIndex >= 0 ? firstPrefixIndex : original.items.length;
+                  // Clamp to the post-removal items length — a stale last-item
+                  // index inserts past the end and strands the generated
+                  // header at its (1,0) origin, corrupting line 1 (fuzz seed
+                  // 11605).
+                  const insertIdx = firstPrefixIndex >= 0
+                    ? Math.min(firstPrefixIndex, original.items.length)
+                    : original.items.length;
                   // The removals above left pending offsets on the document
                   // (or a preceding item).  Inserting before resolving them
                   // lets the new header absorb the document's pending enter
@@ -2072,8 +2129,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               const emptyTable = generateTable(parentPath as string[]);
               materialisedTables.add(emptyTable);
               // Insert at the original position so preceding comments
-              // stay adjacent without a spurious blank line.
-              const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+              // stay adjacent without a spurious blank line.  Clamp to the
+              // post-removal length — a stale last-item index strands the
+              // generated header at its (1,0) origin (fuzz seed 11605).
+              const insertIdx = nodeIndex >= 0
+                ? Math.min(nodeIndex, original.items.length)
+                : original.items.length;
               // Resolve the removal's pending offsets first — an insert at
               // index 0 otherwise absorbs the document's enter offset and
               // lands above line 1 (fuzz seed 1172).
