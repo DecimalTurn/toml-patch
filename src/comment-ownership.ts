@@ -564,10 +564,43 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
  * from how far `node` itself moved, or be zero.
  */
 export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number): void {
+  let sharedLineContainerBeforeMove = false;
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
     if (hostContainer) {
       const slots = resolveInlineElementSlots(parent, hostContainer.items as TreeNode[]);
+
+      // The container's per-line vs shared-line layout must be judged on
+      // the state BEFORE this move: remove()+insert() inflate the tail's
+      // line coordinates, and a later perLine() read of the corrupted span
+      // misclassifies a shared-line container as per-line, skipping the
+      // tail realignment and stranding the rows (fuzz seed 16034).
+      //
+      // The honest signature of a shared-line layout is a RUN of at least
+      // three adjacent items STARTING on the same line.  Two items sharing
+      // a line is the signature of a per-line container whose multiline
+      // member ends on the next item's line — the writer offsets handle
+      // those (fuzz seeds 9553, 9829).  A same-line pair caused by a
+      // just-inserted item still carrying its pending exit offset is
+      // transient and must not count (fuzz seed 761).
+      {
+        const items = (parent as InlineTable | InlineArray).items as TreeNode[];
+        let run = 1;
+        for (let i = 1; i < items.length; i++) {
+          if (items[i].loc.start.line === items[i - 1].loc.start.line) {
+            const prevPending = getExitOffsets(root).get(items[i - 1]);
+            const selfPending = getExitOffsets(root).get(items[i]);
+            if (prevPending || selfPending) continue;
+            run++;
+            if (run >= 3) {
+              sharedLineContainerBeforeMove = true;
+              break;
+            }
+          } else {
+            run = 1;
+          }
+        }
+      }
 
       const detached: Array<{ owner: TreeNode; ownerOriginalStart: { line: number; column: number }; comments: Comment[] }> = [];
       let nodeOwnStart: { line: number; column: number } | undefined;
@@ -769,7 +802,58 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // end column with it.  Realign the tail sequentially: each item starts
       // right after the previous one's end (fuzz seed 50).
       const container = parent as InlineTable | InlineArray;
-      if (!perLine(container)) {
+      // Gate the tail realignment on the original layout classification:
+      // perLine() reads the container's own end, which the moves above can
+      // leave stale.  The pre-move capture reflects the true layout.
+      const containerItems = container.items as TreeNode[];
+      const sharedLineContainer = sharedLineContainerBeforeMove;
+      if (sharedLineContainer) {
+        // Re-anchor the interior rows of a multiline inline container whose
+        // subtree the tail shift above translated rigidly: the shiftNode
+        // moves every row's START, but rows anchored to a preceding
+        // multiline value keep their END columns — the boundary between a
+        // multiline string row and the next row then closes up and the
+        // separator comma is overwritten (fuzz seed 16552).
+        const realignInterior = (inner: InlineTable | InlineArray, wrapper?: TreeNode) => {
+          let anchor: { line: number; column: number } | undefined;
+          for (const row of inner.items as TreeNode[]) {
+            if (!anchor) {
+              anchor = { line: row.loc.end.line, column: row.loc.end.column + 2 };
+              continue;
+            }
+            const d = {
+              lines: anchor.line - row.loc.start.line,
+              columns: anchor.column - row.loc.start.column
+            };
+            if (d.lines !== 0 || d.columns !== 0) {
+              shiftNode(row, d);
+              if (row.loc.end.line > row.loc.start.line) {
+                row.loc.end.column -= d.columns;
+                if (isInlineItem(row) && row.item.loc.end.line > row.item.loc.start.line) {
+                  row.item.loc.end.column -= d.columns;
+                }
+              }
+              const rowInner = isInlineItem(row)
+                ? (isKeyValue(row.item) ? row.item.value : row.item)
+                : row;
+              if ((isInlineTable(rowInner) || isInlineArray(rowInner)) &&
+                  rowInner.loc.end.line > rowInner.loc.start.line) {
+                realignInterior(rowInner, row);
+              }
+            }
+            anchor = { line: row.loc.end.line, column: row.loc.end.column + 2 };
+          }
+          if (anchor) {
+            inner.loc.end = { line: anchor.line, column: anchor.column - 1 };
+            // The enclosing InlineItem's end carries the comma that follows
+            // the closing brace — track the new end so the comma stays
+            // adjacent (fuzz seed 16552).
+            if (wrapper && wrapper.loc.end.line === inner.loc.end.line) {
+              wrapper.loc.end.column = inner.loc.end.column;
+            }
+          }
+        };
+
         let tailAnchor: { line: number; column: number } | undefined;
         for (const item of container.items as TreeNode[]) {
           if (item === node) {
@@ -783,14 +867,26 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           };
           if (delta.lines !== 0 || delta.columns !== 0) {
             shiftNode(item, delta);
-            if (item.loc.end.line > item.loc.start.line) {
-              item.loc.end.column -= delta.columns;
-              if (isInlineItem(item) && item.item.loc.end.line > item.item.loc.start.line) {
-                item.item.loc.end.column -= delta.columns;
-              }
+            const itemInner = isInlineItem(item)
+              ? (isKeyValue(item.item) ? item.item.value : item.item)
+              : item;
+            if ((isInlineTable(itemInner) || isInlineArray(itemInner)) &&
+                itemInner.loc.end.line > itemInner.loc.start.line) {
+              realignInterior(itemInner, isInlineItem(item) ? item : undefined);
             }
           }
-          tailAnchor = { line: item.loc.end.line, column: item.loc.end.column + 2 };
+          // A multiline STRING member's end line may be stale (the move
+          // offsets inflated it) — derive it from the raw content so the
+          // chain doesn't push the following items onto the wrong lines
+          // (fuzz seed 9553).
+          let itemEndLine = item.loc.end.line;
+          const tailInner = isInlineItem(item) ? item.item : item;
+          if (tailInner.type === 'String' && tailInner.loc.end.line > tailInner.loc.start.line) {
+            itemEndLine = tailInner.loc.start.line + tailInner.raw.split('\n').length - 1;
+            tailInner.loc.end.line = itemEndLine;
+            item.loc.end.line = itemEndLine;
+          }
+          tailAnchor = { line: itemEndLine, column: item.loc.end.column + 2 };
         }
         if (tailAnchor) {
           const endBeforeRealign = clonePosition(container.loc.end);
