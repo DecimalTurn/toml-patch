@@ -2918,6 +2918,10 @@ function sinkTableBelowRootKeyValues(doc: Document, table: Table | TableArray): 
   if (!hasFollowingRootKV) return;
 
   const target = nextSectionIndex === -1 ? doc.items.length : nextSectionIndex;
+  // Flush pending offsets so the table's loc reflects its true position before
+  // the remove-then-reinsert cycle; otherwise insert() measures against a stale
+  // (pre-remove) anchor and can drag the table to line 0 (fuzz seed 43159).
+  applyWrites(doc);
   remove(doc, doc, table);
   insert(doc, doc, table, target - 1);
 }
