@@ -742,6 +742,35 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     hoistRootKeyValueAboveTables(original, freshKV);
   }
 
+  // Same as extendKeyWithParentAndReplace, but for a regenerated Table/TableArray
+  // section: when a `[a.b.c]` section (or `[[a.b.c]]`) is replaced by a fresh
+  // section whose key carries only the last segment (`[[c]]`), extend its key
+  // with the parent prefix IN PLACE so it re-renders as `[[a.b.c]]` — a `[[c]]`
+  // child of a generated `[a.b]` header would otherwise fragment into a stray
+  // top-level section (fuzz seed 41613).  The section's items live on their own
+  // lines, so only the header key (not the item columns) needs shifting.
+  function extendSectionKeyWithParentAndReplace(
+    section: Table | TableArray,
+    parentKey: string[],
+    existing: TreeNode,
+    tableParent: TreeNode
+  ): void {
+    const keyNode = section.key.item;
+    const oldRaw = keyNode.raw;
+    const dottedKey = parentKey.concat(keyNode.value);
+    const newRaw = dottedKey
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const delta = newRaw.length - oldRaw.length;
+    keyNode.value = dottedKey;
+    keyNode.raw = newRaw;
+    keyNode.loc.end.column = keyNode.loc.start.column + newRaw.length;
+    if (section.key.loc.end.line === section.key.loc.start.line) {
+      section.key.loc.end.column += delta;
+    }
+    replace(original, tableParent, existing, section);
+  }
+
   // When an Add's path traverses intermediate key segments that do not exist in the
   // original document (their KV was removed by an earlier change in this same patch),
   // findParent resolves to the nearest existing ancestor and the inserted child would
@@ -1658,21 +1687,32 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const freshKV = freshDoc.items[0] as KeyValue;
 
           if (parentKey.length > 0) {
-            // The parent key may be purely implicit (dotted key-values) —
-            // emitting a literal header would fail the re-parse (fuzz seed
-            // 6803).  Extend the KV's key with the prefix instead.
-            const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
-            if (hasImplicitParent) {
-              extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+            // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
+            // when `jsValue` is an object or an array of objects.  Emitting it
+            // with only the last key segment under a `[parentKey]` header
+            // fragments the section into an empty `[parentKey]` + a stray
+            // top-level section (fuzz seed 41613).  Extend the section's key
+            // with the parent prefix and swap it in for the old node directly.
+            if (isTable(freshKV) || isTableArray(freshKV)) {
+              extendSectionKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
               commentEligibleNodes.add(freshKV);
             } else {
-              const newTable = generateTable(parentKey);
-              materialisedTables.add(newTable);
-              insert(original, newTable, freshKV, 0);
-              replace(original, tableParent, existing, newTable);
-              // newTable stands in for the pre-existing `existing` table, so it should stay
-              // eligible for the leading comment run `existing` would have owned via R2.
-              commentEligibleNodes.add(newTable);
+              // The parent key may be purely implicit (dotted key-values) —
+              // emitting a literal header would fail the re-parse (fuzz seed
+              // 6803).  Extend the KV's key with the prefix instead.
+              const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+              if (hasImplicitParent) {
+                extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+                commentEligibleNodes.add(freshKV);
+              } else {
+                const newTable = generateTable(parentKey);
+                materialisedTables.add(newTable);
+                insert(original, newTable, freshKV, 0);
+                replace(original, tableParent, existing, newTable);
+                // newTable stands in for the pre-existing `existing` table, so it should stay
+                // eligible for the leading comment run `existing` would have owned via R2.
+                commentEligibleNodes.add(newTable);
+              }
             }
           } else {
             // Single-segment table [w] — KV belongs directly in the Document.
@@ -1716,20 +1756,33 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const freshKV = freshDoc.items[0] as KeyValue;
 
           if (parentKey.length > 0) {
-            // Same implicit-parent handling as the isTable branch above
-            // (fuzz seed 6803).
-            const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
-            if (hasImplicitParent) {
-              extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+            // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
+            // when `jsValue` is an object or an array of objects.  Emitting it
+            // with only the last key segment under a `[parentKey]` header
+            // fragments the section: a `[[qbvzp4p]]` child of `[e.j9a8-tra]`
+            // re-renders as a TOP-LEVEL AOT, splitting `[[e.j9a8-tra.qbvzp4p]]`
+            // into an empty `[e.j9a8-tra]` + a stray `[[qbvzp4p]]` (fuzz seed
+            // 41613).  Extend the section's key with the parent prefix and swap
+            // it in for the old node directly instead.
+            if (isTable(freshKV) || isTableArray(freshKV)) {
+              extendSectionKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
               commentEligibleNodes.add(freshKV);
             } else {
-              const newTable = generateTable(parentKey);
-              materialisedTables.add(newTable);
-              insert(original, newTable, freshKV, 0);
-              replace(original, tableParent, existing, newTable);
-              // newTable stands in for the pre-existing `existing` AOT, so it should stay
-              // eligible for the leading comment run `existing` would have owned via R2.
-              commentEligibleNodes.add(newTable);
+              // Same implicit-parent handling as the isTable branch above
+              // (fuzz seed 6803).
+              const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+              if (hasImplicitParent) {
+                extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+                commentEligibleNodes.add(freshKV);
+              } else {
+                const newTable = generateTable(parentKey);
+                materialisedTables.add(newTable);
+                insert(original, newTable, freshKV, 0);
+                replace(original, tableParent, existing, newTable);
+                // newTable stands in for the pre-existing `existing` AOT, so it should stay
+                // eligible for the leading comment run `existing` would have owned via R2.
+                commentEligibleNodes.add(newTable);
+              }
             }
           } else {
             // Single-segment [[w]] — KV belongs directly in the Document.
