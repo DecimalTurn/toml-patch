@@ -550,7 +550,12 @@ function insertInline(
   // item continues on that same line — a new-line insert would then land on
   // the following row, inside whatever occupies it (fuzz seed 620: inserting
   // after a multiline string dropped the new item into the next row's nested
-  // array).  In that case stay on the same line as the previous item.
+  // array).  The same hazard exists for a SINGLE-line previous item when the
+  // container is shared-line: `previous` and `next` sit on one row while the
+  // container's span is inflated by a trailing multiline nested array, so a
+  // new-line insert shifts the tail and the move's realignment collapses that
+  // nested array (fuzz seed 68861).  In both cases stay on the same line as
+  // the previous item.
   //
   // The sibling locs must look settled before trusting them: during comment
   // realignment / removal re-inserts `next` can start INSIDE the previous
@@ -558,7 +563,6 @@ function insertInline(
   // "same line" corrupts the insert (fuzz seed 203).
   const use_new_line = perLine(parent) && !(
     previous && next &&
-    previous.loc.end.line > previous.loc.start.line &&
     next.loc.start.line === previous.loc.end.line &&
     next.loc.start.column >= previous.loc.end.column
   ) && !(
