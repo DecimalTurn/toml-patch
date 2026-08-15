@@ -3355,6 +3355,29 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
         insert(doc, parentEntry, emptyKV);
         continue;
       }
+
+      // An AOT declared inside an explicit [table] (e.g. `[["".b.c]]` under
+      // `[""]`) must be re-materialised inside that table with a RELATIVE
+      // key (`b.c = []`).  Materialising it as a root dotted key `"".b.c = []`
+      // defines `""` as an implicit table and collides with the surviving
+      // `[""]` header on re-parse ("Implicit table already defined", fuzz
+      // seed 67221).
+      let hostTable: Table | undefined;
+      for (let len = path.length - 1; len >= 1; len--) {
+        const ancestor = tryFindByPath(doc, path.slice(0, len));
+        if (ancestor && isTable(ancestor)) {
+          hostTable = ancestor;
+          break;
+        }
+      }
+      if (hostTable) {
+        const relativeKey = path.slice(hostTable.key.item.value.length);
+        const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
+        const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
+        applyWrites(doc);
+        insert(doc, hostTable, emptyKV);
+        continue;
+      }
     }
 
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
