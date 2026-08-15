@@ -10562,6 +10562,72 @@ test('regression for fuzz seed 79938', () => {
   expect(result).toEqual(dedent``);
 });
 
+test.fails('regression for fuzz seed 80004', () => {
+  const src = dedent`
+    [a.b]
+    "" = 11:17:13.346128
+    "".x.y = "v"
+  `;
+
+  const obj = parse(src) as any;
+  obj.a.b[""] = { k60: 1 };
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [a.b]
+    "" = { k60 = 1 }
+    `);
+});
+
+test.fails('regression for fuzz seed 82825', () => {
+  const src = dedent`
+    x = { "".1.w46j = -916648, "".e-0cxz9.";" = "v" }
+  `;
+
+  const obj = parse(src) as any;
+  obj.x[""] = "moq45";
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    x = { "" = "moq45" }
+    `);
+});
+
+test.fails('regression for fuzz seed 86547', () => {
+  const src = dedent`
+    b.c.d = [01:48:53, { iuqh = 7544.95655 }, "s", false]
+  `;
+
+  const obj = parse(src) as any;
+  obj.b.c.d[0] = false;
+  obj.b.c.d[1].iuqh = new Date('2010-12-09T00:00:00.000Z');
+
+  const result = patch(src, obj, { trailingComma: true, bracketSpacing: true, inlineTableStart: 2 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    b.c.d = [false, { iuqh = 2010-12-09T00:00:00.000Z, }, "s", false]
+    `);
+});
+
+test.fails('regression for fuzz seed 86724', () => {
+  const src = dedent`
+    [[x_i42]]
+    m = 1
+    wxq = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj.x_i42 = [new Date('2008-09-12T00:00:00.000Z'), new Date('2031-08-14T00:00:00.000Z')];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    x_i42 = [ 2008-09-12T00:00:00.000Z, 2031-08-14T00:00:00.000Z ]
+    `);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
