@@ -10151,3 +10151,49 @@ test('collapsing a Date key that owns a dotted-key child (seed 32801)', () => {
   `);
 });
 
+
+// FIXME(seed 35943): removing one element from a multiline array that holds
+// duplicate scalar values ABOVE a nested multiline array made the diff resolve
+// the deletion as a chain of Moves (the duplicate `true`s are indistinguishable,
+// so the walk treated the scalars after them as "moved" into place, drifting the
+// nested array right one slot) instead of a single in-place Remove.  The writer
+// then relocated the nested array and corrupted its tail — the closing `"""` of
+// its last multiline string was dropped and the DateTime slid onto extra spaces
+// ("Unterminated multiline").  Fixed by identifying the displaced element as a
+// surplus duplicate (more copies in `before` than `after`) and removing it in
+// place, matching the existing multiline-safety guard.
+test('removing one of several duplicate scalars above a nested multiline array (seed 35943)', () => {
+  const src = dedent`
+      [[g--]]
+      v = ['''
+      a
+      b
+      ''', true, true, true, 50190.5, 826, ["""
+      c
+      d
+      """, """
+      e
+      f
+      """, 2068-08-05T05:20:32]]
+    `;
+
+  const obj = parse(src) as any;
+  obj["g--"][0].v.splice(1, 1);
+
+  const result = patch(src, obj, { trailingComma: true });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[g--]]
+    v = ['''
+    a
+    b
+    ''', true, true, 50190.5, 826, ["""
+    c
+    d
+    """, """
+    e
+    f
+    """, 2068-08-05T05:20:32]]
+  `);
+});
+
