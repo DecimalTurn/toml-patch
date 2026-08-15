@@ -252,10 +252,15 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // Multiline DELIMITED strings whose content is single-line aren't visible
   // here (the diff sees only values), but nested arrays/objects are a strong
   // proxy: those are what carry such formatting, and moving them corrupts
-  // their interior the same way (fuzz seed 8512).
+  // their interior the same way (fuzz seed 8512).  A nested array or object
+  // is itself evidence of multiline formatting even when its ELEMENTS are all
+  // plain scalars — the formatter freely wraps such a container across lines,
+  // and the diff cannot tell from values alone (fuzz seed 40181: removing a
+  // scalar above a multiline `[218561, "…"]` chain-moved the array and dropped
+  // columns out of its tail).
   const hasMultilineValue = (v: any): boolean => {
     if (typeof v === 'string') return v.includes('\n');
-    if (Array.isArray(v)) return v.some(x => x !== null && typeof x === 'object') || v.some(hasMultilineValue);
+    if (Array.isArray(v)) return v.length > 0;
     if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
       const vals = Object.values(v);
       return vals.some(x => x !== null && typeof x === 'object') || vals.some(hasMultilineValue);
