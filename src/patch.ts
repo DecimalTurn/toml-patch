@@ -3337,6 +3337,26 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
   if (emptiedKeys.size === 0) return;
 
   for (const path of emptiedKeys.values()) {
+    // A nested AOT (e.g. `[["".Lpfz,]]` emptied inside `[[""]]`) must be
+    // re-materialised as a row INSIDE its parent AOT entry (`Lpfz, = []`),
+    // not as a root dotted key `"".Lpfz, = []` — that dotted key defines `""`
+    // as an implicit table and collides with the surviving `[[""]]` header on
+    // re-parse ("Implicit table already defined", fuzz seed 62163).
+    if (path.length > 1) {
+      const parentEntry = tryFindByPath(doc, path.slice(0, -1).concat(0));
+      if (parentEntry && isTableArray(parentEntry)) {
+        const lastSegment = path[path.length - 1];
+        const emptyArrayDoc = parseJS({ [lastSegment]: [] }, format);
+        const emptyKV = generateKeyValue([lastSegment], (emptyArrayDoc.items[0] as KeyValue).value);
+        // The removal that emptied the array left pending line offsets on the
+        // preceding siblings — flush first (same discipline as the root case,
+        // fuzz seed 7379).
+        applyWrites(doc);
+        insert(doc, parentEntry, emptyKV);
+        continue;
+      }
+    }
+
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
     // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
     // root key literally named `a.b` instead of `b` nested under `a`.
