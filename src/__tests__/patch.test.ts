@@ -10126,3 +10126,28 @@ test('collapsing a dotted key whose prefix has a section sibling (seed 31662)', 
   `);
 });
 
+
+// FIXME(seed 32801): collapsing `""` (a Date that also owns a dotted-key
+// child `"".x`, the parser attaches the child onto the Date) to a scalar
+// string left the `"".x` key-value in place, re-defining `""` on re-parse
+// ("Value already defined").  A single-segment key collapsing to a leaf must
+// drop sibling keys/sections that extend its prefix.  Tracked as a
+// known-failing test until those siblings are swept.
+test.fails('collapsing a Date key that owns a dotted-key child (seed 32801)', () => {
+  const src = dedent`
+      [[a]]
+      "" = 1998-03-05T13:50:08Z
+      "".x = 1
+    `;
+
+  const obj = parse(src) as any;
+  obj.a[0][""] = "str";
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[a]]
+    "" = "str"
+  `);
+});
+
