@@ -1321,7 +1321,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // (e.g. v.e4.c6) must be removed — v is no longer a table.
             const truncatedPrefix = existing.key.value;
             if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-              const parentItems = (containerParent as Table | Document | TableArray).items as Block[];
+              // Snapshot: removeMember below splices the live items array, so
+              // iterating it directly would read `undefined` past the shrunk
+              // end (fuzz seed 31662).
+              const parentItems = [...(containerParent as Table | Document | TableArray).items] as Block[];
               for (let si = parentItems.length - 1; si >= 0; si--) {
                 const sibling = parentItems[si];
                 if (sibling === existing) continue;
@@ -1400,7 +1403,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // Remove sibling KVs that were children of the old implicit table.
             const truncatedPrefix = existing.key.value;
             if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-              const parentItems = (containerParent as Table | Document | TableArray).items as Block[];
+              // Snapshot: removeMember below splices the live items array
+              // (fuzz seed 31662).
+              const parentItems = [...(containerParent as Table | Document | TableArray).items] as Block[];
               for (let si = parentItems.length - 1; si >= 0; si--) {
                 const sibling = parentItems[si];
                 if (sibling === existing) continue;
@@ -1542,7 +1547,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (isInlineItem(scanParent)) scanParent = scanParent.item;
             if (isKeyValue(scanParent)) scanParent = scanParent.value;
             if (scanParent && hasItems(scanParent)) {
-              const parentItems = (scanParent as { items: TreeNode[] }).items;
+              // Snapshot: removeMember below splices the live items array
+              // (fuzz seed 31662).
+              const parentItems = [...(scanParent as { items: TreeNode[] }).items];
               for (let si = parentItems.length - 1; si >= 0; si--) {
                 const sibling = parentItems[si];
                 if (sibling === existing) continue;

@@ -10108,8 +10108,8 @@ test('collapsing a multiline-array dotted key into a flat array (seed 30330)', (
 // "Cannot read properties of undefined (reading 'type')".  The key-truncation
 // sibling sweep iterated the live items array while removeMember() spliced the
 // section AND its leading comment, so the next index read past the shrunk
-// array.  Tracked as a known-failing test until the sweep iterates a snapshot.
-test.fails('collapsing a dotted key whose prefix has a section sibling (seed 31662)', () => {
+// array.  Fixed by iterating a snapshot of the items.
+test('collapsing a dotted key whose prefix has a section sibling (seed 31662)', () => {
   const src = dedent`
       b.x = -inf
       # c
