@@ -3111,8 +3111,11 @@ function handleStructuralEdit(
       // `a` twice and fails the re-parse with "Table already defined"
       // (fuzz seed 43199).  Convert each inline-table row to a dotted KV
       // under that prefix and insert those at the root scope instead.
+      // The implicit table can equally be expressed through a section header
+      // (`"" = { b = 5 }` colliding with `["".a]`, fuzz seed 68244), so any
+      // sibling whose key extends `kvKey` counts — not just dotted key-values.
       const implicitSiblings = findDocumentItemsByKeyPrefix(original, kvKey)
-        .filter(t => isKeyValue(t));
+        .filter(t => isKeyValue(t) || isTable(t) || isTableArray(t));
       if (implicitSiblings.length > 0) {
         for (const row of ((item.value as InlineTable).items as TreeNode[])) {
           const rowNode = isInlineItem(row) ? row.item : row;
