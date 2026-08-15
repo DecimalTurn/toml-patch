@@ -539,7 +539,17 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
     if (replacement.items.length > 0) {
       const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
+      if (lastItem.comma !== originalHadTrailingCommas) {
+        lastItem.comma = originalHadTrailingCommas;
+        // Adding a trailing comma widens the array by one column, but the
+        // regenerated/replacement value's `loc.end` was laid out for the
+        // comma-less form.  Without extending it, the closing `]` (written at
+        // `end.column - 1`) lands on the same column as the comma, colliding
+        // into `...,,` (fuzz seed 30330).
+        if (originalHadTrailingCommas) {
+          replacement.loc.end.column += 1;
+        }
+      }
     }
   }
   
@@ -548,7 +558,14 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const originalHadTrailingCommas = tableHadTrailingCommas(existing);
     if (replacement.items.length > 0) {
       const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
+      if (lastItem.comma !== originalHadTrailingCommas) {
+        lastItem.comma = originalHadTrailingCommas;
+        // Same as the array case above: make room for the added comma before
+        // the closing `}`.
+        if (originalHadTrailingCommas) {
+          replacement.loc.end.column += 1;
+        }
+      }
     }
   }
 }
