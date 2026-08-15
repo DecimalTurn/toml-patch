@@ -720,13 +720,20 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     // removals) to `node.loc.start.line` so the gap computation isn't inflated
     // by lines that were already accounted for.
     const prevPendingExit = previous ? getExitOffsets(root).get(previous) : undefined;
+    // The removed node itself can also carry a pending exit offset (from an
+    // earlier removal in the same applyChanges batch).  In the "nothing
+    // above" branch, `next.loc.start.line` has not been shifted by it yet, so
+    // measuring the gap from the pre-offset position double-counts lines the
+    // earlier removal already reclaimed and pulls `next` up onto the wrong
+    // line (fuzz seed 65785).
+    const nodePendingExit = getExitOffsets(root).get(node);
     const extra = previous
       // Only a section carries a leading separator, so only removing one frees a blank line.
       // A key-value sits flush against the line above and frees nothing extra.
       ? (removedIsSection ? (node.loc.start.line + (prevPendingExit?.lines ?? 0)) - precedingEndLine - 1 : 0)
       // Nothing above: `next` is pulled to the top of the container, where the separator it
       // was carrying becomes a spurious leading blank.
-      : (nextIsSection ? next.loc.start.line - node.loc.end.line - 1 : 0);
+      : (nextIsSection ? (next.loc.start.line + (nodePendingExit?.lines ?? 0)) - node.loc.end.line - 1 : 0);
     if (extra > 0) offset.lines -= extra;
   }
 
