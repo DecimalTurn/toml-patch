@@ -10322,3 +10322,32 @@ test('regression for fuzz seed 43199', () => {
     `);
 });
 
+//WIP 
+test.fails('multiline empty array', () => {
+  const src = dedent`
+    [metadata]
+    version = "1"
+
+    [root]
+    name = "AddinPeer"
+    dependencies = [
+    ]
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.dependencies = ["new-dependency"]; // Example modification for the test
+
+  const result = patch(src, obj, { inlineTableStart: 0, updateOrder: true });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [metadata]
+    version = "1"
+
+    [root]
+    name = "AddinPeer"
+    dependencies = [
+      "new-dependency"
+    ]
+    `);
+});
+
