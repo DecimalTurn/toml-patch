@@ -1336,6 +1336,30 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      // An inline-array element replaced by an object that parseJS rendered as
+      // a Table/TableArray: an array-of-objects at the default inlineTableStart
+      // becomes `[[key]]` sections, so findByPath resolves the replacement to an
+      // AOT entry — but the document holds the array INLINE (`key = [...]`).
+      // Splicing that section in place of the InlineItem emits `[[key]]` inside
+      // the array (fuzz seed 121096).  Regenerate the element as an inline
+      // table, exactly like the converse guard in the Add handler.
+      if (isInlineItem(existing) && (isTable(replacement) || isTableArray(replacement))) {
+        const parentArr = tryFindByPath(original, change.path.slice(0, -1));
+        const parentArray = parentArr && isKeyValue(parentArr) ? parentArr.value : parentArr;
+        if (parentArray && isInlineArray(parentArray)) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const inlineFmt = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+            const valueDoc = parseJS({ tmp: jsValue }, inlineFmt);
+            const wrapper = valueDoc?.items[0];
+            if (wrapper && isKeyValue(wrapper)) {
+              replacement = generateInlineItem(wrapper.value);
+            }
+          }
+        }
+      }
+
       let parent;
       const containerParent = tryFindByPath(original, change.path.slice(0, -1));
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
