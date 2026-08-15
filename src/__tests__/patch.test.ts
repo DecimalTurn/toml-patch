@@ -10362,7 +10362,7 @@ test('regression for fuzz seed 54607', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 61827', () => {
+test('regression for fuzz seed 61827', () => {
   const src = dedent`
     q = {
         "".x = 1,
@@ -10375,7 +10375,11 @@ test.fails('regression for fuzz seed 61827', () => {
 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
-  // TODO: fill in exact expected output after the fix.
+  expect(result).toEqual(dedent`
+    q = {
+        k47 = 2555
+    }
+    `);
 });
 
 //WIP 

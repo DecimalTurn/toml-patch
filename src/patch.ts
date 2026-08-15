@@ -2151,9 +2151,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               if (sibling === node) continue;
               const siblingKey = isKeyValue(sibling)
                 ? sibling.key.value
-                : isTable(sibling) || isTableArray(sibling)
-                  ? sibling.key.item.value
-                  : undefined;
+                : isInlineItem(sibling) && isKeyValue(sibling.item)
+                  ? sibling.item.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
               if (siblingKey
                   && siblingKey.length > relativePrefix.length
                   && arraysEqual(siblingKey.slice(0, relativePrefix.length), relativePrefix)) {
