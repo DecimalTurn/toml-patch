@@ -295,13 +295,31 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     // Check if item has been moved -> shift into place
     const from = overflow ? -1 : before_stable.indexOf(value, index + 1);
     if (from > -1) {
+      // Is `before_stable[index]` (the mismatched element at this slot) a
+      // surplus duplicate — more copies surviving in `before`'s unmatched
+      // suffix than `after` demands?  When so, the extra copy is genuinely
+      // gone from this position and a removal in place is the honest edit.
+      const valueAt = before_stable[index];
+      let beforeCount = 0;
+      for (let i = index; i < before_stable.length; i++) {
+        if (before_stable[i] === valueAt) beforeCount++;
+      }
+      let afterCount = 0;
+      for (let i = index; i < after_stable.length; i++) {
+        if (after_stable[i] === valueAt) afterCount++;
+      }
+      const surplusDuplicate = beforeCount > afterCount;
+
       // A true deletion in move shape: the element at this position is
-      // absent from `after` entirely, while the after-value sits later in
+      // absent from `after` entirely (or is a surplus duplicate of a value
+      // that later slots still hold), while the after-value sits later in
       // `before`.  Without this the element only gets resolved at the end,
       // after a chain of Moves that relocates multiline elements — and the
       // writer corrupts their content (fuzz seed 4765: removing one scalar
-      // from a multiline inline array dropped a line of a multiline string).
-      if (multilineArray && after_stable.indexOf(before_stable[index]) === -1) {
+      // from a multiline inline array dropped a line of a multiline string;
+      // fuzz seed 35943: removing one of several duplicate scalars above a
+      // nested multiline array chain-moved the array and corrupted its tail).
+      if (multilineArray && (after_stable.indexOf(before_stable[index]) === -1 || surplusDuplicate)) {
         changes.push({
           type: ChangeType.Remove,
           path: path.concat(index + removedBefore)
@@ -320,27 +338,20 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       // the displaced element is a surplus duplicate, resolve it as a
       // removal in place instead of a Move: the remaining occurrences stay
       // where they are, so nothing needs to move.
-      if (removedBefore > 0) {
-        const valueAt = before_stable[index];
-        let beforeCount = 0;
-        for (let i = index; i < before_stable.length; i++) {
-          if (before_stable[i] === valueAt) beforeCount++;
-        }
-        let afterCount = 0;
-        for (let i = index; i < after_stable.length; i++) {
-          if (after_stable[i] === valueAt) afterCount++;
-        }
-        if (beforeCount > afterCount) {
-          changes.push({
-            type: ChangeType.Remove,
-            path: path.concat(index + removedBefore)
-          });
-          before_stable.splice(index, 1);
-          before_sim.splice(index, 1);
-          removedBefore++;
-          index--;
-          continue;
-        }
+      //
+      // (Redundant with the surplus-duplicate removal above when
+      // `multilineArray` is set, but kept for the non-multiline case where a
+      // prior splice already shifted indices and the surplus is unambiguous.)
+      if (removedBefore > 0 && surplusDuplicate) {
+        changes.push({
+          type: ChangeType.Remove,
+          path: path.concat(index + removedBefore)
+        });
+        before_stable.splice(index, 1);
+        before_sim.splice(index, 1);
+        removedBefore++;
+        index--;
+        continue;
       }
 
       changes.push({
