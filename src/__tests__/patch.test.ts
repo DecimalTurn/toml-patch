@@ -10304,3 +10304,21 @@ test('regression for fuzz seed 43159', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 43199', () => {
+  const src = dedent`
+    a.p37xq = 61459
+    [[a.l1.zoyksoh]]
+    x = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.a.l1 = -4489;
+
+  const result = patch(src, obj, { inlineTableStart: 0, updateOrder: true });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    a.p37xq = 61459
+    a.l1 = -4489
+    `);
+});
+
