@@ -10643,7 +10643,7 @@ test('regression for fuzz seed 121096', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 129645', () => {
+test('regression for fuzz seed 129645', () => {
   const src = dedent`
     [[""]]
     x = 1
@@ -10664,7 +10664,7 @@ test.fails('regression for fuzz seed 129645', () => {
     x = 1
     a = 2
 
-    [".""=M._!wD>]"]
+    [""."=M._!wD>]"]
     l8401w1 = [ 4567 ]
     `);
 });

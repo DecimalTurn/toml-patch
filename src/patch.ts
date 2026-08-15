@@ -1840,7 +1840,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         const updated_js = toJS(updated.items, '', { temporal });
         const existingAotKey = (existing as TableArray).key.item.value;
         let jsValue: any = updated_js;
-        for (const key of change.path.slice(0, existingAotKey.length)) {
+        // The path's final segment is the AOT entry index ([..., 0]); navigate
+        // everything before it to reach the array's JS value.  Using
+        // `existingAotKey.length` misaligns when the AOT is itself nested inside
+        // another AOT entry, because the path then interleaves numeric entry
+        // indices with string key segments (fuzz seed 129645): an `[[""."k".v]]`
+        // entry edited to a scalar would re-embed the `v` segment instead of
+        // hoisting it, duplicating the key.
+        for (const key of change.path.slice(0, -1)) {
           jsValue = jsValue?.[key];
         }
 
