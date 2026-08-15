@@ -10067,3 +10067,39 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
   });
 
 });
+
+// FIXME(seed 30330): collapsing a dotted key whose value is a multiline array
+// into a flat array leaks the old closing `]` delimiter.  The diff truncates
+// `b.c` (an implicit table) to `b` and replaces its multiline-array value with
+// the new array, but the replaced value's span does not cover the closing `]`
+// line (nor its trailing `,`), so they are left behind: the result
+// `b = [true, "x", "y",,` fails to re-parse with "Consecutive commas in array".
+// A preceding value whose stringify observes the array (`a5 = [1]`) is what
+// makes the earlier `stableStringify` span tracking land on the wrong node.
+// Tracked as a known-failing test until the span handling is fixed.
+test.fails('collapsing a multiline-array dotted key into a flat array (seed 30330)', () => {
+  const src = dedent`
+    a5 = [1]
+
+    h.z = {
+        b.c = [
+        true,
+        8,
+    ],
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.h.z.b = [true, 'x', 'y'];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    a5 = [1]
+
+    h.z = {
+        b = [true, 'x', 'y'],
+    }
+  `);
+});
+
