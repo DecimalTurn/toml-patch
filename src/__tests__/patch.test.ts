@@ -10220,7 +10220,7 @@ test('regression for fuzz seed 37465', () => {
 });
 
 
-test.fails('regression for fuzz seed 39363', () => {
+test('regression for fuzz seed 39363', () => {
   const src = dedent`
     "" = 11:43:08
     ["".g]

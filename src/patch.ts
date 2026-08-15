@@ -1349,16 +1349,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
-        // A single-segment key whose value becomes a scalar (leaf) while a
+        // A single-segment key whose value becomes a non-table while a
         // sibling dotted-key or section still extends its prefix (e.g.
         // `"" = <date>` next to `"".x = 1` collapsing to `"" = "str"`) must
-        // drop those siblings — a leaf cannot hold them, and leaving them in
-        // place re-defines the key on re-parse ("Value already defined",
-        // fuzz seed 32801).
+        // drop those siblings — neither a leaf nor an array can hold them, and
+        // leaving them in place re-defines the key on re-parse
+        // ("Value already defined" for scalars, fuzz seed 32801; "Cannot add
+        // to static array" for arrays, fuzz seed 39363).
         if (!keyTruncated && isKeyValue(replacement)) {
           const newValue = replacement.value;
-          const isLeaf = !isInlineTable(newValue) && !isInlineArray(newValue);
-          if (isLeaf && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+          const isNotTable = !isInlineTable(newValue);
+          if (isNotTable && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
             removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
@@ -1440,12 +1441,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
-        // Single-segment key collapsing to a scalar with siblings extending its
-        // prefix (fuzz seed 32801) — same as the isKeyValue/isKeyValue branch.
+        // Single-segment key collapsing to a non-table with siblings extending
+        // its prefix (fuzz seeds 32801, 39363) — same as the
+        // isKeyValue/isKeyValue branch.
         if (!keyTruncated && isKeyValue(replacement.item)) {
           const newValue = replacement.item.value;
-          const isLeaf = !isInlineTable(newValue) && !isInlineArray(newValue);
-          if (isLeaf && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+          const isNotTable = !isInlineTable(newValue);
+          if (isNotTable && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
             removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
