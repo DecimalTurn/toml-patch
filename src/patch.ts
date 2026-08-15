@@ -3010,6 +3010,28 @@ function handleStructuralEdit(
       continue;
     }
 
+    // A regenerated inline-table key-value (`n = { "{&>*b0M" = -3566 }`)
+    // can collide with a surviving explicit `[n]` section that still owns
+    // unrelated keys.  Re-emitting the inline table defines `n` twice, and
+    // the `[n]` header then tries to extend the inline table, failing the
+    // re-parse with "Cannot extend inline table" (fuzz seed 37465).  Merge
+    // the inline table's rows into the surviving section instead.
+    if (isKeyValue(item) && isInlineTable(item.value)) {
+      const kvKey = item.key.value;
+      const survivingTable = (original.items as TreeNode[]).find(t =>
+        isTable(t) && arraysEqual((t as Table).key.item.value, kvKey));
+      if (survivingTable) {
+        for (const row of ((item.value as InlineTable).items as TreeNode[])) {
+          // Inline-table rows arrive as InlineItem wrappers; unwrap them so
+          // they land as plain KeyValues inside the block table.
+          const rowNode = isInlineItem(row) ? row.item : row;
+          insert(original, survivingTable, rowNode, undefined);
+        }
+        if (!firstInserted) firstInserted = survivingTable;
+        continue;
+      }
+    }
+
     // The rendered section may instead collide with an IMPLICIT table: the
     // document expresses that key through dotted key-values (`"".a = 1`
     // defines the "" table without a header).  Re-emitting the header

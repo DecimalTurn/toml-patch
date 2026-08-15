@@ -10198,7 +10198,7 @@ test('removing one of several duplicate scalars above a nested multiline array (
 });
 
 
-test.fails('regression for fuzz seed 37465', () => {
+test('regression for fuzz seed 37465', () => {
   const src = dedent`
     [[n.a.x]]
     b = true
