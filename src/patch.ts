@@ -3089,6 +3089,38 @@ function handleStructuralEdit(
         if (!firstInserted) firstInserted = survivingTable;
         continue;
       }
+
+      // The inline table's key can also be a prefix of a surviving IMPLICIT
+      // table expressed through dotted key-values (`a = { l1 = -4489 }`
+      // colliding with `a.p37xq = …`): re-emitting the inline table defines
+      // `a` twice and fails the re-parse with "Table already defined"
+      // (fuzz seed 43199).  Convert each inline-table row to a dotted KV
+      // under that prefix and insert those at the root scope instead.
+      const implicitSiblings = findDocumentItemsByKeyPrefix(original, kvKey)
+        .filter(t => isKeyValue(t));
+      if (implicitSiblings.length > 0) {
+        for (const row of ((item.value as InlineTable).items as TreeNode[])) {
+          const rowNode = isInlineItem(row) ? row.item : row;
+          if (isKeyValue(rowNode)) {
+            const oldRaw = rowNode.key.raw;
+            const dotted = kvKey.concat(rowNode.key.value);
+            rowNode.key.value = dotted;
+            rowNode.key.raw = dotted
+              .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+              .join('.');
+            const delta = rowNode.key.raw.length - oldRaw.length;
+            rowNode.key.loc.end.column = rowNode.key.loc.start.column + rowNode.key.raw.length;
+            rowNode.equals += delta;
+            shiftNode(rowNode.value, { lines: 0, columns: delta }, { first_line_only: true });
+            if (rowNode.loc.end.line === rowNode.loc.start.line) {
+              rowNode.loc.end.column += delta;
+            }
+          }
+          insert(original, original, rowNode, i === 0 ? insertIndex : undefined);
+          if (!firstInserted) firstInserted = rowNode;
+        }
+        continue;
+      }
     }
 
     // The rendered section may instead collide with an IMPLICIT table: the

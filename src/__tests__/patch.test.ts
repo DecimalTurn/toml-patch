@@ -10304,7 +10304,7 @@ test('regression for fuzz seed 43159', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 43199', () => {
+test('regression for fuzz seed 43199', () => {
   const src = dedent`
     a.p37xq = 61459
     [[a.l1.zoyksoh]]
