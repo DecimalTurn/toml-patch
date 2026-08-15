@@ -579,11 +579,16 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   let value: Date;
 
   // If next token is string,
-  // check if raw is full date and following is full time
+  // check if raw is full date and following is full time.
+  // The following token must be a BARE time literal (starting with a digit):
+  // `IS_FULL_TIME` is unanchored, so a quoted key like `"Bo5:6"` whose raw
+  // contains `5:6` would otherwise be read as a time and merged into the
+  // date, producing an invalid datetime (fuzz seed 40593).
   if (
     !cursor.peek().done &&
     cursor.peek().value!.type === TokenType.Literal &&
     dateFormatHelper.IS_FULL_DATE.test(raw) &&
+    /^\d/.test(cursor.peek().value!.raw) &&
     dateFormatHelper.IS_FULL_TIME.test(cursor.peek().value!.raw)
   ) {
     const start = loc.start;

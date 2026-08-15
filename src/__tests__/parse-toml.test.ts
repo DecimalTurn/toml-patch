@@ -105,7 +105,7 @@ test('should return correct ParseError (not TypeError) for incomplete table at E
   }).toThrow(/Expected table key, reached end of file/);
 });
 
-test.fails('regression for fuzz seed 40593: date-only value followed by a quoted key', () => {
+test('regression for fuzz seed 40593: date-only value followed by a quoted key', () => {
   const src = dedent`
     a = 2017-04-13
     "Bo5:6" = "x"
