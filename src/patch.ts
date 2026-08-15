@@ -2727,9 +2727,22 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (isKeyValue(parent) && isKeyValue(replacement) &&
             parentKey.value.length <= fullSourcePath.length &&
             arraysEqual(parentKey.value, fullSourcePath.slice(fullSourcePath.length - parentKey.value.length))) {
+          const oldKeyRaw = parentKey.raw;
           parentKey.value[parentKey.value.length - 1] = change.to;
           parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
+          // The `=` position lives on the KeyValue, not the Key, and the value
+          // keeps its own columns.  A rename that GROWS the last segment widens
+          // the key past `equals`, so both `equals` and the value must shift
+          // right, or the value overwrites the `=` and emits `aca9djz.k75 true`
+          // with no separator (fuzz seed 46522).  A rename that SHRINKS the key
+          // leaves `equals` where it was — the gap fills with the alignment
+          // spaces the document already had (fuzz seed 3214 expects this).
+          const keyWidthDelta = parentKey.raw.length - oldKeyRaw.length;
+          if (keyWidthDelta > 0) {
+            parent.equals += keyWidthDelta;
+            shiftNode(parent.value, { lines: 0, columns: keyWidthDelta }, { first_line_only: true });
+          }
           return;
         }
 
