@@ -10277,3 +10277,30 @@ test('regression for fuzz seed 41613', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 43159', () => {
+  const src = dedent`
+    a = """
+    -x
+    y"""
+    "|t" = 99
+    # c
+    z = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj["|t"] = { k8: { k36: { k89: { k83: "x", k28: "y", k10: 865 } } } };
+
+  const result = patch(src, obj, { inlineTableStart: 2, updateOrder: true, trailingNewline: 0 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    a = """
+    -x
+    y"""
+    # c
+    z = 1
+
+    ["|t"]
+    k8 = { k36 = { k89 = { k83 = "x", k28 = "y", k10 = 865 } } }
+    `);
+});
+
