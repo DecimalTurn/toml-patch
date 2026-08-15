@@ -35,7 +35,7 @@ test('it should convert spec examples to JS', () => {
   expect(toJS(parseTOML(spec_01_example))).toMatchSnapshot();
 });
 
-test.fails('it should not collide empty-string key paths with literal dot keys', () => {
+test('it should not collide empty-string key paths with literal dot keys', () => {
   const src = `
     [""]
     "" = { x = 1 }

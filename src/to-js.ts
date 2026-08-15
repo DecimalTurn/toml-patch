@@ -48,7 +48,7 @@ function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], i
     if (keyValue.value.type === NodeType.InlineTable) {
       // Only allocate concat array when we actually have a nested inline table
       const fullPath = basePath.concat(keyValue.key.value);
-      inlineTables.add(joinKey(fullPath));
+      inlineTables.add(encodeKey(fullPath));
       // Recursively track nested inline tables
       trackNestedInlineTables(keyValue.value, fullPath, inlineTables);
     }
@@ -165,7 +165,7 @@ export default function toJS(
       throw new ParseError(input, node.key.loc.start, e.message);
     }
 
-    const joined_key = joinKey(key);
+    const joined_key = encodeKey(key);
     tables.add(joined_key);
     defined.add(joined_key);
 
@@ -183,7 +183,7 @@ export default function toJS(
       throw new ParseError(input, node.key.loc.start, e.message);
     }
 
-    const joined_key = joinKey(key);
+    const joined_key = encodeKey(key);
     table_arrays.add(joined_key);
     defined.add(joined_key);
 
@@ -203,7 +203,7 @@ export default function toJS(
     // Track implicit tables created by dotted keys.
     if (key.length > 1) {
       for (let i = 1; i < key.length; i++) {
-        const implicit = joinKey(active_path.concat(key.slice(0, i)));
+        const implicit = encodeKey(active_path.concat(key.slice(0, i)));
         implicit_tables.add(implicit);
         defined.add(implicit);
       }
@@ -220,13 +220,13 @@ export default function toJS(
     // Inline tables are immutable in TOML
     if (node.value.type === NodeType.InlineTable) {
       const base_path = active_path.concat(key);
-      inline_tables.add(joinKey(base_path));
+      inline_tables.add(encodeKey(base_path));
       trackNestedInlineTables(node.value, base_path, inline_tables);
     }
     const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
 
     target[last(key)!] = value;
-    defined.add(joinKey(active_path.concat(key)));
+    defined.add(encodeKey(active_path.concat(key)));
   }
 }
 
@@ -253,11 +253,13 @@ export function toValue(
         const key = item.key.value;
         const value = toValue(item.value, { integersAsBigInt, temporal });
 
-        // Check for duplicate keys and conflicting key paths
+        // Check for duplicate keys and conflicting key paths.  Set lookups use
+        // the unambiguous encodeKey form; messages use the `.`-joined display.
         const full_key = joinKey(key);
-        
+        const encoded_key = encodeKey(key);
+
         // Check if this exact key was already defined
-        if (defined_keys.has(full_key)) {
+        if (defined_keys.has(encoded_key)) {
           throw new Error(`Duplicate key "${full_key}" in inline table`);
         }
         
@@ -265,25 +267,25 @@ export function toValue(
         // e.g., if "a.b" is defined, we can't later define "a.b.c" (would overwrite the value)
         for (let i = 1; i < key.length; i++) {
           const prefix = joinKey(key.slice(0, i));
-          if (defined_keys.has(prefix)) {
+          if (defined_keys.has(encodeKey(key.slice(0, i)))) {
             throw new Error(`Key "${full_key}" conflicts with key: "${prefix}"`);
           }
         }
         
         // Check if this key is a prefix of an already defined key
         // e.g., if "a.b.c" is defined, we can't later define "a.b" (would overwrite the table)
-        if (defined_prefixes.has(full_key)) {
-          const existing = defined_prefixes.get(full_key)!;
+        if (defined_prefixes.has(encoded_key)) {
+          const existing = defined_prefixes.get(encoded_key)!;
           throw new Error(`Key "${full_key}" conflicts with key: "${existing}"`);
         }
         
-        defined_keys.add(full_key);
+        defined_keys.add(encoded_key);
         
         // Track all prefixes of this key
         for (let i = 1; i < key.length; i++) {
-          const prefix = joinKey(key.slice(0, i));
-          if (!defined_prefixes.has(prefix)) {
-            defined_prefixes.set(prefix, full_key);
+          const encoded_prefix = encodeKey(key.slice(0, i));
+          if (!defined_prefixes.has(encoded_prefix)) {
+            defined_prefixes.set(encoded_prefix, full_key);
           }
         }
 
@@ -339,9 +341,12 @@ function validateKey(
     inline_tables: Set<string>;
   }
 ) {
-  // Pre-compute all candidate key strings incrementally to avoid repeated
-  // prefix.concat(key.slice(0, i)) + join allocations.
-  // candidates[i] = joinKey(prefix.concat(key.slice(0, i + 1)))
+  // Pre-compute candidate key strings incrementally to avoid repeated
+  // prefix.concat(key.slice(0, i)) + join allocations.  Two representations
+  // are kept side by side: `candidates` is the human-readable `.`-joined path
+  // used in error messages, while `encoded` is the unambiguous encodeKey form
+  // used for the state sets below (a joined path collides for distinct keys —
+  // fuzz seed 65682).
   // The accumulation must be structural, not string-truthiness based: an
   // empty-string key segment (e.g. the first segment of `""`.lt = …) makes
   // the accumulated string '' and would silently drop the segment — then
@@ -349,11 +354,14 @@ function validateKey(
   // valid AOT sub-table headers are rejected (fuzz seed 103).
   const parts: string[] = prefix.length > 0 ? [...prefix] : [];
   const candidates: string[] = new Array(key.length);
+  const encoded: string[] = new Array(key.length);
   for (let i = 0; i < key.length; i++) {
     parts.push(key[i]);
-    candidates[i] = parts.join('.');
+    candidates[i] = joinKey(parts);
+    encoded[i] = encodeKey(parts);
   }
   const joined_full_key = candidates[key.length - 1];
+  const encoded_full_key = encoded[key.length - 1];
 
   // 0. Inline tables are immutable.
   // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
@@ -361,14 +369,14 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.inline_tables.has(candidate)) {
+      if (state.inline_tables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend inline table at ${candidate}`);
       }
     }
   }
   
   // Also check if a table header tries to extend an inline table
-  if ((type === NodeType.Table || type === NodeType.TableArray) && state.inline_tables.has(joined_full_key)) {
+  if ((type === NodeType.Table || type === NodeType.TableArray) && state.inline_tables.has(encoded_full_key)) {
     throw new Error(`Cannot extend inline table at ${joined_full_key}`);
   }
   
@@ -376,7 +384,7 @@ function validateKey(
   if (type === NodeType.Table || type === NodeType.TableArray) {
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.inline_tables.has(candidate)) {
+      if (state.inline_tables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend inline table at ${candidate}`);
       }
     }
@@ -388,7 +396,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i < key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.table_arrays.has(candidate)) {
+      if (state.table_arrays.has(encoded[i - 1])) {
         throw new Error(`Cannot traverse Array of Tables at ${candidate}`);
       }
     }
@@ -396,7 +404,7 @@ function validateKey(
 
   // 0b. Tables created implicitly by dotted keys cannot be re-opened via table headers.
   // (toml-test invalid: spec-1.1.0/common-46-0 and common-46-1)
-  if ((type === NodeType.Table || type === NodeType.TableArray) && state.implicit_tables.has(joined_full_key)) {
+  if ((type === NodeType.Table || type === NodeType.TableArray) && state.implicit_tables.has(encoded_full_key)) {
     throw new Error(`Implicit table already defined: ${joined_full_key}`);
   }
 
@@ -404,7 +412,7 @@ function validateKey(
   // Example: `type.name = "Nail"` then `type = { edible = false }` is invalid.
   // Example: `a.b.c = 1` then `a.b = 2` is invalid (a.b was implicitly created as a table).
   // (toml-test invalid: spec-1.1.0/common-50-0, table/append-with-dotted-keys-05)
-  if (type === NodeType.KeyValue && state.implicit_tables.has(joined_full_key)) {
+  if (type === NodeType.KeyValue && state.implicit_tables.has(encoded_full_key)) {
     throw new Error(`Table already defined: ${joined_full_key}`);
   }
 
@@ -414,7 +422,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.tables.has(candidate)) {
+      if (state.tables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }
@@ -429,7 +437,7 @@ function validateKey(
     }
 
     const joined_parts = candidates[index];
-    if (Array.isArray(object[part]) && !state.table_arrays.has(joined_parts)) {
+    if (Array.isArray(object[part]) && !state.table_arrays.has(encoded[index])) {
       throw new Error(`Cannot add to static array at ${joined_parts}`);
     }
 
@@ -440,12 +448,12 @@ function validateKey(
   const joined_key = joined_full_key;
 
   // 2. Cannot override table
-  if (object && type === NodeType.Table && state.defined.has(joined_key)) {
+  if (object && type === NodeType.Table && state.defined.has(encoded_full_key)) {
     throw new Error(`Table already defined: ${joined_key}`);
   }
 
   // 2b. Cannot assign a value to a path that is already a table (explicit or implicit).
-  if (object && type === NodeType.KeyValue && key.length === 1 && state.defined.has(joined_key)) {
+  if (object && type === NodeType.KeyValue && key.length === 1 && state.defined.has(encoded_full_key)) {
     // If the path exists as a structured value, overriding it is invalid.
     if (!isPrimitive(object)) {
       throw new Error(`Table already defined: ${joined_key}`);
@@ -453,7 +461,7 @@ function validateKey(
   }
 
   // 3. Cannot add table array to static array or table
-  if (object && type === NodeType.TableArray && !state.table_arrays.has(joined_key)) {
+  if (object && type === NodeType.TableArray && !state.table_arrays.has(encoded_full_key)) {
     throw new Error(`Cannot add Array of Tables to table at ${joined_key}`);
   }
 }
@@ -496,4 +504,16 @@ function isPrimitive(value: any) {
 
 function joinKey(key: string[]): string {
   return key.join('.');
+}
+
+/**
+ * Unambiguous encoding of a key path for use as a `Set`/`Map` key.
+ *
+ * A plain `key.join('.')` collides for distinct key paths: `["", ""]` (an
+ * empty-string key nested in an empty-string table) and the single literal
+ * segment `["."]` both join to `.`, so a nested empty-key inline table is
+ * wrongly rejected when a `["."]` table header follows (fuzz seed 65682).
+ */
+function encodeKey(key: string[]): string {
+  return JSON.stringify(key);
 }
