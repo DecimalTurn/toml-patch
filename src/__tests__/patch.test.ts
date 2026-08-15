@@ -10237,3 +10237,25 @@ test('regression for fuzz seed 39363', () => {
     `);
 });
 
+
+test.fails('regression for fuzz seed 40181', () => {
+  const src = dedent`
+    a = [1, false, [
+        2,
+        "x"
+    ]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.a.splice(1, 1);
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    a = [1, [
+        2,
+        "x"
+    ]]
+    `);
+});
+
