@@ -1348,6 +1348,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             }
           }
         }
+
+        // A single-segment key whose value becomes a scalar (leaf) while a
+        // sibling dotted-key or section still extends its prefix (e.g.
+        // `"" = <date>` next to `"".x = 1` collapsing to `"" = "str"`) must
+        // drop those siblings — a leaf cannot hold them, and leaving them in
+        // place re-defines the key on re-parse ("Value already defined",
+        // fuzz seed 32801).
+        if (!keyTruncated && isKeyValue(replacement)) {
+          const newValue = replacement.value;
+          const isLeaf = !isInlineTable(newValue) && !isInlineArray(newValue);
+          if (isLeaf && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
+          }
+        }
         
         preserveFormatting(existing.value, replacement.value);
         if (containerParent) {
@@ -1423,6 +1437,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 }
               }
             }
+          }
+        }
+
+        // Single-segment key collapsing to a scalar with siblings extending its
+        // prefix (fuzz seed 32801) — same as the isKeyValue/isKeyValue branch.
+        if (!keyTruncated && isKeyValue(replacement.item)) {
+          const newValue = replacement.item.value;
+          const isLeaf = !isInlineTable(newValue) && !isInlineArray(newValue);
+          if (isLeaf && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
 
@@ -3358,4 +3382,37 @@ function findDocumentItemsByKeyPrefix(
     }
   }
   return matchingNodes;
+}
+
+/**
+ * Removes sibling key-values and table/table-array sections whose key extends
+ * `prefix` (i.e. `prefix` is a strict prefix of the sibling's key) from
+ * `container`'s items, leaving `keep` untouched.  Used when a key collapses to
+ * a scalar: any dotted-key or section that still nests under it would re-define
+ * the key on re-parse ("Value already defined").
+ *
+ * Iterates a snapshot of the items because `removeMember` splices the live
+ * array (fuzz seed 31662).
+ */
+function removeSiblingsExtendingPrefix(
+  original: Document,
+  container: Table | Document | TableArray,
+  prefix: Array<string | number>,
+  keep: TreeNode
+): void {
+  const parentItems = [...container.items] as Block[];
+  for (let si = parentItems.length - 1; si >= 0; si--) {
+    const sibling = parentItems[si];
+    if (sibling === keep) continue;
+    const siblingKey = isKeyValue(sibling)
+      ? sibling.key.value
+      : isTable(sibling) || isTableArray(sibling)
+        ? sibling.key.item.value
+        : undefined;
+    if (siblingKey
+        && siblingKey.length > prefix.length
+        && arraysEqual(siblingKey.slice(0, prefix.length), prefix)) {
+      removeMember(original, container, sibling);
+    }
+  }
 }
