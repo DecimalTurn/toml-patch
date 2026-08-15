@@ -10524,6 +10524,44 @@ test('regression for fuzz seed 68861', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 78079', () => {
+  const src = dedent`
+    ["".i3asc2k3y]
+    a = false
+
+    [""]
+    b = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj[""].i3asc2k3y = "X";
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [""]
+    b = 1
+    i3asc2k3y = "X"
+    `);
+});
+
+test.fails('regression for fuzz seed 79938', () => {
+  const src = dedent`
+    q = 2019-06-13T09:28:26
+    q."X,O{&v6D".kwkxclp2d = true
+
+    [q."Zr%@lBr"]
+    lidz78h = 1
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.q;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent``);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
