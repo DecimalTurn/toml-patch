@@ -10197,3 +10197,25 @@ test('removing one of several duplicate scalars above a nested multiline array (
   `);
 });
 
+
+test.fails('regression for fuzz seed 37465', () => {
+  const src = dedent`
+    [[n.a.x]]
+    b = true
+
+    [n]
+    c = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.n.a = 42;
+
+  const result = patch(src, obj, { inlineTableStart: 0 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [n]
+    c = 1
+    a = 42
+    `);
+});
+
