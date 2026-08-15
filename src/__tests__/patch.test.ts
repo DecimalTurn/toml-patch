@@ -10402,7 +10402,7 @@ test('regression for fuzz seed 62163', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 62263', () => {
+test('regression for fuzz seed 62263', () => {
   const src = dedent`
     a = [1, [false, true, '''
     x

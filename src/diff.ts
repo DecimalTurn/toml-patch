@@ -359,6 +359,23 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
         continue;
       }
 
+      // After an in-place removal this array is one element short at this
+      // slot, so the after-value found later in `before` is NOT being
+      // relocated — a fresh copy is needed here.  Relocating it via a Move
+      // drags multiline elements through a chain that later ADDs a new copy
+      // anyway, and the writer corrupts their content (fuzz seed 62263: a
+      // nested array above a multiline inline table replaced by a duplicate
+      // scalar emitted Remove + Move + Add and mangled the table).
+      if (multilineArray && removedBefore > 0) {
+        changes.push({
+          type: ChangeType.Add,
+          path: path.concat(index)
+        });
+        before_stable.splice(index, 0, value);
+        before_sim.splice(index, 0, after[index]);
+        continue;
+      }
+
       changes.push({
         type: ChangeType.Move,
         path,
