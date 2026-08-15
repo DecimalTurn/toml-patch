@@ -1705,13 +1705,33 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
                 commentEligibleNodes.add(freshKV);
               } else {
-                const newTable = generateTable(parentKey);
-                materialisedTables.add(newTable);
-                insert(original, newTable, freshKV, 0);
-                replace(original, tableParent, existing, newTable);
-                // newTable stands in for the pre-existing `existing` table, so it should stay
-                // eligible for the leading comment run `existing` would have owned via R2.
-                commentEligibleNodes.add(newTable);
+                // The parent key may already be an EXPLICIT section (a
+                // `[parentKey]` header that survives unrelated to this edit,
+                // e.g. `[""].i3asc2k3y` collapsing while a separate `[""]`
+                // table lives on — fuzz seed 78079).  Generating a fresh
+                // `[parentKey]` header would duplicate it and fail the
+                // re-parse with "Table already defined".  Merge the fresh KV
+                // into the surviving section instead.
+                const survivingParent = (original.items as TreeNode[]).find(n =>
+                  n !== existing
+                  && (isTable(n) || isTableArray(n))
+                  && arraysEqual((n as Table | TableArray).key.item.value, parentKey));
+                if (survivingParent) {
+                  const parentSection = (survivingParent as Table | TableArray);
+                  // freshKV's key is the single last segment; inside `[parentKey]`
+                  // it lands as a plain child row.
+                  insert(original, parentSection, freshKV, undefined);
+                  removeMember(original, tableParent, existing);
+                  commentEligibleNodes.add(freshKV);
+                } else {
+                  const newTable = generateTable(parentKey);
+                  materialisedTables.add(newTable);
+                  insert(original, newTable, freshKV, 0);
+                  replace(original, tableParent, existing, newTable);
+                  // newTable stands in for the pre-existing `existing` table, so it should stay
+                  // eligible for the leading comment run `existing` would have owned via R2.
+                  commentEligibleNodes.add(newTable);
+                }
               }
             }
           } else {

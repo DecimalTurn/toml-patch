@@ -10524,7 +10524,7 @@ test('regression for fuzz seed 68861', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 78079', () => {
+test('regression for fuzz seed 78079', () => {
   const src = dedent`
     ["".i3asc2k3y]
     a = false
