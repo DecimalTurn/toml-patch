@@ -10341,6 +10341,28 @@ test('regression for fuzz seed 46522', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 54607', () => {
+  const src = dedent`
+    vvyka = [{
+        a = 1,
+    }, """
+    EY""", 'tail']
+  `;
+
+  const obj = parse(src) as any;
+  obj.vvyka[1] = -3320;
+  obj.vvyka.splice(2, 1);
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  // TODO: fill in exact expected output after the fix.
+  // expect(result).toEqual(dedent`
+  //     vvyka = [{
+  //         a = 1,
+  //     }, -3320]
+  //     `);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
