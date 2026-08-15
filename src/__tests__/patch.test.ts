@@ -10545,7 +10545,7 @@ test('regression for fuzz seed 78079', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 79938', () => {
+test('regression for fuzz seed 79938', () => {
   const src = dedent`
     q = 2019-06-13T09:28:26
     q."X,O{&v6D".kwkxclp2d = true

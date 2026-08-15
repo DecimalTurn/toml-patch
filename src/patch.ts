@@ -2188,6 +2188,37 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
+        // When a key at this path is removed outright (the path exactly
+        // matches the node's key), any sibling whose key EXTENDS this prefix
+        // (a longer dotted key or a [table]/[[array]] section) re-defines
+        // the key on re-parse.  E.g. `q = <date>` alongside `q."X".y = true`
+        // and `[q."Z"]` (a leniently-accepted collision) leaves those
+        // extensions behind when only `q = <date>` is removed, and the
+        // re-parse revives `q` as a table (fuzz seed 79938).  Drop them too.
+        if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
+          const key = removePrefixKv.key.value;
+          const siblings = (parent as { items: TreeNode[] }).items;
+          const extending: TreeNode[] = [];
+          for (const sibling of siblings) {
+            if (sibling === node) continue;
+            const siblingKey = isKeyValue(sibling)
+              ? sibling.key.value
+              : isInlineItem(sibling) && isKeyValue(sibling.item)
+                ? sibling.item.key.value
+                : isTable(sibling) || isTableArray(sibling)
+                  ? sibling.key.item.value
+                  : undefined;
+            if (siblingKey
+                && siblingKey.length > key.length
+                && arraysEqual(siblingKey.slice(0, key.length), key)) {
+              extending.push(sibling);
+            }
+          }
+          for (const sibling of extending) {
+            removeMember(original, parent, sibling);
+          }
+        }
+
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
         }
