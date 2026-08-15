@@ -2307,6 +2307,32 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
+        // Same repair for a removed SECTION header ([table]/[[array]]).  When
+        // `[x]` is deleted while a sibling `[[x.y]]` (or `x.z = …`) still
+        // extends the `x` prefix, removing only the header leaves the section
+        // behind and the re-parse revives `x` from it (fuzz seed 136292).
+        if ((isTable(node) || isTableArray(node)) && hasItems(parent)) {
+          const key = (node as Table | TableArray).key.item.value;
+          const siblings = (parent as { items: TreeNode[] }).items;
+          const extending: TreeNode[] = [];
+          for (const sibling of siblings) {
+            if (sibling === node) continue;
+            const siblingKey = isKeyValue(sibling)
+              ? sibling.key.value
+              : isTable(sibling) || isTableArray(sibling)
+                ? sibling.key.item.value
+                : undefined;
+            if (siblingKey
+                && siblingKey.length > key.length
+                && arraysEqual(siblingKey.slice(0, key.length), key)) {
+              extending.push(sibling);
+            }
+          }
+          for (const sibling of extending) {
+            removeMember(original, parent, sibling);
+          }
+        }
+
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
         }
