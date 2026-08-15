@@ -662,7 +662,15 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
 
   // For inline tables and arrays, check whether the line should be kept
   const is_inline = previous && isInlineItem(previous) || next && isInlineItem(next);
-  const previous_on_same_line = previous && previous.loc.end.line === node.loc.start.line;
+  // `node.loc.start.line` can be stale when `previous` carries a pending exit
+  // offset (e.g. an earlier Edit collapsed a multiline item, leaving a line
+  // offset that will pull this node up a line in applyWrites).  Compensate so
+  // a same-line removal is recognised as such instead of as a full-line
+  // removal that shifts the container's closing bracket onto the wrong line
+  // (fuzz seed 54607).
+  const prevPendingExit = previous ? getExitOffsets(root).get(previous) : undefined;
+  const previous_on_same_line = previous &&
+    previous.loc.end.line === (node.loc.start.line + (prevPendingExit?.lines ?? 0));
   const next_on_sameLine = next && next.loc.start.line === node.loc.end.line;
   const keep_line = is_inline && (previous_on_same_line || next_on_sameLine);
 

@@ -10341,7 +10341,7 @@ test('regression for fuzz seed 46522', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 54607', () => {
+test('regression for fuzz seed 54607', () => {
   const src = dedent`
     vvyka = [{
         a = 1,
@@ -10355,12 +10355,11 @@ test.fails('regression for fuzz seed 54607', () => {
 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
-  // TODO: fill in exact expected output after the fix.
-  // expect(result).toEqual(dedent`
-  //     vvyka = [{
-  //         a = 1,
-  //     }, -3320]
-  //     `);
+  expect(result).toEqual(dedent`
+    vvyka = [{
+        a = 1,
+    }, -3320]
+    `);
 });
 
 //WIP 
