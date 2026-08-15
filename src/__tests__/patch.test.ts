@@ -10562,7 +10562,7 @@ test('regression for fuzz seed 79938', () => {
   expect(result).toEqual(dedent``);
 });
 
-test.fails('regression for fuzz seed 80004', () => {
+test('regression for fuzz seed 80004', () => {
   const src = dedent`
     [a.b]
     "" = 11:17:13.346128
@@ -10580,7 +10580,7 @@ test.fails('regression for fuzz seed 80004', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 82825', () => {
+test('regression for fuzz seed 82825', () => {
   const src = dedent`
     x = { "".1.w46j = -916648, "".e-0cxz9.";" = "v" }
   `;
@@ -10595,7 +10595,7 @@ test.fails('regression for fuzz seed 82825', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 86547', () => {
+test('regression for fuzz seed 86547', () => {
   const src = dedent`
     b.c.d = [01:48:53, { iuqh = 7544.95655 }, "s", false]
   `;
@@ -10611,7 +10611,7 @@ test.fails('regression for fuzz seed 86547', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 86724', () => {
+test('regression for fuzz seed 86724', () => {
   const src = dedent`
     [[x_i42]]
     m = 1

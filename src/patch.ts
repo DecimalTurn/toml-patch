@@ -437,14 +437,29 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     for (const key of prefix) value = value?.[key];
     if (!Array.isArray(value)) continue;
 
-    const staysAllObjects = value.every(el => el !== null && typeof el === 'object' && !Array.isArray(el));
+    // The array no longer holds only AOT-shaped entries once ANY element is a
+    // scalar / array / date / Temporal — `isObject` already excludes those.
+    // (A bare `typeof el === 'object'` check wrongly kept Dates as "objects",
+    // so `[[x]]` → `[date1, date2]` was missed and the redundant per-element
+    // Add double-added the tail — fuzz seed 86724.)
+    const staysAllObjects = value.every(el => isObject(el));
     if (staysAllObjects) continue;
 
-    for (const change of changes) {
-      if (consumed.has(change)) continue;
-      if (!isEdit(change) && !isAdd(change) && !isRemove(change)) continue;
-      if (change.path.length !== prefix.length + 1) continue;
-      if (!arraysEqual(change.path.slice(0, -1), prefix)) continue;
+    // Only coalesce when the diff actually split the replacement across
+    // multiple element-level changes (e.g. Edit[0] + Add[1]).  A single Edit
+    // (e.g. `[[a.b.c]]` → `[date]`) is handled correctly by the
+    // isTableArray(existing) branch, which re-renders the parent as a proper
+    // `[section]` header — collapsing it here would instead route through
+    // handleStructuralEdit and flatten it to an inline table (fuzz seed 3333).
+    const elementChanges = changes.filter(c =>
+      !consumed.has(c)
+      && (isEdit(c) || isAdd(c) || isRemove(c))
+      && c.path.length === prefix.length + 1
+      && arraysEqual(c.path.slice(0, -1), prefix)
+    );
+    if (elementChanges.length < 2) continue;
+
+    for (const change of elementChanges) {
       consumed.add(change);
     }
     coalescedEdits.push({ type: ChangeType.Edit, path: prefix });
@@ -1172,6 +1187,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineArray(parent) && parent.items.length === 0) {
             applyWrites(original);
           }
+          // Inserting at the FRONT of a non-empty single-line inline array
+          // after leading elements were removed in this same patch: removing a
+          // leading element with no previous sibling registers a pending ENTER
+          // offset on the array itself (writer.remove() targets `parent`), and
+          // insert() positions an index-0 child against parent.loc.start — a
+          // stale, pre-offset column.  The re-inserted elements then land on
+          // top of the enclosing dotted key's text and applyWrites clobbers it
+          // (fuzz seed 86547).  Flush first, same discipline as the guards
+          // above and below.
+          if (resolvedIndex === 0 && isInlineArray(parent) &&
+              getPendingEnterOffsets(original).has(parent)) {
+            applyWrites(original);
+          }
           // Inserting at index 0 of a Document/Table/TableArray that still
           // carries a pending ENTER offset from an earlier removal: the
           // offset would drag the new row above line 1 (fuzz seed 11557 —
@@ -1378,17 +1406,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
-        // A single-segment key whose value becomes a non-table while a
+        // A single-segment key whose value becomes a non-block-table while a
         // sibling dotted-key or section still extends its prefix (e.g.
         // `"" = <date>` next to `"".x = 1` collapsing to `"" = "str"`) must
-        // drop those siblings — neither a leaf nor an array can hold them, and
-        // leaving them in place re-defines the key on re-parse
-        // ("Value already defined" for scalars, fuzz seed 32801; "Cannot add
-        // to static array" for arrays, fuzz seed 39363).
+        // drop those siblings — neither a leaf, an array, nor an inline table
+        // can hold them, and leaving them in place re-defines the key on
+        // re-parse ("Value already defined" for scalars, fuzz seed 32801;
+        // "Cannot add to static array" for arrays, fuzz seed 39363; "Cannot
+        // extend inline table" for inline tables, fuzz seed 80004).  In this
+        // branch `replacement` is always a KeyValue, so its value can never be
+        // a block Table/TableArray — every value shape needs the sibling sweep.
         if (!keyTruncated && isKeyValue(replacement)) {
-          const newValue = replacement.value;
-          const isNotTable = !isInlineTable(newValue);
-          if (isNotTable && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
             removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
@@ -1470,13 +1499,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
         }
 
-        // Single-segment key collapsing to a non-table with siblings extending
-        // its prefix (fuzz seeds 32801, 39363) — same as the
-        // isKeyValue/isKeyValue branch.
+        // Single-segment key collapsing to a non-block-table with siblings
+        // extending its prefix (fuzz seeds 32801, 39363, 80004) — same as the
+        // isKeyValue/isKeyValue branch; every value shape in this branch
+        // (leaf, array, inline table) must drop prefix-extending siblings.
         if (!keyTruncated && isKeyValue(replacement.item)) {
-          const newValue = replacement.item.value;
-          const isNotTable = !isInlineTable(newValue);
-          if (isNotTable && containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
             removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
@@ -1533,6 +1561,35 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               addExitOffset(original, existingKeyValue, { lines: 0, columns: delta });
             }
             keyTruncated = true;
+
+            // A surviving sibling row extending the truncated prefix still
+            // re-defines the (now collapsed) key on re-parse — e.g. `"" = "s"`
+            // left next to `"".e-0cxz9.";" = …` inside an inline table
+            // (fuzz seed 82825).  Remove those rows, mirroring the 3607/11799
+            // discipline (InlineItem row keys included).
+            const truncatedPrefix = existingKeyValue.key.value;
+            let scanParent = containerParent;
+            if (isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && hasItems(scanParent)) {
+              const parentItems = [...(scanParent as { items: TreeNode[] }).items];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isInlineItem(sibling) && isKeyValue(sibling.item)
+                    ? sibling.item.key.value
+                    : isTable(sibling) || isTableArray(sibling)
+                      ? sibling.key.item.value
+                      : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, scanParent, sibling);
+                }
+              }
+            }
           }
         }
 
