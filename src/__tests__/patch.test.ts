@@ -10495,6 +10495,35 @@ test('regression for fuzz seed 68244', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 68861', () => {
+  const src = dedent`
+    [t]
+    xepe5 = ['''
+    n
+    J
+    ''', "v", -1, true, [
+        -2,
+        'x',
+    ]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.t.xepe5.splice(2, 0, true);
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [t]
+    xepe5 = ['''
+    n
+    J
+    ''', "v", true, -1, true, [
+        -2,
+        'x',
+    ]]
+    `);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
