@@ -763,19 +763,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     hoistRootKeyValueAboveTables(original, freshKV);
   }
 
-  // Same as extendKeyWithParentAndReplace, but for a regenerated Table/TableArray
-  // section: when a `[a.b.c]` section (or `[[a.b.c]]`) is replaced by a fresh
-  // section whose key carries only the last segment (`[[c]]`), extend its key
-  // with the parent prefix IN PLACE so it re-renders as `[[a.b.c]]` — a `[[c]]`
-  // child of a generated `[a.b]` header would otherwise fragment into a stray
-  // top-level section (fuzz seed 41613).  The section's items live on their own
-  // lines, so only the header key (not the item columns) needs shifting.
-  function extendSectionKeyWithParentAndReplace(
-    section: Table | TableArray,
-    parentKey: string[],
-    existing: TreeNode,
-    tableParent: TreeNode
-  ): void {
+  // Extend a regenerated Table/TableArray section's key with a parent prefix
+  // IN PLACE: a `[[c]]` whose key carries only the last segment becomes
+  // `[[a.b.c]]` when `parentKey` is `['a','b']`.  A `[[c]]` child of a
+  // generated `[a.b]` header would otherwise fragment into a stray top-level
+  // section.  The section's items live on their own lines, so only the header
+  // key (not the item columns) needs shifting.
+  function extendSectionKeyInPlace(section: Table | TableArray, parentKey: string[]): void {
     const keyNode = section.key.item;
     const oldRaw = keyNode.raw;
     const dottedKey = parentKey.concat(keyNode.value);
@@ -789,6 +783,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     if (section.key.loc.end.line === section.key.loc.start.line) {
       section.key.loc.end.column += delta;
     }
+  }
+
+  // Same as extendKeyWithParentAndReplace, but for a regenerated Table/TableArray
+  // section: when a `[a.b.c]` section (or `[[a.b.c]]`) is replaced by a fresh
+  // section whose key carries only the last segment (`[[c]]`), extend its key
+  // with the parent prefix IN PLACE so it re-renders as `[[a.b.c]]` (fuzz seed
+  // 41613).
+  function extendSectionKeyWithParentAndReplace(
+    section: Table | TableArray,
+    parentKey: string[],
+    existing: TreeNode,
+    tableParent: TreeNode
+  ): void {
+    extendSectionKeyInPlace(section, parentKey);
     replace(original, tableParent, existing, section);
   }
 
@@ -1842,6 +1850,27 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             commentEligibleNodes.add(freshKV);
 
             hoistRootKeyValueAboveTables(original, freshKV);
+          }
+
+          // A table replaced by an array of objects becomes an array-of-tables:
+          // parseJS renders each array element as its own `[[key]]` section, so
+          // `freshDoc.items` holds more than one entry.  The block above only
+          // placed `freshKV` (entry 0); the remaining `[[key]]` sections must be
+          // inserted right after it or they are silently dropped (fuzz seed
+          // 460447 — the appended entry vanished).
+          if (freshDoc.items.length > 1) {
+            for (let i = 1; i < freshDoc.items.length; i++) {
+              const extraEntry = freshDoc.items[i] as Table | TableArray;
+              if (parentKey.length > 0) {
+                extendSectionKeyInPlace(extraEntry, parentKey);
+              }
+              // Insert after the entry just placed (freshKV for the first, the
+              // previous extra entry for the rest).
+              const prev = (i === 1 ? freshKV : freshDoc.items[i - 1]) as TreeNode;
+              const prevIndex = (tableParent as Document).items.indexOf(prev as Block);
+              insert(original, tableParent, extraEntry, prevIndex + 1);
+              commentEligibleNodes.add(extraEntry);
+            }
           }
           return; // handled; skip the generic replace() below
         }

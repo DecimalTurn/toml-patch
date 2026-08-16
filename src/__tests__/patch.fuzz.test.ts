@@ -873,3 +873,36 @@ test('regression for fuzz seed 421965 (moving a multiline string to the front an
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
 });
+
+test('regression for fuzz seed 460447 (table replaced by an array-of-tables drops the second entry)', () => {
+  // Replacing a plain table `[jv_c.g5y2632gh]` with a two-element array turns
+  // it into an array-of-tables.  parseJS renders each array element as its
+  // own `[[key]]` section, but the table→AOT branch only grabbed `items[0]`,
+  // silently dropping entry 1 (and its nested sub-table).
+  const src = dedent`
+    [jv_c.g5y2632gh]
+    k78 = "a"
+    k59 = "b"
+    k53 = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.jv_c.g5y2632gh = [
+    { k78: 'a', k59: 'b', k53: 1 },
+    { k61: 'NGbdHzIsNOmfVz', k21: 3835, k9: { k10: 2198, k26: 'oGNuD5FeWfa6QP0AVy' } },
+  ];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[jv_c.g5y2632gh]]
+    k78 = "a"
+    k59 = "b"
+    k53 = 1
+
+    [[jv_c.g5y2632gh]]
+    k61 = "NGbdHzIsNOmfVz"
+    k21 = 3835
+    k9 = { k10 = 2198, k26 = "oGNuD5FeWfa6QP0AVy" }
+  `);
+});
