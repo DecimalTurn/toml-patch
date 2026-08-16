@@ -10820,7 +10820,9 @@ test('regression for fuzz seed 299772 (AOT entry replaced by scalar)', () => {
 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
-  expect(result).not.toContain('[[hc8v]]');
+  expect(result).toEqual(dedent`
+    hc8v = [ -1937, { b = 2 } ]
+  `);
 });
 
 test('regression for fuzz seed 299772 (LocalTime truncated by truncateZeroTimeInDates)', () => {
@@ -10838,8 +10840,10 @@ test('regression for fuzz seed 299772 (LocalTime truncated by truncateZeroTimeIn
 
   const result = patch(src, obj, { truncateZeroTimeInDates: true, minimumDecimals: 1 });
   expect(parse(result)).toEqual(obj);
-  expect(result).toContain('nm5drkk.p9izjo3 = 00:00:00');
-  expect(result).not.toContain('NaN');
+  expect(result).toEqual(dedent`
+    nm5drkk.p9izjo3 = 00:00:00
+    other = 2.0
+  `);
 });
 
 //WIP 
