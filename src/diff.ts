@@ -285,7 +285,15 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // ORIGINAL array — because the patcher applies same-array removals in
   // descending index order (see reorder() in patch.ts), so each emitted
   // index must stay valid against the un-shifted array.
+  // Both removes AND adds splice the simulation in lockstep with the loop:
+  // a remove shifts later sim indices LEFT vs source, an add shifts them
+  // RIGHT.  `removedBefore` alone only models the removes, so an interspersed
+  // Add (e.g. an in-place edit resolved as an add, then a surplus-duplicate
+  // removed a slot later) skews the emitted source index by one position and
+  // the patcher removes the wrong element (fuzz seed 179377).  Track adds
+  // separately and subtract them from the remove offset.
   let removedBefore = 0;
+  let addedBefore = 0;
 
   // 2. Step through after array making changes to before array as-needed
   for (let index = 0; index < after_stable.length; index++) {
@@ -327,7 +335,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       if (multilineArray && (after_stable.indexOf(before_stable[index]) === -1 || surplusDuplicate)) {
         changes.push({
           type: ChangeType.Remove,
-          path: path.concat(index + removedBefore)
+          path: path.concat(index + removedBefore - addedBefore)
         });
         before_stable.splice(index, 1);
         before_sim.splice(index, 1);
@@ -350,7 +358,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       if (removedBefore > 0 && surplusDuplicate) {
         changes.push({
           type: ChangeType.Remove,
-          path: path.concat(index + removedBefore)
+          path: path.concat(index + removedBefore - addedBefore)
         });
         before_stable.splice(index, 1);
         before_sim.splice(index, 1);
@@ -373,6 +381,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
         });
         before_stable.splice(index, 0, value);
         before_sim.splice(index, 0, after[index]);
+        addedBefore++;
         continue;
       }
 
@@ -432,13 +441,14 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     });
     before_stable.splice(index, 0, value);
     before_sim.splice(index, 0, after[index]);
+    addedBefore++;
   }
 
   // 3. Remove any remaining overflow items
   for (let i = after_stable.length; i < before_stable.length; i++) {
     changes.push({
       type: ChangeType.Remove,
-      path: path.concat(i + removedBefore)
+      path: path.concat(i + removedBefore - addedBefore)
     });
   }
 
