@@ -479,7 +479,14 @@ export function fuzzOne(
       if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
         const lastSeg = mutation.path[mutation.path.length - 1];
         const parentPath = mutation.path.slice(0, -1);
-        if (typeof lastSeg === 'number' && aotKeyPaths.has(parentPath.join('.'))) {
+        // The AOT keys in aotKeyPaths are stored in CST coordinates (no numeric
+        // entry indices), while mutation.path lives in JS-object coordinates
+        // where an array-of-tables parent interleaves a numeric index
+        // (e.g. ['', 0, 'azn_', 'I/(T'] vs the AOT key ['', 'azn_', 'I/(T']).
+        // Compare the string-segment projection so the guard actually fires for
+        // an AOT nested inside another AOT entry (fuzz seed 421089).
+        const stringPath = parentPath.filter(seg => typeof seg === 'string').join('.');
+        if (typeof lastSeg === 'number' && aotKeyPaths.has(stringPath)) {
           continue; // unrepresentable in TOML — retry
         }
       }
