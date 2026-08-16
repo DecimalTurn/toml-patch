@@ -2833,7 +2833,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
     } else if (isRename(change)) {
       const sourcePath = change.path.concat(change.from);
-
       let parent = tryFindByPath(original, sourcePath) as
         | KeyValue
         | Table
@@ -2919,6 +2918,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (keyWidthDelta > 0) {
             parent.equals += keyWidthDelta;
             shiftNode(parent.value, { lines: 0, columns: keyWidthDelta }, { first_line_only: true });
+            // The width change also pushes the enclosing inline container's
+            // end (and the closing bracket) right, plus anything a later
+            // same-patch change inserts next to it.  shiftNode only moves the
+            // value node itself; register an exit offset so applyWrites shifts
+            // the container end and a subsequent Add measures the settled
+            // position — otherwise the tail lands on the value's last
+            // character (`false` -> `fals`, fuzz seed 186384).
+            addExitOffset(original, parent.value, { lines: 0, columns: keyWidthDelta });
           }
           return;
         }
