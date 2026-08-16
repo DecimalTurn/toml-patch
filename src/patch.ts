@@ -1599,8 +1599,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // discipline (InlineItem row keys included).
             const truncatedPrefix = existingKeyValue.key.value;
             let scanParent = containerParent;
-            if (isInlineItem(scanParent)) scanParent = scanParent.item;
-            if (isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (scanParent && isKeyValue(scanParent)) scanParent = scanParent.value;
             if (scanParent && hasItems(scanParent)) {
               const parentItems = [...(scanParent as { items: TreeNode[] }).items];
               for (let si = parentItems.length - 1; si >= 0; si--) {
@@ -1686,8 +1686,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // dotted-key KV whose value IS the inline table (fuzz seed
             // 11480) — unwrap either so the sibling scan sees the rows.
             let scanParent = containerParent;
-            if (isInlineItem(scanParent)) scanParent = scanParent.item;
-            if (isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (scanParent && isKeyValue(scanParent)) scanParent = scanParent.value;
             if (scanParent && hasItems(scanParent)) {
               // Snapshot: removeMember below splices the live items array
               // (fuzz seed 31662).
@@ -3521,7 +3521,7 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // as an implicit table and collides with the surviving `[[""]]` header on
     // re-parse ("Implicit table already defined", fuzz seed 62163).
     if (path.length > 1) {
-      const parentEntry = tryFindByPath(doc, path.slice(0, -1).concat(0));
+      const parentEntry = tryFindByPath(doc, (path.slice(0, -1) as Path).concat([0]));
       if (parentEntry && isTableArray(parentEntry)) {
         const lastSegment = path[path.length - 1];
         const emptyArrayDoc = parseJS({ [lastSegment]: [] }, format);

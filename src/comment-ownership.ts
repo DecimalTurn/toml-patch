@@ -15,7 +15,9 @@ import {
   isInlineTable,
   isInlineArray,
   isInlineItem,
-  hasItems
+  isString,
+  hasItems,
+  InlineItem
 } from './cst';
 import { last } from './utils';
 import { clonePosition } from './location';
@@ -906,7 +908,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           // (fuzz seed 9553).
           let itemEndLine = item.loc.end.line;
           const tailInner = isInlineItem(item) ? item.item : item;
-          if (tailInner.type === 'String' && tailInner.loc.end.line > tailInner.loc.start.line) {
+          if (isString(tailInner) && tailInner.loc.end.line > tailInner.loc.start.line) {
             itemEndLine = tailInner.loc.start.line + tailInner.raw.split('\n').length - 1;
             tailInner.loc.end.line = itemEndLine;
             item.loc.end.line = itemEndLine;
