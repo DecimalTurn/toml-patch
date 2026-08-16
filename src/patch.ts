@@ -3140,6 +3140,17 @@ function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
   if (firstTableIndex === -1 || firstTableIndex > kvIndex) return;
 
   remove(doc, doc, kv);
+
+  // The remove() above registers a pending offset on the document, and an
+  // earlier removal in the same patch (e.g. deleting the FIRST table, which
+  // registers an enter offset on the document) may still be unresolved too.
+  // insert() positions against the neighbouring items' loc values, which
+  // carry those offsets until flushed — a stale `firstTableIndex` item then
+  // drags the re-inserted KV onto a negative/phantom line and the writer
+  // crashes reading `undefined.length` (fuzz seeds 358055, 362151). Resolve
+  // before measuring, like every other insert that follows a removal.
+  applyWrites(doc);
+
   insert(doc, doc, kv, firstTableIndex);
 }
 

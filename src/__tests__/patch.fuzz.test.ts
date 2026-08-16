@@ -826,7 +826,7 @@ test('regression for fuzz seed 299772 (LocalTime truncated by truncateZeroTimeIn
   `);
 });
 
-test.fails('regression for fuzz seeds 358055 / 362151 (deleting the first table and collapsing a later table to a scalar)', () => {
+test('regression for fuzz seeds 358055 / 362151 (deleting the first table and collapsing a later table to a scalar)', () => {
   // Deleting the first table (`[v8]`) AND collapsing a later table (`[s]`) to
   // a scalar in the same patch left the hoisted `s = 282` KV on a phantom
   // (negative) line, crashing the writer with `undefined.length`.
