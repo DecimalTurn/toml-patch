@@ -261,3 +261,10 @@ One distilled `.fails` test commit, then one fix commit (test flipped to
 more than one bug — start a new `.fails` from the *full* seed, not the
 just-distilled fragment.
 
+The sweep-notes doc **must be committed** too — write it to
+`docs/bug-notes/fuzz-sweep-<from>-<to>-roundtrip-fixes.md` (one per window, e.g.
+`fuzz-sweep-350000-400000-roundtrip-fixes.md`) and commit it with a
+`docs: add sweep notes for <from>-<to>` message. A *clean* window (0 failures)
+gets no notes file, but a window that needed fixes gets one, listing each seed,
+its distilled minimal repro, and the root cause + fix commit.
+
