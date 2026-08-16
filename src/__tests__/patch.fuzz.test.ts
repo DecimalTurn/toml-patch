@@ -48,6 +48,40 @@ test('restoring anchored rows also restores their key and value nodes (seed 1950
     `);
   });
 
+  test('regression for fuzz seed 742554 (non-contiguous AOT sub-table skipped on append)', () => {
+    // `[[y."!"]]` is a sub-table of `y` entry 0, but it is separated from the
+    // `[[y]]` header by an unrelated `[[c]]` section.  Appending a new `y`
+    // entry must land AFTER that trailing sub-table, or the new `[[y]]`
+    // header cuts in front of it and TOML re-associates `!` with entry 1.
+    const src = dedent`
+      [[y]]
+      a = 1
+
+      [[c]]
+      b = 2
+
+      [[y."!"]]
+      ll = 3
+    `;
+    const obj = parse(src, { integersAsBigInt: false }) as any;
+    obj.y.push({ k33: 4597 });
+    const result = patch(src, obj);
+    expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[y]]
+      a = 1
+
+      [[c]]
+      b = 2
+
+      [[y."!"]]
+      ll = 3
+
+      [[y]]
+      k33 = 4597
+    `);
+  });
+
 // FIXME(seed 30330): collapsing a dotted key whose value is a multiline array
 // into a flat array leaked the old closing `]` delimiter.  The diff truncates
 // `b.c` (an implicit table) to `b` and replaces its multiline-array value with

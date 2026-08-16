@@ -1016,18 +1016,27 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // them into the new entry (fuzz seed 21525).
           if (isTableArray(before)) {
             const aotKey = (before as TableArray).key.item.value;
-            while (index < document.items.length) {
-              const item = document.items[index];
+            // Sub-tables of an AOT entry are NOT necessarily contiguous:
+            // an unrelated section (e.g. `[[c]]`) may sit between the entry
+            // header and one of its sub-tables (`[y."!"..]`), and that
+            // sub-table still belongs to the previous entry because it comes
+            // before the next `[[y]]` header.  Find the LAST such sub-table
+            // anywhere later in the document and place the new entry after
+            // it — otherwise the new [[entry]] header splits the sub-table
+            // off and the re-parse re-associates it with the new entry
+            // (fuzz seed 742554, a non-contiguous variant of seed 21525).
+            let lastSubTable = index - 1;
+            for (let i = index; i < document.items.length; i++) {
+              const item = document.items[i];
               const key = isTable(item) || isTableArray(item)
                 ? (item as Table | TableArray).key.item.value
                 : undefined;
               if (key && key.length > aotKey.length
                   && arraysEqual(key.slice(0, aotKey.length), aotKey)) {
-                index++;
-              } else {
-                break;
+                lastSubTable = i;
               }
             }
+            index = lastSubTable + 1;
           }
         } else {
           index = document.items.length;
