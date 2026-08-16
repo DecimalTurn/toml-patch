@@ -10685,6 +10685,24 @@ test('regression for fuzz seed 136292', () => {
   expect(parse(result)).toEqual(obj);
 });
 
+test.fails('regression for fuzz seed 136865', () => {
+  const src = dedent`
+    [[ng.tll]]
+    a = 1
+    b = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj.ng.tll = [{ k8: 187, k78: [3357.17] }, -4619];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [ng]
+    tll = [ { k8 = 187, k78 = [ 3357.17 ] }, -4619 ]
+    `);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
