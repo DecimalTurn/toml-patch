@@ -825,3 +825,32 @@ test('regression for fuzz seed 299772 (LocalTime truncated by truncateZeroTimeIn
     other = 2.0
   `);
 });
+
+test.fails('regression for fuzz seeds 358055 / 362151 (deleting the first table and collapsing a later table to a scalar)', () => {
+  // Deleting the first table (`[v8]`) AND collapsing a later table (`[s]`) to
+  // a scalar in the same patch left the hoisted `s = 282` KV on a phantom
+  // (negative) line, crashing the writer with `undefined.length`.
+  const src = dedent`
+    [v8]
+    x = 1
+
+    [other]
+    x = 1
+
+    [s]
+    y = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.s = 282;
+  delete obj.v8;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    s = 282
+
+    [other]
+    x = 1
+  `);
+});
