@@ -854,3 +854,22 @@ test('regression for fuzz seeds 358055 / 362151 (deleting the first table and co
     x = 1
   `);
 });
+
+test.fails('regression for fuzz seed 421965 (moving a multiline string to the front and removing the tail)', () => {
+  // Changing index 2 to `false` duplicates the leading `false`, so the diff
+  // moves the multiline string from index 1 to index 0 and removes the tail.
+  // The move relocates the multiline string across lines and drops its closing
+  // delimiter, merging `false` into the string's content.
+  const src = dedent`
+    q7_8 = [false, """
+    AAA
+    """, "z"]
+  `;
+
+  const obj = parse(src) as any;
+  obj.q7_8[2] = false;
+  obj.q7_8.splice(0, 1);
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
