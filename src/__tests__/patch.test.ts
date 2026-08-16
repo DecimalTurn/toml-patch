@@ -10739,7 +10739,7 @@ test('regression for fuzz seed 186384', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 208822', () => {
+test('regression for fuzz seed 208822', () => {
   const src = dedent`
     zrrm9 = ["a", ["fn", 1, false, true, "K", 2, "PLAIN", """
     q9

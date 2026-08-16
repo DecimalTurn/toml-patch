@@ -441,6 +441,14 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     });
     before_stable.splice(index, 0, value);
     before_sim.splice(index, 0, after[index]);
+    // Same source-index bookkeeping as the refused-move Add above: splicing a
+    // new element in front of the surviving suffix shifts later sim indices
+    // right by one, so a later Remove's source index (`index + removedBefore`)
+    // is one too far right and targets the wrong element when a prior remove
+    // is still pending.  Cancel one unit of the remove shift (fuzz seed
+    // 208822: editing a duplicate scalar and trimming a multiline array
+    // removed the multiline string instead of the plain scalar).
+    if (removedBefore > 0) removedBefore--;
   }
 
   // 3. Remove any remaining overflow items
