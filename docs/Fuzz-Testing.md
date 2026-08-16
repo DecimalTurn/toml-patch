@@ -151,3 +151,113 @@ In exchange, bugs are fixed fast, and the patch feature stays trustworthy. A
 single mangled TOML document can be catastrophic for a user who depends on
 format preservation (config files, generated content, round-trip edits). Fuzz
 testing keeps the core promise intact, one distilled regression test at a time.
+
+## Debugging strategies
+
+A distilled `.fails` test narrows the *what*, but not the *why*; the remaining
+work is finding the faulty line in the writer/diff and the exact offset that is
+wrong. These techniques have repeatedly shortened that loop:
+
+### 1. Use the right tool for the right job: `fuzz-run.ts` to detect, `fuzz-investigate.ts` to diagnose
+
+The two scripts answer different questions and must not be confused:
+
+- **`fuzz-run.ts`** (`fuzzOne`) is the *detection* tool and the authority on
+  "is this seed actually broken?". It compares with `deepEqualWithFormat`,
+  which normalises `\r\n`↔`\n` and truncates zero-time dates per
+  `truncateZeroTimeInDates` — the same tolerance the suite enforces. It also
+  replicates `fuzzOne`'s AOT-entry mutation guard. Use it to sweep ranges and
+  to confirm a fix ("0 failures").
+- **`fuzz-investigate.ts`** is the *diagnosis* tool for a seed you *already know*
+  is bad. It uses a stricter raw `diffPaths` comparison, dumps the expected vs
+  re-parsed objects, and prints the **full original and full patched TOML
+  line-numbered** — the fastest way to see exactly *where* (line/column) the
+  output went wrong before you start dumping the CST. Its raw comparison is a
+  *feature*, not a bug: it surfaces discrepancies `fuzzOne` intentionally
+  ignores (e.g. `\n` vs `\r\n`), which is sometimes precisely what you need while
+  tracing. It also re-derives mutations deterministically, so it never applies a
+  mutation that `fuzzOne` would have skipped — which is why a "DIFFS: N" here can
+  be a false positive relative to the sweep.
+
+So: **prefer `fuzz-run.ts` for "is it broken?"** (if they disagree, `fuzz-run.ts`
+wins), and **prefer `fuzz-investigate.ts` for "what changed, line by line?"** once
+you're drilling into a confirmed failure.
+
+### 2. Reproduce the seed faithfully, don't transcribe it
+
+Hand-transcribing a seed's TOML (or its array literals) flips the diff — a
+`null` vs `-inf`, or a re-ordered literal, changes `compareArrays`' behaviour
+and makes the bug vanish (or appear different). Recompute the exact input and
+mutations from the RNG instead, mirroring `fuzzOne`:
+
+```ts
+const generated = randomToml({ seed });
+const obj = deepClone(parse(generated.toml));
+const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
+// apply generateMutation/applyMutation in a loop, exactly like fuzzOne
+// pass randomTomlFormat(new SeededRandom(seed + 500000)) — the FORMAT matters:
+//   truncateZeroTimeInDates / minimumDecimals / newLine all change the output.
+```
+
+The **format** is a first-class input: many "DIFF" results only reproduce with
+the seed's `randomTomlFormat`, not the default (e.g. seed 299772's `0NaN-NaN-NaN`
+LocalTime corruption only appeared with `truncateZeroTimeInDates: true`).
+
+### 3. `dedent`-based fixtures strip the trailing newline
+
+Tests written with `dedent` (most of the suite) produce input with **no**
+trailing newline, and `patch` round-trips that faithfully. When asserting an
+exact `toEqual(dedent…)`, compute the expected string from the *actual* output
+(not a guessed `\n`-suffixed string) — a stray trailing `\n` or a `2` vs `2.0`
+(`minimumDecimals`) is the classic way a freshly-written exact-output assertion
+fails.
+
+### 4. Dump the CST to see the *positions*, not just the rendered text
+
+The rendered string is the symptom; the bug is almost always a stale
+`loc` (start/end line/column) on some node. `parseDocument(src).cst` exposes the
+tree, and it is quick to write a small recursive dumper that prints each node's
+`type`, `key`, and `loc`. Comparing the CST **before** vs **after** `patch`
+(and against the node you expect to move) pinpoints exactly which node kept a
+stale end line/column — the root cause behind the inline-table-absorption bug
+(seed 272851) and most writer-offset bugs.
+
+### 5. Trace the offsets through the writer
+
+`writer.remove()`/`writer.insert()` register *enter/exit* offsets that
+`applyWrites` then applies in a single depth-first pass with running
+`offsetLines`/`offsetColumns` accumulators. When a collapse "doesn't propagate"
+up to an enclosing container's sibling, the offset is being zeroed or placed on
+the wrong target (an enter offset on the inner container vs. an exit offset that
+reaches the sibling). Knowing the target selection rules in `remove()`
+(`previous` → exit offset; first item of a Table/TableArray → the table's key;
+otherwise the parent itself) is the fastest way to see *why* a shift is missing
+or double-counted.
+
+### 6. Simplify nesting level-by-level, keeping each failure
+
+Reach a minimal repro by deleting structure while re-running after each change;
+only continue when the distilled test still fails in the same way. If a
+reduction *stops* failing, you removed something load-bearing (e.g. the nested
+inline table, the trailing sibling, or the multiline-string value) — put it back
+and cut elsewhere. A seed often encodes **more than one** independent bug (seed
+299772 had both an AOT-entry-collapse bug and a `LocalTime` truncation bug); fix
+one, and re-run the full seed to see whether a second remains — then distill and
+repeat.
+
+### 7. Guarded fixes: keep them as narrow as possible, and prefer `instanceof`
+
+Narrow guards are the norm (see "The downside"), but scope them to the exact
+shape that reproduces the seed (e.g. skip truncation only for `value
+instanceof LocalTime`, not "any value with year < 1"). A broad fix that looks
+more general almost always regresses other seeds — the `addedBefore` diff change
+regressed ~38 seeds and was reverted; the surviving fix touched only the one
+refused-move Add branch.
+
+### 8. Commit discipline keeps the history reviewable
+
+One distilled `.fails` test commit, then one fix commit (test flipped to
+`test`), then the sweep-notes doc. If the seed still fails after the fix, it has
+more than one bug — start a new `.fails` from the *full* seed, not the
+just-distilled fragment.
+
