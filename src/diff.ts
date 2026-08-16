@@ -373,6 +373,15 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
         });
         before_stable.splice(index, 0, value);
         before_sim.splice(index, 0, after[index]);
+        // The fresh copy is spliced in BEFORE the original (at `from`), so it
+        // shifts every later sim element — including the original we just
+        // declined to move — one slot right.  `removedBefore` models the
+        // LEFT-shift of a prior remove, so a later Remove's source index
+        // (`index + removedBefore`) is off by one and removes the wrong
+        // element (fuzz seed 179377: `[false, '''…''', …]` edited and trimmed
+        // removed its neighbour instead of the surplus scalar).  Cancelling
+        // one unit of the remove shift keeps the sim↔source mapping aligned.
+        removedBefore--;
         continue;
       }
 
