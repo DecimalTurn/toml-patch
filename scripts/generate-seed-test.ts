@@ -1,5 +1,5 @@
 // Generates a distilled regression test from a fuzz seed and appends it to
-// src/__tests__/patch.test.ts.
+// src/__tests__/patch.fuzz.test.ts.
 //
 // Usage:
 //   npx -y tsx scripts/generate-seed-test.ts --seed 305
@@ -11,7 +11,8 @@
 //     `delete`, `obj.x = …`);
 //   - asserts both `parse(result)` deep-equality AND the exact patched text
 //     (via `toEqual(dedent…)`) when the patch round-trips;
-//   - is appended to `patch.test.ts` (indented, under a seed-labelled test).
+//   - is appended to `patch.fuzz.test.ts` (which holds all the fuzz-derived
+//     regression tests).
 
 import { appendFileSync, existsSync, readFileSync } from 'fs';
 import { randomToml, SeededRandom } from '../src/__tests__/randomizer';
@@ -195,14 +196,14 @@ ${outLiteral}
 });
 `;
 
-// ─── Append to patch.test.ts ─────────────────────────────────────────────
+// ─── Append to patch.fuzz.test.ts ────────────────────────────────────────
 if (dryRun) {
   console.log('--- DRY RUN: generated test body ---');
   console.log(testBody);
   process.exit(0);
 }
 
-const target = 'src/__tests__/patch.test.ts';
+const target = 'src/__tests__/patch.fuzz.test.ts';
 if (!existsSync(target)) {
   console.error(`target not found: ${target}`);
   process.exit(1);

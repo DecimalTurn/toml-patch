@@ -33,7 +33,7 @@ fails, so we are sure it replicates the bug the seed flagged.
 ### Generating the seed's test scaffold automatically
 
 Rather than copying a seed's TOML and mutations by hand, a helper script
-generates a test from a seed and appends it to `src/__tests__/patch.test.ts`:
+generates a test from a seed and appends it to `src/__tests__/patch.fuzz.test.ts`:
 
 ```powershell
 npx -y tsx scripts/generate-seed-test.ts --seed <N> [--mutations <N>] [--dry-run]
@@ -69,7 +69,7 @@ the simplest version of the test we can think of, that is when the test is
 considered distilled.
 Once the test is distilled, commit it (in its failing, `.fails`-marked state) as
 a self-contained regression: the distilled TOML + mutations together with the
-`src/__tests__/patch.test.ts` entry. This keeps a clean history where every bug
+`src/__tests__/patch.fuzz.test.ts` entry. This keeps a clean history where every bug
 lands as one "failing test" commit followed by one "fix" commit, and lets the
 distillation be reviewed independently of the eventual code change.
 Note that if we then fix the code to make the test pass and the seed still
