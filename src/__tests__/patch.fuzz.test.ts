@@ -855,7 +855,7 @@ test('regression for fuzz seeds 358055 / 362151 (deleting the first table and co
   `);
 });
 
-test.fails('regression for fuzz seed 421965 (moving a multiline string to the front and removing the tail)', () => {
+test('regression for fuzz seed 421965 (moving a multiline string to the front and removing the tail)', () => {
   // Changing index 2 to `false` duplicates the leading `false`, so the diff
   // moves the multiline string from index 1 to index 0 and removes the tail.
   // The move relocates the multiline string across lines and drops its closing

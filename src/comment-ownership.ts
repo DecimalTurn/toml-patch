@@ -721,6 +721,21 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         ? (parent.items as TreeNode[])[nodeIndexBeforeRemove - 1]
         : undefined;
 
+      // A multiline node moved to the FRONT (index 0) that, before the move,
+      // shared its START line with the item now following it (`prevBeforeRemove`,
+      // which ends up at index 1).  The writer's per-line offset model assumes
+      // each item sits on its own line, so the shared-line item's columns go
+      // stale (it lands with a negative start column, overwriting the moved
+      // multiline string's closing delimiter).  The tail realignment below is
+      // gated on `sharedLineContainerBeforeMove`, which a two-item same-line
+      // pairing does NOT satisfy — so record this case explicitly (fuzz seed
+      // 421965: `[false, """\nAAA\n""", "z"]` moving the string to the front
+      // left `false` at column -2 on the string's last line).
+      const movedMultilineToFront = toIndex === 0 && nodeIndexBeforeRemove > 0 &&
+        node.loc.end.line > node.loc.start.line &&
+        prevBeforeRemove !== undefined &&
+        prevBeforeRemove.loc.start.line === node.loc.start.line;
+
       remove(root, parent, node, hostContainer.items as TreeNode[]);
 
       let cancelMultilineLastRemovalOffsets = false;
@@ -831,8 +846,11 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       const container = parent as InlineTable | InlineArray;
       // Gate the tail realignment on the original layout classification:
       // perLine() reads the container's own end, which the moves above can
-      // leave stale.  The pre-move capture reflects the true layout.
-      const sharedLineContainer = sharedLineContainerBeforeMove;
+      // leave stale.  The pre-move capture reflects the true layout.  A
+      // multiline node moved to the front also needs the tail realignment
+      // (see movedMultilineToFront above), even though the shared-line run
+      // is only two items and `sharedLineContainerBeforeMove` stays false.
+      const sharedLineContainer = sharedLineContainerBeforeMove || movedMultilineToFront;
       if (sharedLineContainer) {
         // Re-anchor the interior rows of a multiline inline container whose
         // subtree the tail shift above translated rigidly: the shiftNode
