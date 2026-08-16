@@ -1884,6 +1884,23 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
 
+          // When the whole AOT collapsed to an array that no longer holds
+          // only plain objects (`[[hc8v]]` with `hc8v[0] = -1937`), `freshKV`
+          // carries the ENTIRE array value.  Replacing only `existing` (entry
+          // 0) leaves the remaining sibling `[[key]]` entries behind, which
+          // then collide with the rebuilt KV and fail the re-parse (fuzz seed
+          // 299772).  Drop every other entry with the same key first.
+          if (Array.isArray(jsValue) && !jsValue.every(v => isObject(v))) {
+            const siblingEntries = (original.items as TreeNode[]).filter(n =>
+              isTableArray(n)
+              && n !== existing
+              && arraysEqual((n as TableArray).key.item.value, existingAotKey)
+            );
+            for (const sibling of siblingEntries) {
+              removeMember(original, original, sibling);
+            }
+          }
+
           if (parentKey.length > 0) {
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
             // when `jsValue` is an object or an array of objects.  Emitting it
