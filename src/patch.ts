@@ -1228,6 +1228,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // against final coordinates.
         if (parent.items.length === 0) {
           applyWrites(original);
+          // This multiline inline table was emptied from its own bracket line
+          // (the removal zeroed its offset, leaving a stale multiline end line).
+          // Collapse it to a single line NOW so the insert below places the new
+          // item on the bracket row instead of a phantom second line — the
+          // latter leaves the stale lines dangling and pulls a trailing
+          // sibling of an enclosing inline table inside this one (fuzz seed
+          // 272851).
+          if (hasInlineContainerNeedingTighten(parent) &&
+              parent.loc.end.line > parent.loc.start.line) {
+            parent.loc.end.line = parent.loc.start.line;
+          }
         }
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format

@@ -10782,7 +10782,7 @@ test('regression for fuzz seed 224081', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 272851', () => {
+test('regression for fuzz seed 272851', () => {
   // A nested inline table whose only key holds a multiline string is emptied,
   // then re-populated with a short key. The multiline string's content lines
   // are not collapsed, so the trailing sibling of the enclosing inline table
