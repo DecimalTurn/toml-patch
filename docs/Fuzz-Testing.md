@@ -25,10 +25,6 @@ correctly (see `src/__tests__/fuzz-patch.ts` and its `randomizer.ts`).
 
 ## Fixing the bugs discovered by the fuzzing suite
 
-
-
-
-
 When a seed fails, the first step is to create a reproduction of the TOML input
 and the mutations that triggered it. We then run that test to confirm that it
 fails, so we are sure it replicates the bug the seed flagged.
