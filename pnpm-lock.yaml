@@ -18,8 +18,8 @@ importers:
   .:
     devDependencies:
       '@decimalturn/toml-patch':
-        specifier: npm:@decimalturn/toml-patch@2.0.1
-        version: 2.0.1
+        specifier: npm:@decimalturn/toml-patch@3.0.2
+        version: 3.0.2
       '@js-temporal/polyfill':
         specifier: ^0.5.1
         version: 0.5.1
@@ -83,9 +83,9 @@ importers:
 
 packages:
 
-  '@decimalturn/toml-patch@2.0.1':
-    resolution: {integrity: sha512-JShtozUjjCCfHCXFmPnBAOWzpbNYKcGeArrCO3i5v9R13dUvxek3na6gq6//wPYWWhw/CzhfT9zChrXvYJIxeQ==}
-    engines: {node: '>=14'}
+  '@decimalturn/toml-patch@3.0.2':
+    resolution: {integrity: sha512-0qEaybovbKCOTCmOiXj7PgajYsoMhiphka0sjWqT/up5WE9LQF/SRDFcL65CG6IhyyxmKrxjcLROqgDNHMMGWw==}
+    engines: {node: '>=16'}
 
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
@@ -1357,7 +1357,7 @@ packages:
 
 snapshots:
 
-  '@decimalturn/toml-patch@2.0.1': {}
+  '@decimalturn/toml-patch@3.0.2': {}
 
   '@emnapi/core@1.11.1':
     dependencies:
