@@ -10724,6 +10724,21 @@ test('regression for fuzz seed 179377', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 186384', () => {
+  const src = dedent`
+    K = { iw.h6dhsnnqm.ho = false }
+  `;
+
+  const obj = parse(src) as any;
+  obj.K.iw.h6dhsnnqm = { k75: false, k85: 66.66 };
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    K = { iw.h6dhsnnqm.k75 = false, iw.h6dhsnnqm.k85 = 66.66 }
+    `);
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
