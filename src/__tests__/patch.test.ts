@@ -10782,6 +10782,28 @@ test('regression for fuzz seed 224081', () => {
     `);
 });
 
+test.fails('regression for fuzz seed 272851', () => {
+  // A nested inline table whose only key holds a multiline string is emptied,
+  // then re-populated with a short key. The multiline string's content lines
+  // are not collapsed, so the trailing sibling of the enclosing inline table
+  // is swallowed into the nested table.
+  const src = dedent`
+    o6z = { ut = { g7k5gct = { kr9 = """
+    Bz5~
+    5
+    """ } }, w.x = 5 }
+  `;
+
+  const obj = parse(src) as any;
+  obj.o6z.ut.g7k5gct = { k12: "OGB" };
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  // The sibling `w.x` must stay a sibling of `ut` inside `o6z`, not be
+  // absorbed into `ut`.
+  expect((parse(result) as any).o6z).toEqual({ ut: { g7k5gct: { k12: 'OGB' } }, w: { x: 5 } });
+});
+
 //WIP 
 test.fails('multiline empty array', () => {
   const src = dedent`
