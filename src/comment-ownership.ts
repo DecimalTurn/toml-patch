@@ -832,7 +832,6 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // Gate the tail realignment on the original layout classification:
       // perLine() reads the container's own end, which the moves above can
       // leave stale.  The pre-move capture reflects the true layout.
-      const containerItems = container.items as TreeNode[];
       const sharedLineContainer = sharedLineContainerBeforeMove;
       if (sharedLineContainer) {
         // Re-anchor the interior rows of a multiline inline container whose
