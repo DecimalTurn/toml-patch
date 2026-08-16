@@ -2522,11 +2522,35 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               } else if (isInlineTable(container)) {
                 // InlineTable items are relative to the table itself; the
                 // table's own key path is the node's absolute path minus its
-                // key segments (captured before the removal).
-                const containerKeyLen = nodeAbsolutePath
-                  ? nodeAbsolutePath.length - kv.key.value.length
-                  : parentPath.length - (kv.key.value.length - 1);
-                relativePrefix = parentPath.slice(containerKeyLen) as string[];
+                // key segments (captured before the removal).  But the change
+                // coordinates (`parentPath`) can interleave a numeric AOT
+                // entry index that the CST path lacks — the JS object sees
+                // `[""]` as an array-of-tables (so `obj[""].o96` -> path
+                // `["", 0, "o96", …]`) while the CST stores `o96` as a
+                // sibling `[""."o96"]` table (absolute path `["", "o96", …]`).
+                // Slicing parentPath by the CST length then over-includes the
+                // enclosing segment and re-emits `GD64qOzFQn.x = {}` instead
+                // of `x = {}` (fuzz seed 224081).  Align by skipping numeric
+                // indices while matching the container's string segments.
+                if (nodeAbsolutePath) {
+                  const containerSegs = nodeAbsolutePath.slice(0, nodeAbsolutePath.length - kv.key.value.length);
+                  let offset = 0;
+                  let matched = 0;
+                  while (matched < containerSegs.length && offset < parentPath.length) {
+                    while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                    if (offset >= parentPath.length || parentPath[offset] !== containerSegs[matched]) break;
+                    matched++;
+                    offset++;
+                  }
+                  while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                  if (matched === containerSegs.length) {
+                    relativePrefix = parentPath.slice(offset) as string[];
+                  } else {
+                    relativePrefix = parentPath.slice(containerSegs.length) as string[];
+                  }
+                } else {
+                  relativePrefix = parentPath.slice(parentPath.length - (kv.key.value.length - 1)) as string[];
+                }
               } else {
                 relativePrefix = parentPath as string[];
               }

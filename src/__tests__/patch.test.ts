@@ -10759,7 +10759,7 @@ test('regression for fuzz seed 208822', () => {
     `);
 });
 
-test.fails('regression for fuzz seed 224081', () => {
+test('regression for fuzz seed 224081', () => {
   const src = dedent`
     [[""]]
     a = 1
@@ -10778,7 +10778,7 @@ test.fails('regression for fuzz seed 224081', () => {
     a = 1
 
     ["".o96]
-    GD64qOzFQn = { x = {} }
+    GD64qOzFQn = {  x = {} }
     `);
 });
 
