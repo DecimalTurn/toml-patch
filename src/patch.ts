@@ -451,11 +451,17 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     // isTableArray(existing) branch, which re-renders the parent as a proper
     // `[section]` header — collapsing it here would instead route through
     // handleStructuralEdit and flatten it to an inline table (fuzz seed 3333).
+    // Element-level changes include both entry adds/edits (path `prefix+[i]`)
+    // and edits nested INSIDE an entry (path `prefix+[i, key]`): a mixed array
+    // like `[{…}, -4619]` diffs as `Add[1]` plus per-key edits under entry 0,
+    // and counting only the direct children (prefix.length + 1) missed the
+    // nested edits, leaving the scalar entry to be re-materialised as an empty
+    // AOT row (fuzz seed 136865).
     const elementChanges = changes.filter(c =>
       !consumed.has(c)
       && (isEdit(c) || isAdd(c) || isRemove(c))
-      && c.path.length === prefix.length + 1
-      && arraysEqual(c.path.slice(0, -1), prefix)
+      && c.path.length > prefix.length
+      && arraysEqual(c.path.slice(0, prefix.length), prefix)
     );
     if (elementChanges.length < 2) continue;
 
@@ -1840,14 +1846,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         const updated_js = toJS(updated.items, '', { temporal });
         const existingAotKey = (existing as TableArray).key.item.value;
         let jsValue: any = updated_js;
-        // The path's final segment is the AOT entry index ([..., 0]); navigate
-        // everything before it to reach the array's JS value.  Using
-        // `existingAotKey.length` misaligns when the AOT is itself nested inside
-        // another AOT entry, because the path then interleaves numeric entry
-        // indices with string key segments (fuzz seed 129645): an `[[""."k".v]]`
-        // entry edited to a scalar would re-embed the `v` segment instead of
-        // hoisting it, duplicating the key.
-        for (const key of change.path.slice(0, -1)) {
+        // Navigate to the array's JS value.  When the edit targets an AOT
+        // entry the path ends in that entry's numeric index ([..., 0]), which
+        // is not part of the array's key; drop it.  A whole-array edit's path
+        // ends in the key itself (fuzz seed 136865: `ng.tll = [obj, -4619]`),
+        // and has no trailing index — navigate the path as-is.  Using a fixed
+        // `existingAotKey.length` misaligns when the AOT is itself nested
+        // inside another AOT entry, because the path then interleaves numeric
+        // entry indices with string key segments (fuzz seed 129645).
+        const navPath = typeof change.path[change.path.length - 1] === 'number'
+          ? change.path.slice(0, -1)
+          : change.path;
+        for (const key of navPath) {
           jsValue = jsValue?.[key];
         }
 

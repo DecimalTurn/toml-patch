@@ -10685,7 +10685,7 @@ test('regression for fuzz seed 136292', () => {
   expect(parse(result)).toEqual(obj);
 });
 
-test.fails('regression for fuzz seed 136865', () => {
+test('regression for fuzz seed 136865', () => {
   const src = dedent`
     [[ng.tll]]
     a = 1
