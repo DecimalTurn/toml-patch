@@ -906,3 +906,30 @@ test('regression for fuzz seed 460447 (table replaced by an array-of-tables drop
     k9 = { k10 = 2198, k26 = "oGNuD5FeWfa6QP0AVy" }
   `);
 });
+
+test('regression for fuzz seed 599513: moving a multiline inline table left corrupts its interior rows', () => {
+  // Changing index 0 from a long string to `true` makes the diff align the
+  // pre-existing `true` (index 1) with it, producing a Move of the multiline
+  // inline table toward the front of a shared-line array.  insert()'s rigid
+  // horizontal translation dragged the table's interior rows to negative
+  // columns, and toTOML then emitted `,-1.5nx=` (value before key, leading
+  // comma) — invalid TOML.
+  const src = dedent`
+    a = ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', true, {
+        nx = -1.5,
+        bv = 94479.23159,
+    }, true]
+  `;
+
+  const obj = parse(src) as any;
+  obj.a[0] = true;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    a = [true, true, {
+        nx = -1.5,
+        bv = 94479.23159,
+    }, true]
+  `);
+});

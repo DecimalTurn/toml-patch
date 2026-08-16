@@ -610,23 +610,24 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       let nodeInnerEnd: { line: number; column: number } | undefined;
 
       // Snapshot descendants of the moved node that start BELOW its first
-      // line and follow another item on that same line.  insert()'s rigid
-      // translation shifts every line of the subtree by the first line's
-      // column delta, but these items are anchored to their predecessor's
-      // END column — which did not move.  Without restoring them they slide
-      // sideways onto the preceding content (fuzz seed 706: `, 5, 6` after a
-      // multiline string inside a moved nested array slid left onto the
-      // string's closing quotes).
+      // line.  insert()'s rigid horizontal translation shifts every subtree
+      // column by the first line's column delta, but interior rows of a
+      // multiline inline table/array are indented from line start (not from
+      // the opening bracket), so they must not move sideways.  This covers
+      // both rows anchored to a preceding multiline value's end column
+      // (fuzz seed 706: `, 5, 6` after a multiline string inside a moved
+      // nested array slid left onto the string's closing quotes) and the
+      // FIRST row of a multiline container that has no predecessor at all
+      // (fuzz seed 599513: `nxweV7FF3` slid to a negative column and toTOML
+      // emitted `,-1.5nx=`).
       const anchoredDescendants: Array<{ node: TreeNode; start: { line: number; column: number }; end: { line: number; column: number }; endOnly?: boolean; equals?: number }> = [];
       const collectAnchored = (container: TreeNode, firstLine: number) => {
         if (!hasItems(container)) return;
         const items = container.items as TreeNode[];
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
-          const prev = items[i - 1];
-          const follows = prev !== undefined && prev.loc.end.line === item.loc.start.line;
           const below = item.loc.start.line > firstLine;
-          if (below && follows) {
+          if (below) {
             anchoredDescendants.push({ node: item, start: clonePosition(item.loc.start), end: clonePosition(item.loc.end) });
           }
           // A multiline element's wrapper END (where its comma lands) is
@@ -638,7 +639,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           }
           if (isInlineItem(item)) {
             const inner = item.item;
-            if (below && follows) {
+            if (below) {
               const kv = isKeyValue(inner) ? inner : undefined;
               anchoredDescendants.push({
                 node: inner,
