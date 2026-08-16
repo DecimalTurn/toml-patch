@@ -175,3 +175,35 @@ test('it should accept raw UTF-8 bytes that start with UTF-8 BOM', () => {
   const parsed = parse(bytes);
   expect(parsed).toEqual({ a: 1 });
 });
+
+test('it should parse array-of-tables with non-contiguous nested sub-tables', () => {
+  const parsed = parse(`
+[[y]]
+a = 1
+
+[[c]]
+b = 2
+
+[[y."!"]]
+ll = 3
+
+[[y]]
+k33 = 4597
+`);
+
+  // `[[y]]` is an array-of-tables: each `[[y]]` header starts a new entry.
+  // `[[y."!"]]` is a nested array-of-tables under the FIRST entry's `!` key
+  // (it is non-contiguous — separated from `[[y]]` by `[[c]]` — but still
+  // belongs to entry 0 because it precedes the second `[[y]]` header).
+  // `[[c]]` is also an array-of-tables, so `c` is an array too.
+  expect(parsed).toEqual({
+    y: [
+      {
+        a: 1,
+        '!': [{ ll: 3 }]
+      },
+      { k33: 4597 }
+    ],
+    c: [{ b: 2 }]
+  });
+});
