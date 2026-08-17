@@ -23,6 +23,12 @@ correctly (see `src/__tests__/fuzz-patch.ts` and its `randomizer.ts`).
 6. **Run** the test to make sure it now passes, *and* re-run the specific seed
    to confirm the seed passes too.
 
+Once every failing seed in a window is fixed and each previously-failing seed
+re-runs clean, the window is done — there is no need to re-sweep the *entire*
+range a second time. Checking just the previously-failing seeds (via
+`fuzz-run.ts --seed <N> --to <N>`) is sufficient; a fresh full sweep only
+matters when you change core logic and want a broad regression signal.
+
 ## Fixing the bugs discovered by the fuzzing suite
 
 When a seed fails, the first step is to create a reproduction of the TOML input
