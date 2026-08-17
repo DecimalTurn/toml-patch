@@ -4,9 +4,9 @@
 
 Seeds `1100000` through `1300000` (inclusive), 200001 seeds, `mutationCount` = 3.
 
-## Failures in this sweep
+## Failures fixed in this sweep
 
-### Seed 1137525 — remove leaps past interleaved adds on reorder (OPEN, documented)
+### Seed 1137525 — remove leaps past interleaved adds on reorder
 
 **Symptom:** `patch()` round-trip returned:
 
@@ -22,11 +22,12 @@ The surplus-duplicate `16654.71209` was left in place and its neighbour
 the two interleaved Adds, so it was applied against the **original** array —
 index 6 is `77741.96689`, not `16654.71209`.
 
-This is a coordinate-space inconsistency, not a one-line bug: a Remove's index
-is a *sequential-application* index when it stays put (a single remove never
-gets reordered, e.g. seeds 3093/761) but a *source* index when `reorder()` moves
-it before interleaved Adds.  Three attempted fixes all regressed neighbouring
-seeds on re-sweep and were reverted:
+The diff's emission order is correct for *sequential* application: a Remove
+emitted after a same-array Add/Move is in post-shift (sequential) coordinates,
+so it must not be hoisted back across that Add/Move.  `reorder()` only needs
+descending order among Removes that share a coordinate space — and a same-array
+Add or Move is exactly the boundary between two such spaces.  Earlier attempts
+either changed the wrong layer or over-broadened the guard:
 
 - `removedBefore--` unconditional in the diff (commit `d17e606`): regressed
   seeds 761/3093 — the negative net shift is wrong for the overflow loop when a
@@ -38,15 +39,16 @@ seeds on re-sweep and were reverted:
   seeds 84522 and 473477 (nested `Add[6,2,3]`/`Add[5,5]` in a DIFFERENT array
   context must not stop the scan).
 
-A correct fix must make Remove indices consistently source coordinates — the
-diff's `removedBefore` has to account for Adds AND Moves, and `reorder()` has to
-apply all Removes first.  That is a larger change than this sweep warranted.
+**Fix:** `reorder()` now treats only a **same-array** Add or Move as a barrier:
+while sorting a Remove toward an earlier Remove, the scan stops at a same-array
+Add/Move (those shift/reorder the array, so anything after them is in post-shift
+coordinates), but crosses Edits (length-preserving, seed 50448) and Adds/Moves
+in a different array context (seed 84522/473477).  Object-key Moves
+(`updateOrder`) never shift array indices, so they are ignored as barriers.
 
-**Status:** left open.  A distilled `.fails` regression test is in
-`src/__tests__/patch.fuzz.test.ts` (`regression for fuzz seed 1137525`) with the
-full analysis in its comment.
-
-## Failures fixed in this sweep
+**Files changed:**
+- `src/patch.ts` — `reorder()` same-array Add/Move barrier.
+- `src/__tests__/patch.fuzz.test.ts` — `regression for fuzz seed 1137525` (asserts the exact output).
 
 ### Seed 1285105 — AOT collapsed to a static array leaves a non-contiguous sub-table
 
