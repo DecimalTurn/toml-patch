@@ -1055,3 +1055,75 @@ test('regression for fuzz seed 1024477 (table to AOT misplaces a nested sub-tabl
     k89 = 798.60
   `);
 });
+
+// FIXME(seed 1137525): the diff emits `Remove[1], Add[2], Add[3], Remove[6]`
+// for a multiline array where a scalar was removed and a nested array + scalar
+// were inserted.  reorder() moves the higher-index `Remove[6]` in front of the
+// two Adds, so it is applied against the ORIGINAL array — index 6 is
+// `77741.96689`, not the surplus duplicate `16654.71209`.  The root cause is a
+// coordinate-space inconsistency: a Remove's index is sequential when it stays
+// put (single remove, e.g. seeds 3093/761) but source-coordinate when reorder()
+// moves it before interleaved Adds.  A correct fix must make Remove indices
+// consistently source coordinates (accounting for adds AND moves in the diff's
+// `removedBefore` bookkeeping) and have reorder() apply them first — the naive
+// `removedBefore--` unconditional (commit d17e606) regressed seeds 761/3093,
+// and guarding reorder() against crossing Adds regressed seeds 50448/84522/473477.
+test.fails('regression for fuzz seed 1137525 (remove leaps past interleaved adds on reorder)', () => {
+  // The diff emits `Remove[1], Add[2], Add[3], Remove[6]`.  reorder() used to
+  // move the higher-index Remove past the two Adds, so `Remove[6]` was applied
+  // against the ORIGINAL array and deleted `77741.96689` instead of the surplus
+  // duplicate `16654.71209`.  Removes are sequential-application indices and
+  // must not leapfrog an interleaved Add — only adjacent Removes may be swapped.
+  const src = dedent`
+    nea32 = [2005-09-17T02:03:12.077192Z, inf, false, "$R0fV=AR?~81OAaNiQ", 2018-07-23T02:49:32.062984Z, 16654.71209, 77741.96689, -8.82e-21, "/E^T8VttWr3Lq"]
+  `;
+
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj.nea32 = [
+    new Date('2005-09-17T02:03:12.077Z'),
+    false,
+    [-3018.3657770976424, 'giDkjEefX6S6L'],
+    false,
+    '$R0fV=AR?~81OAaNiQ',
+    new Date('2018-07-23T02:49:32.062Z'),
+    77741.96689,
+    -8.82e-21,
+    '/E^T8VttWr3Lq',
+  ];
+
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+  expect(result).toEqual(dedent`
+    nea32 = [2005-09-17T02:03:12.077192Z, false, [-3018.3657770976424, "giDkjEefX6S6L"], false, "$R0fV=AR?~81OAaNiQ", 2018-07-23T02:49:32.062984Z, 77741.96689, -8.82e-21, "/E^T8VttWr3Lq"]
+  `);
+});
+
+test('regression for fuzz seed 1285105 (AOT collapsed to static array with non-contiguous sub-table)', () => {
+  // A top-level `[[""]]` and a later non-contiguous sub-table
+  // `["".c47eko_.bog8_vy3w]` (separated by an unrelated `[other]`) share the
+  // `""` key prefix.  Collapsing `""` to a static (non-object) array leaves
+  // the prefix-extended sub-table behind, which re-parse rejects with
+  // "Cannot add to static array".  The sub-table must be removed too.
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [other]
+    b = 2
+
+    ["".c47eko_.bog8_vy3w]
+    c = 3
+  `;
+
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj[''] = [[1, 2]];
+
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+  expect(result).toEqual(dedent`
+    "" = [ [ 1, 2 ] ]
+
+    [other]
+    b = 2
+  `);
+});
