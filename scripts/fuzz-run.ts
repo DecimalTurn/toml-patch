@@ -30,13 +30,38 @@ const fastFail = hasFlag('fast-fail');
 // Print a progress line every `progress` seeds (0 = disabled).  The line is
 // written to stderr so it never mixes with the machine-readable stdout report.
 const progress = param('progress', 0);
+// Full requested range (used as the denominator of the progress fraction) and
+// the wall-clock start, for elapsed / ETA reporting.
+const total = to - seed + 1;
+const startTime = Date.now();
+
+// Human-readable duration, e.g. "1h2m3s", "2m3s", "3s".
+const formatDuration = (ms: number): string => {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h${m}m${s}s`;
+  if (m > 0) return `${m}m${s}s`;
+  return `${s}s`;
+};
 
 const failures: string[] = [];
 let scanned = 0;
 for (let s = seed; s <= to; s++) {
   scanned++;
   if (progress > 0 && s % progress === 0) {
-    console.error(`progress: seed ${s} (${scanned} scanned)`);
+    const elapsed = Date.now() - startTime;
+    const fraction = scanned / total;
+    const remaining = fraction > 0 && elapsed > 0
+      ? (elapsed / fraction) - elapsed
+      : 0;
+    const green = '\x1b[32m';
+    const reset = '\x1b[0m';
+    console.error(
+      `${green}progress: ${scanned}/${total} (${(fraction * 100).toFixed(1)}%)` +
+      ` | elapsed ${formatDuration(elapsed)} | ETA ${formatDuration(remaining)}${reset}`
+    );
   }
   const result = fuzzOne(s, mutations);
   if (result.status !== 'ok') {
