@@ -1086,6 +1086,29 @@ test('regression for fuzz seed 1137525 (remove leaps past interleaved adds on re
 
 });
 
+// FIXME: patching a COMPACT inline array (no spaces after commas) with the
+// interleaved remove/add pattern drops the commas between neighbouring
+// elements.  The spaced form round-trips correctly (see the 1137525 regression
+// above); only the compact form is affected.  Currently produces
+// `arr = ["a""c", ["x"], "c","d","e""g"]` — the commas after `"a"` and `"e"`
+// are lost, so the re-parse reads `"a""c"` / `"e""g"` as single strings and the
+// round-trip fails.
+test('compact inline array loses commas on interleaved remove/add (fuzz seed 1137525 variant)', () => {
+  const src = dedent`
+    arr = ["a","b","c","d","e","f","g"]
+  `;
+
+  const obj = parse(src) as any;
+  obj.arr = ['a', 'c', ['x'], 'c', 'd', 'e', 'g'];
+
+  const result = patch(src, obj);
+  expect(result).toEqual(dedent`
+    arr = ["a","c",["x"],"c","d","e","g"]
+    `);
+
+  expect(parse(result)).toEqual(obj);
+});
+
 test('regression for fuzz seed 1285105 (AOT collapsed to static array with non-contiguous sub-table)', () => {
   // A top-level `[[""]]` and a later non-contiguous sub-table
   // `["".c47eko_.bog8_vy3w]` (separated by an unrelated `[other]`) share the
