@@ -1024,7 +1024,7 @@ test('regression for fuzz seed 1020868 (empty sub-table of an AOT entry leaks th
   `);
 });
 
-test.fails('regression for fuzz seed 1024477 (table to AOT misplaces a nested sub-table)', () => {
+test('regression for fuzz seed 1024477 (table to AOT misplaces a nested sub-table)', () => {
   // Changing a table into an array-of-tables whose first entry holds a nested
   // object (depth >= inlineTableStart) forces that object out into a separate
   // `[key.sub]` section.  It must land directly after its `[[key]]` entry, not
