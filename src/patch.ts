@@ -1929,11 +1929,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // then collide with the rebuilt KV and fail the re-parse (fuzz seed
           // 299772).  Drop every other entry with the same key first.
           if (Array.isArray(jsValue) && !jsValue.every(v => isObject(v))) {
-            const siblingEntries = (original.items as TreeNode[]).filter(n =>
-              isTableArray(n)
-              && n !== existing
-              && arraysEqual((n as TableArray).key.item.value, existingAotKey)
-            );
+            // The AOT's key can be a strict prefix of OTHER document sections
+            // (e.g. `[[""]]` collapsing to a static array while
+            // `["".c47eko_.bog8_vy3w]` is a non-contiguous sub-table extending
+            // that prefix).  Those prefix-extended sub-tables/sub-AOTs would
+            // re-define the key on re-parse and fail with "Cannot add to
+            // static array" (fuzz seed 1285105).  Match them by key prefix,
+            // not just exact key equality.
+            const siblingEntries = findDocumentItemsByKeyPrefix(original, existingAotKey)
+              .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of siblingEntries) {
               removeMember(original, original, sibling);
             }
