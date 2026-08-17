@@ -995,3 +995,31 @@ test('regression for fuzz seed 599513: moving a multiline inline table left corr
     }, true]
   `);
 });
+
+test('regression for fuzz seed 1020868 (empty sub-table of an AOT entry leaks the entry index)', () => {
+  // Deleting `fv.dtmo2qe` empties `fv` to `{}`.  `change.path` is the JS-object
+  // path `["", 0, "fv", "dtmo2qe"]`, whose parent prefix `["", 0, "fv"]`
+  // interleaves the numeric AOT entry index.  Materialising the parent with
+  // that prefix emitted `["".0.fv]` and the re-parse nested `fv` under a key
+  // literally named "0".  The in-place materialisation must use the CST key
+  // `["", "fv"]` instead.
+  const src = dedent`
+    [[""]]
+    x = 1
+
+    ["".fv.dtmo2qe]
+    y = 2
+  `;
+
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  delete obj[''][0].fv.dtmo2qe;
+
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[""]]
+    x = 1
+
+    ["".fv]
+  `);
+});

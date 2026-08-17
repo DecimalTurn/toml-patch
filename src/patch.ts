@@ -2251,7 +2251,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         let materialisedInPlace = false;
         if (change.path.length > 1 && isTable(node) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath)
+          // `change.path` is in JS-object coordinates (numeric AOT index after
+          // the AOT key, e.g. `["", 0, "fv"]` for CST `["", "fv"]`).  The
+          // sibling scan and in-place key rename must use the CST key, else
+          // the index leaks into the header `["".0.fv]` (fuzz seed 1020868).
+          const cstParentPath = (node as Table).key.item.value.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath)
             .filter(s => s !== node);
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
@@ -2266,7 +2271,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               applyWrites(original);
               const keyHolder = table.key;
               const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
-              key.value = parentPath as string[];
+              key.value = cstParentPath as string[];
               key.raw = preserveEscapedKeyRaw(key.raw, key.value);
               key.loc.end.column = key.loc.start.column + key.raw.length;
               keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
@@ -2508,12 +2513,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (!materialisedInPlace &&
             change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+          // `change.path` is in JS-object coordinates, which interleave a
+          // numeric AOT entry index after the AOT key (e.g. `["", 0, "fv"]`
+          // for the CST key `["", "fv"]`).  The sibling scan and generated
+          // header must use the CST key (no index), else the index leaks into
+          // the header as `["".0.fv]` and the re-parse nests `fv` under a key
+          // literally named "0" (fuzz seed 1020868).  The value walk below
+          // keeps the JS coordinates.
+          const cstParentKey = (node as Table | TableArray).key.item.value.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentKey);
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
-              const emptyTable = generateTable(parentPath as string[]);
+              const emptyTable = generateTable(cstParentKey as string[]);
               materialisedTables.add(emptyTable);
               // Insert at the original position so preceding comments
               // stay adjacent without a spurious blank line.  Clamp to the
