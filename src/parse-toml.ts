@@ -21,7 +21,8 @@ import {
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation } from './location';
+import { clonePosition, cloneLocation, Location } from './location';
+import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
 
 import {
@@ -1309,6 +1310,25 @@ function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment>
   }
 }
 
+/**
+ * Measures the horizontal gap a separating comma occupies between two adjacent
+ * inline siblings: 1 for a compact list (`[1,2]`), 2 for a spaced list
+ * (`[1, 2]`).  Stored on the container at parse time because the writer needs
+ * this original spacing later, long after the items' own positions have been
+ * shifted by pending edits.
+ */
+function detectCommaSpace(items: { loc: Location }[]): number | undefined {
+  for (let i = 1; i < items.length; i++) {
+    const prev = items[i - 1];
+    const next = items[i];
+    if (prev.loc.end.line === next.loc.start.line) {
+      const gap = next.loc.start.column - prev.loc.end.column;
+      if (gap >= 1) return gap;
+    }
+  }
+  return undefined;
+}
+
 function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
@@ -1404,6 +1424,10 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
   }
 
   value.loc.end = cursor.value!.loc.end;
+  {
+    const gap = detectCommaSpace(value.items);
+    if (gap !== undefined) setCommaSpace(value, gap);
+  }
   return [value, comments];
 }
 
@@ -1489,5 +1513,9 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
   }
 
   value.loc.end = cursor.value!.loc.end;
+  {
+    const gap = detectCommaSpace(value.items);
+    if (gap !== undefined) setCommaSpace(value, gap);
+  }
   return [value, comments];
 }
