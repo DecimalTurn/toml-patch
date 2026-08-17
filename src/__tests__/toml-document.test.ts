@@ -1596,12 +1596,22 @@ describe('TomlDocument', () => {
       doc.patch(updatedObj);
       const result = doc.toTomlString;
       
-      // Even with compact input, the tool should add appropriate comma spacing for new elements
-      // This documents how the tool handles compact input vs its output formatting
-      expect(result).toContain('["web","api","database", "monitoring"]'); // New element gets comma spacing (we might want to add a feature to TomlFormat to preseve the no-comma-spacing style)
-      //TODO: Decide if we want to preserve no-comma-spacing style in this case
-      expect(result).toContain('[80,443,8080, 9090]'); // New element gets comma spacing
-      expect(result).toContain('["192.168.1.1","192.168.1.2", "192.168.1.3"]'); // New element gets comma spacing
+      // Compact input is preserved end-to-end: newly added elements adopt the
+      // container's existing (no-space) comma spacing instead of defaulting to
+      // a spaced comma.
+
+      expect(result).toEqual(dedent`
+        title = "Compact Config"
+        tags = ["web","api","database","monitoring"]
+        ports = [80,443,8080,9090]
+        
+        [server]
+        name = "production"
+        ips = ["192.168.1.1","192.168.1.2","192.168.1.3"]
+      ` + '\n');
+      expect(result).toContain('["web","api","database","monitoring"]');
+      expect(result).toContain('[80,443,8080,9090]');
+      expect(result).toContain('["192.168.1.1","192.168.1.2","192.168.1.3"]');
       
       // Should still preserve no bracket spacing
       expect(result).not.toContain('[ "web"'); // No space after opening bracket
