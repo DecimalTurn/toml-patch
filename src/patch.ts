@@ -2675,6 +2675,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                       // Resolve it first so the insert positions the item
                       // against final coordinates (fuzz seed 22).
                       applyWrites(original);
+                      // The container was a MULTILINE inline table whose only
+                      // item (a multiline dotted key) was just removed: the
+                      // removal zeroed its line offset but left a stale
+                      // multiline end line, so insert() would place the new
+                      // `prefix = {}` on a phantom second line and the
+                      // enclosing table's trailing siblings would be pulled
+                      // inside this one (fuzz seed 863085).  Collapse the end
+                      // to the bracket row first, mirroring the Add handler
+                      // (fuzz seed 272851).
+                      if (hasInlineContainerNeedingTighten(container) &&
+                          container.loc.end.line > container.loc.start.line) {
+                        container.loc.end.line = container.loc.start.line;
+                      }
                       insert(original, container, inlineItem, containerItemIndex >= 0 ? containerItemIndex : undefined);
                       // insert() reserves one column for the opening-brace
                       // space; with bracket spacing enabled that column is

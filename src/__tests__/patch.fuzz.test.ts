@@ -818,6 +818,34 @@ test('regression for fuzz seed 272851', () => {
   expect((parse(result) as any).o6z).toEqual({ ut: { g7k5gct: { k12: 'OGB' } }, w: { x: 5 } });
 });
 
+test('regression for fuzz seed 863085 (delete dotted key empties nested inline table)', () => {
+  // A nested inline table `nn` holds a single dotted key `"k1".k2.k3` whose
+  // value is a multiline string, so `nn` spans several lines. Deleting the
+  // last segment (`k3`) empties the dotted prefix to `{}` and re-serialises
+  // `nn` as `{  k1.k2 = {} }`. The re-materialisation collapsed `nn` to a
+  // single line but left its `loc.end` on the multiline string's old end
+  // line, so the enclosing table's trailing siblings `sib1`/`sib2` were
+  // pulled inside `nn`.
+  const src = dedent`
+    root = { nn = { "k1".k2.k3 = '''
+    AAA
+    BBB''' }, sib1 = "x", sib2 = "y" }
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.root.nn.k1.k2.k3;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  // `sib1`/`sib2` must stay siblings of `nn` inside `root`, not be absorbed
+  // into `nn`.
+  expect((parse(result) as any).root).toEqual({
+    nn: { k1: { k2: {} } },
+    sib1: 'x',
+    sib2: 'y',
+  });
+});
+
 test('regression for fuzz seed 299772 (AOT entry replaced by scalar)', () => {
   // Replacing the first entry of an array-of-tables with a scalar collapses
   // the whole AOT to a plain array — the regenerated `hc8v = [...]` KV must
