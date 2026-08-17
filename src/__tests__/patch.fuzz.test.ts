@@ -1023,3 +1023,35 @@ test('regression for fuzz seed 1020868 (empty sub-table of an AOT entry leaks th
     ["".fv]
   `);
 });
+
+test.fails('regression for fuzz seed 1024477 (table to AOT misplaces a nested sub-table)', () => {
+  // Changing a table into an array-of-tables whose first entry holds a nested
+  // object (depth >= inlineTableStart) forces that object out into a separate
+  // `[key.sub]` section.  It must land directly after its `[[key]]` entry, not
+  // after a later entry — otherwise the re-parse reassigns the sub-table to
+  // the wrong array element.
+  const src = dedent`
+    tp6.":" = 451070
+  `;
+
+  const obj = parse(src) as any;
+  obj.tp6 = [
+    { k61: 439, k41: { k96: new Date('2012-04-07T00:00:00.000Z') } },
+    { k76: -2790, k10: 1301, k89: 798.6 },
+  ];
+
+  const result = patch(src, obj, { inlineTableStart: 2, minimumDecimals: 2 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[tp6]]
+    k61 = 439.00
+
+    [tp6.k41]
+    k96 = 2012-04-07T00:00:00.000Z
+
+    [[tp6]]
+    k76 = -2790.00
+    k10 = 1301.00
+    k89 = 798.60
+  `);
+});
