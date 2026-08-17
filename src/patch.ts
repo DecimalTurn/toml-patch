@@ -325,14 +325,43 @@ function reorder(changes: Change[]): Change[] {
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
     if (isRemove(change)) {
+      // The array this Remove targets, and the Remove's own index within it.
+      const aIdx = last(change.path);
+      const aPrefix = change.path.slice(0, -1);
       let j = i + 1;
       while (j < changes.length) {
         const next_change = changes[j];
+
+        // A Remove emitted AFTER a same-array Add or Move is in post-shift
+        // (sequential) coordinates: the Add changed the array's length and the
+        // Move changed the element order, so hoisting the Remove back across
+        // that barrier would apply its index to the wrong element (fuzz seed
+        // 1137525: `Remove[1], Add[2], Add[3], Remove[6]` must keep Remove[6]
+        // after the Adds, where index 6 is the surplus duplicate, not the
+        // source index 6).  Same-array Edits are length-preserving, so they are
+        // safe to cross (fuzz seed 50448), and Adds/Moves in a DIFFERENT array
+        // context do not shift this one (fuzz seeds 84522/473477) — so only a
+        // same-array Add or Move forms a barrier.
+        if (isAdd(next_change)) {
+          const bIdx = last(next_change.path);
+          if (typeof bIdx === 'number' && arraysEqual(aPrefix, next_change.path.slice(0, -1))) {
+            break;
+          }
+          j++;
+          continue;
+        }
+        // Object-key Moves (`updateOrder`, key set) reorder object members, not
+        // array elements, so they never shift this array's indices.
+        if (isMove(next_change) && next_change.key === undefined) {
+          if (arraysEqual(aPrefix, next_change.path)) {
+            break;
+          }
+          j++;
+          continue;
+        }
         if (!isRemove(next_change)) { j++; continue; }
 
-        const aIdx = last(change.path);
         const bIdx = last(next_change.path);
-        const aPrefix = change.path.slice(0, -1);
         const bPrefix = next_change.path.slice(0, -1);
 
         // Same array context AND higher index should come first.

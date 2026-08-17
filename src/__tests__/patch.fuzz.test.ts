@@ -1056,24 +1056,21 @@ test('regression for fuzz seed 1024477 (table to AOT misplaces a nested sub-tabl
   `);
 });
 
-// FIXME(seed 1137525): the diff emits `Remove[1], Add[2], Add[3], Remove[6]`
-// for a multiline array where a duplicate scalar was inserted and a scalar was
-// removed.  reorder() moves the higher-index `Remove[6]` in front of the two
-// Adds, so it is applied against the ORIGINAL array — index 6 is `"g"`, not the
-// surplus duplicate `"f"` (source index 5) — and the wrong element is removed.
-// The root cause is a coordinate-space inconsistency: a Remove's index is
-// sequential when it stays put (single remove, e.g. seeds 3093/761) but
-// source-coordinate when reorder() moves it before interleaved Adds.  A correct
-// fix must make Remove indices consistently source coordinates (accounting for
-// adds AND moves in the diff's `removedBefore` bookkeeping) and have reorder()
-// apply them first — the naive `removedBefore--` unconditional (commit d17e606)
-// regressed seeds 761/3093, and guarding reorder() against crossing Adds
-// regressed seeds 50448/84522/473477.
+// Regression for fuzz seed 1137525: the diff emits `Remove[1], Add[2], Add[3],
+// Remove[6]` for a multiline array where a duplicate scalar was inserted and a
+// scalar was removed.  reorder() used to move the higher-index `Remove[6]` in
+// front of the two Adds, so it was applied against the ORIGINAL array — index 6
+// is `"g"`, not the surplus duplicate `"f"` (source index 5) — and the wrong
+// element was removed.  The fix: reorder() now treats a same-array Add or Move
+// as a barrier (a Remove emitted after it is in post-shift coordinates and must
+// stay after it), while still crossing length-preserving Edits (seed 50448) and
+// Adds/Moves in a DIFFERENT array context (seeds 84522/473477).  The naive
+// `removedBefore--` unconditional (commit d17e606) regressed seeds 761/3093.
 test('regression for fuzz seed 1137525 (remove leaps past interleaved adds on reorder)', () => {
   // `"b"` becomes `"c"` (a duplicate of the existing `"c"`), `["x"]` is
   // inserted, a second `"c"` is inserted, and `"f"` is dropped.  The diff
-  // emits `Remove[1], Add[2], Add[3], Remove[6]`; the last Remove targets
-  // index 6 (`"g"`) instead of 5 (`"f"`).
+  // emits `Remove[1], Add[2], Add[3], Remove[6]`; the last Remove must stay
+  // after the Adds, where index 6 is the surplus duplicate `"f"`.
   const src = dedent`
     nea32 = ["a", "b", "c", "d", "e", "f", "g"]
   `;
