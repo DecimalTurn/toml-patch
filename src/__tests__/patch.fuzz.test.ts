@@ -1138,3 +1138,29 @@ test('regression for fuzz seed 1285105 (AOT collapsed to static array with non-c
     b = 2
   `);
 });
+
+test('regression for fuzz seed 1428499 (delete implicit sub-table of an AOT entry)', () => {
+  // Deleting the intermediate key of a nested array-of-tables inside a `""`
+  // AOT entry.  The change path is `["", 0, "sub"]` — JS-object coordinates
+  // carrying the numeric AOT entry index — but the nested AOT's CST key is
+  // `["", "sub", "q"]` (no index, and `sub` is an implicit table with no
+  // section of its own).  The remove handler must strip the AOT index and
+  // sweep the prefix-extending sub-AOT, or findByPath throws "Node not found".
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".sub.q]]
+    b = 2
+  `;
+
+  const obj = parse(src) as any;
+  delete obj[''][0]['sub'];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[""]]
+    a = 1
+  `);
+});
