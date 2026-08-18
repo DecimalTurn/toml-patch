@@ -1230,3 +1230,25 @@ test('regression for fuzz seed 1657445 (AOT entry structural edit emitted as tab
     rw109.kjzi = 3495.677246246487
   `);
 });
+
+test('regression for fuzz seed 1947810 (AOT entry edited to scalar under existing parent table)', () => {
+  const src = dedent`
+    [""]
+    x = 1
+
+    [["".u60ke_j3]]
+    a = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj[""].u60ke_j3 = [-3754];
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [""]
+    x = 1
+    u60ke_j3 = [ -3754 ]
+  `);
+});
+
