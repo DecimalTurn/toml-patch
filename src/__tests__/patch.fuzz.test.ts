@@ -1164,3 +1164,27 @@ test('regression for fuzz seed 1428499 (delete implicit sub-table of an AOT entr
     a = 1
   `);
 });
+
+test('regression for fuzz seed 1674968 (implicit dotted table collapsed to scalar leaves stale children)', () => {
+  // `b.c` is an implicit table defined only by the dotted keys `b.c.k1` /
+  // `b.c.k2`.  Collapsing `b.c` to a scalar must truncate the key to `b.c`
+  // and remove the stale `b.c.k2` sibling — otherwise the surviving dotted
+  // child re-defines `b.c` on re-parse ("Value already defined").  The fix:
+  // the parent path resolves to a prefix-matched KV, so the sibling sweep has
+  // to look in that KV's structural container (the AOT entry) instead.
+  const src = dedent`
+    [[a]]
+    b.c.k1 = 1
+    b.c.k2 = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj.a[0].b.c = 'X';
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[a]]
+    b.c = "X"
+  `);
+});
