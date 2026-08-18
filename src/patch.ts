@@ -2186,8 +2186,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // For example, [references.VBIDE] creates a Table with key
           // ["references", "VBIDE"], so a Remove at path ["references"] has
           // no exact node match. Find all document-level items whose key
-          // starts with the change path and remove them.
-          const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+          // starts with the change path and remove them.  The path is in
+          // JS-object coordinates, so strip numeric AOT entry indices first —
+          // `delete obj[""][0]["-vX`"]` has path `["", 0, "-vX`"]` but the
+          // CST sub-table is keyed `["", "-vX`"]` (fuzz seed 1428499).
+          const cstPath = stripAotEntryIndices(original, change.path);
+          const prefixNodes = findDocumentItemsByKeyPrefix(original, cstPath);
           if (prefixNodes.length > 0) {
             const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
@@ -2197,14 +2201,16 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             // implicit parent (e.g. [mhv6z.hpd_iu9zs5."2<w"] removed at
             // path [mhv6z, hpd_iu9zs5] -> { mhv6z: {} }), materialise the
             // parent as an empty table so the key isn't dropped (seed 176).
-            if (change.path.length > 1 && rawUpdated !== undefined) {
-              const parentPath = change.path.slice(0, -1);
-              const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            if (cstPath.length > 1 && rawUpdated !== undefined) {
+              const cstParentPath = cstPath.slice(0, -1);
+              const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath);
               if (remainingSiblings.length === 0) {
+                // `rawUpdated` is the JS object, so walk the ORIGINAL
+                // (indexed) path — not the index-stripped CST path.
                 let value: any = rawUpdated;
-                for (const k of parentPath) value = value?.[k];
+                for (const k of change.path.slice(0, -1)) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
-                  const emptyTable = generateTable(parentPath as string[]);
+                  const emptyTable = generateTable(cstParentPath as string[]);
                   materialisedTables.add(emptyTable);
                   // Clamp to the post-removal items length — a stale last-item
                   // index inserts past the end and strands the generated
@@ -3898,6 +3904,28 @@ function findDocumentItemsByKeyPrefix(
     }
   }
   return matchingNodes;
+}
+
+/**
+ * Converts a JS-object change path into CST key coordinates by dropping the
+ * numeric array-of-tables entry indices.  The diff walks the JS object, so a
+ * path into an AOT entry interleaves the entry's numeric index (e.g. `["", 0,
+ * "fv"]`), but CST keys carry no such index — `[[""]]` entries live at the
+ * document level and their sub-tables are keyed `["", "fv"]`.  A numeric
+ * segment is an AOT entry index when the accumulated path is a document-level
+ * TableArray key; inline-array indices (which ARE part of the CST path) never
+ * resolve to a document-level TableArray.
+ */
+function stripAotEntryIndices(original: Document, jsPath: Path): Path {
+  const cstPath: Path = [];
+  for (const seg of jsPath) {
+    if (typeof seg === 'number') {
+      const isAotIndex = findDocumentItemsByKeyPrefix(original, cstPath).some(isTableArray);
+      if (isAotIndex) continue;
+    }
+    cstPath.push(seg);
+  }
+  return cstPath;
 }
 
 /**
