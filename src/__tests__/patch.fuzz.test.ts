@@ -3,6 +3,23 @@ import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 
+test.fails('regression for fuzz seed 1845422 (array index leaks into dotted key)', () => {
+  const src = dedent`
+    [[a]]
+
+    [a.q]
+    v = [0, 0, 0, { p.g.h = 3 }]
+    `;
+
+  const obj = parse(src) as any;
+  // Deleting this dotted leaf should keep `p.g = {}` inside the inline table,
+  // but patch injects the array index (`3`) into the key path.
+  delete obj.a[0].q.v[3].p.g.h;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
 test('restoring anchored rows also restores their key and value nodes (seed 19506)', () => {
     // Removing a leading item moves the inline table left; its interior rows
     // are anchored to the preceding multiline string's end.  The rigid
