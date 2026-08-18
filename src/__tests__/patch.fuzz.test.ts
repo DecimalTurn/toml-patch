@@ -1188,3 +1188,28 @@ test('regression for fuzz seed 1674968 (implicit dotted table collapsed to scala
     b.c = "X"
   `);
 });
+
+test('regression for fuzz seed 1657445 (AOT entry structural edit emitted as table is flattened back to dotted key)', () => {
+  // Under an AOT entry, changing `rw109.kjzi` from an object-shaped subtree
+  // (rendered as [["".rw109.kjzi]]) to a scalar must reinsert `rw109.kjzi =` in
+  // that SAME entry. parseJS can render the replacement tail as `[rw109]` + row;
+  // if we only accept root KeyValue nodes there, the replacement is dropped.
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".rw109.kjzi]]
+    x = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj[''][0].rw109.kjzi = 3495.677246246487;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[""]]
+    a = 1
+    rw109.kjzi = 3495.677246246487
+  `);
+});

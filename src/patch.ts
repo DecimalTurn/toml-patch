@@ -3366,18 +3366,46 @@ function handleStructuralEdit(
         const tailDoc = parseJS(tail, format);
         const tailToml = toTOML(tailDoc.items, format);
         const tailCst = Array.from(parseTOML(tailToml));
+
+        const upsertEntryKeyValue = (kv: KeyValue): void => {
+          const existingRow = (entry as TableArray).items.find(row =>
+            isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
+          );
+          if (existingRow) {
+            replace(original, entry as TableArray, existingRow, kv);
+          } else {
+            insert(original, entry, kv, undefined);
+          }
+        };
+
         for (const item of tailCst) {
           if (isKeyValue(item)) {
-            const kv = item;
-            // The rendered key is relative to the entry; overwrite an
-            // equal-keyed surviving row rather than duplicating it.
-            const existingRow = (entry as TableArray).items.find(row =>
-              isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
-            );
-            if (existingRow) {
-              replace(original, entry as TableArray, existingRow, kv);
-            } else {
-              insert(original, entry, kv, undefined);
+            upsertEntryKeyValue(item);
+            continue;
+          }
+
+          // parseJS may materialize the replacement tail as a Table section
+          // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
+          // edit scoped to a specific AOT entry, flatten section rows back to
+          // dotted KVs relative to that entry (fuzz seed 1657445).
+          if (isTable(item)) {
+            const tableKey = (item as Table).key.item.value;
+            for (const row of (item as Table).items as TreeNode[]) {
+              if (!isKeyValue(row)) continue;
+
+              const oldRaw = row.key.raw;
+              const dotted = tableKey.concat(row.key.value);
+              row.key.value = dotted;
+              row.key.raw = generateKey(dotted).raw;
+              const delta = row.key.raw.length - oldRaw.length;
+              row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+              row.equals += delta;
+              shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+              if (row.loc.end.line === row.loc.start.line) {
+                row.loc.end.column += delta;
+              }
+
+              upsertEntryKeyValue(row);
             }
           }
         }
