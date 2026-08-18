@@ -3,7 +3,7 @@ import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 
-test.fails('regression for fuzz seed 1845422 (array index leaks into dotted key)', () => {
+test('regression for fuzz seed 1845422 (array index leaks into dotted key)', () => {
   const src = dedent`
     [[a]]
 

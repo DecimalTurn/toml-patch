@@ -2683,6 +2683,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               } else {
                 relativePrefix = parentPath as string[];
               }
+              // `relativePrefix` is a TOML key path. `parentPath` comes from
+              // JS-object coordinates and can include array indices (numbers),
+              // which must never be emitted as key segments.
+              relativePrefix = relativePrefix.filter((seg): seg is string => typeof seg === 'string');
               const remaining = (container.items as TreeNode[]).filter(item => {
                 const key = isKeyValue(item)
                   ? (item as KeyValue).key.value
