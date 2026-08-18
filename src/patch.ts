@@ -1996,6 +1996,30 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               extendSectionKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
               commentEligibleNodes.add(freshKV);
             } else {
+              // If an explicit parent table already exists (`[""]` plus
+              // `[["".u60ke_j3]]`), reuse it and insert the rebuilt key
+              // there. Creating a new `[parentKey]` duplicates the table
+              // header and re-parse fails with "Table already defined"
+              // (fuzz seed 1947810).
+              const existingParentTable = isDocument(tableParent)
+                ? (tableParent.items as TreeNode[]).find(item =>
+                  isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)
+                ) as Table | undefined
+                : undefined;
+              if (existingParentTable) {
+                const existingRow = (existingParentTable.items as TreeNode[]).find(row =>
+                  isKeyValue(row) && arraysEqual((row as KeyValue).key.value, freshKV.key.value)
+                ) as KeyValue | undefined;
+                if (existingRow) {
+                  replace(original, existingParentTable, existingRow, freshKV);
+                } else {
+                  insert(original, existingParentTable, freshKV, undefined);
+                }
+                removeMember(original, tableParent as Document, existing);
+                commentEligibleNodes.add(existingParentTable);
+                return; // handled; skip generic replace below
+              }
+
               // Same implicit-parent handling as the isTable branch above
               // (fuzz seed 6803).
               const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
