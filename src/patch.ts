@@ -1424,7 +1424,18 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
       let parent;
-      const containerParent = tryFindByPath(original, change.path.slice(0, -1));
+      let containerParent = tryFindByPath(original, change.path.slice(0, -1));
+      // The parent path can resolve to a dotted KV by PREFIX when the edited
+      // key sits under an implicit table (e.g. editing `["", 0, "", ""]` while
+      // the CST holds `""."".lh8butjh6i`): the probe is shorter than the key,
+      // so tryFindByPath returns the KV, not its container.  The sibling
+      // sweeps below must look in the REAL container (the AOT entry) or stale
+      // children survive the collapse and re-parse fails with "Value already
+      // defined" (fuzz seed 1674968).  Resolve it structurally.
+      if (containerParent && isKeyValue(containerParent) &&
+          isPrefixMatchedNode(containerParent, change.path.slice(0, -1))) {
+        containerParent = findStructuralParent(original, containerParent);
+      }
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
