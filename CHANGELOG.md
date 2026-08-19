@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: Fix dotted-key truncation and whitespace bugs ([#282])
 - Patching: Fixing 54+ patching bugs discovered with fuzzing harness (2M seeds) ([#288])
 - Patching: preserve dotted-key formatting when appending array-of-tables entries after nested sub-tables ([#289])
+- Patching: reorder dotted-key members inside array-of-tables entries when `updateOrder` is enabled ([#290])
 
 ### Changed
 - Improve stringification performance ([#280])
@@ -393,4 +394,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#282]: https://github.com/DecimalTurn/toml-patch/pull/282
 [#288]: https://github.com/DecimalTurn/toml-patch/pull/288
 [#289]: https://github.com/DecimalTurn/toml-patch/pull/289
+[#290]: https://github.com/DecimalTurn/toml-patch/pull/290
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
