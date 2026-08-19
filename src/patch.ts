@@ -734,6 +734,68 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     return !arraysEqual(kv.key.value, probe.slice(probe.length - keyLen));
   }
 
+  function aotEntryUsesDottedKey(styleEntry: TableArray, relativeKey: string[]): boolean {
+    const entryKey = styleEntry.key.item.value;
+    const fullKey = entryKey.concat(relativeKey);
+
+    if ((styleEntry.items as TreeNode[]).some(item =>
+      isKeyValue(item)
+      && item.key.value.length > relativeKey.length
+      && arraysEqual(item.key.value.slice(0, relativeKey.length), relativeKey)
+    )) {
+      return true;
+    }
+
+    return (original.items as TreeNode[]).some(item => {
+      if (!isTable(item) && !isTableArray(item)) return false;
+      const key = item.key.item.value;
+      return key.length > fullKey.length
+        && arraysEqual(key.slice(0, fullKey.length), fullKey);
+    });
+  }
+
+  function preserveAotEntryDottedKeys(entry: TableArray, styleEntry: TableArray): TableArray {
+    const rows: TreeNode[] = [];
+    let changed = false;
+
+    for (const item of entry.items as TreeNode[]) {
+      if (!isKeyValue(item) || !isInlineTable(item.value)
+          || !aotEntryUsesDottedKey(styleEntry, item.key.value)) {
+        rows.push(item);
+        continue;
+      }
+
+      const replacementRows: KeyValue[] = [];
+      for (const nestedItem of item.value.items as TreeNode[]) {
+        if (!isInlineItem(nestedItem) || !isKeyValue(nestedItem.item)) continue;
+        const nestedObject = toJS([nestedItem.item], '', { temporal });
+        let nestedValue: any = nestedObject;
+        for (const key of nestedItem.item.key.value) nestedValue = nestedValue?.[key];
+        const freshValue = regenerateValue(nestedValue, format);
+        if (freshValue !== undefined) {
+          replacementRows.push(generateKeyValue(
+            item.key.value.concat(nestedItem.item.key.value),
+            freshValue
+          ));
+        }
+      }
+
+      if (replacementRows.length > 0) {
+        rows.push(...replacementRows);
+        changed = true;
+      } else {
+        rows.push(item);
+      }
+    }
+
+    if (!changed) return entry;
+
+    const rebuilt = generateTableArray(entry.key.item.value);
+    for (const row of rows) insert(rebuilt, rebuilt, row);
+    applyWrites(rebuilt);
+    return rebuilt;
+  }
+
   // The immediate structural container holding `target` in its `.items`
   // array — any container type (Document/Table/TableArray/InlineTable/
   // InlineArray), descending through KeyValue values and InlineItem
@@ -1066,6 +1128,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               }
             }
             index = lastSubTable + 1;
+            if (isTableArray(child)) {
+              child = preserveAotEntryDottedKeys(child, before as TableArray);
+            }
           }
         } else {
           index = document.items.length;

@@ -79,7 +79,7 @@ import dedent from 'dedent';
     `);
   });
 
-  test.fails('appending an AOT entry after a nested array sub-table (seed 21525 alt.1)', () => {
+  test('appending an AOT entry after a nested array sub-table (seed 21525 alt.1)', () => {
     const src = dedent`
       [[a]]
       child.value = 1
