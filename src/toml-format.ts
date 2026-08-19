@@ -274,7 +274,16 @@ export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>
   for (const node of nodes) visit(node);
 
   if (detectTabsForIndentation(tomlString)) return 1;
-  return widths.length > 0 ? Math.min(...widths) : DEFAULT_INDENT_WIDTH;
+  if (widths.length > 0) return Math.min(...widths);
+
+  // A document with only an indented root key has no nested CST row from which to
+  // infer the width. Use its content indentation as a fallback, ignoring blank lines
+  // and comments so a banner cannot become the detected indent.
+  const rootIndentWidths = lines
+    .filter(line => line.trim().length > 0 && !line.trimStart().startsWith('#'))
+    .map(line => line.match(/^ +/)?.[0].length ?? 0)
+    .filter(width => width > 0);
+  return rootIndentWidths.length > 0 ? Math.min(...rootIndentWidths) : DEFAULT_INDENT_WIDTH;
 }
 
 /**
