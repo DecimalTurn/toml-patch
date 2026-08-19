@@ -10083,20 +10083,33 @@ test('multiline empty array accepts an explicit indentation width', () => {
     ]
   ` + '\n');
 });
+describe('indentation at the root level', () => {
+  test('single key added to indented single key', () => {
+    const src = [
+      '    key1 = "test"',
+    ].join('\n')
 
-test('single key added to indented single key', () => {
-  const src = [
-    '    key1 = "test"',
-  ].join('\n')
+    const obj = parse(src) as any;
+    //Add key2 to the object
+    obj.key2 = "new-value";
 
-  const obj = parse(src) as any;
-  //Add key2 to the object
-  obj.key2 = "new-value";
+    const result = patch(src, obj, { indentWidth: 4 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual([
+      '    key1 = "test"',
+      '    key2 = "new-value"',
+    ].join('\n'));
+  });
 
-  const result = patch(src, obj, { indentWidth: 4 });
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual([
-    '    key1 = "test"',
-    '    key2 = "new-value"',
-  ].join('\n'));
-});
+  test('single key added to indented single key with dotted keys', () => {
+    const src = [
+      '    fruit.color = "yellow"',
+    ].join('\n')
+    const obj = parse(src) as any;
+    //Add fruit.flavor to the object
+    obj.fruit.flavor = "banana";
+    expect(patch(src, obj)).toEqual([
+      '    fruit.color = "yellow"',
+      '    fruit.flavor = "banana"',
+    ].join('\n'));  
+  });
