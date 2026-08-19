@@ -526,14 +526,7 @@ describe('updateOrder warnings when a requested position could not be honored', 
     spy.mockRestore();
   });
 
-  // FIXME(seed 3214): reordering dotted-key implicit tables inside an
-  // array-of-tables entry is currently unsupported (updateOrder resolves the
-  // move's path -- which carries the numeric AOT index `a.0.y3.mklbjj.k99` --
-  // to no container and leaves it unchanged, emitting an "unsupported
-  // location" warning).  There is no user-facing reason the two keys can't be
-  // swapped in place; the expected behaviour is a real reorder with no
-  // warning.  Tracked as a known-failing test until the capacity is added.
-  test.fails('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
+  test('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const input = dedent`
