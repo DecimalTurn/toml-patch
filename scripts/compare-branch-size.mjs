@@ -37,8 +37,8 @@ function run(cmd, { cwd = root, allowFailure = false } = {}) {
   }
 }
 
-function git(args, { cwd = root } = {}) {
-  return run(`git ${args}`, { cwd }).trim();
+function git(args, { cwd = root, allowFailure = false } = {}) {
+  return run(`git ${args}`, { cwd, allowFailure }).trim();
 }
 
 function measure(file) {
