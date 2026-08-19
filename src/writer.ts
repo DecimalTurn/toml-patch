@@ -106,7 +106,10 @@ const getEnterOffsets = (root: Root) => {
  * line 1 by the unresolved removal shift).
  */
 export function getPendingEnterOffsets(root: Root): Offsets {
-  return enter_offsets.has(root) ? enter_offsets.get(root)! : new WeakMap();
+  if (!enter_offsets.has(root)) {
+    enter_offsets.set(root, new WeakMap());
+  }
+  return enter_offsets.get(root)!;
 }
 
 const exit_offsets: WeakMap<Root, Offsets> = new WeakMap();
