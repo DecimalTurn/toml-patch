@@ -10084,6 +10084,7 @@ test('multiline empty array accepts an explicit indentation width', () => {
   ` + '\n');
 });
 describe('indentation at the root level', () => {
+
   test('single key added to indented single key', () => {
     const src = [
       '    key1 = "test"',
@@ -10093,11 +10094,30 @@ describe('indentation at the root level', () => {
     //Add key2 to the object
     obj.key2 = "new-value";
 
-    const result = patch(src, obj, { indentWidth: 4 });
+    const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual([
       '    key1 = "test"',
       '    key2 = "new-value"',
+    ].join('\n'));
+  });
+
+  // The indentaion of the new key should match the last sibling key in the container
+  test('single key added to a few keys with inconsistent indentation', () => {
+    const src = [
+      '  key1 = "test1"',
+      '    key2 = "test2"',
+    ].join('\n')
+
+    const obj = parse(src) as any;
+    obj.key3 = "new-value";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual([
+      '  key1 = "test1"',
+      '    key2 = "test2"',
+      '    key3 = "new-value"',
     ].join('\n'));
   });
 
