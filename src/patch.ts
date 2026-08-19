@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -258,6 +258,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
     items
   };
+  setRootIndentWidth(existing_document, format.indentWidth);
 
   // Certain formatting options should not be applied to the updated document during patching, because it would
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would

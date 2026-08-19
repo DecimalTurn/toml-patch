@@ -3,6 +3,7 @@ import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import { stripLeadingBom } from '../decode-utf8';
+import dedent from 'dedent';
 
 function autoDetectFormat(toml: string) {
   return TomlFormat.autoDetectFormatWithCst(toml, parseTOML(stripLeadingBom(toml)));
@@ -45,6 +46,7 @@ describe('TomlFormat comprehensive tests', () => {
       expect(format.trailingNewline).toBe(1);
       expect(format.trailingComma).toBe(false);
       expect(format.bracketSpacing).toBe(true);
+      expect(format.indentWidth).toBe(2);
     });
 
     test('should use default when newLine is undefined', () => {
@@ -454,6 +456,31 @@ data = "test"`;
       expect(format.newLine).toBe('\n');
       expect(format.trailingNewline).toBe(0);
       expect(format.trailingComma).toBe(true); // Should detect from multiple trailing commas
+    });
+
+
+    test('should detect four-space indentation from single key', () => {
+      const toml = '    singleKey = 1\n';
+      expect(autoDetectFormat(toml).indentWidth).toBe(4);
+    });
+
+    test('should detect four-space indentation from multiline rows', () => {
+      const toml = dedent`
+        table = {
+            key1 = 1,
+            key2 = 2,
+        }
+      `;
+
+      expect(autoDetectFormat(toml).indentWidth).toBe(4);
+    });
+
+    test('should detect one-column indentation for tabs', () => {
+      const toml = 'table = {\n\tkey = 1,\n}\n';
+      const format = autoDetectFormat(toml);
+
+      expect(format.useTabsForIndentation).toBe(true);
+      expect(format.indentWidth).toBe(1);
     });
 
     test('should reuse an existing parse tree when auto-detecting format', () => {

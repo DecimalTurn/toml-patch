@@ -9,6 +9,7 @@ export const DEFAULT_BRACKET_SPACING = true;
 export const DEFAULT_INLINE_TABLE_START = 1;
 export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
+export const DEFAULT_INDENT_WIDTH = 2;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
 export const DEFAULT_UPDATE_ORDER = false;
@@ -237,6 +238,45 @@ export function detectTabsForIndentation(str: string): boolean {
   return tabCount > spaceCount;
 }
 
+export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>): number {
+  const lines = tomlString.split(/\r?\n/);
+  const widths: number[] = [];
+  const containers = new Set(['Table', 'TableArray', 'InlineTable', 'InlineArray']);
+  const rowNodes = new Set(['Table', 'TableArray', 'InlineTable', 'InlineArray', 'KeyValue', 'InlineItem', 'Comment']);
+
+  const visit = (node: any, containerStartLine?: number): void => {
+    if (!node || typeof node !== 'object') return;
+
+    if (
+      containerStartLine !== undefined &&
+      rowNodes.has(node.type) &&
+      node.loc?.start?.line > containerStartLine
+    ) {
+      const line = lines[node.loc.start.line - 1] ?? '';
+      const leading = line.match(/^[ \t]*/)?.[0] ?? '';
+      if (leading.length > 0) widths.push(leading.includes('\t') ? 1 : leading.length);
+    }
+
+    const nextContainerStartLine = containers.has(node.type) && node.loc?.end?.line > node.loc?.start?.line
+      ? node.loc.start.line
+      : containerStartLine;
+
+    if (Array.isArray(node.items)) {
+      for (const item of node.items) visit(item, nextContainerStartLine);
+    }
+    if (node.item) visit(node.item, nextContainerStartLine);
+    if (node.value) visit(node.value, nextContainerStartLine);
+  };
+
+  const nodes = Array.isArray(syntaxTree)
+    ? syntaxTree
+    : Array.from(syntaxTree ?? []);
+  for (const node of nodes) visit(node);
+
+  if (detectTabsForIndentation(tomlString)) return 1;
+  return widths.length > 0 ? Math.min(...widths) : DEFAULT_INDENT_WIDTH;
+}
+
 /**
  * Validates a format object and warns about unsupported properties.
  * Throws errors for supported properties with invalid types.
@@ -261,6 +301,8 @@ export function validateFormatObject(format: any): any {
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     truncateZeroTimeInDates: isBool,
     useTabsForIndentation: isBool,
+    indentWidth: v => typeof v === 'number' && Number.isInteger(v) && v > 0
+      ? null : `expected positive integer, got ${typeof v}`,
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     updateOrder: isBool,
@@ -324,6 +366,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.minimumDecimals ?? fallbackFormat.minimumDecimals,
         validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
         validatedFormat.updateOrder ?? fallbackFormat.updateOrder,
+        validatedFormat.indentWidth ?? fallbackFormat.indentWidth,
       );
     }
   } else {
@@ -417,6 +460,12 @@ export class TomlFormat {
   useTabsForIndentation?: boolean;
 
   /**
+   * The number of columns used for one indentation level in generated multiline values.
+   * This is auto-detected when patching and defaults to two columns.
+   */
+  indentWidth: number;
+
+  /**
    * The minimum number of decimal places to use when serializing JS numbers as TOML floats.
    * When greater than 0, plain JS integer values are serialized as TOML floats padded with
    * zeros to reach the specified decimal count. BigInt values are always serialized as integers
@@ -459,7 +508,8 @@ export class TomlFormat {
     useTabsForIndentation?: boolean,
     minimumDecimals?: number,
     leadingBom?: boolean,
-    updateOrder?: boolean
+      updateOrder?: boolean,
+    indentWidth?: number
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine ?? DEFAULT_NEWLINE;
@@ -469,6 +519,7 @@ export class TomlFormat {
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
+    this.indentWidth = indentWidth ?? DEFAULT_INDENT_WIDTH;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
     this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
     this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;
@@ -500,7 +551,8 @@ export class TomlFormat {
       DEFAULT_USE_TABS_FOR_INDENTATION,
       DEFAULT_MINIMUM_DECIMALS,
       DEFAULT_LEADING_BOM,
-      DEFAULT_UPDATE_ORDER
+      DEFAULT_UPDATE_ORDER,
+      DEFAULT_INDENT_WIDTH
     );
   }
 
@@ -542,6 +594,7 @@ export class TomlFormat {
     format.leadingBom = hasLeadingBom(tomlString);
     // Strip the BOM before other formatting detection to avoid interference.
     const tomlContent = stripLeadingBom(tomlString);
+    let cstNodes: any[] = [];
     
     // Detect line ending style
     format.newLine = detectNewline(tomlContent);
@@ -552,7 +605,7 @@ export class TomlFormat {
     // Get TOML syntax tree to detect comma and bracket spacing usage patterns
     try {
       // Materialize only when needed so we can traverse the same CST twice.
-      const cstNodes = Array.isArray(syntaxTree)
+      cstNodes = Array.isArray(syntaxTree)
         ? syntaxTree
         : Array.from(syntaxTree ?? parseTOML(tomlContent));
       format.trailingComma = detectTrailingComma(cstNodes);
@@ -566,6 +619,7 @@ export class TomlFormat {
     
     // Detect if tabs are used for indentation
     format.useTabsForIndentation = detectTabsForIndentation(tomlContent);
+    format.indentWidth = detectIndentWidth(tomlContent, cstNodes);
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences

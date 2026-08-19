@@ -10057,7 +10057,7 @@ test('multiline empty array uses the existing indentation level', () => {
     [root]
     dependencies = [
       ]
-  `;
+  ` + '\n';
 
   const obj = parse(src) as any;
   obj.root.dependencies = ['new-dependency'];
@@ -10067,6 +10067,36 @@ test('multiline empty array uses the existing indentation level', () => {
     dependencies = [
         "new-dependency"
       ]
-  `);
+  ` + '\n');
 });
 
+test('multiline empty array accepts an explicit indentation width', () => {
+  const src = 'dependencies = [\n]\n';
+  const obj = parse(src) as any;
+  obj.dependencies = ['new-dependency'];
+
+  const result = patch(src, obj, { indentWidth: 4 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    dependencies = [
+        "new-dependency"
+    ]
+  ` + '\n');
+});
+
+test('single key added to indented single key', () => {
+  const src = [
+    '    key1 = "test"',
+  ].join('\n')
+
+  const obj = parse(src) as any;
+  //Add key2 to the object
+  obj.key2 = "new-value";
+
+  const result = patch(src, obj, { indentWidth: 4 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual([
+    '    key1 = "test"',
+    '    key2 = "new-value"',
+  ].join('\n'));
+});

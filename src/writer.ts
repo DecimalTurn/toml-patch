@@ -33,6 +33,7 @@ import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
 import traverse from './traverse';
 import { getCommaSpace } from './inline-comma-space';
+import { DEFAULT_INDENT_WIDTH } from './toml-format';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -55,6 +56,12 @@ const dirty_roots: WeakSet<Root> = new WeakSet();
 // These never contain Comment nodes, never have items removed, and
 // inserts are always sequential — letting us skip patch-only code paths.
 const stringifyRoots: WeakSet<Root> = new WeakSet();
+
+const rootIndentWidths: WeakMap<Root, number> = new WeakMap();
+
+export function setRootIndentWidth(root: Root, indentWidth: number): void {
+  rootIndentWidths.set(root, indentWidth);
+}
 
 /** Mark a root as being built by parseJS — enables stringify fast paths. */
 export function markStringifyRoot(root: Root): void {
@@ -202,7 +209,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   let shift: Span;
   let offset: Span;
   if (isInlineArray(parent) || isInlineTable(parent)) {
-    ({ shift, offset } = insertInline(parent, child as InlineItem, index));
+    ({ shift, offset } = insertInline(parent, child as InlineItem, index, rootIndentWidths.get(root) ?? DEFAULT_INDENT_WIDTH));
   } else if (forceInline && isDocument(parent)) {
     ({ shift, offset } = insertInlineAtRoot(parent, child, index));
   } else {
@@ -423,6 +430,7 @@ function calculateInlinePositioning(
     hasSeparatingCommaBefore?: boolean;
     hasSeparatingCommaAfter?: boolean;
     hasTrailingComma?: boolean;
+    indentWidth?: number;
   } = {}
 ): { shift: Span; offset: Span } {
   
@@ -435,7 +443,8 @@ function calculateInlinePositioning(
     isLastElement = false,
     hasSeparatingCommaBefore = false,
     hasSeparatingCommaAfter = false,
-    hasTrailingComma = false
+    hasTrailingComma = false,
+    indentWidth = DEFAULT_INDENT_WIDTH
   } = options;
 
   // Store preceding node
@@ -470,7 +479,7 @@ function calculateInlinePositioning(
     if (following) {
       start.column = following.loc.start.column;
     } else if (parent.loc.end.line > parent.loc.start.line) {
-      start.column = parent.loc.end.column + 1;
+      start.column = parent.loc.end.column - 1 + indentWidth;
     }
   }
 
@@ -542,7 +551,8 @@ function commaSpaceOf(container: InlineArray | InlineTable): number {
 function insertInline(
   parent: InlineArray | InlineTable,
   child: InlineItem,
-  index: number
+  index: number,
+  indentWidth: number
 ): { shift: Span; offset: Span } {
   if (!isInlineItem(child)) {
     throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
@@ -607,7 +617,8 @@ function insertInline(
     isLastElement: is_last,
     hasSeparatingCommaBefore: has_separating_comma_before,
     hasSeparatingCommaAfter: has_separating_comma_after,
-    hasTrailingComma: has_trailing_comma
+    hasTrailingComma: has_trailing_comma,
+    indentWidth
   });
 }
 
