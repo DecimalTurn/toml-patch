@@ -673,7 +673,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   const absolutePathCache = new WeakMap<TreeNode, Path>();
   function absolutePathOf(target: TreeNode): Path | undefined {
     const cached = absolutePathCache.get(target);
-    if (cached) return cached;
+    if (cached !== undefined) return cached;
     const indexes: Record<string, number> = {};
     function walk(node: TreeNode, path: Path): Path | undefined {
       if (node === target) return path;
@@ -706,7 +706,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       return undefined;
     }
     const result = walk(original, []);
-    if (result) absolutePathCache.set(target, result);
+    if (result !== undefined) absolutePathCache.set(target, result);
     return result;
   }
 
