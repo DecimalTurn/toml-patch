@@ -195,8 +195,6 @@ function deepEqual(a: unknown, b: unknown): boolean {
  * Like `deepEqual` but normalises values that formatting options can change:
  * - `truncateZeroTimeInDates`: converts Date objects to date-only ISO strings
  *   before comparing, since the patched TOML drops the zero time component.
- * - `minimumDecimals`: rounds numbers to the specified decimal places before
- *   comparing, since the patched TOML adds trailing zeros.
  * - `newLine`: treats \r\n and \n as equivalent inside string values, since
  *   the patched TOML normalises ALL line endings — including multiline string
  *   content — to the requested style.  Only active when the option is set;
@@ -205,7 +203,6 @@ function deepEqual(a: unknown, b: unknown): boolean {
  */
 function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>): boolean {
   const truncateDates = fmt?.truncateZeroTimeInDates === true;
-  const minDec = fmt?.minimumDecimals ?? 0;
   const normalizeNewlines = fmt?.newLine !== undefined;
 
   function normalise(val: unknown): unknown {
@@ -226,9 +223,6 @@ function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>):
       }
       return val.toISOString();
     }
-    if (minDec > 0 && typeof val === 'number' && Number.isFinite(val)) {
-      return Number(val.toFixed(minDec));
-    }
     if (Array.isArray(val)) return val.map(normalise);
     if (val && typeof val === 'object' && !(val instanceof Date)) {
       const acc: Record<string, unknown> = {};
@@ -243,7 +237,7 @@ function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>):
   // Normalise both sides when the format would affect the comparison, then
   // use plain deepEqual on the normalised values.  When no normalising
   // options are active this degrades to a regular deepEqual.
-  if (truncateDates || minDec > 0 || normalizeNewlines) {
+  if (truncateDates || normalizeNewlines) {
     return deepEqual(normalise(a), normalise(b));
   }
   return deepEqual(a, b);
