@@ -192,3 +192,53 @@ describe('updateOrder option (docs/PLAN-Update-Order.md)', () => {
     );
   });
 });
+
+describe('array moves with duplicate values', () => {
+  test('edits the displaced item, not the original at the same index (fuzz seed 340)', () => {
+    // Replacing index 0 with a value equal to index 3 moves `true` from 3 to 0,
+    // leaving 'a' at index 3.  The edit must diff the SIMULATED element ('a')
+    // against the target (true) — diffing the untouched original `before[3]`
+    // (true) against true emitted nothing and the leftover 'a' stayed in place.
+    const changes = diff(['a', 1, 2, true], [true, 1, 2, true], ['x']);
+
+    expect(changes).toEqual([
+      { type: 'Move', path: ['x'], from: 3, to: 0 },
+      { type: 'Move', path: ['x'], from: 2, to: 1 },
+      { type: 'Move', path: ['x'], from: 3, to: 2 },
+      { type: 'Edit', path: ['x', 3] }
+    ]);
+  });
+
+  test('edits a duplicated value in place instead of an Add + Move chain (fuzz seed 1406)', () => {
+    // `true` at index 1 becomes '4' but another `true` remains later in the
+    // array.  Reading the element as "kept" made the diff fall through to
+    // Add(1) plus a chain of Moves and a trailing Remove — and the writer
+    // then slid the multiline string's following row onto its closing
+    // quotes.  The surplus occurrence is now edited in place.
+    const changes = diff(
+      ['a', true, 'b', 'c', 'd', true, 'nested', 'inner', 6767, 'n', true],
+      ['a', '4', 'b', 'c', 'd', true, 'nested', 'inner', 6767, 'n', true],
+      ['x']
+    );
+
+    expect(changes).toEqual([
+      { type: 'Edit', path: ['x', 1] }
+    ]);
+  });
+
+  test('removes a deleted element in place instead of a Move chain when multiline values are present (fuzz seed 4765)', () => {
+    // Removing one scalar from an array whose other elements include a
+    // multiline string: the element only resolved at the end, after a chain
+    // of Moves, and the writer dropped a content line of the multiline
+    // string while relocating it.
+    const changes = diff(
+      ['a', 1, 2, 29780.85246, 'jgl', { k: '=F\nsK\nTijp\nb *8#fBchs>' }],
+      ['a', 1, 2, 'jgl', { k: '=F\nsK\nTijp\nb *8#fBchs>' }],
+      ['x']
+    );
+
+    expect(changes).toEqual([
+      { type: 'Remove', path: ['x', 3] }
+    ]);
+  });
+});

@@ -187,6 +187,17 @@ export function stableStringify(object: any): string {
     return JSON.stringify(object.toISOString());
   } else if (typeof object === 'bigint') {
     return object.toString() + 'n';
+  } else if (typeof object === 'number' && !Number.isFinite(object)) {
+    // NaN, Infinity and -Infinity all round-trip through JSON.stringify as
+    // "null", so they collapse into one another (and into a literal `null`
+    // value) in the diff's stable form — an array like `[1, inf, 2, nan]`
+    // then diffs `inf` and `nan` as the same element and removes the wrong
+    // one (fuzz seed 22629).  Tag them by their IEEE 754 sign bit so every
+    // distinct non-finite number (including -NaN vs +NaN) stays unique.
+    const buf = new Float64Array([object]);
+    const view = new DataView(buf.buffer);
+    const sign = view.getUint32(4, true) & 0x80000000 ? '-' : '+';
+    return `${sign}${String(object)}`;
   } else {
     return JSON.stringify(object);
   }

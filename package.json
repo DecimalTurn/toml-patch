@@ -64,6 +64,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "check-overrides": "node scripts/check-overrides.mjs",
+    "compare-branch-size": "node scripts/compare-branch-size.mjs",
     "publish:jsr": "jsr publish --allow-dirty"
   },
   "devDependencies": {

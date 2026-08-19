@@ -245,18 +245,146 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   const before_stable = before.map(stableStringify);
   const after_stable = after.map(stableStringify);
 
+  // The writer corrupts multiline inline content when elements are relocated
+  // (moves of elements holding multiline strings drop content lines — fuzz
+  // seed 4765).  Only for such arrays, prefer resolving a true deletion in
+  // place over drifting the element right through a chain of Moves.
+  // Multiline DELIMITED strings whose content is single-line aren't visible
+  // here (the diff sees only values), but nested arrays/objects are a strong
+  // proxy: those are what carry such formatting, and moving them corrupts
+  // their interior the same way (fuzz seed 8512).  A nested array or object
+  // is itself evidence of multiline formatting even when its ELEMENTS are all
+  // plain scalars — the formatter freely wraps such a container across lines,
+  // and the diff cannot tell from values alone (fuzz seed 40181: removing a
+  // scalar above a multiline `[218561, "…"]` chain-moved the array and dropped
+  // columns out of its tail).
+  const hasMultilineValue = (v: any): boolean => {
+    if (typeof v === 'string') return v.includes('\n');
+    if (Array.isArray(v)) return v.length > 0;
+    if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
+      const vals = Object.values(v);
+      return vals.some(x => x !== null && typeof x === 'object') || vals.some(hasMultilineValue);
+    }
+    return false;
+  };
+  const multilineArray = before.some(hasMultilineValue) || after.some(hasMultilineValue);
+
+  // Simulation of the actual VALUES, mutated in lockstep with before_stable.
+  // The "removed -> edited in place" branch below must diff the element the
+  // move simulation left at this index, not the untouched original: after a
+  // Move, `before[index]` can hold a DIFFERENT element than the one whose
+  // stable form sits at `before_stable[index]`, and diffing the wrong one
+  // silently drops the edit (fuzz seed 340: `['4', …, true, …]` →
+  // `[true, …]` moved `true` from 4 to 0, then diffed the original
+  // `before[4]` — which was `true` — against `true`, emitting nothing for
+  // the leftover string).
+  const before_sim = before.slice();
+
+  // Elements spliced out of `before` while walking the loop (the deletion
+  // branch below).  Remove paths are source coordinates — indices in the
+  // ORIGINAL array — because the patcher applies same-array removals in
+  // descending index order (see reorder() in patch.ts), so each emitted
+  // index must stay valid against the un-shifted array.
+  let removedBefore = 0;
+
   // 2. Step through after array making changes to before array as-needed
-  after_stable.forEach((value, index) => {
+  for (let index = 0; index < after_stable.length; index++) {
+    const value = after_stable[index];
     const overflow = index >= before_stable.length;
 
     // Check if items are the same
     if (!overflow && before_stable[index] === value) {
-      return;
+      continue;
     }
 
     // Check if item has been moved -> shift into place
-    const from = before_stable.indexOf(value, index + 1);
-    if (!overflow && from > -1) {
+    const from = overflow ? -1 : before_stable.indexOf(value, index + 1);
+    if (from > -1) {
+      // Is `before_stable[index]` (the mismatched element at this slot) a
+      // surplus duplicate — more copies surviving in `before`'s unmatched
+      // suffix than `after` demands?  When so, the extra copy is genuinely
+      // gone from this position and a removal in place is the honest edit.
+      const valueAt = before_stable[index];
+      let beforeCount = 0;
+      for (let i = index; i < before_stable.length; i++) {
+        if (before_stable[i] === valueAt) beforeCount++;
+      }
+      let afterCount = 0;
+      for (let i = index; i < after_stable.length; i++) {
+        if (after_stable[i] === valueAt) afterCount++;
+      }
+      const surplusDuplicate = beforeCount > afterCount;
+
+      // A true deletion in move shape: the element at this position is
+      // absent from `after` entirely (or is a surplus duplicate of a value
+      // that later slots still hold), while the after-value sits later in
+      // `before`.  Without this the element only gets resolved at the end,
+      // after a chain of Moves that relocates multiline elements — and the
+      // writer corrupts their content (fuzz seed 4765: removing one scalar
+      // from a multiline inline array dropped a line of a multiline string;
+      // fuzz seed 35943: removing one of several duplicate scalars above a
+      // nested multiline array chain-moved the array and corrupted its tail).
+      if (multilineArray && (after_stable.indexOf(before_stable[index]) === -1 || surplusDuplicate)) {
+        changes.push({
+          type: ChangeType.Remove,
+          path: path.concat(index + removedBefore)
+        });
+        before_stable.splice(index, 1);
+        before_sim.splice(index, 1);
+        removedBefore++;
+        index--;
+        continue;
+      }
+
+      // A Move emitted after an in-place deletion splice: its from/to are
+      // simulation coordinates, but the patcher applies ALL removes first
+      // (in descending index order) — when a trailing remove follows, the
+      // move's source can be pushed out of bounds (fuzz seed 8138).  When
+      // the displaced element is a surplus duplicate, resolve it as a
+      // removal in place instead of a Move: the remaining occurrences stay
+      // where they are, so nothing needs to move.
+      //
+      // (Redundant with the surplus-duplicate removal above when
+      // `multilineArray` is set, but kept for the non-multiline case where a
+      // prior splice already shifted indices and the surplus is unambiguous.)
+      if (removedBefore > 0 && surplusDuplicate) {
+        changes.push({
+          type: ChangeType.Remove,
+          path: path.concat(index + removedBefore)
+        });
+        before_stable.splice(index, 1);
+        before_sim.splice(index, 1);
+        removedBefore++;
+        index--;
+        continue;
+      }
+
+      // After an in-place removal this array is one element short at this
+      // slot, so the after-value found later in `before` is NOT being
+      // relocated — a fresh copy is needed here.  Relocating it via a Move
+      // drags multiline elements through a chain that later ADDs a new copy
+      // anyway, and the writer corrupts their content (fuzz seed 62263: a
+      // nested array above a multiline inline table replaced by a duplicate
+      // scalar emitted Remove + Move + Add and mangled the table).
+      if (multilineArray && removedBefore > 0) {
+        changes.push({
+          type: ChangeType.Add,
+          path: path.concat(index)
+        });
+        before_stable.splice(index, 0, value);
+        before_sim.splice(index, 0, after[index]);
+        // The fresh copy is spliced in BEFORE the original (at `from`), so it
+        // shifts every later sim element — including the original we just
+        // declined to move — one slot right.  `removedBefore` models the
+        // LEFT-shift of a prior remove, so a later Remove's source index
+        // (`index + removedBefore`) is off by one and removes the wrong
+        // element (fuzz seed 179377: `[false, '''…''', …]` edited and trimmed
+        // removed its neighbour instead of the surplus scalar).  Cancelling
+        // one unit of the remove shift keeps the sim↔source mapping aligned.
+        removedBefore--;
+        continue;
+      }
+
       changes.push({
         type: ChangeType.Move,
         path,
@@ -266,17 +394,44 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
 
       const move = before_stable.splice(from, 1);
       before_stable.splice(index, 0, ...move);
+      const moveValues = before_sim.splice(from, 1);
+      before_sim.splice(index, 0, ...moveValues);
 
-      return;
+      continue;
     }
 
-    // Check if item is removed -> assume it's been edited and replace
-    const removed = !after_stable.includes(before_stable[index]);
-    if (!overflow && removed) {
-      merge(changes, diff(before[index], after[index], path.concat(index), options));
+    // Check if item is removed -> assume it's been edited and replace.
+    //
+    // `after.includes(value)` alone is not enough: when the value also
+    // occurs later in the array, the element is read as "kept", so the
+    // mismatch becomes an Add plus a chain of Moves that re-finds the
+    // duplicate — a pathological diff for a plain in-place edit (fuzz seed
+    // 1406: `true` → `'4'` with another `true` later emitted Add(1) + six
+    // Moves + Remove(10), and the writer corrupted a multiline string).
+    // A duplicate further along in `before` can serve the later `after`
+    // slot, so this occurrence is surplus whenever `before`'s unmatched
+    // suffix holds more copies of the value than `after`'s does — then the
+    // element is genuinely gone from its position and edited in place.
+    let surplus = false;
+    if (!overflow) {
+      const value = before_stable[index];
+      let beforeCount = 0;
+      for (let i = index; i < before_stable.length; i++) {
+        if (before_stable[i] === value) beforeCount++;
+      }
+      let afterCount = 0;
+      for (let i = index; i < after_stable.length; i++) {
+        if (after_stable[i] === value) afterCount++;
+      }
+      surplus = beforeCount > afterCount;
+    }
+    const removed = !overflow && surplus;
+    if (removed) {
+      merge(changes, diff(before_sim[index], after[index], path.concat(index), options));
       before_stable[index] = value;
+      before_sim[index] = after[index];
 
-      return;
+      continue;
     }
 
     // Add as new item and shift existing
@@ -285,13 +440,22 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       path: path.concat(index)
     });
     before_stable.splice(index, 0, value);
-  });
+    before_sim.splice(index, 0, after[index]);
+    // Same source-index bookkeeping as the refused-move Add above: splicing a
+    // new element in front of the surviving suffix shifts later sim indices
+    // right by one, so a later Remove's source index (`index + removedBefore`)
+    // is one too far right and targets the wrong element when a prior remove
+    // is still pending.  Cancel one unit of the remove shift (fuzz seed
+    // 208822: editing a duplicate scalar and trimming a multiline array
+    // removed the multiline string instead of the plain scalar).
+    if (removedBefore > 0) removedBefore--;
+  }
 
   // 3. Remove any remaining overflow items
   for (let i = after_stable.length; i < before_stable.length; i++) {
     changes.push({
       type: ChangeType.Remove,
-      path: path.concat(i)
+      path: path.concat(i + removedBefore)
     });
   }
 

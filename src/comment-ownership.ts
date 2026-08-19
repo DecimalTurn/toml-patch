@@ -14,11 +14,14 @@ import {
   isDocument,
   isInlineTable,
   isInlineArray,
-  isInlineItem
+  isInlineItem,
+  isString,
+  hasItems,
+  InlineItem
 } from './cst';
 import { last } from './utils';
 import { clonePosition } from './location';
-import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, Root } from './writer';
+import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, perLine, getExitOffsets, addExitOffset, Root } from './writer';
 
 // See docs/PLAN-Comment-Ownership.md for the full model (rules R1-R6).
 
@@ -319,6 +322,26 @@ export function resolveInlineElementSlots(
  * deeply `target` is nested inside other inline containers, they always
  * flatten up to the same enclosing Document/Table.
  */
+/**
+ * Finds the InlineItem that wraps `target` (an InlineTable/InlineArray)
+ * inside its own parent container's items, searching the whole tree.
+ */
+function findWrapperItem(root: TreeNode, target: TreeNode): InlineItem | undefined {
+  function walk(node: TreeNode): InlineItem | undefined {
+    if (isKeyValue(node)) return walk(node.value);
+    if (!hasItems(node)) return undefined;
+    for (const item of node.items as TreeNode[]) {
+      if (isInlineItem(item) && item.item === target) return item;
+    }
+    for (const item of node.items as TreeNode[]) {
+      const found = walk(isInlineItem(item) ? item.item : item);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  return walk(root);
+}
+
 export function findHostContainer(root: Document, target: TreeNode): Document | Table | TableArray | undefined {
   function searchValue(value: TreeNode, container: Document | Table | TableArray): Document | Table | TableArray | undefined {
     if (value === target) return container;
@@ -543,14 +566,117 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
  * from how far `node` itself moved, or be zero.
  */
 export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number): void {
+  let sharedLineContainerBeforeMove = false;
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
     if (hostContainer) {
       const slots = resolveInlineElementSlots(parent, hostContainer.items as TreeNode[]);
 
+      // The container's per-line vs shared-line layout must be judged on
+      // the state BEFORE this move: remove()+insert() inflate the tail's
+      // line coordinates, and a later perLine() read of the corrupted span
+      // misclassifies a shared-line container as per-line, skipping the
+      // tail realignment and stranding the rows (fuzz seed 16034).
+      //
+      // The honest signature of a shared-line layout is a RUN of at least
+      // three adjacent items STARTING on the same line.  Two items sharing
+      // a line is the signature of a per-line container whose multiline
+      // member ends on the next item's line — the writer offsets handle
+      // those (fuzz seeds 9553, 9829).  A same-line pair caused by a
+      // just-inserted item still carrying its pending exit offset is
+      // transient and must not count (fuzz seed 761).
+      {
+        const items = (parent as InlineTable | InlineArray).items as TreeNode[];
+        let run = 1;
+        for (let i = 1; i < items.length; i++) {
+          if (items[i].loc.start.line === items[i - 1].loc.start.line) {
+            const prevPending = getExitOffsets(root).get(items[i - 1]);
+            const selfPending = getExitOffsets(root).get(items[i]);
+            if (prevPending || selfPending) continue;
+            run++;
+            if (run >= 3) {
+              sharedLineContainerBeforeMove = true;
+              break;
+            }
+          } else {
+            run = 1;
+          }
+        }
+      }
+
       const detached: Array<{ owner: TreeNode; ownerOriginalStart: { line: number; column: number }; comments: Comment[] }> = [];
       let nodeOwnStart: { line: number; column: number } | undefined;
       let nodeOwnEnd: { line: number; column: number } | undefined;
+      let nodeInnerEnd: { line: number; column: number } | undefined;
+
+      // Snapshot descendants of the moved node that start BELOW its first
+      // line.  insert()'s rigid horizontal translation shifts every subtree
+      // column by the first line's column delta, but interior rows of a
+      // multiline inline table/array are indented from line start (not from
+      // the opening bracket), so they must not move sideways.  This covers
+      // both rows anchored to a preceding multiline value's end column
+      // (fuzz seed 706: `, 5, 6` after a multiline string inside a moved
+      // nested array slid left onto the string's closing quotes) and the
+      // FIRST row of a multiline container that has no predecessor at all
+      // (fuzz seed 599513: `nxweV7FF3` slid to a negative column and toTOML
+      // emitted `,-1.5nx=`).
+      const anchoredDescendants: Array<{ node: TreeNode; start: { line: number; column: number }; end: { line: number; column: number }; endOnly?: boolean; equals?: number }> = [];
+      const collectAnchored = (container: TreeNode, firstLine: number) => {
+        if (!hasItems(container)) return;
+        const items = container.items as TreeNode[];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const below = item.loc.start.line > firstLine;
+          if (below) {
+            anchoredDescendants.push({ node: item, start: clonePosition(item.loc.start), end: clonePosition(item.loc.end) });
+          }
+          // A multiline element's wrapper END (where its comma lands) is
+          // anchored to the element's own end column, which the leaf path of
+          // the rigid translation leaves alone — but the wrapper's end is
+          // shifted with the first line.  Restore it too.
+          if (item.loc.end.line > firstLine && item.loc.end.line > item.loc.start.line) {
+            anchoredDescendants.push({ node: item, start: clonePosition(item.loc.start), end: clonePosition(item.loc.end), endOnly: true });
+          }
+          if (isInlineItem(item)) {
+            const inner = item.item;
+            if (below) {
+              const kv = isKeyValue(inner) ? inner : undefined;
+              anchoredDescendants.push({
+                node: inner,
+                start: clonePosition(inner.loc.start),
+                end: clonePosition(inner.loc.end),
+                equals: kv ? kv.equals : undefined
+              });
+              // The KV's key and value nodes ride the same rigid translation
+              // as the row, but only the row and the KV are restored above —
+              // the key keeps its shifted column and toTOML writes it at its
+              // own loc, overwriting the preceding content (fuzz seed 19506).
+              if (kv) {
+                anchoredDescendants.push({
+                  node: kv.key,
+                  start: clonePosition(kv.key.loc.start),
+                  end: clonePosition(kv.key.loc.end)
+                });
+                anchoredDescendants.push({
+                  node: kv.value,
+                  start: clonePosition(kv.value.loc.start),
+                  end: clonePosition(kv.value.loc.end)
+                });
+              }
+            }
+            // A multiline STRING's own end column is what its closing quotes
+            // follow — offsets can nudge it while the wrapper's end (with the
+            // comma) stays put, making toTOML's multiline writer consume the
+            // columns between them (fuzz seed 706).  Restore it independently.
+            if (inner.loc.end.line > firstLine && inner.loc.end.line > inner.loc.start.line) {
+              anchoredDescendants.push({ node: inner, start: clonePosition(inner.loc.start), end: clonePosition(inner.loc.end), endOnly: true });
+            }
+            collectAnchored(inner, firstLine);
+          } else if (hasItems(item)) {
+            collectAnchored(item, firstLine);
+          }
+        }
+      };
 
       for (const slot of slots) {
         if (slot.kind !== 'member' || !slot.member) continue;
@@ -559,6 +685,10 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         if (slot.member === node) {
           nodeOwnStart = clonePosition(node.loc.start);
           nodeOwnEnd = clonePosition(node.loc.end);
+          if (isInlineItem(node)) {
+            nodeInnerEnd = clonePosition(node.item.loc.end);
+          }
+          collectAnchored(isInlineItem(node) ? node.item : node, nodeOwnStart.line);
           if (comments.length) {
             // Extend node's own loc to the full group span so the bare
             // remove()+insert() below accounts for the combined height —
@@ -578,8 +708,64 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
+      // For a multiline item removed from the END of a shared-line container,
+      // remove()'s bracket-slide offset (fuzz seed 706) mixes the removed
+      // item's LAST line with the previous item's line.  The re-insert below
+      // cannot cancel it — its own span-based offset has the same cross-line
+      // defect — so the pair leaks past the container and corrupts every
+      // subsequent node on the flush (fuzz seed 900: the rows after the array
+      // slid onto the multiline string's content).  Drop both; the tail
+      // realignment below repositions the container's interior explicitly.
+      const nodeIndexBeforeRemove = (parent.items as TreeNode[]).indexOf(node);
+      const removedWasLast = nodeIndexBeforeRemove === (parent.items as TreeNode[]).length - 1;
+      const prevBeforeRemove = nodeIndexBeforeRemove > 0
+        ? (parent.items as TreeNode[])[nodeIndexBeforeRemove - 1]
+        : undefined;
+
+      // A multiline node moved to the FRONT (index 0) that, before the move,
+      // shared its START line with the item now following it (`prevBeforeRemove`,
+      // which ends up at index 1).  The writer's per-line offset model assumes
+      // each item sits on its own line, so the shared-line item's columns go
+      // stale (it lands with a negative start column, overwriting the moved
+      // multiline string's closing delimiter).  The tail realignment below is
+      // gated on `sharedLineContainerBeforeMove`, which a two-item same-line
+      // pairing does NOT satisfy — so record this case explicitly (fuzz seed
+      // 421965: `[false, """\nAAA\n""", "z"]` moving the string to the front
+      // left `false` at column -2 on the string's last line).
+      const movedMultilineToFront = toIndex === 0 && nodeIndexBeforeRemove > 0 &&
+        node.loc.end.line > node.loc.start.line &&
+        prevBeforeRemove !== undefined &&
+        prevBeforeRemove.loc.start.line === node.loc.start.line;
+
       remove(root, parent, node, hostContainer.items as TreeNode[]);
+
+      let cancelMultilineLastRemovalOffsets = false;
+      if (removedWasLast && prevBeforeRemove !== undefined &&
+          node.loc.end.line > node.loc.start.line &&
+          !perLine(parent as InlineArray | InlineTable)) {
+        const prevPending = getExitOffsets(root).get(prevBeforeRemove);
+        if (prevPending) {
+          getExitOffsets(root).delete(prevBeforeRemove);
+          cancelMultilineLastRemovalOffsets = true;
+        }
+      }
+
+      // Resolve the removal's offsets before re-inserting, so insert()
+      // measures against final positions.  Otherwise insert() absorbs the
+      // removal's pending exit offset into the inserted item's own offset,
+      // which then leaks into the container's end column (and any wrapper
+      // InlineItem's end) — a comma or closing bracket lands inside the
+      // last value on that line (fuzz seed 50).
+      applyWrites(root);
       insert(root, parent, node, toIndex, undefined, hostContainer.items as TreeNode[]);
+
+      if (cancelMultilineLastRemovalOffsets) {
+        const childPending = getExitOffsets(root).get(node);
+        if (childPending) {
+          childPending.lines = 0;
+          childPending.columns = 0;
+        }
+      }
 
       // Flush before reading anything back out below. Every other element's
       // own loc (an untouched sibling that nonetheless shifted because this
@@ -588,6 +774,40 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
       // means any FURTHER change in this patch touching the same container
       // starts from a fully-resolved, non-stale state.
       applyWrites(root);
+
+      // insert() translates the node rigidly: every line of a multi-line
+      // node receives the first line's column delta.  A multi-line value's
+      // content columns below the first line are part of its raw text and
+      // must not move — the writer only reads the END column on the last
+      // line, so restore just that, on both the wrapper InlineItem and the
+      // inner value node it wraps (fuzz seed 50).
+      if (nodeOwnStart && nodeOwnEnd && node.loc.end.line > node.loc.start.line) {
+        node.loc.end.column = nodeOwnEnd.column;
+        // The inner value keeps its OWN original end — for a multiline
+        // string the wrapper's end includes the comma that follows, and
+        // assigning it to the string makes toTOML's multiline writer
+        // consume the columns between the closing quotes and the next item
+        // (fuzz seed 706).
+        if (isInlineItem(node) && nodeInnerEnd && node.item.loc.end.line > node.item.loc.start.line) {
+          node.item.loc.end.column = nodeInnerEnd.column;
+        }
+      }
+
+      // Restore the columns of anchored below-first-line descendants that the
+      // rigid translation shifted horizontally (see the snapshot comment above).
+      for (const { node: descendant, start, end, endOnly, equals } of anchoredDescendants) {
+        if (endOnly) {
+          descendant.loc.end.column = end.column;
+          continue;
+        }
+        descendant.loc.start.column = start.column;
+        if (descendant.loc.end.line === descendant.loc.start.line) {
+          descendant.loc.end.column = end.column;
+        }
+        if (equals !== undefined && isKeyValue(descendant)) {
+          (descendant as KeyValue).equals = equals;
+        }
+      }
 
       for (const { owner, ownerOriginalStart, comments } of detached) {
         let delta: { lines: number; columns: number };
@@ -617,10 +837,169 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
+      // The writer's offset model assumes the next sibling sits at the moved
+      // node's first-line column.  When the moved node wraps lines (a
+      // multiline string) inside a container whose items share lines, that
+      // assumption breaks and every item after the moved one lands in the
+      // wrong place, dragging the container's (and any wrapper InlineItem's)
+      // end column with it.  Realign the tail sequentially: each item starts
+      // right after the previous one's end (fuzz seed 50).
+      const container = parent as InlineTable | InlineArray;
+      // Gate the tail realignment on the original layout classification:
+      // perLine() reads the container's own end, which the moves above can
+      // leave stale.  The pre-move capture reflects the true layout.  A
+      // multiline node moved to the front also needs the tail realignment
+      // (see movedMultilineToFront above), even though the shared-line run
+      // is only two items and `sharedLineContainerBeforeMove` stays false.
+      const sharedLineContainer = sharedLineContainerBeforeMove || movedMultilineToFront;
+      if (sharedLineContainer) {
+        // Re-anchor the interior rows of a multiline inline container whose
+        // subtree the tail shift above translated rigidly: the shiftNode
+        // moves every row's START, but rows anchored to a preceding
+        // multiline value keep their END columns — the boundary between a
+        // multiline string row and the next row then closes up and the
+        // separator comma is overwritten (fuzz seed 16552).
+        const realignInterior = (inner: InlineTable | InlineArray, wrapper?: TreeNode) => {
+          let anchor: { line: number; column: number } | undefined;
+          for (const row of inner.items as TreeNode[]) {
+            if (!anchor) {
+              anchor = { line: row.loc.end.line, column: row.loc.end.column + 2 };
+              continue;
+            }
+            const d = {
+              lines: anchor.line - row.loc.start.line,
+              columns: anchor.column - row.loc.start.column
+            };
+            if (d.lines !== 0 || d.columns !== 0) {
+              shiftNode(row, d);
+              if (row.loc.end.line > row.loc.start.line) {
+                row.loc.end.column -= d.columns;
+                if (isInlineItem(row) && row.item.loc.end.line > row.item.loc.start.line) {
+                  row.item.loc.end.column -= d.columns;
+                }
+              }
+              const rowInner = isInlineItem(row)
+                ? (isKeyValue(row.item) ? row.item.value : row.item)
+                : row;
+              if ((isInlineTable(rowInner) || isInlineArray(rowInner)) &&
+                  rowInner.loc.end.line > rowInner.loc.start.line) {
+                realignInterior(rowInner, row);
+              }
+            }
+            anchor = { line: row.loc.end.line, column: row.loc.end.column + 2 };
+          }
+          if (anchor) {
+            inner.loc.end = { line: anchor.line, column: anchor.column - 1 };
+            // The enclosing InlineItem's end carries the comma that follows
+            // the closing brace — track the new end so the comma stays
+            // adjacent (fuzz seed 16552).
+            if (wrapper && wrapper.loc.end.line === inner.loc.end.line) {
+              wrapper.loc.end.column = inner.loc.end.column;
+            }
+          }
+        };
+
+        let tailAnchor: { line: number; column: number } | undefined;
+        for (const item of container.items as TreeNode[]) {
+          if (item === node) {
+            tailAnchor = { line: node.loc.end.line, column: node.loc.end.column + 2 };
+            continue;
+          }
+          if (!tailAnchor) continue;
+          const delta = {
+            lines: tailAnchor.line - item.loc.start.line,
+            columns: tailAnchor.column - item.loc.start.column
+          };
+          if (delta.lines !== 0 || delta.columns !== 0) {
+            shiftNode(item, delta);
+            const itemInner = isInlineItem(item)
+              ? (isKeyValue(item.item) ? item.item.value : item.item)
+              : item;
+            if ((isInlineTable(itemInner) || isInlineArray(itemInner)) &&
+                itemInner.loc.end.line > itemInner.loc.start.line) {
+              realignInterior(itemInner, isInlineItem(item) ? item : undefined);
+            }
+          }
+          // A multiline STRING member's end line may be stale (the move
+          // offsets inflated it) — derive it from the raw content so the
+          // chain doesn't push the following items onto the wrong lines
+          // (fuzz seed 9553).
+          let itemEndLine = item.loc.end.line;
+          const tailInner = isInlineItem(item) ? item.item : item;
+          if (isString(tailInner) && tailInner.loc.end.line > tailInner.loc.start.line) {
+            itemEndLine = tailInner.loc.start.line + tailInner.raw.split('\n').length - 1;
+            tailInner.loc.end.line = itemEndLine;
+            item.loc.end.line = itemEndLine;
+          }
+          tailAnchor = { line: itemEndLine, column: item.loc.end.column + 2 };
+        }
+        if (tailAnchor) {
+          const endBeforeRealign = clonePosition(container.loc.end);
+          container.loc.end = { line: tailAnchor.line, column: tailAnchor.column - 1 };
+
+          // The container may itself be an element of another inline
+          // container; the wrapper InlineItem's end must track the
+          // container's end or its comma lands inside the last value.
+          const wrapper = findWrapperItem(root, container as TreeNode);
+          if (wrapper) {
+            wrapper.loc.end = { line: container.loc.end.line, column: container.loc.end.column };
+          }
+
+          // Nodes AFTER the container (same-line followers, enclosing
+          // table rows, the table's own end) were positioned by the writer
+          // offsets this realignment has just replaced.  Re-anchor them to
+          // the new end with a pending exit offset so a later flush shifts
+          // them by exactly the end delta (fuzz seed 900: the row following
+          // the moved array would otherwise sit on the moved item's stale
+          // column and the subsequent removal then slides it sideways onto
+          // the multiline string's content).
+          const endDelta = {
+            lines: container.loc.end.line - endBeforeRealign.line,
+            columns: container.loc.end.column - endBeforeRealign.column
+          };
+          if (endDelta.lines !== 0 || endDelta.columns !== 0) {
+            addExitOffset(root, wrapper ?? (container as TreeNode), endDelta);
+          }
+        }
+      }
+
       return;
     }
   }
 
+  // Capture the container's bracket gaps before the move so they can be
+  // restored afterwards.  remove()+insert() uses writer offsets that do
+  // not perfectly cancel over consecutive Moves on the same container,
+  // which corrupts the leading gap (space after `[`/`{`) and trailing gap
+  // (space before `]`/`}`).
+  const container = parent as InlineTable | InlineArray;
+  const itemsBefore = container.items as TreeNode[];
+  const firstBefore = itemsBefore[0];
+  const lastBefore = itemsBefore[itemsBefore.length - 1];
+  const originalLeadingGap = firstBefore.loc.start.column - container.loc.start.column - 1;
+  const originalTrailingGap = container.loc.end.column - 1 - lastBefore.loc.end.column;
+
   remove(root, parent, node);
   insert(root, parent, node, toIndex);
+
+  // Flush so consecutive Moves start from resolved positions (prevents
+  // exit-offset accumulation on the same target) and so the gap
+  // measurements below see final positions.
+  applyWrites(root);
+
+  // Restore bracket gaps corrupted by the move's offsets.
+  const itemsAfter = container.items as TreeNode[];
+  const firstAfter = itemsAfter[0];
+  const leadingGap = firstAfter.loc.start.column - container.loc.start.column - 1;
+  if (leadingGap !== originalLeadingGap) {
+    shiftNode(firstAfter, {
+      lines: 0,
+      columns: originalLeadingGap - leadingGap
+    });
+  }
+  const lastAfter = itemsAfter[itemsAfter.length - 1];
+  const trailingGap = container.loc.end.column - 1 - lastAfter.loc.end.column;
+  if (trailingGap !== originalTrailingGap) {
+    container.loc.end.column = lastAfter.loc.end.column + 1 + originalTrailingGap;
+  }
 }

@@ -4972,6 +4972,152 @@ describe('Mixed line endings', () => {
     // LF because the original document format is LF.
     expect(patch(existing, obj)).toEqual('key = """updated\nvalue"""\n');
   });
+
+  test('should warn when patching a mixed line ending document normalizes to LF', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document with \r\n inside the multiline literal string.
+    const existing = [
+      'name = "before"', '\n',
+      "multi = '''", '\n',
+      'line1', '\r\n',
+      'line2', '\r\n',
+      "'''", '\n',
+      'unrelated = 1', '\n'
+    ].join('');
+
+    const obj = parse(existing);
+    expect(obj.multi).toEqual('line1\r\nline2\r\n');
+    obj.unrelated = 2;
+
+    const result = patch(existing, obj);
+
+    // The literal string content is normalized to the document's LF endings.
+    expect(result).toEqual([
+      'name = "before"', '\n',
+      "multi = '''", '\n',
+      'line1', '\n',
+      'line2', '\n',
+      "'''", '\n',
+      'unrelated = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+  test('should warn when patching a mixed line ending document normalizes to CRLF', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // CRLF document with bare \n inside the multiline literal string.
+    const existing = [
+      'name = "before"', '\r\n',
+      "multi = '''", '\r\n',
+      'line1', '\n',
+      'line2', '\n',
+      "'''", '\r\n',
+      'unrelated = 1', '\r\n'
+    ].join('');
+
+    const obj = parse(existing);
+    obj.unrelated = 2;
+
+    patch(existing, obj);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to CRLF');
+
+    spy.mockRestore();
+  });
+
+  test('should warn even when the patch makes no changes', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // A no-op patch still rewrites the document, so it still normalizes.
+    
+    const existing = [
+      'a = 1', '\n',
+      'b = """x', '\r\n',
+      '"""', '\n'
+    ].join('');
+    const obj = parse(existing);
+
+    patch(existing, obj);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+  test('should not warn when the document has uniform line endings', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const existing = dedent`
+      name = "before"
+      unrelated = 1
+    ` + '\n';
+
+    patch(existing, { unrelated: 2 });
+
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+
+  // Any mixed line ending conversion warns, even when the only difference
+  // sits in the trailing newline run.
+  test('should warn when only the trailing newline uses a different line ending', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document whose only \r\n is the trailing newline.
+    const existing = [
+      'a = 1', '\n',
+      'b = 2', '\r\n'
+    ].join('');
+
+    const result = patch(existing, { a: 3, b: 2 });
+
+    expect(result).toEqual([
+      'a = 3', '\n',
+      'b = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
+
+    test('should warn when only the middle newline uses a different line ending', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // LF document whose only \r\n is in the middle of the content.
+    const existing = [
+      'a = 1', '\n',
+      'b = 2', '\r\n',
+      'c = 2', '\n'
+    ].join('');
+
+    const result = patch(existing, { a: 3, b: 2, c: 2 });
+
+    expect(result).toEqual([
+      'a = 3', '\n',
+      'b = 2', '\n',
+      'c = 2', '\n'
+    ].join(''));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toContain('Mixed line endings detected');
+    expect(spy.mock.calls[0][0]).toContain('normalized to LF');
+
+    spy.mockRestore();
+  });
 });
 
 describe('Root key-value placement', () => {
@@ -5370,6 +5516,33 @@ describe('BigInt handling', () => {
 
 });
 
+describe('non-finite float (inf/nan) array diff', () => {
+
+  test('should not confuse inf and nan when removing an array item (seed 22629)', () => {
+    // `stableStringify` used to collapse `inf` and `nan` (and `null`) to the
+    // same stable string, so the diff misidentified which item to remove —
+    // removing index 1 of `[1, inf, 2, nan]` yielded `[1, 2, inf]`.
+    const src = 'k = [1, inf, 2, nan]\n';
+    const obj = parse(src) as any;
+    obj.k.splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result).k).toEqual([1, 2, NaN]);
+    expect(result).toEqual('k = [1, 2, nan]\n');
+  });
+
+  test('should not confuse inf and nan when removing a nested array item (seed 24018)', () => {
+    // Same `stableStringify` collision, reached through a nested array whose
+    // interior holds adjacent `inf`/`nan` values.
+    const src = 'k = [[inf, 2, nan]]\n';
+    const obj = parse(src) as any;
+    obj.k[0].splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result).k).toEqual([[2, NaN]]);
+    expect(result).toEqual('k = [[2, nan]]\n');
+  });
+
+});
+
 describe('commented multiline array edge cases', () => {
 
   test('should preserve closing bracket when adding new key after commented multiline array', () => {
@@ -5486,6 +5659,23 @@ describe('table to scalar replacement', () => {
 
       foo = 1
     ` + '\n');
+  });
+
+  test('should remove sibling sections extending the collapsed key when a table becomes a scalar (seed 22772)', () => {
+    // `[""]` collapsing to a scalar while `["".hv8lx]` is a document-level
+    // section extending the `""` prefix re-defines the key on re-parse
+    // ("Value already defined").  The sibling section must be removed.
+    const src = dedent`
+      [""]
+      x = 1
+
+      ["".hv8lx]
+      y = 2
+    ` + '\n';
+
+    const result = patch(src, { '': 1884 });
+    expect(parse(result)).toEqual({ '': 1884 });
+    expect(result).toEqual('"" = 1884\n');
   });
 
 });
@@ -8204,8 +8394,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   // ─── Fuzz-discovered bugs ───────────────────────────────────────────
 
   // BUG: Changing a value inside a nested array within a multiline array
-  // produces consecutive commas in the output (found by fuzz seed 485).
-  test('BUG: changing nested array element in multiline array produces consecutive commas (fuzz #485)', () => {
+  // produces consecutive commas in the output (found by fuzzing).
+  test('BUG: changing nested array element in multiline array produces consecutive commas', () => {
     const src = dedent`
       a = [
           1,
@@ -8227,8 +8417,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   });
 
   // BUG: Changing a value inside a nested array where the inner array
-  // contains a multiline string also produces consecutive commas (fuzz #485).
-  test('BUG: changing nested array with multiline string produces consecutive commas (fuzz #485)', () => {
+  // contains a multiline string also produces consecutive commas.
+  test('BUG: changing nested array with multiline string produces consecutive commas', () => {
     const src = dedent`
       a = [
           1,
@@ -8249,17 +8439,11 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
-  // BUG: Deleting the first segment of a dotted key combined with other
-  // mutations throws "Unsupported parent type 'String' for remove".
-  // Reproduced from fuzz seed 484 with 5 simultaneous mutations.
-  //
-  // FIXED (partial): The crash is resolved by detecting when findParent
-  // returns the node itself via dotted-key prefix match and re-resolving
-  // from one path segment higher.
-  //
-  // TODO: Implicit parent "y" (created by dotted key y.ic83) does not
-  // survive when its last child is removed — "y": {} is dropped.
-  test.fails('BUG: implicit parent of dotted KV does not survive child removal (fuzz #484)', () => {
+  // When a dotted KeyValue's last segment is removed inside a table,
+  // the implicit parent segments should survive as an empty table header.
+  // This exercises the KeyValue branch of the implicit-parent materialisation
+  // added alongside the existing Table/TableArray materialisation.
+  test('implicit parent of dotted KV survives child removal', () => {
     const src = dedent`
       y3.u9jt4 = 0b111101
       "pEjJDgj/n".y = 0xeb5034c
@@ -8287,8 +8471,8 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Deleting keys from a table combined with other mutations
   // throws "Unsupported parent type 'Boolean' for remove".
-  // Reproduced from fuzz seed 489 with 5 simultaneous mutations.
-  test('BUG: multi-mutation delete inside table throws Unsupported parent type (fuzz #489)', () => {
+  // Reproduced with 5 simultaneous mutations.
+  test('BUG: multi-mutation delete inside table throws Unsupported parent type', () => {
     const src = dedent`
       "N&SXI1".el2p2s-m.j3 = 2045-07-18T11:00:10.256062
       q = -772872
@@ -8333,11 +8517,11 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing deeply nested values inside an inline table under a
   // section header produces a duplicate [kaes3f6] header.
-  // Reproduced from fuzz seed 464 with 3 simultaneous mutations.
+  // Reproduced with 3 simultaneous mutations.
   //
   // Edits that truncate dotted keys inside inline tables (changing nested
   // objects to scalars/arrays/objects) should produce a single valid section.
-  test('structural changes in nested inline table under section (fuzz #464)', () => {
+  test('structural changes in nested inline table under section', () => {
     const src = dedent`
       [kaes3f6]
       rrc4z.r-dr3h3 = { bksb.eca7itb61.ismjjcc = false, aavr = { dvk1s.hiza = "x", 0.y2k2_.tgo = "" } }
@@ -8383,8 +8567,8 @@ describe('wasEmptied compensation — multiple tables', () => {
   // BUG: Deleting a key from a nested inline table inside an array
   // can throw "Node not found in parent for removal" with certain
   // format options. Simple single-mutation works, but the fuzzer
-  // found failures with format options like minimumDecimals (seed 483).
-  test('BUG: deleting key from nested inline table in array should leave empty subtable (simple case, fuzz #483)', () => {
+  // found failures with format options like minimumDecimals.
+  test('BUG: deleting key from nested inline table in array should leave empty subtable (simple case)', () => {
     const src = dedent`
       i6i6d5cuwt = [{ "ZQG<xH>I8" = { sgshmg = { k92 = 1 } } }]
     ` + '\n';
@@ -8398,8 +8582,8 @@ describe('wasEmptied compensation — multiple tables', () => {
 
   // BUG: Changing a value inside a nested array within a multiline array
   // that contains a wider inner array also produces consecutive commas.
-  // Found by fuzz seed 485 (multi-mutation scenario).
-  test('BUG: changing nested array element in wide multiline array produces bad output (fuzz #485 multi)', () => {
+  // Found by fuzzing (multi-mutation scenario).
+  test('BUG: changing nested array element in wide multiline array produces bad output', () => {
     const src = dedent`
       kdp2j91 = [
           1265.69395,
@@ -8420,4 +8604,1452 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
   });
 
+  // ── Re-parse failures: patch produces invalid TOML ──────────────────
+  //
+  // Found by the fuzz harness.  Seeds 92, 139, 176 require the full
+  // random TOML context to trigger; only seed 187 reproduces in isolation.
+
+  // BUG: Changing a dotted key to a scalar under a section header
+  // leaves a conflicting key-value in the output, producing
+  // "Value already defined" on re-parse.
+  test('dotted-to-scalar edit under section (seed 187)', () => {
+    const src = dedent`
+      [cso]
+      g.bq5g = "D"
+      v.jp = -0.128
+      v.e4.c6 = false
+    ` + '\n';
+    const obj = parse(src);
+    obj.cso.v = 42;
+    const result = patch(src, obj);
+    // Currently produces conflicting v = 42 and v.e4.c6 = false
+    expect(result).toEqual(dedent`
+      [cso]
+      g.bq5g = "D"
+      v = 42
+    ` + '\n');
+    expect(() => parse(result)).not.toThrow();
+  });
+
+  // ── Writer position corruption ─────────────────────────────────────
+  //
+  // When structural edits create new table sections (via inlineTableStart
+  // or handleStructuralEdit), the insert() positioning can produce
+  // overlapping loc values that cause toTOML to write garbled output.
+  // Found by fuzz harness seed 176.  Deleting a section and then emptying an
+  // AOT caused `remove()` to over-count the blank-line reclaim (`extra`),
+  // because `node.loc.start.line` was stale from a prior removal's pending
+  // exit offset.  The inflated `extra` pulled subsequent sections up too far,
+  // overlapping their headers with preceding content.
+  test('writer position after section removal plus AOT emptying (seed 176)', () => {
+    const src = dedent`
+      ouud3l2 = "CHPCI3,bKbr|;!]Mr"
+
+      [["AciQ!}@)".m]]
+      eydt.iqb25ww2.uKV = true
+      uz-8.x0zmi.nycv = -80107.11299
+      w079g8 = "E?Ne|T7(8i.Vvu+P?"
+      is6x08yl.m.p = 2031-11-16T16:50:32
+      yzn3ck = 13:50:59.491731
+      y0ro = '9'
+      QDRogRh.u.wrfxsa3wx = false
+      gk8r-hf3.flyet.y7kx = -81798100000000091262
+      [mhv6z.hpd_iu9zs5."2<w"]
+      "lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
+
+      [[""]]
+      lnb2_kse1.gpei2kd94x = 0b01
+
+      [g]
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.mhv6z;
+    obj['AciQ!}@)'].m[0]['QDRogRh'].u = 4152;
+    obj[''] = [];
+    const result = patch(src, obj, {
+      inlineTableStart: 2, trailingComma: true, bracketSpacing: false,
+      updateOrder: false, trailingNewline: 2, newLine: '\n', leadingBom: false,
+      truncateZeroTimeInDates: true, useTabsForIndentation: false, minimumDecimals: 1
+    });
+    expect(parse(result)).toEqual(obj);
+    // Double trailing newline for trailingNewline: 2 — dedent gives one, append the second.
+    expect(result).toEqual(dedent`
+      ouud3l2 = "CHPCI3,bKbr|;!]Mr"
+      "" = []
+
+      [["AciQ!}@)".m]]
+      eydt.iqb25ww2.uKV = true
+      uz-8.x0zmi.nycv = -80107.11299
+      w079g8 = "E?Ne|T7(8i.Vvu+P?"
+      is6x08yl.m.p = 2031-11-16T16:50:32
+      yzn3ck = 13:50:59.491731
+      y0ro = '9'
+      QDRogRh.u = 4152.0
+      gk8r-hf3.flyet.y7kx = -81798100000000091262
+
+      [g]
+      ` + '\n\n');
+  });
+
+  // ── Fuzz-discovered delete-key failures ────────────────────────────
+
+  // Seed 22: Unsupported parent type "InlineItem" for remove.
+  // Deleting an element from a nested array inside an inline table causes
+  // findParent to return the InlineItem wrapper rather than the inner
+  // InlineArray container.
+  test('delete element from nested inline array inside inline table (seed 22)', () => {
+    const src = dedent`
+      [p]
+      t = { arr = [1, [2, 3, 4]] }
+    ` + '\n';
+    const obj = parse(src);
+    // Delete element 0 of the inner array [2, 3, 4]
+    obj.p.t.arr[1].splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [p]
+      t = { arr = [1, [3, 4]] }
+      ` + '\n');
+  });
+
+  // Seed 20/26/41: Unsupported parent type "Integer" for remove.
+  // Deleting an element from an array-of-arrays where findParent
+  // resolves to the primitive array element rather than the outer
+  // InlineArray container.
+  test('delete element from nested array (seed 20)', () => {
+    const src = dedent`
+      a = [ [ 1, 2, 3 ] ]
+    ` + '\n';
+    const obj = parse(src);
+    obj.a[0].splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      a = [ [ 2, 3 ] ]
+      ` + '\n');
+  });
+
+  // Fuzz seed 20 (3 mutations): delete-key at 7<L:.b32uvhdz.0.z0ncoh.y.eam.
+  // Removing the last segment of a dotted key inside an AOT entry.  Every
+  // prefix of the change path matches the dotted key via prefix-matching,
+  // so findParent returns the KV itself (even after re-resolving one
+  // segment higher) and the handler previously unwrapped its Integer value
+  // as the parent — crashing with "Unsupported parent type 'Integer' for
+  // remove".  The KV must be removed from the AOT entry and the emptied
+  // parent materialised as a sub-table inside the entry's scope.
+  test('delete last segment of dotted key inside AOT entry (seed 20)', () => {
+    const src = dedent`
+      [["7<L:".b32uvhdz]]
+      z0ncoh.y.eam = 0xd50d56
+    ` + '\n';
+    const obj = parse(src);
+    delete obj['7<L:'].b32uvhdz[0].z0ncoh.y.eam;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [["7<L:".b32uvhdz]]
+
+      ["7<L:".b32uvhdz.z0ncoh.y]
+      ` + '\n');
+  });
+
+  // Materialisation scope for the same operation: the emptied parent must
+  // be materialised as a sub-table of the SAME AOT entry — relative to the
+  // entry key (no numeric index in the key), inserted before the next
+  // entry so it doesn't leak into a later entry's scope.
+  test('materialised dotted parent stays in the AOT entry scope', () => {
+    const src = dedent`
+      [["7<L:".b32uvhdz]]
+      n = 1
+      z0ncoh.y.eam = 0xd50d56
+
+      [["7<L:".b32uvhdz]]
+      n = 2
+    ` + '\n';
+    const obj = parse(src);
+    delete obj['7<L:'].b32uvhdz[0].z0ncoh.y.eam;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [["7<L:".b32uvhdz]]
+      n = 1
+
+      ["7<L:".b32uvhdz.z0ncoh.y]
+
+      [["7<L:".b32uvhdz]]
+      n = 2
+      ` + '\n');
+  });
+
+  // Fuzz seed 20 (remaining diff): with newLine = "\r\n", a multiline
+  // string's content newlines are normalised to the structural line
+  // endings, so re-parsing the patched output no longer deep-equals the
+  // input object.  The library intentionally normalises value newlines
+  // (no mixed line endings in the output); the fuzz harness comparison
+  // must normalise \r\n vs \n in strings the same way.
+  test('multiline literal string content follows newLine (seed 20)', () => {
+    const src = dedent`
+      ["?"]
+      j16ata5 = '''
+      Z(4jxV:VdbXcB<t
+      H4T.1
+      JW[f*l/O!KyD
+      '''
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj['?'].j16ata5).toEqual('Z(4jxV:VdbXcB<t\nH4T.1\nJW[f*l/O!KyD\n');
+    const result = patch(src, obj, { newLine: '\r\n' });
+    expect(result).toEqual([
+      '["?"]',
+      "j16ata5 = '''",
+      'Z(4jxV:VdbXcB<t',
+      'H4T.1',
+      'JW[f*l/O!KyD',
+      "'''",
+      '',
+    ].join('\r\n'));
+    expect(parse(result)).toEqual({
+      '?': {
+        j16ata5: 'Z(4jxV:VdbXcB<t\r\nH4T.1\r\nJW[f*l/O!KyD\r\n',
+      },
+    });
+  });
+
+  // Fuzz seed 4: replacing the first segment of a dotted KV with an object
+  // produces adds under the (no longer existing) prefix, e.g.
+  //   ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+  // becomes
+  //   ak = { k99: [310, "74m", false], k36: "2012-06-06" }
+  // After the first add created `ak.k99`, the second add's findParent
+  // matched `ak` as a PREFIX of the dotted key and unwrapped the KV's
+  // value (the array) as the parent — merging `k36` into the array line.
+  // Both adds must land in the shared table with the `ak` prefix restored.
+  test('replacing dotted KV with object restores the key prefix (seed 4)', () => {
+    const src = dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.iHv.o4umx0u5w_.ak = { k99: [310, '74m', false], k36: '2012-06-06' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.k99 = [ 310, "74m", false ]
+      ak.k36 = "2012-06-06"
+      ` + '\n');
+  });
+
+  // Same operation with scalar values: the second add used to crash with
+  // "Unsupported parent type 'Integer' for insert" because the prefix
+  // match resolved the dotted KV and unwrapped its scalar value.
+  test('consecutive scalar adds under a restored dotted prefix (seed 4)', () => {
+    const src = dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.b72h424xn6.golwdunl = 2002-05-17T15:38:12
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.iHv.o4umx0u5w_.ak = { k99: 1, k36: 2 };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t.iHv.o4umx0u5w_]
+      ak.k99 = 1
+      ak.k36 = 2
+      ` + '\n');
+  });
+
+  // Fuzz seed 11: deleting the last segment of a ROOT-level dotted KV
+  // materialises the emptied parent as a section.  A [table] header claims
+  // every key-value below it, so the section must land AFTER the remaining
+  // root KVs — inserting it at the removed KV's index (the top of the file)
+  // nested all following root KVs under it.
+  test('materialised root dotted parent lands after root KVs (seed 11)', () => {
+    const src = dedent`
+      nduxrs6pz.ek = 597081
+      other = true
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.nduxrs6pz.ek;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      other = true
+
+      [nduxrs6pz]
+      ` + '\n');
+  });
+
+  // Same operation when a section already exists: the materialised header
+  // goes before the first existing section so the root KVs stay root-level.
+  test('materialised root dotted parent lands before first section (seed 11)', () => {
+    const src = dedent`
+      nduxrs6pz.ek = 597081
+      other = true
+
+      [late]
+      x = 1
+    ` + '\n';
+    const obj = parse(src);
+    delete obj.nduxrs6pz.ek;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      other = true
+
+      [nduxrs6pz]
+
+      [late]
+      x = 1
+      ` + '\n');
+  });
+
+  // Fuzz seed 22: deleting the last segment of a dotted key INSIDE an inline
+  // table (TOML 1.1) empties its prefix, e.g. `p = { a.b = "x" }` with a.b
+  // removed leaves a = {}.  The emptied prefix was dropped entirely, and the
+  // pending removal offset then corrupted the re-inserted item's position.
+  test('emptied dotted prefix inside inline table re-emits prefix = {} (seed 22)', () => {
+    const src = `p = { a.b = "x", c = 1 }
+`;
+    const obj = parse(src);
+    delete obj.p.a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`p = { a = {}, c = 1 }
+`);
+  });
+
+  // Same operation one nesting level deeper: the emptied prefix lives in an
+  // inline table that is itself an inline-table value.
+  test('emptied dotted prefix in nested inline table (seed 22)', () => {
+    const src = `p = { q = { a.b = "x", c = 1 } }
+`;
+    const obj = parse(src);
+    delete obj.p.q.a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // Fuzz seed 50: same operation when the inline table is an inline-array
+  // element.  findHostContainer only returns block containers, so the
+  // parent fallback landed on the Document and remove() crashed with
+  // "Node not found in parent for removal".  The structural container
+  // (the inline table inside the array element) must be found instead.
+  test('emptied dotted prefix in inline table inside array element (seed 50)', () => {
+    const src = `t = [{ a.b = 1, c = 2 }]
+`;
+    const obj = parse(src);
+    delete obj.t[0].a.b;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // Fuzz seed 50: splicing an element out of an inline array that contains
+  // a multiline string.  The diff expresses the splice as Moves + a Remove;
+  // moveInlineElement re-inserted the multiline string with the writer's
+  // span math (which assumes the next sibling sits at the moved node's
+  // first-line column), corrupting every item after it and the closing
+  // bracket — the string's closing delimiter was overwritten by the
+  // following date.  Items after a moved multi-line value are now
+  // realigned sequentially after the move.
+  test('array splice around multiline string keeps rows aligned (seed 50)', () => {
+    const src = dedent`
+      a = [1, "x", 2, '''
+      m
+      t''', 2020-01-01]
+    ` + '\n';
+    const obj = parse(src);
+    obj.a.splice(2, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      a = [1, "x", '''
+      m
+      t''', 2020-01-01]
+      ` + '\n');
+  });
+
+  // Fuzz seeds 70/73/79: with useTabsForIndentation, toTOML converted
+  // leading spaces to tabs on EVERY line — including the content lines of
+  // multiline string literals, silently changing the value (' A' became
+  // '\tA').  Indentation inside multiline strings is value content and
+  // must never be converted.
+  test('tabs indentation never touches multiline string content (seed 70)', () => {
+    const src = dedent`
+      x = '''
+       A
+      i'''
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj.x).toEqual(' A\ni');
+    const result = patch(src, obj, { useTabsForIndentation: true });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain(' A\n');
+  });
+
+  // Fuzz seed 92: replacing every key of an inline table (dotted KV value)
+  // emits Removes for the old keys and Adds for the new ones.  The removal
+  // of the first old key registers an enter offset on the inline table
+  // itself, which applyWrites would also apply to the newly added items —
+  // dragging them left into the preceding key area and corrupting the row.
+  // Adds into an inline container emptied by the same patch now flush the
+  // pending offsets before positioning the new items.
+  test('replacing all keys of an inline table value keeps rows aligned (seed 92)', () => {
+    const src = dedent`
+      [[wm07fzxt.m-etxqo]]
+      b5drwvd1na.rx-8xie4."h*7*Al&" = { fc.j."pl<Dl" = false, "cI3%|".unr6 = -982143 }
+      "y0DG]J2[".ivh-16w.wjlufe = 100613
+      osjez."ec+C" = 0x5d7b7fb2
+    ` + '\n';
+    const obj = parse(src);
+    obj.wm07fzxt['m-etxqo'][0].b5drwvd1na['rx-8xie4']['h*7*Al&'] = {
+      k568: ['G', 1997, '2004-09-21'],
+      k96: 'wSC8rLyhs9vuAiZhKp',
+      k34: -1339.1474424861372,
+    };
+    const result = patch(src, obj, {
+      inlineTableStart: 2,
+      bracketSpacing: false,
+      trailingComma: false,
+    });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[wm07fzxt.m-etxqo]]
+      b5drwvd1na.rx-8xie4."h*7*Al&" = {k568 = ["G", 1997, "2004-09-21"], k96 = "wSC8rLyhs9vuAiZhKp", k34 = -1339.1474424861372}
+      "y0DG]J2[".ivh-16w.wjlufe = 100613
+      osjez."ec+C" = 0x5d7b7fb2
+      ` + '\n');
+  });
+
+  // Fuzz seed 103: a table header that extends an array-of-tables entry
+  // whose key starts with an EMPTY segment (`["".lt.pcz8w994u.q]` after
+  // `[["".lt.pcz8w994u]]`).  toJS's validateKey built candidate key
+  // strings with a string-truthiness check, which dropped the empty first
+  // segment ("lt.pcz8w994u" instead of ".lt.pcz8w994u") — the lookup in
+  // table_arrays missed and the header was rejected as "Cannot add to
+  // static array".
+  test('AOT sub-table under an empty first key segment parses (seed 103)', () => {
+    const src = dedent`
+      [""]
+
+      [["".lt.pcz8w994u]]
+      y = 2
+
+      ["".lt.pcz8w994u.q]
+    ` + '\n';
+    const obj = parse(src);
+    expect(obj[''].lt.pcz8w994u).toEqual([{ y: 2, q: {} }]);
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [""]
+
+      [["".lt.pcz8w994u]]
+      y = 2
+
+      ["".lt.pcz8w994u.q]
+      ` + '\n');
+    expect(parse(result)).toEqual(obj);
+  });
+
+  // Fuzz seed 128: deleting a MIDDLE segment of a dotted key inside an
+  // inline table (`6U.booay.o563zkr` → delete `booay`, leaving 6U = {}).
+  // The materialisation derived the emptied prefix from the key's last
+  // segment (`6U.booay`) instead of the removed path (`6U`), and computed
+  // it AFTER the removal — when the node's absolute path can no longer be
+  // resolved by walking the tree.  It now captures the path before the
+  // removal and derives the prefix from parentPath.
+  test('deleting a middle dotted segment in an inline table keeps the parent (seed 128)', () => {
+    const src = `-Juc6-.i8_zae = { 6U.booay.o563zkr = "x", ip1f-7.k = 0x8f923b58 }
+`;
+    const obj = parse(src);
+    delete obj['-Juc6-'].i8_zae['6U'].booay;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain('6U = {}');
+    expect(result).not.toContain('booay');
+  });
+
+  // Fuzz seed 137: replacing a whole dotted key inside an inline table with
+  // a differently-shaped value (`u3chwmmvk."g{dXAvRV]1".oe1zht` → `[]`).
+  // The edit branch for InlineItem-existing / KV-replacement only swapped
+  // the VALUE, keeping the old full dotted key — the key-truncation logic
+  // the other edit branches have was missing.
+  test('inline dotted key truncated when its whole subtree changes shape (seed 137)', () => {
+    const src = `es8 = { u3chwmmvk."g{dXAvRV]1".oe1zht = 2026-03-27T00:01:35Z }
+`;
+    const obj = parse(src);
+    obj.es8.u3chwmmvk = [];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toContain('u3chwmmvk = []');
+    expect(result).not.toContain('oe1zht');
+  });
+
+  // Fuzz seed 139: truncating a dotted key whose value is a MULTILINE
+  // string inside a multiline inline table (`w.cauh0."GDwQX)kv*" = """…"""`
+  // → `w.cauh0 = 699`).  The key-truncation exit offset was registered
+  // unconditionally and landed on the KV's END line — whose content
+  // columns did not move — shifting the wrapper InlineItem's end (the
+  // trailing comma's position) far away from the value.  The exit offset
+  // is now only registered for single-line KVs.
+  test('truncating a multiline-string inline key keeps the comma (seed 139)', () => {
+    const src = dedent`
+      t = {
+          w.cauh0."GDwQX)kv*" = """
+      CB
+      vE
+      D.7[ub%aLY""",
+          bc.vqe5 = nan,
+      }
+    ` + '\n';
+    const obj = parse(src);
+    obj.t.w.cauh0 = 699;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      t = {
+          w.cauh0 = 699,
+          bc.vqe5 = nan,
+      }
+      ` + '\n');
+  });
+
+  // Fuzz seed 176: removing the intermediate path of a LONGER dotted table
+  // key.  `[mhv6z.hpd_iu9zs5."2<w"]` produces a Table with key
+  // ["mhv6z", "hpd_iu9zs5", "2<w"], so a Remove at ["mhv6z", "hpd_iu9zs5"]
+  // has no exact node match — the prefix-removal branch drops the whole
+  // table, and must then materialise the emptied implicit parent `[mhv6z]`
+  // so the empty-object key isn't dropped from the document.
+  test('implicit prefix removed with longer dotted table key materialises parent (seed 176)', () => {
+    const src = dedent`
+      [mhv6z.hpd_iu9zs5."2<w"]
+      "lfQ[WI?5y".jz1awl = 1981-03-06T22:06:55Z
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.mhv6z.hpd_iu9zs5;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [mhv6z]
+    ` + '\n');
+  });
+
+  // Fuzz seed 185: removing a dotted key whose FIRST segment is the empty
+  // string (`"".tvbin`), when an EARLIER sibling also starts with that
+  // prefix (`"".vf = true`).  findParent(original, [""]) prefix-matched
+  // `"".vf` first, unwrapped it to its Boolean VALUE, and removeMember
+  // threw "Unsupported parent type Boolean".  A parent without items can
+  // never contain the node — fall back to the structural container.
+  test('removing empty-string dotted key falls back to structural parent (seed 185)', () => {
+    const src = dedent`
+      "".vf = true
+      "".tvbin = '&^I}x7)'
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj[''].tvbin;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      "".vf = true
+    ` + '\n');
+  });
+
+  // Fuzz seed 297: with inlineTableStart 0, replacing a dotted-key value
+  // (`"%jadD;hO+#".o993b.tf0q1c`) with an inline table (`{ k77 = false }`)
+  // becomes a Remove of the old dotted key plus an Add of the inline-table
+  // child.  The added child arrives wrapped in an InlineItem, so the
+  // root-scope index clamp (keep root KVs before the first section header)
+  // never fired — `index` stayed the string key `k77`, insert() treated it
+  // as "not a number" and appended at document end, silently nesting the
+  // key inside the following [[dbfv3.acx]] section.
+  test('added root KV from inline table lands before first section (seed 297)', () => {
+    const src = dedent`
+      vli9.pyfi4 = true
+      bojx."" = "x"
+      "%jadD;hO+#".o993b.tf0q1c = nan
+      un9gn0vga.l6."C\`UgZ,?x=" = 61505.74328
+
+      [[dbfv3.acx]]
+      h829.d8ua = -710262
+      ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
+      fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.vli9 = false;
+    obj.bojx[''] = 'BFNriKFvsK';
+    obj['%jadD;hO+#'] = { k77: false };
+    const result = patch(src, obj, { inlineTableStart: 0 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      vli9 = false
+      bojx."" = "BFNriKFvsK"
+      un9gn0vga.l6."C\`UgZ,?x=" = 61505.74328
+      "%jadD;hO+#".k77 = false
+
+      [[dbfv3.acx]]
+      h829.d8ua = -710262
+      ce926677 = '#a.!ZJHkNdE<k~:EU9]6r0KaeZZLVWH@SX610xk'
+      fbgx = "b0Z!SSzTH/!38f>DEc Q/j:7a2a4E[uAuI.^"
+    ` + '\n');
+  });
+
+  // Fuzz seed 305: replacing the dotted key `o247.bjbdmm11-.y773gunzy` inside
+  // an inline table with an object.  The diff becomes a Remove of the dotted
+  // key plus Adds of the new object's keys; the Adds resolve into the inline
+  // table whose insertion parent is shallower than the change path, and must
+  // restore the missing `o247.bjbdmm11-` prefix on the new keys — otherwise
+  // they land at the inline table's top level.
+  test('inline-table add restores missing dotted-key prefix (seed 305)', () => {
+    const src = dedent`
+      x = { o247.bjbdmm11-.y773gunzy = 'old' }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.o247['bjbdmm11-'] = { k2: true, k94: 1.5, k50: 'str' };
+    const result = patch(src, obj, { inlineTableStart: 0 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = { o247.bjbdmm11-.k2 = true, o247.bjbdmm11-.k94 = 1.5, o247.bjbdmm11-.k50 = "str" }
+    ` + '\n');
+  });
+
+  // Fuzz seed 340: setting array item 0 to a value that equals a LATER item
+  // (['a', 1, 2, true] -> [true, 1, 2, true]).  The diff moves the later item
+  // into place and edits the displaced one; the old code diffed the untouched
+  // original at that index, emitted nothing, and left 'a' in the output.
+  test('array item edited to a duplicated value removes the old item (seed 340)', () => {
+    const src = dedent`
+      x = ['a', 1, 2, true]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x[0] = true;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [true, 1, 2, true]
+    ` + '\n');
+  });
+
+  // Fuzz seed 477: replacing an implicit table created by a dotted key
+  // (`one.ehl."Yv[" = false`) with an array of objects.  The diff emits an
+  // Edit at the bare path [one], but the updated CST renders the new value
+  // as [[one]] array-of-tables entries whose lookup paths are [one, 0],
+  // so the generic edit path threw "Node not found at one".  Such edits
+  // now fall back to the structural-change handling.
+  test('implicit table replaced by array of tables uses structural handling (seed 477)', () => {
+    const src = dedent`
+      one.ehl."Yv[" = false
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.one = [{ k62: -3175, k98: 1753, k59: -1488 }];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[one]]
+      k62 = -3175
+      k98 = 1753
+      k59 = -1488
+    ` + '\n');
+  });
+
+  // Fuzz seed 590: replacing a root-level KV with an object renders the
+  // replacement as a [g86] section.  A section header captures every
+  // key-value that follows it in the document, so the root KVs after the
+  // original position (fofc/y3n/"<w") would be swallowed into the new
+  // table.  The new section must sink below the root-table scope.
+  test('root KV replaced by a section does not swallow following keys (seed 590)', () => {
+    const src = dedent`
+      g86 = "str"
+      fofc.clf.xt7-l54a9- = 1989-03-20T04:37:52.698492
+      y3n = "a"
+      "<w" = 590118
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.g86 = { k31: 'AZ', k50: { k63: 3334, k55: '5epJmJ51' } };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fofc.clf.xt7-l54a9- = 1989-03-20T04:37:52.698492
+      y3n = "a"
+      "<w" = 590118
+
+      [g86]
+      k31 = "AZ"
+      k50 = { k63 = 3334, k55 = "5epJmJ51" }
+    ` + '\n');
+  });
+
+  // Fuzz seed 620: adding an item right after a MULTILINE string inside a
+  // one-item-per-line array whose next item continues on the string's END
+  // line.  The new-line insert placed the new item on the FOLLOWING row —
+  // inside the nested array that occupied it.  The insert must stay on the
+  // multiline string's end line instead.
+  test('perLine insert after multiline string stays on its end line (seed 620)', () => {
+    const src = dedent`
+      x = [
+          [1, 2],
+          '''
+      a
+      b''', "y",
+      ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.splice(2, 0, false);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [
+          [1, 2],
+          '''
+      a
+      b''', false, "y",
+      ]
+    ` + '\n');
+  });
+
+  // Fuzz seed 706: removing an item whose neighbour is a MULTILINE element
+  // inside a moved nested array.  The rigid translation of the moved subtree
+  // shifted every line's columns, so the items after a multiline string slid
+  // sideways onto its closing quotes, and the outer array's closing bracket
+  // followed the removed item's width instead of the remaining previous
+  // item's end — landing inside the nested array.
+  test('removing an item next to a multiline string keeps rows aligned (seed 706)', () => {
+    const src = dedent`
+      x = [1, "rem", ['''
+      a
+      b''', 5, 6]]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.x.splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      x = [1, ['''
+      a
+      b''', 5, 6]]
+    ` + '\n');
+  });
+
+  // Fuzz seed 724: replacing an array-of-tables with a nested object when
+  // the replacement depth exceeds inlineTableStart.  parseJS renders the
+  // nested value as MORE than one root item (`[n]` plus the key-values
+  // under it), and handleStructuralEdit only inserted the first — dropping
+  // the value entirely.
+  test('structural AOT replacement inserts all rendered items (seed 724)', () => {
+    const src = dedent`
+      [[n.h9nvi6w.gfjsfiy]]
+      lxonelscfi.oiz = 2006-09-08T21:16:26
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.n.h9nvi6w = { gfjsfiy: true };
+    const result = patch(src, obj, { inlineTableStart: 2 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [n]
+
+      [n.h9nvi6w]
+      gfjsfiy = true
+    ` + '\n');
+  });
+
+  // Fuzz seed 735: replacing a dotted key inside a table with an object
+  // restores the missing prefix and regenerates the new key-values.  The
+  // regenerated value's loc came from its own round-trip — a line BELOW the
+  // generated key — so the value was emitted on a separate line from its
+  // `=`, producing invalid TOML.  generateKeyValue now aligns the fresh
+  // value onto the key's line.
+  test('restored dotted-key value stays on the key line (seed 735)', () => {
+    const src = dedent`
+      [t]
+      a.b = 2057-09-09
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.t.a = { k6: -2320.491732098162, k98: 'c-zjH' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t]
+      a.k6 = -2320.491732098162
+      a.k98 = "c-zjH"
+    ` + '\n');
+  });
+
+  // Fuzz seed 735 (part 2): restoring a NESTED object value.  With the
+  // caller's inlineTableStart, parseJS rendered `__tmp__ = { k28, k10 }`
+  // as dotted keys, so regenerateValue returned the first leaf's scalar and
+  // the object collapsed to a scalar (k10 silently dropped).  The
+  // round-trip now forces inlineTableStart 0 so nested values regenerate as
+  // inline tables.
+  test('restored nested value regenerates as an inline table (seed 735b)', () => {
+    const src = dedent`
+      [t]
+      a.b = 2057-09-09
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.t.a = { k6: { k28: -2320.491732098162, k10: false }, k98: 'c-zjH' };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [t]
+      a.k6 = { k28 = -2320.491732098162, k10 = false }
+      a.k98 = "c-zjH"
+    ` + '\n');
+  });
+
+  // Fuzz seed 900: removing an array item that sits BEFORE a multiline
+  // string shifts the string left (a Move).  The removal's bracket-slide
+  // offset mixed the multiline item's last line with the previous item's
+  // line, and the re-insert's span-based offset could not cancel it — the
+  // pair leaked past the container and the rows after the array slid onto
+  // the multiline string's content (`m,sd"=]` garbage).  moveInlineElement
+  // now drops both offsets for a multiline last item and lets the tail
+  // realignment re-anchor everything after the container.
+  test('removing an array item before a multiline string keeps following rows (seed 900)', () => {
+    const src = dedent`
+      r = { q = { a = [1, true, 2000-01-01, false, 9, 7.25, """
+      mls"""], d = """
+      D""", k = 1 } }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.r.q.a.splice(5, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      r = { q = { a = [1, true, 2000-01-01, false, 9, """
+      mls"""], d = """
+      D""", k = 1 } }
+    ` + '\n');
+  });
+
+  // Fuzz seed 1028: removing the last segment of the FIRST root key (a
+  // dotted key whose prefix becomes an implicit parent) materialises a
+  // section header at document index 0.  The removal's pending enter offset
+  // was still on the document, so the inserted header absorbed it and
+  // landed above line 1, crashing the writer.  The materialisation now
+  // resolves pending offsets before inserting.
+  test('materialised parent header lands at line 1 after removing the first root key (seed 1028)', () => {
+    const src = dedent`
+      r8e."O|zw=".xsc = -50438.91602
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.r8e['O|zw='].xsc;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [r8e."O|zw="]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1098: removing the only key of an explicit [table] must not
+  // materialise a second copy of the header — the table itself already is
+  // the (now empty) parent.  The duplicate made the re-parse fail with
+  // "Table already defined".
+  test('emptied explicit table is not duplicated (seed 1098)', () => {
+    const src = dedent`
+      [em2-0u.is]
+      WdkQS.dbh = 0b10011100100011
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj['em2-0u'].is.WdkQS;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [em2-0u.is]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1172: removing an implicit key prefix (a table whose key
+  // extends the removed path) materialises the parent as an empty table at
+  // the removed section's index.  Same pending-offset hazard as seed 1028 —
+  // the fresh header absorbed the document's enter offset and landed above
+  // line 1.
+  test('materialised parent header stays in bounds when a prefix table is removed (seed 1172)', () => {
+    const src = dedent`
+      [c.s0k825_vp.p-e95lg61w]
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.c.s0k825_vp;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [c]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1219: an [[array]] header and an explicit [table] share the
+  // same logical parent key.  Replacing the array with a scalar makes the
+  // structural edit re-render a [table] header for that parent — which
+  // already exists — and the duplicate failed the re-parse with "Table
+  // already defined".  The rendered rows now merge into the surviving
+  // table instead of re-inserting the header.
+  test('structural edit merges rows into a surviving same-key table (seed 1219)', () => {
+    const src = dedent`
+      [["".dmt6_v]]
+      ""."*XC=]" = 1996-02-17
+
+      [""]
+      q = 53961
+      jz.rjs = 1
+      "" = -18275
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj[''].dmt6_v = -4026.25;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [""]
+      q = 53961
+      jz.rjs = 1
+      "" = -18275
+      dmt6_v = -4026.25
+    ` + '\n');
+  });
+
+  // Fuzz seed 1406: replacing a duplicated `true` inside a multiline array
+  // (the same value occurs again later) used to diff as an Add plus a chain
+  // of Moves, because compareArrays read the element as "kept" — and the
+  // move chain slid the date row that follows the multiline string's
+  // closing quotes onto them.  compareArrays now counts surplus occurrences
+  // in the unmatched suffixes and edits the element in place instead.
+  test('editing a duplicated array item keeps the multiline-string tail (seed 1406)', () => {
+    const src = dedent`
+      dgzj3t = ["2Htn5AGYQ4KHFejd{3,G)hZ%a>nS4q", true, "d{Tz[RsD!:6bn*80Pd", "+fXxjsRtucWI5.P]}Me6R3*Nl|1L:!nz4(skHf' ", 0x35e6e402, true, ["Lx1t$zO9sow'.zUt", 0x810fd, 2010-09-14, '''
+      9GI|4>''', [1984-12-03, 388209]], 6767, "nCdDq3_ZwB,<}7Lp?V#1", true]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.dgzj3t[1] = '4';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      dgzj3t = ["2Htn5AGYQ4KHFejd{3,G)hZ%a>nS4q", "4", "d{Tz[RsD!:6bn*80Pd", "+fXxjsRtucWI5.P]}Me6R3*Nl|1L:!nz4(skHf' ", 0x35e6e402, true, ["Lx1t$zO9sow'.zUt", 0x810fd, 2010-09-14, '''
+      9GI|4>''', [1984-12-03, 388209]], 6767, "nCdDq3_ZwB,<}7Lp?V#1", true]
+    ` + '\n');
+  });
+
+  // Fuzz seed 1898: replacing a table whose key extends an implicit parent
+  // (""."!lf|D(A".")" under the "" table expressed by the dotted KV
+  // "".cxl5h6l) re-rendered the new scalar as a [""] section — colliding
+  // with the implicit definition and failing the re-parse with "Implicit
+  // table already defined".  handleStructuralEdit now detects the implicit
+  // parent and emits the rendered rows as dotted KVs under that prefix.
+  test('structural edit joins an implicit table as dotted keys (seed 1898)', () => {
+    const src = dedent`
+      "".cxl5h6l = 00:17:37
+
+      [""."!lf|D(A".")"]
+      x = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj['']['!lf|D(A'] = '2002-04-23T00:00:00.000Z';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      "".cxl5h6l = 00:17:37
+      ""."!lf|D(A" = "2002-04-23T00:00:00.000Z"
+    ` + '\n');
+  });
+
+  test('editing a time-only value into a date keeps the date (seed 2583)', () => {
+    const src = dedent`
+      [[qs8lo_a]]
+      dp6t.uhds = 18:06:01
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.qs8lo_a[0].dp6t = new Date('2036-10-16T00:00:00.000Z');
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[qs8lo_a]]
+      dp6t = 2036-10-16T00:00:00.000Z
+    ` + '\n');
+  });
+
+  test('removing the last child of a dotted key in an inline table keeps the empty inline table (seed 2726)', () => {
+    const src = dedent`
+      e.kze = { paq1pnm_.gpucau8w07."{qXi pf" = 2081-09-08 }
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.e.kze.paq1pnm_;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      e.kze = {}
+    ` + '\n');
+  });
+
+  test('removing a dotted key also removes its longer sibling segments (seed 2926)', () => {
+    const src = dedent`
+      [[c38az_8-.OCq]]
+      kl98l94l = 02:17:12.89
+      l.l = "Z^G:B1mn+m<{H{soK&wO]HQ9O>[R}0G2k_=yI!uqpS-<R/YKI"
+      l.utc.xme7 = 734_926
+      yp7.si6_r."LL}~=*NuC" = -40986000000000356972
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj['c38az_8-'].OCq[0].l;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[c38az_8-.OCq]]
+      kl98l94l = 02:17:12.89
+      yp7.si6_r."LL}~=*NuC" = -40986000000000356972
+    ` + '\n');
+  });
+
+  test('renaming the last segment of a dotted key keeps the prefix (seed 3214)', () => {
+    const src = dedent`
+      [[ir.hfh1c4]]
+      y3.mklbjj.kb16my_18h = true
+    ` + '\n';
+    const obj = parse(src) as any;
+    const entry = obj.ir.hfh1c4[0].y3.mklbjj;
+    entry.k30 = entry.kb16my_18h;
+    delete entry.kb16my_18h;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[ir.hfh1c4]]
+      y3.mklbjj.k30        = true
+    ` + '\n');
+  });
+
+  test('replacing an array-of-tables with a plain array keeps the key (seed 3333)', () => {
+    const src = dedent`
+      [[rxhh_-guv5.cj.na92rw23n]]
+      d = inf
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj['rxhh_-guv5'].cj.na92rw23n = [new Date('2000-06-07T00:00:00.000Z')];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [rxhh_-guv5.cj]
+      na92rw23n = [ 2000-06-07T00:00:00.000Z ]
+    ` + '\n');
+  });
+
+  test('deleting a root key also removes section siblings sharing its prefix (seed 3392)', () => {
+    const src = dedent`
+      ev0 = true
+      "".p6ydtm-s8 = "L3y"
+      [["". ":?bsQ+"]]
+      x = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj[''];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      ev0 = true
+    ` + '\n');
+  });
+
+  test('deleting a root key removes section siblings even with no dotted KV (seed 3463)', () => {
+    const src = dedent`
+      ev0 = true
+      ["". "aV^16c\`G"]
+      a = 1
+      [["".ijq3]]
+      b = 2
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj[''];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      ev0 = true
+    ` + '\n');
+  });
+
+  test('truncating a dotted key to a scalar removes conflicting section siblings (seed 3607)', () => {
+    const src = dedent`
+      "".9UI.eu6kd2ym9 = 70864.16394
+      ["".y4ywkew]
+      a = 1
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj[''] = -4201;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      "" = -4201
+    ` + '\n');
+  });
+
+  test('adding into a multiline inline table whose brace shares the last row keeps it inside (seed 3632)', () => {
+    const src = dedent`
+      [[ildq2.g08p]]
+      "~<i".js-uda0fp0 = {
+          a = 1,
+          b = [
+              2,
+          ] }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.ildq2.g08p[0]['~<i']['js-uda0fp0'].c = 3;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[ildq2.g08p]]
+      "~<i".js-uda0fp0 = {
+          a = 1,
+          b = [
+              2,
+          ], c = 3 }
+    ` + '\n');
+  });
+
+  test('editing then truncating an inline array keeps the closing bracket (seed 3780)', () => {
+    const src = dedent`
+      lynqrjp5 = { lxt = [[], true, 0x7253b, 755_394], gt53.ho = 0o076124 }
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.lynqrjp5.lxt[2] = -3125;
+    obj.lynqrjp5.lxt.length = 3;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      lynqrjp5 = { lxt = [[], true, -3125], gt53.ho = 0o076124 }
+    ` + '\n');
+  });
+
+  test('materialising an emptied dotted parent under a table stays below the parent rows (seed 4402)', () => {
+    const src = dedent`
+      [kx5z9sjjgp.".(o<1RF&v".mia_m]
+      g5yv2z2."(X" = 821968
+      dykv.svbuxq37tb = 91929
+      d4jl5.mi = 521_854
+      vsqdcqeko.k3i5l."" = true
+      v.lw85f.vrxc00y = -54296.21447
+    ` + '\n';
+    const obj = parse(src) as any;
+    delete obj.kx5z9sjjgp['.(o<1RF&v'].mia_m.dykv.svbuxq37tb;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [kx5z9sjjgp.".(o<1RF&v".mia_m]
+      g5yv2z2."(X" = 821968
+      d4jl5.mi = 521_854
+      vsqdcqeko.k3i5l."" = true
+      v.lw85f.vrxc00y = -54296.21447
+
+      [kx5z9sjjgp.".(o<1RF&v".mia_m.dykv]
+    ` + '\n');
+  });
+
+  test('removing a scalar from a multiline inline array keeps the multiline string intact (seed 4765)', () => {
+    const src = 'ie7 = ["a", 1, 2, 29780.85246, "jgl", { k = """\n=F\nsK\nTijp\nb *8#fBchs>""" }]\n';
+    const obj = parse(src) as any;
+    obj.ie7.splice(3, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('ie7 = ["a", 1, 2, "jgl", { k = """\n=F\nsK\nTijp\nb *8#fBchs>""" }]\n');
+  });
+
+  test('emptying a multiline inline array keeps the closing bracket on the array row (seed 5522)', () => {
+    // The only item starts on the array's own bracket line, so its span
+    // includes that line; the removal offset used to drag the closing
+    // bracket into the previous row ("2057]09-23").
+    const src = '")k".sz1ttzn = 2057-09-23T12:58:41Z\necq = ["""\n%eFd&xC>@A*t}\nZNI\n\n:r|:]&S*(/^zd`wc"""]\n';
+    const obj = parse(src) as any;
+    obj.ecq.length = 0;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('")k".sz1ttzn = 2057-09-23T12:58:41Z\necq = []\n');
+  });
+
+  test('emptying a multiline inline table whose only key starts on the brace line tightens to {} (seed 5522 variant)', () => {
+    const src = '")k".sz1ttzn = 2057-09-23T12:58:41Z\nmt = { a = 1,\n}\n';
+    const obj = parse(src) as any;
+    delete obj.mt.a;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('")k".sz1ttzn = 2057-09-23T12:58:41Z\nmt = {}\n');
+  });
+
+  test('adding an AOT entry with a nested object keeps the nested table under the entry key (seed 6746)', () => {
+    // The regenerated entry was parsed standalone, so its nested section
+    // carried the local key `[k79]` — which re-parses as a ROOT table,
+    // detaching it from the new entry.
+    const src = '[[d6r6.p]]\nn2119ollj = false\n"^hQ".ch = true\n';
+    const obj = parse(src) as any;
+    obj.d6r6.p.unshift({ k39: 381, k79: { k89: 1347, k93: '2003-06-06T00:00:00.000Z' }, k44: '2WRIF ' });
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[[d6r6.p]]\nk39 = 381\nk44 = "2WRIF "\n\n[d6r6.p.k79]\nk89 = 1347\nk93 = "2003-06-06T00:00:00.000Z"\n\n[[d6r6.p]]\nn2119ollj = false\n"^hQ".ch = true\n');
+  });
+
+  test('replacing a table with a scalar extends the dotted key when the parent is implicit (seed 6803)', () => {
+    // The parent "" table is only implicit (`"".nfh`), so re-emitting a
+    // `[""]` header would fail with "Implicit table already defined"; the
+    // replacement must be a dotted KV, and it must stay in the root table
+    // instead of being captured by a preceding section header.
+    const src = '"".nfh = 469650\n\n[l6n1z.f]\n\n[""."61o;$k"]\nkg = 40604.71363\n';
+    const obj = parse(src) as any;
+    obj['']['61o;$k'] = -428.2192816026509;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('"".nfh = 469650\n"".\"61o;$k\" = -428.2192816026509\n\n[l6n1z.f]\n');
+  });
+
+  test('replacing a nested object under an AOT entry with a scalar removes the old sub-sections (seed 6409)', () => {
+    // The path carries the entry's numeric index, which document-level keys
+    // never do — the old sub-[[array]] survived the rebuild and collided
+    // with the new value ("Cannot add Array of Tables to table").
+    const src = 'Zi = 1\n[[""]]\n"EY,?z%" = 990e-10\n[["".":h9q=2`aO".oqu]]\nk = 1\n';
+    const obj = parse(src) as any;
+    obj[''][0][':h9q=2`aO'] = 'iumXK';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('Zi = 1\n[[""]]\n"EY,?z%" = 990e-10\n":h9q=2`aO" = "iumXK"\n');
+  });
+
+  test('deleting an AOT and replacing a later AOT with a scalar keeps positions sane (seed 7379)', () => {
+    // The emptied AOT was materialised in place while its inner-row removals
+    // still had pending offsets; the later structural edit's gap arithmetic
+    // then over-shifted the remaining sections above line 1.
+    const src = 'lo = 1\n[[s.u1fhw.htzs]]\nuscet4 = 44241.85347\nqj = -5831.79776\n[[yft.aw3axx.o-3hmn]]\nu1ckvoz."".dzb00402i = 2086-04-27\n[[y-g]]\nw7e = 1\n';
+    const obj = parse(src) as any;
+    delete obj.s.u1fhw.htzs;
+    obj.yft.aw3axx['o-3hmn'] = 9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('lo = 1\n\n[yft]\naw3axx = { o-3hmn = 9 }\n[s.u1fhw]\n[[y-g]]\nw7e = 1\n');
+  });
+
+  test('extending a dotted key shifts the inline-table value rows with the key (seed 7443)', () => {
+    // Extending `rrjd = {…}` into `"".rrjd = {…}` only shifted the value
+    // container, leaving its inner row behind to overwrite the `{`.
+    const src = '"".hrw.aa = 1974-09-04\n[["".rrjd.oypetl]]\ne10 = "x"\n';
+    const obj = parse(src) as any;
+    obj['']['rrjd']['oypetl'] = 9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('"".hrw.aa = 1974-09-04\n"".rrjd = { oypetl = 9 }\n');
+  });
+
+  test('removing a scalar from an array of multiline-delimited strings keeps the rows intact (seed 8512)', () => {
+    // The strings' VALUES are single-line — only their `"""` delimiters
+    // span rows — so the diff produced a Move chain that relocated the
+    // multiline elements and mangled a nested datetime.
+    const src = 'd6xdeuwdq."a@" = [\n  [405_276, 24084.46770, """\n<K}-|i*iA%r/""", [0o6, false, 1978-12-02, true, """\n>b#ufvG1>O0""", 12:07:06.526966, -57678.90931], """\nwtV+6np[K189t&""", 0x4],\n]\n';
+    const obj = parse(src) as any;
+    obj.d6xdeuwdq['a@'][0].splice(1, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('d6xdeuwdq."a@" = [\n  [405_276, """\n<K}-|i*iA%r/""", [0o6, false, 1978-12-02, true, """\n>b#ufvG1>O0""", 12:07:06.526966, -57678.90931], """\nwtV+6np[K189t&""", 0x4],\n]\n');
+  });
+
+  test('editing and truncating the bracket-row tail of a multiline inline array keeps the bracket (seed 10469)', () => {
+    // The edit left a pending column offset on the new last item; removing
+    // the old last item folded it into a huge shift that dragged the
+    // closing bracket before the surviving tail.
+    const src = 'skc4zmino = [22136, [\n    \'\'\'\n(r8XJB!Yj/XyVxt1\n@Mib\'\'\',\n    false,\n    true,\n    false,\n    false,\n    "!8y",\n    46838.23739,\n], \'-x\', 979896, true, 0b0000000011110, 658559]\n';
+    const obj = parse(src) as any;
+    obj.skc4zmino.splice(5, 1);
+    obj.skc4zmino[5] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('skc4zmino = [22136, [\n    \'\'\'\n(r8XJB!Yj/XyVxt1\n@Mib\'\'\',\n    false,\n    true,\n    false,\n    false,\n    "!8y",\n    46838.23739,\n], \'-x\', 979896, true, false]\n');
+  });
+
+  test('materialising an emptied dotted parent under a table nested in an AOT keeps the full key (seed 10533)', () => {
+    // The table `[y.sl4."m{sHnZ"]` sits inside a [[y]] entry, so the
+    // absolute path carries the entry index; slicing by the key length
+    // alone left a duplicate segment in the materialised header.
+    const src = '[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\nvk.dj8es9 = 0o363511\n';
+    const obj = parse(src) as any;
+    delete obj.y[0].sl4['m{sHnZ'].vk.dj8es9;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\n\n[y.sl4."m{sHnZ".vk]\n');
+  });
+
+  test('truncating an empty-string dotted key inside an inline table drops extending sibling rows (seeds 11480, 11799)', () => {
+    // Setting `""` to a scalar truncates the `"".dj9.hi7` row; the sibling
+    // `"".2U]0!Rr([{` row must go too, or the re-parse sees two `""` keys.
+    const src = 'g5we.m.fk0 = { "".dj9.hi7 = 1, ""."2U]0!Rr([{" = 2 }\n';
+    const obj = parse(src) as any;
+    obj.g5we.m.fk0[''] = -1317.3668063245714;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('g5we.m.fk0 = { "" = -1317.3668063245714 }\n');
+  });
+
+  test('truncating a dotted key in a nested inline table drops extending sibling rows (seed 11627)', () => {
+    // The container of the rows is an inline table wrapped by an InlineItem;
+    // the sibling scan must unwrap through the wrapper to see the rows.
+    const src = 'gve = { "5wu[/?=h4"."/uHK&4Y8N" = { "gx/HY[Su,." = false, r."" = 1, r.r2_nxfy88j = 803_452 } }\n';
+    const obj = parse(src) as any;
+    obj.gve['5wu[/?=h4']['/uHK&4Y8N'].r = 'UTjMiCvj2TedF3i5pDM';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('gve = { "5wu[/?=h4"."/uHK&4Y8N" = { "gx/HY[Su,." = false, r = "UTjMiCvj2TedF3i5pDM" } }\n');
+  });
+
+  test('replacing the value of a dotted-KV inline table row drops conflicting empty-key siblings (seed 11480)', () => {
+    // The rows live in a dotted-key KV whose value is the inline table —
+    // the sibling scan must unwrap through the KV to find them.
+    const src = 'i0o-csev.ljw_chub."&$_kB+" = { "".qkghjs82 = -2323.46, ""."%>?!<" = 92499 }\n';
+    const obj = parse(src) as any;
+    obj['i0o-csev'].ljw_chub['&$_kB+'][''] = 42;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('i0o-csev.ljw_chub."&$_kB+" = { "" = 42 }\n');
+  });
+
+  test('re-adding a key at index 0 after removing the first dotted KV flushes the pending enter offset (seed 11557)', () => {
+    // The removal of the first document item leaves a pending enter offset
+    // on the Document; inserting the new dotted KV at index 0 without
+    // flushing dragged it to line -1.
+    const src = 'bi4uus.huofmuw7v = 1\n';
+    const obj = parse(src) as any;
+    delete obj.bi4uus.huofmuw7v;
+    obj.bi4uus.k60 = 'tqW';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('bi4uus.k60 = "tqW"\n');
+  });
+
+  test('materialising an emptied implicit parent as the last document item clamps the insert index (seed 11605)', () => {
+    // Removing the final `[ib.cf_d]` section left a stale index that
+    // inserted the generated `[ib]` header past the end of the document,
+    // stranding it at its (1,0) origin and overwriting line 1.
+    const src = 'a = 1\n[ib.cf_d]\nx = 2\n';
+    const obj = parse(src) as any;
+    delete obj.ib.cf_d;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('a = 1\n[ib]\n');
+  });
+
+  test('removing the last array item after editing its predecessor keeps the bracket gap (seed 12237)', () => {
+    // The Edit left a pending column offset on the new previous item; the
+    // removal's end-to-end gap measured against the still-stale removed
+    // item and spliced text over a neighbouring string.
+    const src = 'wuu-qq.se5ev = [false, "kK)3,il5u;@bQ8=PH1ay", ["<I7s", \'+&}{rd\'], false]\n';
+    const obj = parse(src) as any;
+    const a = obj['wuu-qq'].se5ev;
+    a[2].splice(0, 1);
+    a[2][0] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('wuu-qq.se5ev = [false, "kK)3,il5u;@bQ8=PH1ay", [false], false]\n');
+  });
+
+  test('collapsing a multiline array element to a scalar with sibling edits keeps the closing bracket (seed 12894)', () => {
+    // The first element (a multiline array) was replaced by a scalar, the
+    // second by `[]`, and the third removed; the outer bracket's position
+    // was derived from stale offsets and landed inside the array.
+    const src = 'f = [["a", """\nX"""], -488883, \'z\']\n';
+    const obj = parse(src) as any;
+    obj.f = [2093, []];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('f = [2093, []]\n');
+  });
+
+  test('editing a nested dotted key under an echoing table key truncates only the row segments (seed 13057)', () => {
+    // The path ['mbe','',''] carries the [mbe.""] header's own key; matching
+    // the key prefix against those segments once truncated the row
+    // `"".""."mfn31vru"` to `"".""` instead of `""`, nesting the value one
+    // level too deep.
+    const src = '[mbe.""]\n"".""."mfn31vru" = 0o5514\n';
+    const obj = parse(src) as any;
+    obj.mbe[''][''] = 'F81M5dd6QCL2x';
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('[mbe.""]\n"" = "F81M5dd6QCL2x"\n');
+  });
+
+  test('removing a multiline inline-table row keeps the tail rows aligned (seed 14262)', () => {
+    // The removed row's value spans several lines; its next sibling starts
+    // on the row's END line.  The removal's column shift was keyed to the
+    // trigger line and never reached the tail rows, which slid up over the
+    // earlier rows; two emptied-parent materialisations in one batch then
+    // mispositioned the rows after the second replacement.
+    const src = `fo2i.X.bp-nt = { j620-i."6/A8b" = '''
+abc
+def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
+`;
+    const obj = parse(src) as any;
+    delete obj['fo2i'].X['bp-nt']['j620-i']['6/A8b'];
+    delete obj['fo2i'].X['bp-nt'].r9cq39r657['@#ft7'];
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`fo2i.X.bp-nt = { j620-i = {},  r9cq39r657 = {}, ZilE9tvZ = 1 }
+`);
+  });
+
+  test('replacing a multiline array element keeps moved inline-table row separators (seed 16552)', () => {
+    // Replacing the first element (a multiline string) shifts the array's
+    // remaining items; the moved inline table's interior rows that follow a
+    // multiline string are anchored to the string's END, so a rigid shift
+    // closed the gap and the separator comma was overwritten (`'''jfj...`).
+    const src = `d."" = ['''
+K(2[v
+:o;''', -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
+O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
+`;
+    const obj = parse(src) as any;
+    obj.d[''][0] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`d."" = [false, -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
+O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
+`);
+  });
+
+  test('removing the first element of a shared-line array with nested arrays realigns the tail (seed 16034)', () => {
+    // The span-based perLine() test misread the container as per-line (its
+    // nested array inflates the span), so the tail realignment was skipped
+    // and the moved elements' column offsets drifted — the element after
+    // the moved string lost its `, ` separator.
+    const src = `"BiVX3?#K".f9 = [true, '''
+ /YtT%
+89i]n8d?
+dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
+`;
+    const obj = parse(src) as any;
+    obj['BiVX3?#K'].f9.splice(0, 1);
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(`"BiVX3?#K".f9 = ['''
+ /YtT%
+89i]n8d?
+dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
+`);
+  });
+
 });
+
+
+//WIP 
+test.fails('multiline empty array', () => {
+  const src = dedent`
+    [metadata]
+    version = "1"
+
+    [root]
+    name = "AddinPeer"
+    dependencies = [
+    ]
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.dependencies = ["new-dependency"]; // Example modification for the test
+
+  const result = patch(src, obj, { inlineTableStart: 0, updateOrder: true });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [metadata]
+    version = "1"
+
+    [root]
+    name = "AddinPeer"
+    dependencies = [
+      "new-dependency"
+    ]
+    `);
+});
+

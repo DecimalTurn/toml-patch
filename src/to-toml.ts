@@ -17,7 +17,10 @@ import {
   InlineArray,
   InlineTable,
   InlineItem,
-  Comment
+  Comment,
+  hasItems,
+  isKeyValue,
+  isInlineItem
 } from './cst';
 import { Location } from './location';
 import { SPACE } from './tokenizer';
@@ -157,7 +160,32 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
 
   // Post-process: convert leading spaces to tabs if useTabsForIndentation is enabled
   if (format.useTabsForIndentation) {
+    // Lines belonging to multiline string literals are VALUE content — the
+    // indentation there is part of the string and must not be converted
+    // (fuzz seed 70).  The opening-delimiter line may carry structural
+    // indentation, but every line from the first content line through the
+    // closing delimiter is untouchable.
+    const contentLines = new Set<number>();
+    const collectStringLines = (node: TreeNode) => {
+      if (node.type === NodeType.String && node.loc.end.line > node.loc.start.line) {
+        for (let l = node.loc.start.line + 1; l <= node.loc.end.line; l++) {
+          contentLines.add(l);
+        }
+      }
+      if (hasItems(node)) {
+        for (const item of node.items as TreeNode[]) collectStringLines(item);
+      }
+      if (isKeyValue(node)) collectStringLines(node.value);
+      if (isInlineItem(node)) collectStringLines(node.item);
+    };
+    if (isIterable(cst)) {
+      for (const item of cst) collectStringLines(item as TreeNode);
+    } else {
+      collectStringLines(cst as unknown as TreeNode);
+    }
+
     for (let i = 0; i < lines.length; i++) {
+      if (contentLines.has(i + 1)) continue;
       const line = lines[i];
       // Find the leading whitespace
       const match = line.match(/^( +)/);

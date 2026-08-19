@@ -42,9 +42,31 @@ const CH_LBRACE = 0x7b;
 const CH_RBRACE = 0x7d;
 const CH_DEL = 0x7f;
 
-export function* tokenize(input: string): IterableIterator<Token> {
+/**
+ * Mutable scan state used to detect mixed line endings while tokenizing.
+ * The tokenizer updates this as it encounters newlines, so no second pass
+ * over the input is required.
+ */
+export interface NewlineScanState {
+  /** The first newline style seen, used as the reference for the document. */
+  reference: '\n' | '\r\n' | null;
+  /** True once a newline style different from the reference is encountered. */
+  mixed: boolean;
+}
+
+/** Creates an empty newline scan state for use with tokenize(). */
+export function createNewlineScanState(): NewlineScanState {
+  return { reference: null, mixed: false };
+}
+
+export function* tokenize(input: string, newlineState?: NewlineScanState): IterableIterator<Token> {
   const len = input.length;
   let pos = 0;
+
+  // Tracks mixed line endings without an extra pass: the first newline seen
+  // sets the reference style and any later newline of the other style flags
+  // the document as mixed.
+  const nlState = newlineState ?? createNewlineScanState();
 
   // Build line index incrementally as we scan, instead of a separate
   // upfront findLines pass. Records newline positions in the main loop
@@ -82,8 +104,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
     if (code === CH_SPACE || code === CH_TAB || code === CH_CR) {
       // skip non-newline whitespace (CR is part of CRLF; LF will be next)
     } else if (code === CH_LF) {
-      // Record newline position for incremental line index
-      lines.push(pos);
+      recordNewline(pos);
     } else if (code === CH_LBRACKET || code === CH_RBRACKET) {
       yield { type: TokenType.Bracket, raw: input[pos], loc: locate(pos, pos + 1) };
     } else if (code === CH_LBRACE || code === CH_RBRACE) {
@@ -112,6 +133,19 @@ export function* tokenize(input: string): IterableIterator<Token> {
   }
 
   // ── Helper closures (capture pos by reference) ──────────────────────
+
+  // Records a LF position in the incremental line index and updates the
+  // mixed-newline scan state: the first style seen becomes the reference
+  // and any later newline of the other style flags the document as mixed.
+  function recordNewline(lfPos: number) {
+    lines.push(lfPos);
+    const style: '\n' | '\r\n' = lfPos > 0 && input.charCodeAt(lfPos - 1) === CH_CR ? '\r\n' : '\n';
+    if (nlState.reference === null) {
+      nlState.reference = style;
+    } else if (nlState.reference !== style) {
+      nlState.mixed = true;
+    }
+  }
 
   function comment(): Token {
     const start = pos;
@@ -220,7 +254,7 @@ export function* tokenize(input: string): IterableIterator<Token> {
 
       // Record newlines inside multiline strings for incremental line index
       if (cc === CH_LF) {
-        lines.push(pos);
+        recordNewline(pos);
       }
 
       pos++;

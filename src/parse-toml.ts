@@ -18,10 +18,11 @@ import {
   CST,
   Block
 } from './cst';
-import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE } from './tokenizer';
+import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation } from './location';
+import { clonePosition, cloneLocation, Location } from './location';
+import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
 
 import {
@@ -250,9 +251,9 @@ export {
   DateFormatHelper
 } from './date-format';
 
-export default function* parseTOML(input: string): CST {
+export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
-  const cursor = new Cursor(tokenize(input));
+  const cursor = new Cursor(tokenize(input, newlineState));
   
   while (!cursor.next().done) {
     const blocks = walkBlock(cursor, input);
@@ -579,11 +580,16 @@ function datetime(cursor: Cursor<Token>, input: string): DateTime {
   let value: Date;
 
   // If next token is string,
-  // check if raw is full date and following is full time
+  // check if raw is full date and following is full time.
+  // The following token must be a BARE time literal (starting with a digit):
+  // `IS_FULL_TIME` is unanchored, so a quoted key like `"Bo5:6"` whose raw
+  // contains `5:6` would otherwise be read as a time and merged into the
+  // date, producing an invalid datetime (fuzz seed 40593).
   if (
     !cursor.peek().done &&
     cursor.peek().value!.type === TokenType.Literal &&
     dateFormatHelper.IS_FULL_DATE.test(raw) &&
+    /^\d/.test(cursor.peek().value!.raw) &&
     dateFormatHelper.IS_FULL_TIME.test(cursor.peek().value!.raw)
   ) {
     const start = loc.start;
@@ -1304,6 +1310,25 @@ function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment>
   }
 }
 
+/**
+ * Measures the horizontal gap a separating comma occupies between two adjacent
+ * inline siblings: 1 for a compact list (`[1,2]`), 2 for a spaced list
+ * (`[1, 2]`).  Stored on the container at parse time because the writer needs
+ * this original spacing later, long after the items' own positions have been
+ * shifted by pending edits.
+ */
+function detectCommaSpace(items: { loc: Location }[]): number | undefined {
+  for (let i = 1; i < items.length; i++) {
+    const prev = items[i - 1];
+    const next = items[i];
+    if (prev.loc.end.line === next.loc.start.line) {
+      const gap = next.loc.start.column - prev.loc.end.column;
+      if (gap >= 1) return gap;
+    }
+  }
+  return undefined;
+}
+
 function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
@@ -1399,6 +1424,10 @@ function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Commen
   }
 
   value.loc.end = cursor.value!.loc.end;
+  {
+    const gap = detectCommaSpace(value.items);
+    if (gap !== undefined) setCommaSpace(value, gap);
+  }
   return [value, comments];
 }
 
@@ -1484,5 +1513,9 @@ function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Commen
   }
 
   value.loc.end = cursor.value!.loc.end;
+  {
+    const gap = detectCommaSpace(value.items);
+    if (gap !== undefined) setCommaSpace(value, gap);
+  }
   return [value, comments];
 }

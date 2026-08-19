@@ -526,6 +526,40 @@ describe('updateOrder warnings when a requested position could not be honored', 
     spy.mockRestore();
   });
 
+  // FIXME(seed 3214): reordering dotted-key implicit tables inside an
+  // array-of-tables entry is currently unsupported (updateOrder resolves the
+  // move's path -- which carries the numeric AOT index `a.0.y3.mklbjj.k99` --
+  // to no container and leaves it unchanged, emitting an "unsupported
+  // location" warning).  There is no user-facing reason the two keys can't be
+  // swapped in place; the expected behaviour is a real reorder with no
+  // warning.  Tracked as a known-failing test until the capacity is added.
+  test.fails('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [[a]]
+      y3.mklbjj.k36 = 1
+      y3.mklbjj.k99 = 2
+    ` + '\n';
+
+    try {
+      const result = patch(
+        input,
+        { a: [{ y3: { mklbjj: { k99: 9, k36: 1 } } }] },
+        { updateOrder: true }
+      );
+
+      expect(result).toEqual(dedent`
+        [[a]]
+        y3.mklbjj.k99 = 9
+        y3.mklbjj.k36 = 1
+      ` + '\n');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test('warns when the requested order violates the root-KV/section validity partition', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

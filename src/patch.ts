@@ -33,13 +33,13 @@ import {
   isDateTime
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
-import findByPath, { tryFindByPath, findParent } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset } from './writer';
+import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
-import { IS_BARE_KEY } from './tokenizer';
+import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
@@ -69,11 +69,22 @@ import traverse from './traverse';
  * @returns A new TOML string with the changes applied
  */
 export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing)));
+  // The tokenizer flags mixed line endings as it scans, so this requires no
+  // separate pass over the input.
+  const newlineState = createNewlineScanState();
+  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing), newlineState));
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
   const fmt = resolveTomlFormat(format, autoDetectedFormat);
+
+  if (newlineState.mixed) {
+    const normalized = fmt.newLine === '\r\n' ? 'CRLF' : 'LF';
+    console.warn(
+      `toml-patch: Mixed line endings detected. ` +
+      `Line endings in the output will be normalized to ${normalized}`
+    );
+  }
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
@@ -92,6 +103,27 @@ function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
     if (hasTemporal(v, seen)) return true;
   }
   return false;
+}
+
+/**
+ * Length of the existing dotted key's prefix that the edit path matches.
+ * Only the path's RELATIVE tail (past the key's container) is eligible:
+ * the absolute path carries the container's own key segments (e.g. the
+ * [mbe.""] header consumes ['mbe',''] before the row key), and matching
+ * against those keeps extra key segments when the container's key echoes
+ * the row's — editing `mbe[""][""]` once truncated the row
+ * `"".""."mfn31vru"` to `"".""` instead of `""` (fuzz seed 13057).
+ */
+function truncationMatchLen(changePath: Path, existingKey: string[], containerAbsLen: number): number {
+  const relPath = changePath.slice(containerAbsLen);
+  let matchLen = 0;
+  const max = Math.min(relPath.length, existingKey.length);
+  for (let i = 1; i <= max; i++) {
+    if (arraysEqual(relPath.slice(relPath.length - i), existingKey.slice(0, i))) {
+      matchLen = i;
+    }
+  }
+  return matchLen;
 }
 
 /** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
@@ -293,14 +325,43 @@ function reorder(changes: Change[]): Change[] {
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i];
     if (isRemove(change)) {
+      // The array this Remove targets, and the Remove's own index within it.
+      const aIdx = last(change.path);
+      const aPrefix = change.path.slice(0, -1);
       let j = i + 1;
       while (j < changes.length) {
         const next_change = changes[j];
+
+        // A Remove emitted AFTER a same-array Add or Move is in post-shift
+        // (sequential) coordinates: the Add changed the array's length and the
+        // Move changed the element order, so hoisting the Remove back across
+        // that barrier would apply its index to the wrong element (fuzz seed
+        // 1137525: `Remove[1], Add[2], Add[3], Remove[6]` must keep Remove[6]
+        // after the Adds, where index 6 is the surplus duplicate, not the
+        // source index 6).  Same-array Edits are length-preserving, so they are
+        // safe to cross (fuzz seed 50448), and Adds/Moves in a DIFFERENT array
+        // context do not shift this one (fuzz seeds 84522/473477) — so only a
+        // same-array Add or Move forms a barrier.
+        if (isAdd(next_change)) {
+          const bIdx = last(next_change.path);
+          if (typeof bIdx === 'number' && arraysEqual(aPrefix, next_change.path.slice(0, -1))) {
+            break;
+          }
+          j++;
+          continue;
+        }
+        // Object-key Moves (`updateOrder`, key set) reorder object members, not
+        // array elements, so they never shift this array's indices.
+        if (isMove(next_change) && next_change.key === undefined) {
+          if (arraysEqual(aPrefix, next_change.path)) {
+            break;
+          }
+          j++;
+          continue;
+        }
         if (!isRemove(next_change)) { j++; continue; }
 
-        const aIdx = last(change.path);
         const bIdx = last(next_change.path);
-        const aPrefix = change.path.slice(0, -1);
         const bPrefix = next_change.path.slice(0, -1);
 
         // Same array context AND higher index should come first.
@@ -405,14 +466,35 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     for (const key of prefix) value = value?.[key];
     if (!Array.isArray(value)) continue;
 
-    const staysAllObjects = value.every(el => el !== null && typeof el === 'object' && !Array.isArray(el));
+    // The array no longer holds only AOT-shaped entries once ANY element is a
+    // scalar / array / date / Temporal — `isObject` already excludes those.
+    // (A bare `typeof el === 'object'` check wrongly kept Dates as "objects",
+    // so `[[x]]` → `[date1, date2]` was missed and the redundant per-element
+    // Add double-added the tail — fuzz seed 86724.)
+    const staysAllObjects = value.every(el => isObject(el));
     if (staysAllObjects) continue;
 
-    for (const change of changes) {
-      if (consumed.has(change)) continue;
-      if (!isEdit(change) && !isAdd(change) && !isRemove(change)) continue;
-      if (change.path.length !== prefix.length + 1) continue;
-      if (!arraysEqual(change.path.slice(0, -1), prefix)) continue;
+    // Only coalesce when the diff actually split the replacement across
+    // multiple element-level changes (e.g. Edit[0] + Add[1]).  A single Edit
+    // (e.g. `[[a.b.c]]` → `[date]`) is handled correctly by the
+    // isTableArray(existing) branch, which re-renders the parent as a proper
+    // `[section]` header — collapsing it here would instead route through
+    // handleStructuralEdit and flatten it to an inline table (fuzz seed 3333).
+    // Element-level changes include both entry adds/edits (path `prefix+[i]`)
+    // and edits nested INSIDE an entry (path `prefix+[i, key]`): a mixed array
+    // like `[{…}, -4619]` diffs as `Add[1]` plus per-key edits under entry 0,
+    // and counting only the direct children (prefix.length + 1) missed the
+    // nested edits, leaving the scalar entry to be re-materialised as an empty
+    // AOT row (fuzz seed 136865).
+    const elementChanges = changes.filter(c =>
+      !consumed.has(c)
+      && (isEdit(c) || isAdd(c) || isRemove(c))
+      && c.path.length > prefix.length
+      && arraysEqual(c.path.slice(0, prefix.length), prefix)
+    );
+    if (elementChanges.length < 2) continue;
+
+    for (const change of elementChanges) {
       consumed.add(change);
     }
     coalescedEdits.push({ type: ChangeType.Edit, path: prefix });
@@ -468,6 +550,15 @@ function preserveFormatting(existing: Value, replacement: Value): void {
       replacement.raw = raw;
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
       // Keep the Temporal object as the value — it will serialize correctly.
+    } else if (DateFormatHelper.IS_TIME_ONLY.test(originalRaw)
+        && newValue instanceof Date && newValue.getUTCFullYear() > 1) {
+      // The existing value is a bare local time, but the replacement carries
+      // a real date component that a time-only format cannot represent.
+      // Converting would silently drop the date (fuzz seed 2583: an implicit
+      // table `dp6t.uhds = 18:06:01` truncated to `dp6t = 2036-10-16` came
+      // back as `00:00:00`).  Keep the replacement's own formatting instead.
+      // Time-only values are represented internally as Date objects with
+      // year 0000, so year > 1 reliably separates real dates from bare times.
     } else {
       // Create a new date with the original format preserved
       const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
@@ -498,7 +589,17 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
     if (replacement.items.length > 0) {
       const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
+      if (lastItem.comma !== originalHadTrailingCommas) {
+        lastItem.comma = originalHadTrailingCommas;
+        // Adding a trailing comma widens the array by one column, but the
+        // regenerated/replacement value's `loc.end` was laid out for the
+        // comma-less form.  Without extending it, the closing `]` (written at
+        // `end.column - 1`) lands on the same column as the comma, colliding
+        // into `...,,` (fuzz seed 30330).
+        if (originalHadTrailingCommas) {
+          replacement.loc.end.column += 1;
+        }
+      }
     }
   }
   
@@ -507,7 +608,14 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     const originalHadTrailingCommas = tableHadTrailingCommas(existing);
     if (replacement.items.length > 0) {
       const lastItem = replacement.items[replacement.items.length - 1];
-      lastItem.comma = originalHadTrailingCommas;
+      if (lastItem.comma !== originalHadTrailingCommas) {
+        lastItem.comma = originalHadTrailingCommas;
+        // Same as the array case above: make room for the added comma before
+        // the closing `}`.
+        if (originalHadTrailingCommas) {
+          replacement.loc.end.column += 1;
+        }
+      }
     }
   }
 }
@@ -558,6 +666,231 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
     }
   }
+
+  // Compute the absolute lookup path of a node by walking the document tree.
+  // Used to tell whether findByPath matched a dotted KeyValue exactly or by
+  // key-prefix (the key is longer than the consumed path segments).
+  const absolutePathCache = new WeakMap<TreeNode, Path>();
+  function absolutePathOf(target: TreeNode): Path | undefined {
+    const cached = absolutePathCache.get(target);
+    if (cached !== undefined) return cached;
+    const indexes: Record<string, number> = {};
+    function walk(node: TreeNode, path: Path): Path | undefined {
+      if (node === target) return path;
+      if (isKeyValue(node)) return walk(node.value, path);
+      if (isInlineItem(node)) return walk(node.item, path);
+      if (!hasItems(node)) return undefined;
+      for (let i = 0; i < node.items.length; i++) {
+        const item = node.items[i];
+        let key: Path = [];
+        if (isKeyValue(item)) {
+          key = item.key.value;
+        } else if (isTable(item) || isTableArray(item)) {
+          key = item.key.item.value;
+          if (isTableArray(item)) {
+            const ks = stableStringify(key);
+            indexes[ks] = (indexes[ks] ?? -1) + 1;
+            key = key.concat(indexes[ks]);
+          }
+        } else if (isInlineItem(item)) {
+          if (isKeyValue(item.item)) {
+            key = item.item.key.value;
+          } else {
+            key = [i];
+          }
+        }
+        const full = key.length ? path.concat(key) : path;
+        const found = walk(item, full);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    const result = walk(original, []);
+    if (result !== undefined) absolutePathCache.set(target, result);
+    return result;
+  }
+
+  // findByPath returns a dotted KeyValue (or its InlineItem wrapper) when the
+  // probe path is a PREFIX of the key (the key is longer than the path). Such
+  // a match is not a real location: the node's value belongs to a different
+  // subtree, so Adds must resolve past it to the shared ancestor container.
+  function isPrefixMatchedNode(candidate: TreeNode, probe: Path): boolean {
+    const kv = isKeyValue(candidate)
+      ? candidate
+      : isInlineItem(candidate) && isKeyValue(candidate.item)
+        ? candidate.item
+        : undefined;
+    if (!kv) return false;
+    const keyLen = kv.key.value.length;
+    // The probe fully consumed the key's prefix and the key continues past
+    // it (e.g. ['ak'] matching key ['ak','k99']).
+    if (keyLen > probe.length) return true;
+    // An exact match consumes the key's own segments as the probe's tail —
+    // for nodes under an array-of-tables the absolute path carries the
+    // entry's numeric index, which the probe doesn't, so comparing absolute
+    // lengths misflags exact matches as prefix matches (fuzz seed 3632:
+    // adding under `js-uda0fp0` skipped the KV and inserted at the entry
+    // level, right after the closing `}` of the multiline inline table).
+    return !arraysEqual(kv.key.value, probe.slice(probe.length - keyLen));
+  }
+
+  // The immediate structural container holding `target` in its `.items`
+  // array — any container type (Document/Table/TableArray/InlineTable/
+  // InlineArray), descending through KeyValue values and InlineItem
+  // wrappers.  Used when path-based parent resolution lands on a container
+  // that doesn't physically contain the node (fuzz seed 50: a dotted KV
+  // inside an inline table that is itself an inline-array element).
+  function findStructuralParent(root: TreeNode, target: TreeNode): TreeNode | undefined {
+    function walk(node: TreeNode): TreeNode | undefined {
+      if (isKeyValue(node)) return walk(node.value);
+      if (isInlineItem(node)) return walk(node.item);
+      if (!hasItems(node)) return undefined;
+      const items = node.items as TreeNode[];
+      for (const item of items) {
+        if (item === target) return node;
+        if (isInlineItem(item) && item.item === target) return node;
+      }
+      for (const item of items) {
+        const found = walk(isInlineItem(item) ? item.item : item);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    return walk(root);
+  }
+
+  // A table/AOT replaced by a scalar whose PARENT key is expressed implicitly
+  // through dotted key-values (`"".nfh = …` defines the "" table without a
+  // header).  Re-emitting a `[""]` header would conflict with the implicit
+  // definition and fail the re-parse with "Implicit table already defined"
+  // (fuzz seed 6803).  Extend the fresh KV's key with the parent prefix and
+  // swap it in for the old section directly.
+  function extendKeyWithParentAndReplace(
+    freshKV: KeyValue,
+    parentKey: string[],
+    existing: TreeNode,
+    tableParent: TreeNode
+  ): void {
+    const dottedKey = parentKey.concat(freshKV.key.value);
+    const oldRaw = freshKV.key.raw;
+    freshKV.key.value = dottedKey;
+    freshKV.key.raw = dottedKey
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const delta = freshKV.key.raw.length - oldRaw.length;
+    freshKV.key.loc.end.column = freshKV.key.loc.start.column + freshKV.key.raw.length;
+    freshKV.equals += delta;
+    shiftNode(freshKV.value, { lines: 0, columns: delta }, { first_line_only: true });
+    if (freshKV.loc.end.line === freshKV.loc.start.line) {
+      freshKV.loc.end.column += delta;
+    }
+    replace(original, tableParent, existing, freshKV);
+    // The extended dotted KV belongs to the root table — once the old
+    // section header is gone, leaving it in place would bind it to the
+    // nearest surviving section above (fuzz seed 6803: it landed inside
+    // `[l6n1z.f]`).  Hoist it above the first section header.
+    hoistRootKeyValueAboveTables(original, freshKV);
+  }
+
+  // Extend a regenerated Table/TableArray section's key with a parent prefix
+  // IN PLACE: a `[[c]]` whose key carries only the last segment becomes
+  // `[[a.b.c]]` when `parentKey` is `['a','b']`.  A `[[c]]` child of a
+  // generated `[a.b]` header would otherwise fragment into a stray top-level
+  // section.  The section's items live on their own lines, so only the header
+  // key (not the item columns) needs shifting.
+  function extendSectionKeyInPlace(section: Table | TableArray, parentKey: string[]): void {
+    const keyNode = section.key.item;
+    const oldRaw = keyNode.raw;
+    const dottedKey = parentKey.concat(keyNode.value);
+    const newRaw = dottedKey
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const delta = newRaw.length - oldRaw.length;
+    keyNode.value = dottedKey;
+    keyNode.raw = newRaw;
+    keyNode.loc.end.column = keyNode.loc.start.column + newRaw.length;
+    if (section.key.loc.end.line === section.key.loc.start.line) {
+      section.key.loc.end.column += delta;
+    }
+  }
+
+  // Same as extendKeyWithParentAndReplace, but for a regenerated Table/TableArray
+  // section: when a `[a.b.c]` section (or `[[a.b.c]]`) is replaced by a fresh
+  // section whose key carries only the last segment (`[[c]]`), extend its key
+  // with the parent prefix IN PLACE so it re-renders as `[[a.b.c]]` (fuzz seed
+  // 41613).
+  function extendSectionKeyWithParentAndReplace(
+    section: Table | TableArray,
+    parentKey: string[],
+    existing: TreeNode,
+    tableParent: TreeNode
+  ): void {
+    extendSectionKeyInPlace(section, parentKey);
+    replace(original, tableParent, existing, section);
+  }
+
+  // When an Add's path traverses intermediate key segments that do not exist in the
+  // original document (their KV was removed by an earlier change in this same patch),
+  // findParent resolves to the nearest existing ancestor and the inserted child would
+  // keep only its own key — silently dropping the missing prefix.  Replacing
+  // `ak.b.c = 1` with `ak = { k99 = 1 }` would emit `k99 = 1` at the parent level
+  // (fuzz seed 4).  Extend the child's key with the missing segments instead.
+  // Returns a fresh KV to insert, or null when no extension is needed.
+  function restoreMissingKeySegments(parent_path: Path, child: KeyValue, change_path: Path): KeyValue | null {
+    const direct = tryFindByPath(original, parent_path);
+    if (direct && !isPrefixMatchedNode(direct, parent_path)) return null;
+
+    // Longest prefix of parent_path that resolves to a real location in the
+    // original document.  Prefix-matched dotted KVs don't count — they are the
+    // very situation we are restoring around.
+    let prefixLen = parent_path.length;
+    while (prefixLen > 0) {
+      const node = tryFindByPath(original, parent_path.slice(0, prefixLen));
+      if (node && !isPrefixMatchedNode(node, parent_path.slice(0, prefixLen))) break;
+      prefixLen--;
+    }
+    const missing = parent_path.slice(prefixLen) as string[];
+    if (missing.length === 0 || !missing.every(seg => typeof seg === 'string')) return null;
+
+    // The child's value comes from the updated document, whose coordinates are
+    // unrelated to the insertion target.  Regenerate it from the JS value with
+    // clean locs first (same discipline as the key-truncation branch in the Edit
+    // handler), then build a fresh KV with the extended dotted key.
+    if (rawUpdated !== undefined) {
+      let jsValue: any = rawUpdated;
+      for (const k of change_path) jsValue = jsValue?.[k];
+      if (jsValue !== undefined) {
+        const freshValue = regenerateValue(jsValue, format);
+        if (freshValue !== undefined) {
+          return generateKeyValue([...missing, ...child.key.value], freshValue);
+        }
+      }
+    }
+
+    // Fallback: extend the key in place and shift the value's first line right by
+    // the added width.  Later lines of a multiline value keep their absolute
+    // columns — insert() translates the whole subtree rigidly afterwards.
+    const oldKey = child.key;
+    const newRaw = [...missing, ...oldKey.value]
+      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+      .join('.');
+    const colDelta = newRaw.length - oldKey.raw.length;
+    oldKey.raw = newRaw;
+    oldKey.value = [...missing, ...oldKey.value];
+    oldKey.loc.end.column = oldKey.loc.start.column + newRaw.length;
+    child.equals += colDelta;
+    shiftNode(child.value, { lines: 0, columns: colDelta }, { first_line_only: true });
+    if (child.loc.end.line === child.loc.start.line) {
+      child.loc.end.column += colDelta;
+    }
+    return child;
+  }
+
+  // Containers that already received a KV whose key was extended by
+  // restoreMissingKeySegments.  A second such insert into the same container
+  // must resolve the first insert's pending offsets before measuring its target
+  // position, or the two rows overlap (fuzz seed 4).
+  const restoredInsertContainers = new Set<TreeNode>();
 
   // Multi-line inline containers already inserted into during this patch. The stale-position
   // problem only arises on the SECOND insertion into the same container, so this lets the
@@ -659,6 +992,28 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
           }
+          // The entry value was parsed standalone, so any [table]/[[array]]
+          // sections inside it carry their LOCAL keys (e.g. `[k79]` for
+          // `{ k79: { … } }`).  Inside the parent array-of-tables those
+          // headers must carry the full key (`[d6r6.p.k79]`), or they
+          // re-parse as root-level sections detached from the entry
+          // (fuzz seed 6746).
+          const prefixNestedSectionKeys = (node: TreeNode) => {
+            if (!hasItems(node)) return;
+            for (const item of node.items as TreeNode[]) {
+              if (!isTable(item) && !isTableArray(item)) continue;
+              const holder = item.key;
+              const keyNode = holder.item;
+              const fullKey = tableArrayKey.concat(keyNode.value);
+              keyNode.value = fullKey;
+              keyNode.raw = generateKey(fullKey).raw;
+              keyNode.loc.start.column = holder.loc.start.column + 1;
+              keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
+              holder.loc.end.column = keyNode.loc.start.column + keyNode.raw.length + 1;
+              prefixNestedSectionKeys(item);
+            }
+          };
+          prefixNestedSectionKeys(freshTableArray);
           applyWrites(freshTableArray);
           child = freshTableArray;
         }
@@ -680,11 +1035,57 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           index = document.items.indexOf(after);
         } else if (before) {
           index = document.items.indexOf(before) + 1;
+          // Appending a new entry must land after the PREVIOUS entry's full
+          // scope.  Sub-tables of an AOT entry live as document-level items
+          // after the entry header (both pre-existing `[a.b.sub]` sections
+          // and sub-tables materialised in-place by an earlier Remove in the
+          // same batch, e.g. a dotted key emptied to `{}`).  Skipping them
+          // here keeps those sections in the previous entry — otherwise the
+          // new [[entry]] header lands before them and the re-parse swallows
+          // them into the new entry (fuzz seed 21525).
+          if (isTableArray(before)) {
+            const aotKey = (before as TableArray).key.item.value;
+            // Sub-tables of an AOT entry are NOT necessarily contiguous:
+            // an unrelated section (e.g. `[[c]]`) may sit between the entry
+            // header and one of its sub-tables (`[y."!"..]`), and that
+            // sub-table still belongs to the previous entry because it comes
+            // before the next `[[y]]` header.  Find the LAST such sub-table
+            // anywhere later in the document and place the new entry after
+            // it — otherwise the new [[entry]] header splits the sub-table
+            // off and the re-parse re-associates it with the new entry
+            // (fuzz seed 742554, a non-contiguous variant of seed 21525).
+            let lastSubTable = index - 1;
+            for (let i = index; i < document.items.length; i++) {
+              const item = document.items[i];
+              const key = isTable(item) || isTableArray(item)
+                ? (item as Table | TableArray).key.item.value
+                : undefined;
+              if (key && key.length > aotKey.length
+                  && arraysEqual(key.slice(0, aotKey.length), aotKey)) {
+                lastSubTable = i;
+              }
+            }
+            index = lastSubTable + 1;
+          }
         } else {
           index = document.items.length;
         }
       } else {
-        parent = findParent(original, change.path);
+        // Walk change.path prefixes from longest to shortest to find the
+        // insertion container.  A dotted KeyValue matched by prefix (its key
+        // is longer than the consumed path, e.g. `ak` matching `ak.k99`) is
+        // NOT the parent: its value belongs to a different subtree, and
+        // consecutive adds under the same dotted prefix must land in the
+        // shared ancestor (fuzz seed 4).  restoreMissingKeySegments then
+        // re-attaches the missing prefix to the child's key.
+        parent = original;
+        for (let pLen = change.path.length - 1; pLen >= 0; pLen--) {
+          const candidate = tryFindByPath(original, change.path.slice(0, pLen));
+          if (!candidate) continue;
+          if (isPrefixMatchedNode(candidate, change.path.slice(0, pLen))) continue;
+          parent = candidate;
+          break;
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         } else if (isInlineItem(parent) && isKeyValue(parent.item)) {
@@ -801,8 +1202,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // the last one. Clamp to the end of the root table scope instead.
           // For non-KV children (e.g. table-array entries) the index was already
           // resolved to a correct integer above, so leave it as-is.
+          //
+          // Unwrap InlineItem first: a KV added under the document root arrives
+          // wrapped in an InlineItem (it was resolved inside an inline table in
+          // the updated CST), and the clamp below must see the inner KV to
+          // recognise a root-level key-value (fuzz seed 297).
+          let childToInsert = child;
+          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
+            childToInsert = child.item;
+          }
           let resolvedIndex = index;
-          if (isDocument(parent) && isKeyValue(child)) {
+          if (isDocument(parent) && isKeyValue(childToInsert)) {
             const rootTableEnd = (parent as Document).items.findIndex(
               item => isTable(item) || isTableArray(item)
             );
@@ -810,15 +1220,72 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               resolvedIndex = rootTableEnd;
             }
           }
-          // Unwrap InlineItem when adding to a TableArray or Document —
-          // InlineItems are only valid inside InlineTables/InlineArrays.
-          let childToInsert = child;
-          if (isInlineItem(child) && (isTableArray(parent) || isDocument(parent))) {
-            childToInsert = child.item;
+          // Restore intermediate key segments the path traverses that no longer
+          // exist in the original document (fuzz seed 4).
+          let restoredKeySegments = false;
+          if ((isTableArray(parent) || isDocument(parent)) && isKeyValue(childToInsert)) {
+            const restored = restoreMissingKeySegments(parent_path, childToInsert, change.path);
+            if (restored) {
+              if (restoredInsertContainers.has(parent)) {
+                applyWrites(original);
+              }
+              childToInsert = restored;
+              restoredKeySegments = true;
+            }
+          }
+          // Adding the first item back into an inline array emptied by
+          // earlier removals in this same patch has the same pending-offset
+          // hazard as the inline-table case below (fuzz seed 92).
+          if (isInlineArray(parent) && parent.items.length === 0) {
+            applyWrites(original);
+          }
+          // Inserting at the FRONT of a non-empty single-line inline array
+          // after leading elements were removed in this same patch: removing a
+          // leading element with no previous sibling registers a pending ENTER
+          // offset on the array itself (writer.remove() targets `parent`), and
+          // insert() positions an index-0 child against parent.loc.start — a
+          // stale, pre-offset column.  The re-inserted elements then land on
+          // top of the enclosing dotted key's text and applyWrites clobbers it
+          // (fuzz seed 86547).  Flush first, same discipline as the guards
+          // above and below.
+          if (resolvedIndex === 0 && isInlineArray(parent) &&
+              getPendingEnterOffsets(original).has(parent)) {
+            applyWrites(original);
+          }
+          // Inserting at index 0 of a Document/Table/TableArray that still
+          // carries a pending ENTER offset from an earlier removal: the
+          // offset would drag the new row above line 1 (fuzz seed 11557 —
+          // deleting the first dotted KV then re-adding its key emitted the
+          // new row at line -1).  Flush first, like every other insert that
+          // follows removals in the same patch.
+          if (resolvedIndex === 0 && (isDocument(parent) || isTable(parent) || isTableArray(parent)) &&
+              getPendingEnterOffsets(original).has(parent)) {
+            applyWrites(original);
           }
           insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
+          if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       } else if (isInlineTable(parent)) {
+        // Adding the first item back into an inline table emptied by
+        // earlier removals in this same patch: the removal registered an
+        // enter offset on the table itself, which applyWrites would also
+        // apply to the new items — dragging them into the preceding key
+        // area (fuzz seed 92).  Resolve it first so insert() positions
+        // against final coordinates.
+        if (parent.items.length === 0) {
+          applyWrites(original);
+          // This multiline inline table was emptied from its own bracket line
+          // (the removal zeroed its offset, leaving a stale multiline end line).
+          // Collapse it to a single line NOW so the insert below places the new
+          // item on the bracket row instead of a phantom second line — the
+          // latter leaves the stale lines dangling and pulls a trailing
+          // sibling of an enclosing inline table inside this one (fuzz seed
+          // 272851).
+          if (hasInlineContainerNeedingTighten(parent) &&
+              parent.loc.end.line > parent.loc.start.line) {
+            parent.loc.end.line = parent.loc.start.line;
+          }
+        }
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
         const originalHadTrailingCommas = tableHadTrailingCommas(parent);
@@ -828,6 +1295,27 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
           insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+        } else if (isInlineItem(child) && isKeyValue(child.item)) {
+          // The child was resolved through an inline table in the updated
+          // CST, so it arrives as an InlineItem-wrapped KV.  When the
+          // insertion parent is a shallower ancestor than the change path
+          // (the dotted KV holding the missing intermediate segments was
+          // removed earlier in this same patch — fuzz seed 305: removing
+          // `o247.bjbdmm11-.y773gunzy` then adding `o247.k2`), restore the
+          // missing key segments on the inner KV so the new key lands under
+          // the right dotted prefix instead of at the container's top level.
+          let kv = child.item as KeyValue;
+          const restored = restoreMissingKeySegments(parent_path, kv, change.path);
+          if (restored) {
+            if (restoredInsertContainers.has(parent)) {
+              applyWrites(original);
+            }
+            kv = restored;
+          }
+          const inlineItem = generateInlineItem(kv);
+          inlineItem.comma = originalHadTrailingCommas;
+          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          if (restored) restoredInsertContainers.add(parent);
         } else {
           insert(original, parent, child, undefined, undefined, inlineHostItems);
         }
@@ -855,7 +1343,21 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineItem(child) && (isTable(parent) || isTableArray(parent) || isDocument(parent))) {
             childToInsert = child.item;
           }
+          // Restore intermediate key segments the path traverses that no longer
+          // exist in the original document (fuzz seed 4).
+          let restoredKeySegments = false;
+          if (isTable(parent) && isKeyValue(childToInsert)) {
+            const restored = restoreMissingKeySegments(parent_path, childToInsert, change.path);
+            if (restored) {
+              if (restoredInsertContainers.has(parent)) {
+                applyWrites(original);
+              }
+              childToInsert = restored;
+              restoredKeySegments = true;
+            }
+          }
           insert(original, parent, childToInsert);
+          if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       }
 
@@ -863,18 +1365,77 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
     } else if (isEdit(change)) {
       let existing = tryFindByPath(original, change.path);
-      let replacement = findByPath(updated, change.path);
+      let replacement: TreeNode | undefined;
+      try {
+        replacement = findByPath(updated, change.path);
+      } catch {
+        replacement = undefined;
+      }
 
-      // When the existing node can't be found, this is likely a structural
-      // type change (e.g. table→scalar, AOT→scalar, array→empty).
+      // When the existing node can't be found — or the replacement can't be
+      // resolved in the updated CST (e.g. `one = { … }` became an array of
+      // tables, whose entries live at path [one, 0] so the bare path [one]
+      // resolves nowhere — fuzz seed 477) — this is a structural type change
+      // (table→scalar, implicit-table→AOT, array→empty, …).
       // Handle by removing old nodes and inserting fresh KV.
-      if (!existing) {
+      if (!existing || !replacement) {
         handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes, materialisedTables);
         return; // skip generic edit handling
       }
 
+      // A KV replaced by a Table section whose key already owns sibling
+      // document nodes (e.g. `"" = {…}` becoming `["".y4ywkew]` while the
+      // document also holds `"".9UI = …`) — the generic replace would leave
+      // those siblings behind, and the section would collide with the
+      // implicit table they define on re-parse ("Value already defined",
+      // fuzz seed 3607).  Let the structural-edit path clear the prefix
+      // and rebuild the key instead.
+      if (isKeyValue(existing) && isTable(replacement)) {
+        const tableKey = (replacement as Table).key.item.value;
+        const prefixNodes = findDocumentItemsByKeyPrefix(original, tableKey);
+        if (prefixNodes.some(n => n !== existing)) {
+          handleStructuralEdit(original, updated, change, format, temporal, commentEligibleNodes, materialisedTables);
+          return; // handled; skip generic edit handling
+        }
+      }
+
+      // An inline-array element replaced by an object that parseJS rendered as
+      // a Table/TableArray: an array-of-objects at the default inlineTableStart
+      // becomes `[[key]]` sections, so findByPath resolves the replacement to an
+      // AOT entry — but the document holds the array INLINE (`key = [...]`).
+      // Splicing that section in place of the InlineItem emits `[[key]]` inside
+      // the array (fuzz seed 121096).  Regenerate the element as an inline
+      // table, exactly like the converse guard in the Add handler.
+      if (isInlineItem(existing) && (isTable(replacement) || isTableArray(replacement))) {
+        const parentArr = tryFindByPath(original, change.path.slice(0, -1));
+        const parentArray = parentArr && isKeyValue(parentArr) ? parentArr.value : parentArr;
+        if (parentArray && isInlineArray(parentArray)) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const inlineFmt = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+            const valueDoc = parseJS({ tmp: jsValue }, inlineFmt);
+            const wrapper = valueDoc?.items[0];
+            if (wrapper && isKeyValue(wrapper)) {
+              replacement = generateInlineItem(wrapper.value);
+            }
+          }
+        }
+      }
+
       let parent;
-      const containerParent = tryFindByPath(original, change.path.slice(0, -1));
+      let containerParent = tryFindByPath(original, change.path.slice(0, -1));
+      // The parent path can resolve to a dotted KV by PREFIX when the edited
+      // key sits under an implicit table (e.g. editing `["", 0, "", ""]` while
+      // the CST holds `""."".lh8butjh6i`): the probe is shorter than the key,
+      // so tryFindByPath returns the KV, not its container.  The sibling
+      // sweeps below must look in the REAL container (the AOT entry) or stale
+      // children survive the collapse and re-parse fails with "Value already
+      // defined" (fuzz seed 1674968).  Resolve it structurally.
+      if (containerParent && isKeyValue(containerParent) &&
+          isPrefixMatchedNode(containerParent, change.path.slice(0, -1))) {
+        containerParent = findStructuralParent(original, containerParent);
+      }
       const inlineTableRowContext = findEnclosingInlineTableRowContext(original, change.path);
 
       if (isKeyValue(existing) && isKeyValue(replacement)) {
@@ -888,16 +1449,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // (e.g. it splits { '': { swr: x } } into Table [\"\"] + KV swr).
         let keyTruncated = false;
         if (existing.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existing.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existing.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existing);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existing.key.value,
+            absPath ? absPath.length - existing.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
@@ -913,6 +1470,53 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
             keyTruncated = true;
+
+            // When a dotted key is truncated (e.g. v.jp → v), any
+            // sibling KVs that were children of the old implicit table
+            // (e.g. v.e4.c6) must be removed — v is no longer a table.
+            const truncatedPrefix = existing.key.value;
+            if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+              // Snapshot: removeMember below splices the live items array, so
+              // iterating it directly would read `undefined` past the shrunk
+              // end (fuzz seed 31662).
+              const parentItems = [...(containerParent as Table | Document | TableArray).items] as Block[];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                // >= (not just >): a sibling holding the exact same key
+                // (`"" = {…}` next to `"".x = 1`) duplicates the truncated
+                // key once it becomes a scalar and fails the re-parse with
+                // "Value already defined" (fuzz seed 3607).  Section
+                // siblings ([table]/[[array]] extending the prefix) conflict
+                // the same way and are removed too.
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, containerParent, sibling);
+                }
+              }
+            }
+          }
+        }
+
+        // A single-segment key whose value becomes a non-block-table while a
+        // sibling dotted-key or section still extends its prefix (e.g.
+        // `"" = <date>` next to `"".x = 1` collapsing to `"" = "str"`) must
+        // drop those siblings — neither a leaf, an array, nor an inline table
+        // can hold them, and leaving them in place re-defines the key on
+        // re-parse ("Value already defined" for scalars, fuzz seed 32801;
+        // "Cannot add to static array" for arrays, fuzz seed 39363; "Cannot
+        // extend inline table" for inline tables, fuzz seed 80004).  In this
+        // branch `replacement` is always a KeyValue, so its value can never be
+        // a block Table/TableArray — every value shape needs the sibling sweep.
+        if (!keyTruncated && isKeyValue(replacement)) {
+          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
         
@@ -945,16 +1549,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // logic as the isKeyValue && isKeyValue branch above).
         let keyTruncated = false;
         if (existing.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existing.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existing.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existing);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existing.key.value,
+            absPath ? absPath.length - existing.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existing.key.value.length) {
             existing.key.value = existing.key.value.slice(0, matchLen);
             existing.key.raw = generateKey(existing.key.value).raw;
@@ -970,6 +1570,40 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existing.value.loc.end.line === existing.value.loc.start.line) existing.value.loc.end.column += delta;
             if (existing.loc.end.line === existing.loc.start.line) existing.loc.end.column += delta;
             keyTruncated = true;
+
+            // Remove sibling KVs that were children of the old implicit table.
+            const truncatedPrefix = existing.key.value;
+            if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+              // Snapshot: removeMember below splices the live items array
+              // (fuzz seed 31662).
+              const parentItems = [...(containerParent as Table | Document | TableArray).items] as Block[];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                // >= (not just >), and sections count too — see the
+                // isKeyValue/isKeyValue branch above (fuzz seed 3607).
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, containerParent, sibling);
+                }
+              }
+            }
+          }
+        }
+
+        // Single-segment key collapsing to a non-block-table with siblings
+        // extending its prefix (fuzz seeds 32801, 39363, 80004) — same as the
+        // isKeyValue/isKeyValue branch; every value shape in this branch
+        // (leaf, array, inline table) must drop prefix-extending siblings.
+        if (!keyTruncated && isKeyValue(replacement.item)) {
+          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
 
@@ -993,10 +1627,87 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         // Preserve the InlineItem's formatting (alignment, equals position) by only swapping the value,
         // not the whole KeyValue — otherwise alignment spaces for the key are lost (as well as the trailing comma).
         const existingKeyValue = existing.item;
+
+        // If the path matched via prefix (shorter than the existing dotted
+        // key), truncate the key — same logic as the branches above
+        // (fuzz seed 137: `u3chwmmvk.g{…}.oe1zht` → `u3chwmmvk = []`).
+        let keyTruncated = false;
+        if (existingKeyValue.key.value.length > 1) {
+          const absPath = absolutePathOf(existingKeyValue);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existingKeyValue.key.value,
+            absPath ? absPath.length - existingKeyValue.key.value.length : 0
+          );
+          if (matchLen > 0 && matchLen < existingKeyValue.key.value.length) {
+            existingKeyValue.key.value = existingKeyValue.key.value.slice(0, matchLen);
+            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value).raw;
+            const oldEndCol = existingKeyValue.key.loc.end.column;
+            const newEndCol = existingKeyValue.key.loc.start.column + existingKeyValue.key.raw.length;
+            const delta = newEndCol - oldEndCol;
+            existingKeyValue.key.loc.end.column = newEndCol;
+            existingKeyValue.equals += delta;
+            existingKeyValue.value.loc.start.column += delta;
+            if (existingKeyValue.value.loc.end.line === existingKeyValue.value.loc.start.line) existingKeyValue.value.loc.end.column += delta;
+            if (existingKeyValue.loc.end.line === existingKeyValue.loc.start.line) existingKeyValue.loc.end.column += delta;
+            // Record an exit offset at the KV so applyWrites shifts
+            // everything after it (sibling items, closing brace) by the
+            // key-size delta — but only for a single-line KV: for a
+            // multiline value the exit offset would land on the KV's END
+            // line, whose content columns did not move (fuzz seed 139).
+            if (existingKeyValue.loc.end.line === existingKeyValue.loc.start.line) {
+              addExitOffset(original, existingKeyValue, { lines: 0, columns: delta });
+            }
+            keyTruncated = true;
+
+            // A surviving sibling row extending the truncated prefix still
+            // re-defines the (now collapsed) key on re-parse — e.g. `"" = "s"`
+            // left next to `"".e-0cxz9.";" = …` inside an inline table
+            // (fuzz seed 82825).  Remove those rows, mirroring the 3607/11799
+            // discipline (InlineItem row keys included).
+            const truncatedPrefix = existingKeyValue.key.value;
+            let scanParent = containerParent;
+            if (scanParent && isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (scanParent && isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && hasItems(scanParent)) {
+              const parentItems = [...(scanParent as { items: TreeNode[] }).items];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isInlineItem(sibling) && isKeyValue(sibling.item)
+                    ? sibling.item.key.value
+                    : isTable(sibling) || isTableArray(sibling)
+                      ? sibling.key.item.value
+                      : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, scanParent, sibling);
+                }
+              }
+            }
+          }
+        }
+
         preserveFormatting(existingKeyValue.value, replacement.value);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
+
+        // Same regenerate discipline as the truncation paths above.
+        if (keyTruncated && rawUpdated !== undefined) {
+          let jsValue: any = rawUpdated;
+          for (const k of change.path) jsValue = jsValue?.[k];
+          if (jsValue !== undefined) {
+            const freshValue = regenerateValue(jsValue, format);
+            if (freshValue !== undefined) {
+              replacement = freshValue;
+              preserveFormatting(existing as Value, replacement as Value);
+            }
+          }
+        }
       } else if (isInlineItem(existing) && isInlineItem(replacement) && isKeyValue(existing.item) && isKeyValue(replacement.item)) {
         // Both are InlineItems wrapping KeyValues (nested inline table edits).
         
@@ -1005,16 +1716,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         let keyTruncated = false;
         const existingKV = existing.item;
         if (existingKV.key.value.length > 1) {
-          let matchLen = 0;
-          const max = Math.min(change.path.length, existingKV.key.value.length);
-          for (let i = 1; i <= max; i++) {
-            if (arraysEqual(
-              change.path.slice(change.path.length - i) as string[],
-              existingKV.key.value.slice(0, i)
-            )) {
-              matchLen = i;
-            }
-          }
+          const absPath = absolutePathOf(existingKV);
+          const matchLen = truncationMatchLen(
+            change.path,
+            existingKV.key.value,
+            absPath ? absPath.length - existingKV.key.value.length : 0
+          );
           if (matchLen > 0 && matchLen < existingKV.key.value.length) {
             existingKV.key.value = existingKV.key.value.slice(0, matchLen);
             existingKV.key.raw = generateKey(existingKV.key.value).raw;
@@ -1027,12 +1734,49 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             if (existingKV.value.loc.end.line === existingKV.value.loc.start.line) existingKV.value.loc.end.column += delta;
             if (existingKV.loc.end.line === existingKV.loc.start.line) existingKV.loc.end.column += delta;
             // Record an exit offset at the KV so applyWrites shifts
-            // everything after the KV (InlineTableItem end, sibling
-            // items, closing brace) by the key-size delta.  The direct
-            // adjustments above only fix positions inside the KV; the
-            // offset system handles everything downstream.
-            addExitOffset(original, existingKV, { lines: 0, columns: delta });
+            // everything after the KV (sibling items, closing brace) by
+            // the key-size delta — single-line KVs only (see the
+            // InlineItem-KV branch, fuzz seed 139).
+            if (existingKV.loc.end.line === existingKV.loc.start.line) {
+              addExitOffset(original, existingKV, { lines: 0, columns: delta });
+            }
             keyTruncated = true;
+
+            // Remove sibling rows extending the truncated prefix — a
+            // surviving `"".2U]0!Rr([{` next to the new scalar `""`
+            // duplicates the key on re-parse (fuzz seed 11799).  Same
+            // discipline as the isKeyValue branches (fuzz seed 3607),
+            // with InlineItem row keys included for inline-table
+            // containers.
+            const truncatedPrefix = existingKV.key.value;
+            // The parent may be the InlineItem wrapper around the inline
+            // table holding the rows (fuzz seeds 11627, 11799), or a
+            // dotted-key KV whose value IS the inline table (fuzz seed
+            // 11480) — unwrap either so the sibling scan sees the rows.
+            let scanParent = containerParent;
+            if (scanParent && isInlineItem(scanParent)) scanParent = scanParent.item;
+            if (scanParent && isKeyValue(scanParent)) scanParent = scanParent.value;
+            if (scanParent && hasItems(scanParent)) {
+              // Snapshot: removeMember below splices the live items array
+              // (fuzz seed 31662).
+              const parentItems = [...(scanParent as { items: TreeNode[] }).items];
+              for (let si = parentItems.length - 1; si >= 0; si--) {
+                const sibling = parentItems[si];
+                if (sibling === existing) continue;
+                const siblingKey = isKeyValue(sibling)
+                  ? sibling.key.value
+                  : isInlineItem(sibling) && isKeyValue(sibling.item)
+                    ? sibling.item.key.value
+                    : isTable(sibling) || isTableArray(sibling)
+                      ? sibling.key.item.value
+                      : undefined;
+                if (siblingKey
+                    && siblingKey.length >= truncatedPrefix.length
+                    && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
+                  removeMember(original, scanParent, sibling);
+                }
+              }
+            }
           }
         }
 
@@ -1073,25 +1817,227 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const existingTableKey = (existing as Table).key.item.value;
           const lastSegment = existingTableKey.slice(-1);
           const parentKey = existingTableKey.slice(0, -1);
-          const tableParent = findParent(original, change.path);
+          // Path-based parent resolution can land on an unrelated sibling: the
+          // path prefix (e.g. ['']) prefix-matches an EARLIER dotted key-value
+          // (e.g. `"".nfh`), and replacing through it would overwrite that KV's
+          // value instead of swapping the table (fuzz seed 6803).  Prefer the
+          // node's actual structural container.
+          const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+
+          // The table's key can be a strict prefix of OTHER document sections
+          // (e.g. `[""]` collapsing to a scalar while `["".hv8lx]` is also a
+          // document-level section extending that prefix).  Those sections
+          // re-define the key on re-parse and fail with "Value already defined"
+          // (fuzz seed 22772).  Remove them before the table becomes a scalar.
+          if (isDocument(tableParent)) {
+            const sectionedSiblings = findDocumentItemsByKeyPrefix(original, existingTableKey)
+              .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
+            for (const sibling of sectionedSiblings) {
+              removeMember(original, tableParent, sibling);
+            }
+          }
 
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
 
           if (parentKey.length > 0) {
-            const newTable = generateTable(parentKey);
-            materialisedTables.add(newTable);
-            insert(original, newTable, freshKV, 0);
-            replace(original, tableParent, existing, newTable);
-            // newTable stands in for the pre-existing `existing` table, so it should stay
-            // eligible for the leading comment run `existing` would have owned via R2.
-            commentEligibleNodes.add(newTable);
+            // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
+            // when `jsValue` is an object or an array of objects.  Emitting it
+            // with only the last key segment under a `[parentKey]` header
+            // fragments the section into an empty `[parentKey]` + a stray
+            // top-level section (fuzz seed 41613).  Extend the section's key
+            // with the parent prefix and swap it in for the old node directly.
+            if (isTable(freshKV) || isTableArray(freshKV)) {
+              extendSectionKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+              commentEligibleNodes.add(freshKV);
+            } else {
+              // The parent key may be purely implicit (dotted key-values) —
+              // emitting a literal header would fail the re-parse (fuzz seed
+              // 6803).  Extend the KV's key with the prefix instead.
+              const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+              if (hasImplicitParent) {
+                extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+                commentEligibleNodes.add(freshKV);
+              } else {
+                // The parent key may already be an EXPLICIT section (a
+                // `[parentKey]` header that survives unrelated to this edit,
+                // e.g. `[""].i3asc2k3y` collapsing while a separate `[""]`
+                // table lives on — fuzz seed 78079).  Generating a fresh
+                // `[parentKey]` header would duplicate it and fail the
+                // re-parse with "Table already defined".  Merge the fresh KV
+                // into the surviving section instead.
+                const survivingParent = (original.items as TreeNode[]).find(n =>
+                  n !== existing
+                  && (isTable(n) || isTableArray(n))
+                  && arraysEqual((n as Table | TableArray).key.item.value, parentKey));
+                if (survivingParent) {
+                  const parentSection = (survivingParent as Table | TableArray);
+                  // freshKV's key is the single last segment; inside `[parentKey]`
+                  // it lands as a plain child row.
+                  insert(original, parentSection, freshKV, undefined);
+                  removeMember(original, tableParent, existing);
+                  commentEligibleNodes.add(freshKV);
+                } else {
+                  const newTable = generateTable(parentKey);
+                  materialisedTables.add(newTable);
+                  insert(original, newTable, freshKV, 0);
+                  replace(original, tableParent, existing, newTable);
+                  // newTable stands in for the pre-existing `existing` table, so it should stay
+                  // eligible for the leading comment run `existing` would have owned via R2.
+                  commentEligibleNodes.add(newTable);
+                }
+              }
+            }
           } else {
             // Single-segment table [w] — KV belongs directly in the Document.
             // Replace the table with the KV, then reposition the KV to before
             // the first table header so it lands in the implicit root table
             // rather than inside a preceding section.
+            replace(original, tableParent, existing, freshKV);
+            // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
+            commentEligibleNodes.add(freshKV);
+
+            hoistRootKeyValueAboveTables(original, freshKV);
+          }
+
+          // A table replaced by an array of objects becomes an array-of-tables:
+          // parseJS renders each array element as its own `[[key]]` section, so
+          // `freshDoc.items` holds more than one entry.  The block above only
+          // placed `freshKV` (entry 0); the remaining `[[key]]` sections must be
+          // inserted right after it or they are silently dropped (fuzz seed
+          // 460447 — the appended entry vanished).
+          if (freshDoc.items.length > 1) {
+            for (let i = 1; i < freshDoc.items.length; i++) {
+              const extraEntry = freshDoc.items[i] as Table | TableArray;
+              if (parentKey.length > 0) {
+                extendSectionKeyInPlace(extraEntry, parentKey);
+              }
+              // Insert after the entry just placed (freshKV for the first, the
+              // previous extra entry for the rest).
+              const prev = (i === 1 ? freshKV : freshDoc.items[i - 1]) as TreeNode;
+              const prevIndex = (tableParent as Document).items.indexOf(prev as Block);
+              insert(original, tableParent, extraEntry, prevIndex + 1);
+              commentEligibleNodes.add(extraEntry);
+            }
+          }
+          return; // handled; skip the generic replace() below
+        }
+
+        // Could not resolve the JS value — fall back to generic handling
+        parent = findParent(original, change.path);
+      } else if (isTableArray(existing)) {
+        // Same situation as the isTable branch above, but for an array-of-tables:
+        // the diff edits the entry (path [..., 0]), and the replacement — an
+        // InlineItem from the updated doc — carries no key.  Splicing it in for
+        // the [[a]] node emits a bare value with no key at all (fuzz seed 3333).
+        // Regenerate the array as a fresh KV instead.
+        const updated_js = toJS(updated.items, '', { temporal });
+        const existingAotKey = (existing as TableArray).key.item.value;
+        let jsValue: any = updated_js;
+        // Navigate to the array's JS value.  When the edit targets an AOT
+        // entry the path ends in that entry's numeric index ([..., 0]), which
+        // is not part of the array's key; drop it.  A whole-array edit's path
+        // ends in the key itself (fuzz seed 136865: `ng.tll = [obj, -4619]`),
+        // and has no trailing index — navigate the path as-is.  Using a fixed
+        // `existingAotKey.length` misaligns when the AOT is itself nested
+        // inside another AOT entry, because the path then interleaves numeric
+        // entry indices with string key segments (fuzz seed 129645).
+        const navPath = typeof change.path[change.path.length - 1] === 'number'
+          ? change.path.slice(0, -1)
+          : change.path;
+        for (const key of navPath) {
+          jsValue = jsValue?.[key];
+        }
+
+        if (jsValue !== undefined) {
+          const lastSegment = existingAotKey.slice(-1);
+          const parentKey = existingAotKey.slice(0, -1);
+          // Same structural-parent discipline as the isTable branch above
+          // (fuzz seed 6803): the path prefix can prefix-match an unrelated
+          // earlier dotted key-value.
+          const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+
+          // Regenerate a fresh KV using parseJS on just the single key-value
+          const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
+          const freshKV = freshDoc.items[0] as KeyValue;
+
+          // When the whole AOT collapsed to an array that no longer holds
+          // only plain objects (`[[hc8v]]` with `hc8v[0] = -1937`), `freshKV`
+          // carries the ENTIRE array value.  Replacing only `existing` (entry
+          // 0) leaves the remaining sibling `[[key]]` entries behind, which
+          // then collide with the rebuilt KV and fail the re-parse (fuzz seed
+          // 299772).  Drop every other entry with the same key first.
+          if (Array.isArray(jsValue) && !jsValue.every(v => isObject(v))) {
+            // The AOT's key can be a strict prefix of OTHER document sections
+            // (e.g. `[[""]]` collapsing to a static array while
+            // `["".c47eko_.bog8_vy3w]` is a non-contiguous sub-table extending
+            // that prefix).  Those prefix-extended sub-tables/sub-AOTs would
+            // re-define the key on re-parse and fail with "Cannot add to
+            // static array" (fuzz seed 1285105).  Match them by key prefix,
+            // not just exact key equality.
+            const siblingEntries = findDocumentItemsByKeyPrefix(original, existingAotKey)
+              .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
+            for (const sibling of siblingEntries) {
+              removeMember(original, original, sibling);
+            }
+          }
+
+          if (parentKey.length > 0) {
+            // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
+            // when `jsValue` is an object or an array of objects.  Emitting it
+            // with only the last key segment under a `[parentKey]` header
+            // fragments the section: a `[[qbvzp4p]]` child of `[e.j9a8-tra]`
+            // re-renders as a TOP-LEVEL AOT, splitting `[[e.j9a8-tra.qbvzp4p]]`
+            // into an empty `[e.j9a8-tra]` + a stray `[[qbvzp4p]]` (fuzz seed
+            // 41613).  Extend the section's key with the parent prefix and swap
+            // it in for the old node directly instead.
+            if (isTable(freshKV) || isTableArray(freshKV)) {
+              extendSectionKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+              commentEligibleNodes.add(freshKV);
+            } else {
+              // If an explicit parent table already exists (`[""]` plus
+              // `[["".u60ke_j3]]`), reuse it and insert the rebuilt key
+              // there. Creating a new `[parentKey]` duplicates the table
+              // header and re-parse fails with "Table already defined"
+              // (fuzz seed 1947810).
+              const existingParentTable = isDocument(tableParent)
+                ? (tableParent.items as TreeNode[]).find(item =>
+                  isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)
+                ) as Table | undefined
+                : undefined;
+              if (existingParentTable) {
+                const existingRow = (existingParentTable.items as TreeNode[]).find(row =>
+                  isKeyValue(row) && arraysEqual((row as KeyValue).key.value, freshKV.key.value)
+                ) as KeyValue | undefined;
+                if (existingRow) {
+                  replace(original, existingParentTable, existingRow, freshKV);
+                } else {
+                  insert(original, existingParentTable, freshKV, undefined);
+                }
+                removeMember(original, tableParent as Document, existing);
+                commentEligibleNodes.add(existingParentTable);
+                return; // handled; skip generic replace below
+              }
+
+              // Same implicit-parent handling as the isTable branch above
+              // (fuzz seed 6803).
+              const hasImplicitParent = findDocumentItemsByKeyPrefix(original, parentKey).some(isKeyValue);
+              if (hasImplicitParent) {
+                extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
+                commentEligibleNodes.add(freshKV);
+              } else {
+                const newTable = generateTable(parentKey);
+                materialisedTables.add(newTable);
+                insert(original, newTable, freshKV, 0);
+                replace(original, tableParent, existing, newTable);
+                // newTable stands in for the pre-existing `existing` AOT, so it should stay
+                // eligible for the leading comment run `existing` would have owned via R2.
+                commentEligibleNodes.add(newTable);
+              }
+            }
+          } else {
+            // Single-segment [[w]] — KV belongs directly in the Document.
             replace(original, tableParent, existing, freshKV);
             // Same reasoning as newTable above: freshKV replaces `existing`, not a new entry.
             commentEligibleNodes.add(freshKV);
@@ -1142,14 +2088,33 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
       replace(original, parent, existing, replacement);
+
+      // A section header captures every key-value that follows it, so an
+      // edit that turns a root-level KV into a Table must not leave root
+      // KVs after the new header (fuzz seed 590: `g86 = "str"` → `[g86]`
+      // while `fofc`/`y3n`/`"<w"` followed it — they were swallowed into
+      // the new table).  Sink the new section below the root-table scope.
+      if (isDocument(parent) && isKeyValue(existing) &&
+          (isTable(replacement) || isTableArray(replacement))) {
+        sinkTableBelowRootKeyValues(original, replacement);
+      }
     } else if (isRemove(change)) {
       const node = tryFindByPath(original, change.path);
 
       if (!node) {
         // The path likely refers to all entries of a TableArray sequence
-        // (e.g. path ['tasks'] when the CST stores entries at ['tasks',0], ['tasks',1]…).
-        // Remove all entries by repeatedly pulling the one at index 0.
-        const first = tryFindByPath(original, change.path.concat(0));
+        // (e.g. path ['tasks'] when the CST stores entries at ['tasks',0], ['tasks',1]…),
+        // or is a strict prefix of a longer AOT key (e.g. path ['a','b'] when
+        // the entry key is ['a','b','c'] — fuzz seed 176).
+        // Remove all entries by repeatedly pulling the next matching one.
+        const nextAotEntry = (): TreeNode | undefined => {
+          const direct = tryFindByPath(original, change.path.concat(0));
+          if (direct) return direct;
+          const prefixed = findDocumentItemsByKeyPrefix(original, change.path)
+            .filter(isTableArray) as TableArray[];
+          return prefixed[0];
+        };
+        const first = nextAotEntry();
         if (first) {
           const firstIndex = (original.items as TreeNode[]).indexOf(first);
 
@@ -1173,6 +2138,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
                 while (aotNode.items.length > 0) {
                   removeMember(original, aotNode, last(aotNode.items as TreeNode[])!);
                 }
+                // The item removals above left pending line offsets on the
+                // entry's key.  Shrinking loc.end against pre-offset
+                // positions — and leaving the offsets to bleed through the
+                // entry into later sections — corrupts everything below
+                // (fuzz seed 7379).  Resolve first.
+                applyWrites(original);
                 (aotNode as any).type = NodeType.Table;
                 // Also change the key type so toTOML renders [a] not [[a]].
                 (aotKeyHolder as any).type = NodeType.TableKey;
@@ -1195,8 +2166,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // Remove remaining AOT entries.  If the first was converted in place
           // it no longer matches change.path, so the loop naturally skips it.
           let entry: TreeNode | undefined;
-          while ((entry = tryFindByPath(original, change.path.concat(0)))) {
+          while ((entry = nextAotEntry())) {
             removeMember(original, original, entry);
+          }
+          // [table] sections extending the same prefix belong to the removed
+          // key too — deleting `""` must remove `["". "aV^16c`G"]` as well,
+          // or the re-parse revives the key (fuzz seed 3463).
+          for (const tableNode of findDocumentItemsByKeyPrefix(original, change.path).filter(isTable)) {
+            removeMember(original, original, tableNode);
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
@@ -1221,7 +2198,19 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               if (isObject(value) && Object.keys(value).length === 0) {
                 const emptyTable = generateTable(parentPath as string[]);
                 materialisedTables.add(emptyTable);
-                const insertIdx = firstIndex >= 0 ? firstIndex : original.items.length;
+                // The removals above already spliced the document items, so a
+                // stale index (e.g. the removed entry was the last item) must
+                // be clamped — inserting past the end leaves the generated
+                // header at its (1,0) origin, corrupting line 1 (fuzz seed
+                // 11605).
+                const insertIdx = firstIndex >= 0
+                  ? Math.min(firstIndex, original.items.length)
+                  : original.items.length;
+                // Same pending-offset hazard as the implicit-key branch
+                // below: insert after the removals are resolved so the new
+                // header can't absorb the document's enter offset (fuzz
+                // seed 1172).
+                applyWrites(original);
                 insert(original, original, emptyTable, insertIdx);
               }
             }
@@ -1232,11 +2221,47 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // For example, [references.VBIDE] creates a Table with key
           // ["references", "VBIDE"], so a Remove at path ["references"] has
           // no exact node match. Find all document-level items whose key
-          // starts with the change path and remove them.
-          const prefixNodes = findDocumentItemsByKeyPrefix(original, change.path);
+          // starts with the change path and remove them.  The path is in
+          // JS-object coordinates, so strip numeric AOT entry indices first —
+          // `delete obj[""][0]["-vX`"]` has path `["", 0, "-vX`"]` but the
+          // CST sub-table is keyed `["", "-vX`"]` (fuzz seed 1428499).
+          const cstPath = stripAotEntryIndices(original, change.path);
+          const prefixNodes = findDocumentItemsByKeyPrefix(original, cstPath);
           if (prefixNodes.length > 0) {
+            const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
               removeMember(original, original, prefixNode);
+            }
+            // When the removed prefix items were the sole children of an
+            // implicit parent (e.g. [mhv6z.hpd_iu9zs5."2<w"] removed at
+            // path [mhv6z, hpd_iu9zs5] -> { mhv6z: {} }), materialise the
+            // parent as an empty table so the key isn't dropped (seed 176).
+            if (cstPath.length > 1 && rawUpdated !== undefined) {
+              const cstParentPath = cstPath.slice(0, -1);
+              const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath);
+              if (remainingSiblings.length === 0) {
+                // `rawUpdated` is the JS object, so walk the ORIGINAL
+                // (indexed) path — not the index-stripped CST path.
+                let value: any = rawUpdated;
+                for (const k of change.path.slice(0, -1)) value = value?.[k];
+                if (isObject(value) && Object.keys(value).length === 0) {
+                  const emptyTable = generateTable(cstParentPath as string[]);
+                  materialisedTables.add(emptyTable);
+                  // Clamp to the post-removal items length — a stale last-item
+                  // index inserts past the end and strands the generated
+                  // header at its (1,0) origin, corrupting line 1 (fuzz seed
+                  // 11605).
+                  const insertIdx = firstPrefixIndex >= 0
+                    ? Math.min(firstPrefixIndex, original.items.length)
+                    : original.items.length;
+                  // The removals above left pending offsets on the document
+                  // (or a preceding item).  Inserting before resolving them
+                  // lets the new header absorb the document's pending enter
+                  // offset and land above line 1 (fuzz seed 1172).
+                  applyWrites(original);
+                  insert(original, original, emptyTable, insertIdx);
+                }
+              }
             }
           } else {
             // Not a table array or implicit key — let findByPath throw the descriptive error.
@@ -1252,6 +2277,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (parent === node) {
           parent = findParent(original, change.path.slice(0, -1));
         }
+        // Every prefix of the path can itself match a dotted key (e.g.
+        // removing the last segment of `z0ncoh.y.eam` inside an AOT entry),
+        // in which case both resolutions above return the node itself.
+        // Fall back to the node's structural container instead.
+        if (parent === node) {
+          const host = findHostContainer(original, node);
+          if (host) parent = host;
+        }
         if (isKeyValue(parent)) {
           parent = parent.value;
         }
@@ -1266,11 +2299,24 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (isInlineItem(parent) && isInlineTable((parent as InlineItem).item)) {
           parent = (parent as InlineItem).item;
         }
+        // When the parent is an InlineItem wrapping an InlineArray (a nested array inside an
+        // inline array, e.g. `a = [ [ 1, 2, 3 ] ]`), unwrap to the inner InlineArray so
+        // `remove` receives a node type that `hasItems` accepts.
+        if (isInlineItem(parent) && isInlineArray((parent as InlineItem).item)) {
+          parent = (parent as InlineItem).item;
+        }
         // The logical (JS-object) parent may differ from the CST parent.
         // For example, [server.tls] lives in document.items, not [server].items.
-        // Fall back to the document root when the parent doesn't contain the node.
-        if (hasItems(parent) && !(parent.items as TreeNode[]).includes(node)) {
-          parent = original;
+        // Fall back to the node's structural container when the parent doesn't
+        // contain it (keeps document-sibling behaviour, and handles inline
+        // containers nested inside values).  This also covers resolution
+        // landing on an unrelated sibling: removing `"".tvbin` resolves its
+        // prefix [""] to the FIRST key starting with "" (e.g. `"".vf = true`),
+        // whose unwrapped value is a Boolean — not a container at all
+        // (fuzz seed 185).
+        if (!hasItems(parent) || !(parent.items as TreeNode[]).includes(node)) {
+          const structural = findStructuralParent(original, node);
+          parent = structural ?? (hasItems(parent) ? original : findHostContainer(original, node) ?? original);
         }
 
         // R2 extension: when the last child of an implicit parent is removed,
@@ -1279,7 +2325,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         let materialisedInPlace = false;
         if (change.path.length > 1 && isTable(node) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath)
+          // `change.path` is in JS-object coordinates (numeric AOT index after
+          // the AOT key, e.g. `["", 0, "fv"]` for CST `["", "fv"]`).  The
+          // sibling scan and in-place key rename must use the CST key, else
+          // the index leaks into the header `["".0.fv]` (fuzz seed 1020868).
+          const cstParentPath = (node as Table).key.item.value.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath)
             .filter(s => s !== node);
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
@@ -1289,9 +2340,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               while (table.items.length > 0) {
                 remove(original, table, last(table.items as TreeNode[])!);
               }
+              // Same pending-offset discipline as materialiseAotInPlace
+              // above (fuzz seed 7379).
+              applyWrites(original);
               const keyHolder = table.key;
               const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
-              key.value = parentPath as string[];
+              key.value = cstParentPath as string[];
               key.raw = preserveEscapedKeyRaw(key.raw, key.value);
               key.loc.end.column = key.loc.start.column + key.raw.length;
               keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
@@ -1313,9 +2367,218 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         const nodeIndex = isDocument(parent) && hasItems(parent)
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
+        const containerItemIndex = hasItems(parent) && !isDocument(parent)
+          ? (parent.items as TreeNode[]).indexOf(node)
+          : -1;
+        const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
+        // The bracket gap of a multiline inline container, captured BEFORE the
+        // removal: removeMember flushes pending offsets for multiline inline
+        // containers, so the post-removal fixup below can no longer measure
+        // the original end-to-bracket gap from the container's own loc (fuzz
+        // seed 10469).
+        const bracketGapBefore =
+          isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
+          node.loc.end.line === parent.loc.end.line
+            ? parent.loc.end.column - node.loc.end.column
+            : undefined;
+        // Absolute lookup path of the node (or its inner KV for InlineItems),
+        // captured while it is still in the tree — the materialisation block
+        // below runs AFTER the removal and needs it to derive the emptied
+        // parent's prefix relative to an inline-table container (seed 128).
+        const nodeAbsolutePath = absolutePathOf(
+          isInlineItem(node) && isKeyValue(node.item) ? node.item : node
+        );
+
+        // When the probe path matched a dotted key by PREFIX (the key is
+        // longer than the path), removing only that KV leaves the key's
+        // other segments behind.  E.g. deleting `l` when the CST holds
+        // `l.l` and `l.utc.xme7` must remove both, or the re-parse revives
+        // `l` from the surviving sibling (fuzz seed 2926).
+        const removePrefixKv = isKeyValue(node)
+          ? node as KeyValue
+          : isInlineItem(node) && isKeyValue(node.item)
+            ? node.item as KeyValue
+            : undefined;
+        if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
+          const containerAbsLen = nodeAbsolutePath.length - removePrefixKv.key.value.length;
+          const relativePrefix = change.path.slice(containerAbsLen) as Path;
+          if (relativePrefix.length > 0 && relativePrefix.length < removePrefixKv.key.value.length) {
+            const siblings = (parent as { items: TreeNode[] }).items;
+            // Collect matches first, then remove by identity: removeMember
+            // splices the live array (member + its leading comments), so
+            // mutating it inside the scan loop corrupts the indices.
+            // Table/TableArray sections extending the same prefix count too —
+            // a root `""` holds both `"".x = 1` and `[["".y]]` (fuzz seed 3392).
+            const toRemove: TreeNode[] = [];
+            for (const sibling of siblings) {
+              if (sibling === node) continue;
+              const siblingKey = isKeyValue(sibling)
+                ? sibling.key.value
+                : isInlineItem(sibling) && isKeyValue(sibling.item)
+                  ? sibling.item.key.value
+                  : isTable(sibling) || isTableArray(sibling)
+                    ? sibling.key.item.value
+                    : undefined;
+              if (siblingKey
+                  && siblingKey.length > relativePrefix.length
+                  && arraysEqual(siblingKey.slice(0, relativePrefix.length), relativePrefix)) {
+                toRemove.push(sibling);
+              }
+            }
+            for (const sibling of toRemove) {
+              removeMember(original, parent, sibling);
+            }
+          }
+        }
+
+        // When a key at this path is removed outright (the path exactly
+        // matches the node's key), any sibling whose key EXTENDS this prefix
+        // (a longer dotted key or a [table]/[[array]] section) re-defines
+        // the key on re-parse.  E.g. `q = <date>` alongside `q."X".y = true`
+        // and `[q."Z"]` (a leniently-accepted collision) leaves those
+        // extensions behind when only `q = <date>` is removed, and the
+        // re-parse revives `q` as a table (fuzz seed 79938).  Drop them too.
+        if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
+          const key = removePrefixKv.key.value;
+          const siblings = (parent as { items: TreeNode[] }).items;
+          const extending: TreeNode[] = [];
+          for (const sibling of siblings) {
+            if (sibling === node) continue;
+            const siblingKey = isKeyValue(sibling)
+              ? sibling.key.value
+              : isInlineItem(sibling) && isKeyValue(sibling.item)
+                ? sibling.item.key.value
+                : isTable(sibling) || isTableArray(sibling)
+                  ? sibling.key.item.value
+                  : undefined;
+            if (siblingKey
+                && siblingKey.length > key.length
+                && arraysEqual(siblingKey.slice(0, key.length), key)) {
+              extending.push(sibling);
+            }
+          }
+          for (const sibling of extending) {
+            removeMember(original, parent, sibling);
+          }
+        }
+
+        // Same repair for a removed SECTION header ([table]/[[array]]).  When
+        // `[x]` is deleted while a sibling `[[x.y]]` (or `x.z = …`) still
+        // extends the `x` prefix, removing only the header leaves the section
+        // behind and the re-parse revives `x` from it (fuzz seed 136292).
+        if ((isTable(node) || isTableArray(node)) && hasItems(parent)) {
+          const key = (node as Table | TableArray).key.item.value;
+          const siblings = (parent as { items: TreeNode[] }).items;
+          const extending: TreeNode[] = [];
+          for (const sibling of siblings) {
+            if (sibling === node) continue;
+            const siblingKey = isKeyValue(sibling)
+              ? sibling.key.value
+              : isTable(sibling) || isTableArray(sibling)
+                ? sibling.key.item.value
+                : undefined;
+            if (siblingKey
+                && siblingKey.length > key.length
+                && arraysEqual(siblingKey.slice(0, key.length), key)) {
+              extending.push(sibling);
+            }
+          }
+          for (const sibling of extending) {
+            removeMember(original, parent, sibling);
+          }
+        }
 
         if (!materialisedInPlace) {
           removeMember(original, parent, node);
+        }
+
+        // Removing the LAST item of a single-line inline container while an
+        // earlier edit left a pending exit offset on the new last item makes
+        // the writer's column arithmetic go stale: the container's end (and
+        // thus the closing bracket) ends up inside the surviving item's span
+        // (fuzz seed 3780: `[[], true, -3125, 755_394]` edited and truncated
+        // emitted `-312,` with `]` eating the last digit).  Flush the pending
+        // offsets, then fix the end from the surviving item, preserving the
+        // original gap to the bracket.
+        // The same hazard applies to a MULTILINE container when the removed
+        // item ends on the bracket row: the bracket slides before the
+        // surviving tail (fuzz seed 10469).
+        if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
+            node.loc.end.line === parent.loc.end.line) {
+          const remaining = (parent as InlineArray | InlineTable).items as TreeNode[];
+          const isSingleLineContainer = parent.loc.end.line === parent.loc.start.line;
+          // Only for the LAST item.  For a single-line container the whole
+          // remaining content must be single-line: a multiline child (e.g. a
+          // multiline string) keeps its own lines below the container's
+          // line, and the column fixup would corrupt that layout (fuzz seed
+          // 1841).  For a multiline container only the bracket-row tail
+          // matters — earlier items sit on their own lines above.
+          const tailOnBracketRow = isSingleLineContainer
+            ? remaining.every(item => item.loc.end.line === parent.loc.start.line)
+            : remaining.length > 0 && last(remaining)!.loc.end.line === parent.loc.end.line;
+          if (remaining.length > 0 && containerItemIndex === remaining.length &&
+              tailOnBracketRow) {
+            // For a multiline container the pending offsets were already
+            // flushed by removeMember, so the container's end is stale and
+            // the gap must come from the pre-removal capture (fuzz seed
+            // 10469); the single-line path still measures live.
+            const gap = bracketGapBefore ?? (parent.loc.end.column - node.loc.end.column);
+            applyWrites(original);
+            const targetEnd = last(remaining)!.loc.end.column + gap;
+            if (parent.loc.end.column !== targetEnd) {
+              parent.loc.end.column = targetEnd;
+            }
+            // The owning KV's end mirrors the value's end; without it the
+            // KV's own row comma (inside an enclosing inline table) is
+            // written at the stale column, overwriting the value's tail.
+            let owner: KeyValue | undefined;
+            const findOwner = (n: TreeNode): KeyValue | undefined => {
+              if (isKeyValue(n)) {
+                if (n.value === parent) return n;
+                return findOwner(n.value);
+              }
+              if (isInlineItem(n)) return findOwner(n.item);
+              if (!hasItems(n)) return undefined;
+              for (const item of n.items as TreeNode[]) {
+                const found = findOwner(isInlineItem(item) ? item.item : item);
+                if (found) return found;
+              }
+              return undefined;
+            };
+            owner = findOwner(original);
+            if (owner && owner.loc.end.line === parent.loc.end.line) {
+              owner.loc.end.column = parent.loc.end.column;
+              // The InlineItem row wrapping the KV carries the row's comma;
+              // its end must track the KV's end too.
+              const findWrapper = (n: TreeNode): InlineItem | undefined => {
+                if (isKeyValue(n)) return findWrapper(n.value);
+                if (isInlineItem(n)) {
+                  if (n.item === owner) return n;
+                  return findWrapper(n.item);
+                }
+                if (!hasItems(n)) return undefined;
+                for (const item of n.items as TreeNode[]) {
+                  const found = findWrapper(item);
+                  if (found) return found;
+                }
+                return undefined;
+              };
+              const wrapper = findWrapper(original);
+              if (wrapper) {
+                // Register the row's growth as an exit offset so the next
+                // row of the enclosing table shifts past the comma+space,
+                // and resolve it immediately — the earlier flush cleared
+                // the dirty flag, so the final applyWrites would skip it.
+                const delta = parent.loc.end.column - wrapper.loc.end.column;
+                wrapper.loc.end.column = parent.loc.end.column;
+                if (delta !== 0) {
+                  addExitOffset(original, wrapper, { lines: 0, columns: delta });
+                  markDirty(original);
+                  applyWrites(original);
+                }
+              }
+            }
+          }
         }
 
         // When removing a node whose key has an implicit parent, check whether
@@ -1324,17 +2587,264 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         if (!materialisedInPlace &&
             change.path.length > 1 && (isTable(node) || isTableArray(node)) && rawUpdated !== undefined) {
           const parentPath = change.path.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+          // `change.path` is in JS-object coordinates, which interleave a
+          // numeric AOT entry index after the AOT key (e.g. `["", 0, "fv"]`
+          // for the CST key `["", "fv"]`).  The sibling scan and generated
+          // header must use the CST key (no index), else the index leaks into
+          // the header as `["".0.fv]` and the re-parse nests `fv` under a key
+          // literally named "0" (fuzz seed 1020868).  The value walk below
+          // keeps the JS coordinates.
+          const cstParentKey = (node as Table | TableArray).key.item.value.slice(0, -1);
+          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentKey);
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
-              const emptyTable = generateTable(parentPath as string[]);
+              const emptyTable = generateTable(cstParentKey as string[]);
               materialisedTables.add(emptyTable);
               // Insert at the original position so preceding comments
-              // stay adjacent without a spurious blank line.
-              const insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+              // stay adjacent without a spurious blank line.  Clamp to the
+              // post-removal length — a stale last-item index strands the
+              // generated header at its (1,0) origin (fuzz seed 11605).
+              const insertIdx = nodeIndex >= 0
+                ? Math.min(nodeIndex, original.items.length)
+                : original.items.length;
+              // Resolve the removal's pending offsets first — an insert at
+              // index 0 otherwise absorbs the document's enter offset and
+              // lands above line 1 (fuzz seed 1172).
+              applyWrites(original);
               insert(original, original, emptyTable, insertIdx);
+            }
+          }
+        }
+
+        // Dotted-key KeyValues follow the same implicit-parent materialisation
+        // rule: when removing the last segment of a dotted key (e.g. y.ic83
+        // → y), and no other items share the parent prefix, materialise the
+        // parent as an empty table header (or empty inline table, for dotted
+        // keys inside an inline table) so the key isn't silently dropped.
+        if (!materialisedInPlace && change.path.length > 1 && rawUpdated !== undefined) {
+          const kv = isKeyValue(node)
+            ? node as KeyValue
+            : isInlineItem(node) && isKeyValue(node.item)
+              ? node.item as KeyValue
+              : undefined;
+          // Only for dotted keys with 2+ segments.
+          if (kv && kv.key.value.length > 1) {
+            const parentPath = change.path.slice(0, -1);
+            // Search the node's own container (Table / Document / AOT entry /
+            // InlineTable) for remaining siblings whose key starts with the
+            // parent prefix.
+            const container = isDocument(parent) || isTable(parent) || isTableArray(parent) || isInlineTable(parent)
+              ? parent
+              : original;
+            if (hasItems(container)) {
+              // The prefix relative to the container: strip the container's own
+              // key from the path.  For an AOT entry the numeric entry index is
+              // also stripped.  Deriving it from parentPath (not kv.key.value)
+              // matters when a middle segment of the dotted key was removed
+              // (e.g. deleting `booay` from `6U.booay.o563zkr` must leave the
+              // prefix `6U`, not `6U.booay` — fuzz seed 128).
+              let relativePrefix: string[];
+              if (isTable(container) || isTableArray(container)) {
+                // Strip the container's own key from parentPath, skipping
+                // any numeric AOT entry indexes that appear between its
+                // segments — the absolute path of a table nested inside an
+                // array-of-tables entry interleaves them (e.g. [y, 0, sl4,
+                // m{sHnZ, vk] against the container key [y, sl4, m{sHnZ]),
+                // and slicing by the key length alone leaves the extra
+                // segment behind (fuzz seed 10533).
+                const containerKey = (container as Table | TableArray).key.item.value;
+                let offset = 0;
+                let matched = 0;
+                for (let k = 0; k < containerKey.length && offset < parentPath.length; k++) {
+                  while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                  if (offset >= parentPath.length || parentPath[offset] !== containerKey[k]) break;
+                  matched++;
+                  offset++;
+                }
+                while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                if (matched === containerKey.length) {
+                  relativePrefix = parentPath.slice(offset) as string[];
+                } else {
+                  // Fall back to the historical key-length slice.
+                  relativePrefix = parentPath.slice(
+                    containerKey.length + (isTableArray(container) ? 1 : 0)
+                  ) as string[];
+                }
+              } else if (isInlineTable(container)) {
+                // InlineTable items are relative to the table itself; the
+                // table's own key path is the node's absolute path minus its
+                // key segments (captured before the removal).  But the change
+                // coordinates (`parentPath`) can interleave a numeric AOT
+                // entry index that the CST path lacks — the JS object sees
+                // `[""]` as an array-of-tables (so `obj[""].o96` -> path
+                // `["", 0, "o96", …]`) while the CST stores `o96` as a
+                // sibling `[""."o96"]` table (absolute path `["", "o96", …]`).
+                // Slicing parentPath by the CST length then over-includes the
+                // enclosing segment and re-emits `GD64qOzFQn.x = {}` instead
+                // of `x = {}` (fuzz seed 224081).  Align by skipping numeric
+                // indices while matching the container's string segments.
+                if (nodeAbsolutePath) {
+                  const containerSegs = nodeAbsolutePath.slice(0, nodeAbsolutePath.length - kv.key.value.length);
+                  let offset = 0;
+                  let matched = 0;
+                  while (matched < containerSegs.length && offset < parentPath.length) {
+                    while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                    if (offset >= parentPath.length || parentPath[offset] !== containerSegs[matched]) break;
+                    matched++;
+                    offset++;
+                  }
+                  while (offset < parentPath.length && typeof parentPath[offset] === 'number') offset++;
+                  if (matched === containerSegs.length) {
+                    relativePrefix = parentPath.slice(offset) as string[];
+                  } else {
+                    relativePrefix = parentPath.slice(containerSegs.length) as string[];
+                  }
+                } else {
+                  relativePrefix = parentPath.slice(parentPath.length - (kv.key.value.length - 1)) as string[];
+                }
+              } else {
+                relativePrefix = parentPath as string[];
+              }
+              // `relativePrefix` is a TOML key path. `parentPath` comes from
+              // JS-object coordinates and can include array indices (numbers),
+              // which must never be emitted as key segments.
+              relativePrefix = relativePrefix.filter((seg): seg is string => typeof seg === 'string');
+              const remaining = (container.items as TreeNode[]).filter(item => {
+                const key = isKeyValue(item)
+                  ? (item as KeyValue).key.value
+                  : isInlineItem(item) && isKeyValue(item.item)
+                    ? item.item.key.value
+                    : undefined;
+                if (!key) return false;
+                return arraysEqual(key.slice(0, relativePrefix.length), relativePrefix);
+              });
+              // An AOT entry can also own sub-tables stored as document-level
+              // siblings whose keys extend the entry's own key.
+              const isAotEntry = isTableArray(container);
+              let docSiblings: TreeNode[] = [];
+              if (isAotEntry && remaining.length === 0) {
+                docSiblings = findDocumentItemsByKeyPrefix(
+                  original,
+                  (container as TableArray).key.item.value.concat(relativePrefix)
+                );
+              }
+              // When the removed dotted key sits directly inside an explicit
+              // [table] (or [[entry]]) header, that header already IS the
+              // materialised parent — generating another one duplicates it
+              // and the re-parse fails with "Table already defined" (fuzz
+              // seed 1098).  Nothing to do; the emptied header stays.
+              // Same for an inline table: when the parent prefix equals the
+              // inline table's own key, the (now empty) inline table already
+              // renders the emptied object — re-emitting an empty key would
+              // parse `${''} = {}` and crash (fuzz seed 2726).
+              const containerAlreadyIsParent =
+                relativePrefix.length === 0 &&
+                (isTable(container) || isTableArray(container) || isInlineTable(container));
+              if (remaining.length === 0 && docSiblings.length === 0 && !containerAlreadyIsParent) {
+                let value: any = rawUpdated;
+                for (const k of parentPath) value = value?.[k];
+                if (isObject(value) && Object.keys(value).length === 0) {
+                  if (isInlineTable(container)) {
+                    // Emptied dotted prefix inside an inline table: re-emit it
+                    // as `prefix = {}` at the removed item's position, keeping
+                    // the comma setting the removed item carried (fuzz seed 22).
+                    // parseJS strips empty objects, so regenerateValue() can't
+                    // build the value — parse a literal instead, which yields
+                    // proper single-line locs for the empty inline table.
+                    const freshKey = relativePrefix
+                      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+                      .join('.');
+                    const freshKv = Array.from(parseTOML(`${freshKey} = {}`))[0];
+                    if (isKeyValue(freshKv)) {
+                      const inlineItem = generateInlineItem(freshKv);
+                      inlineItem.comma = removedInlineComma ?? false;
+                      // The removal above left a pending enter offset on the
+                      // inline table (first-item removals register there),
+                      // which applyWrites would apply to the new item too.
+                      // Resolve it first so the insert positions the item
+                      // against final coordinates (fuzz seed 22).
+                      applyWrites(original);
+                      // The container was a MULTILINE inline table whose only
+                      // item (a multiline dotted key) was just removed: the
+                      // removal zeroed its line offset but left a stale
+                      // multiline end line, so insert() would place the new
+                      // `prefix = {}` on a phantom second line and the
+                      // enclosing table's trailing siblings would be pulled
+                      // inside this one (fuzz seed 863085).  Collapse the end
+                      // to the bracket row first, mirroring the Add handler
+                      // (fuzz seed 272851).
+                      if (hasInlineContainerNeedingTighten(container) &&
+                          container.loc.end.line > container.loc.start.line) {
+                        container.loc.end.line = container.loc.start.line;
+                      }
+                      insert(original, container, inlineItem, containerItemIndex >= 0 ? containerItemIndex : undefined);
+                      // insert() reserves one column for the opening-brace
+                      // space; with bracket spacing enabled that column is
+                      // already the space after `{`, so align the item with
+                      // the original bracket style.
+                      if (format.bracketSpacing) {
+                        shiftNode(inlineItem, { lines: 0, columns: 1 });
+                      }
+                      // An earlier materialisation in the same batch can
+                      // occupy the removed row's original slot, so the new
+                      // row starts LATER than the removed one and insert()'s
+                      // exit offset (span + separator, folded against the
+                      // previous row's pending offsets) no longer puts the
+                      // tail rows exactly after it.  Re-derive the exact
+                      // displacement to just past the new row's comma.
+                      const tailRow = (container as InlineTable).items[containerItemIndex + 1] as TreeNode | undefined;
+                      const pendingInsertOffset = getExitOffsets(original).get(inlineItem);
+                      if (tailRow && pendingInsertOffset && tailRow.loc.start.line === inlineItem.loc.end.line) {
+                        pendingInsertOffset.columns = inlineItem.loc.end.column + 2 - tailRow.loc.start.column;
+                      }
+                    }
+                    return;
+                  }
+                  // Table key: container key + relative prefix.  For a root
+                  // KV that's just the relative prefix; for an AOT entry the
+                  // numeric index is NOT part of the key.
+                  const tableKey = isAotEntry
+                    ? (container as TableArray).key.item.value.concat(relativePrefix)
+                    : isTable(container)
+                      ? (container as Table).key.item.value.concat(relativePrefix)
+                      : relativePrefix;
+                  const emptyTable = generateTable(tableKey as string[]);
+                  materialisedTables.add(emptyTable);
+                  let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
+                  if (isAotEntry) {
+                    // Insert right after the entry so the sub-table stays in
+                    // the entry's scope.
+                    const entryIdx = (original.items as TreeNode[]).indexOf(container);
+                    insertIdx = entryIdx >= 0 ? entryIdx + 1 : original.items.length;
+                  } else if (isTable(container)) {
+                    // Same hazard for a [table] container: a sub-table header
+                    // appended at the document end can be pulled up into the
+                    // parent's rows by a later removal's exit offset, and the
+                    // header then captures those rows (fuzz seed 4402).
+                    // Insert directly after the parent so the header stays
+                    // below the parent's own rows.
+                    const parentIdx = (original.items as TreeNode[]).indexOf(container);
+                    insertIdx = parentIdx >= 0 ? parentIdx + 1 : original.items.length;
+                  } else if (isDocument(container)) {
+                    // Root-scope materialisation: a [table] header claims every
+                    // key-value below it, so it must land after all root KVs —
+                    // before the first existing section, or at the very end —
+                    // never at the removed KV's index (fuzz seed 11).
+                    const headerIdx = firstSectionHeaderIndex(original);
+                    insertIdx = headerIdx >= 0 ? headerIdx : original.items.length;
+                  }
+                  // The removal above registered its line/column offset on
+                  // the parent (or a preceding item).  insert() measures
+                  // against sibling locs, not pending offsets, so an insert
+                  // at index 0 would absorb the document's pending enter
+                  // offset and land above line 1 (fuzz seed 1028).  Resolve
+                  // first, like every other just-in-time flush in this file.
+                  applyWrites(original);
+                  insert(original, original, emptyTable, insertIdx);
+                }
+              }
             }
           }
         }
@@ -1363,6 +2873,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       if (parent) {
         if (hasItem(parent)) parent = parent.item;
         if (isKeyValue(parent)) parent = parent.value;
+
+        // A Move's from/to are simulation coordinates from the diff walk;
+        // when an in-place Remove earlier in the same array was reordered
+        // ahead of it, the source index can be past the array's end.  The
+        // remaining elements are already in place then — the move is a
+        // simulation artifact and must be skipped (fuzz seed 8138).
+        if (change.from >= (parent as WithItems).items.length) return;
 
         const node = (parent as WithItems).items[change.from];
 
@@ -1510,7 +3027,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
     } else if (isRename(change)) {
       const sourcePath = change.path.concat(change.from);
-
       let parent = tryFindByPath(original, sourcePath) as
         | KeyValue
         | Table
@@ -1560,11 +3076,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // prefix, emitting `[z]`. Refuse instead: these shapes threw before this branch
       // understood sections at all, and a clear failure beats a corrupted document.
       if (parentKey.value.length !== replacementKey.value.length) {
+        const fullSourcePath = change.path.concat(change.from);
         // When the existing node is a Table/TableArray whose key shares a prefix with
         // change.path + change.from, and the replacement is a plain KeyValue, we're
         // renaming one segment of a dotted section header rather than replacing the
         // whole key (e.g. [a.b] -> [a.y]).  Rename just the matching segment in place.
-        const fullSourcePath = change.path.concat(change.from);
         if ((isTable(parent) || isTableArray(parent)) &&
             isKeyValue(replacement) &&
             arraysEqual(parentKey.value.slice(0, fullSourcePath.length), fullSourcePath)) {
@@ -1572,6 +3088,39 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           parentKey.value[segmentIndex] = change.to;
           parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
+          return;
+        }
+
+        // Same situation for a dotted KeyValue: renaming the last segment of
+        // `y3.mklbjj.kb16my_18h` to `k30` renames just that segment — the KV
+        // keeps the `y3.mklbjj` prefix (fuzz seed 3214).
+        if (isKeyValue(parent) && isKeyValue(replacement) &&
+            parentKey.value.length <= fullSourcePath.length &&
+            arraysEqual(parentKey.value, fullSourcePath.slice(fullSourcePath.length - parentKey.value.length))) {
+          const oldKeyRaw = parentKey.raw;
+          parentKey.value[parentKey.value.length - 1] = change.to;
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
+          // The `=` position lives on the KeyValue, not the Key, and the value
+          // keeps its own columns.  A rename that GROWS the last segment widens
+          // the key past `equals`, so both `equals` and the value must shift
+          // right, or the value overwrites the `=` and emits `aca9djz.k75 true`
+          // with no separator (fuzz seed 46522).  A rename that SHRINKS the key
+          // leaves `equals` where it was — the gap fills with the alignment
+          // spaces the document already had (fuzz seed 3214 expects this).
+          const keyWidthDelta = parentKey.raw.length - oldKeyRaw.length;
+          if (keyWidthDelta > 0) {
+            parent.equals += keyWidthDelta;
+            shiftNode(parent.value, { lines: 0, columns: keyWidthDelta }, { first_line_only: true });
+            // The width change also pushes the enclosing inline container's
+            // end (and the closing bracket) right, plus anything a later
+            // same-patch change inserts next to it.  shiftNode only moves the
+            // value node itself; register an exit offset so applyWrites shifts
+            // the container end and a subsequent Add measures the settled
+            // position — otherwise the tail lands on the value's last
+            // character (`false` -> `fals`, fuzz seed 186384).
+            addExitOffset(original, parent.value, { lines: 0, columns: keyWidthDelta });
+          }
           return;
         }
 
@@ -1637,10 +3186,31 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // remove(). The exit offset that carried the closing-bracket space was
   // on the removed item and is now lost. Tighten the end column and
   // reapply bracket spacing.
+  //
+  // Resolve pending offsets BEFORE measuring: an earlier edit may have left
+  // an exit offset on the surviving last item, so the item's pre-offset
+  // position isn't where it will actually render.  Tightening against the
+  // stale position leaves the container end inside the item's span, and the
+  // closing bracket overwrites the item's content (fuzz seed 3780: an edit
+  // plus a remove on the same inline array emitted `-312,` with `]` eating
+  // the value's last digit).
+  let needsTighten = false;
+  traverse(original, {
+    InlineTable: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) needsTighten = true;
+    },
+    InlineArray: (node) => {
+      if (hasInlineContainerNeedingTighten(node)) needsTighten = true;
+    }
+  });
+  if (needsTighten) applyWrites(original);
+
   let hasTightened = false;
+  const tightenedInlineContainers: (InlineTable | InlineArray)[] = [];
   traverse(original, {
     InlineTable: (node) => {
       if (hasInlineContainerNeedingTighten(node)) {
+        tightenedInlineContainers.push(node);
         tightenInlineContainerEnd(node);
         deleteInlineContainerNeedingTighten(node);
         applyBracketSpacing(original, node, format.bracketSpacing);
@@ -1658,6 +3228,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) {
     applyWrites(original);
+    for (const container of tightenedInlineContainers) {
+      compactInlineContainerAncestors(original, container);
+    }
     // Nested inline container tightening doesn't propagate through the
     // offset system (the removed item's offset was zeroed), so parent
     // container end positions must be recalculated explicitly.
@@ -1714,7 +3287,50 @@ function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
   if (firstTableIndex === -1 || firstTableIndex > kvIndex) return;
 
   remove(doc, doc, kv);
+
+  // The remove() above registers a pending offset on the document, and an
+  // earlier removal in the same patch (e.g. deleting the FIRST table, which
+  // registers an enter offset on the document) may still be unresolved too.
+  // insert() positions against the neighbouring items' loc values, which
+  // carry those offsets until flushed — a stale `firstTableIndex` item then
+  // drags the re-inserted KV onto a negative/phantom line and the writer
+  // crashes reading `undefined.length` (fuzz seeds 358055, 362151). Resolve
+  // before measuring, like every other insert that follows a removal.
+  applyWrites(doc);
+
   insert(doc, doc, kv, firstTableIndex);
+}
+
+/**
+ * The converse of hoistRootKeyValueAboveTables: an edit that turned a
+ * root-level KeyValue into a Table section inserts a section header where
+ * the KV was — and a section header captures every key-value that follows it
+ * in the document.  If any root KV comes after the new header (and before the
+ * next section), move the table below the root-table scope (fuzz seed 590:
+ * `g86 = "str"` became `[g86]` while `fofc`/`y3n`/`"<w"` followed it).
+ */
+function sinkTableBelowRootKeyValues(doc: Document, table: Table | TableArray): void {
+  const tableIndex = doc.items.indexOf(table);
+  if (tableIndex < 0) return;
+
+  const nextSectionIndex = doc.items.findIndex(
+    (item, i) => i > tableIndex && (isTable(item) || isTableArray(item))
+  );
+  const hasFollowingRootKV = doc.items.some(
+    (item, i) =>
+      i > tableIndex &&
+      isKeyValue(item) &&
+      (nextSectionIndex === -1 || i < nextSectionIndex)
+  );
+  if (!hasFollowingRootKV) return;
+
+  const target = nextSectionIndex === -1 ? doc.items.length : nextSectionIndex;
+  // Flush pending offsets so the table's loc reflects its true position before
+  // the remove-then-reinsert cycle; otherwise insert() measures against a stale
+  // (pre-remove) anchor and can drag the table to line 0 (fuzz seed 43159).
+  applyWrites(doc);
+  remove(doc, doc, table);
+  insert(doc, doc, table, target - 1);
 }
 
 /**
@@ -1739,6 +3355,98 @@ function handleStructuralEdit(
 
   if (jsValue === undefined) return;
 
+  // An object→scalar (or object→array) edit under an array-of-tables entry:
+  // the path carries the entry's numeric index (e.g. ['', 0, ':h9q=2`aO']),
+  // which document-level keys never do.  The generic prefix scan below can't
+  // find the old sub-table/[[sub-array]] entries (their keys lack the index),
+  // so they survive and collide with the rebuilt value — and rebuilding from
+  // the root would emit a `[""]` table next to the surviving [[[""]]] array,
+  // failing the re-parse with "Cannot add Array of Tables to table"
+  // (fuzz seed 6409).  Handle it inside the entry instead: drop the old
+  // sub-entries and insert a fresh key-value for the changed segment.
+  {
+    const aotIndexPos = change.path.findIndex(seg => typeof seg === 'number');
+    if (aotIndexPos > 0 && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
+      const entry = tryFindByPath(original, change.path.slice(0, aotIndexPos + 1));
+      if (entry && isTableArray(entry)) {
+        const entryKey = (entry as TableArray).key.item.value;
+        const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+
+        // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
+        // (the previous object value's children), and any dotted-key rows
+        // inside the entry that start with the changed segment.
+        const toRemove = findDocumentItemsByKeyPrefix(original, entryKey.concat(changedKey));
+        for (const prefixNode of toRemove) {
+          removeMember(original, original, prefixNode);
+        }
+        const entryItems = (entry as TableArray).items as TreeNode[];
+        const inlineToRemove = entryItems.filter(item => {
+          const key = isKeyValue(item) ? item.key.value : undefined;
+          return key
+            && key.length > changedKey.length
+            && arraysEqual(key.slice(0, changedKey.length), changedKey);
+        });
+        for (const item of inlineToRemove) {
+          removeMember(original, entry, item);
+        }
+
+        // Rebuild the tail of the path as a fresh KV (or KVs) and insert
+        // into the entry.
+        let tail: any = jsValue;
+        for (let k = change.path.length - 1; k > aotIndexPos; k--) {
+          tail = { [change.path[k]]: tail };
+        }
+        const tailDoc = parseJS(tail, format);
+        const tailToml = toTOML(tailDoc.items, format);
+        const tailCst = Array.from(parseTOML(tailToml));
+
+        const upsertEntryKeyValue = (kv: KeyValue): void => {
+          const existingRow = (entry as TableArray).items.find(row =>
+            isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
+          );
+          if (existingRow) {
+            replace(original, entry as TableArray, existingRow, kv);
+          } else {
+            insert(original, entry, kv, undefined);
+          }
+        };
+
+        for (const item of tailCst) {
+          if (isKeyValue(item)) {
+            upsertEntryKeyValue(item);
+            continue;
+          }
+
+          // parseJS may materialize the replacement tail as a Table section
+          // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
+          // edit scoped to a specific AOT entry, flatten section rows back to
+          // dotted KVs relative to that entry (fuzz seed 1657445).
+          if (isTable(item)) {
+            const tableKey = (item as Table).key.item.value;
+            for (const row of (item as Table).items as TreeNode[]) {
+              if (!isKeyValue(row)) continue;
+
+              const oldRaw = row.key.raw;
+              const dotted = tableKey.concat(row.key.value);
+              row.key.value = dotted;
+              row.key.raw = generateKey(dotted).raw;
+              const delta = row.key.raw.length - oldRaw.length;
+              row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+              row.equals += delta;
+              shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+              if (row.loc.end.line === row.loc.start.line) {
+                row.loc.end.column += delta;
+              }
+
+              upsertEntryKeyValue(row);
+            }
+          }
+        }
+        return;
+      }
+    }
+  }
+
   // Build a nested object matching the change path.
   let nested: any = jsValue;
   for (let i = change.path.length - 1; i >= 0; i--) {
@@ -1758,7 +3466,6 @@ function handleStructuralEdit(
   const freshDoc = parseJS(nested, format);
   const replacementToml = toTOML(freshDoc.items, format);
   const replacementCst = Array.from(parseTOML(replacementToml));
-  const replacementKV = replacementCst[0] as KeyValue;
 
   // Insert above the first remaining section header: a key-value placed after one would
   // bind to that section instead of the root table.
@@ -1770,7 +3477,142 @@ function handleStructuralEdit(
   // until flushed, leaving the emitted node pointing past the end of the output buffer.
   if (insertIndex !== undefined) applyWrites(original);
 
-  insert(original, original, replacementKV, insertIndex);
+  // parseJS can render the nested value as MORE than one root item — e.g. a
+  // [section] followed by the key-values that belong to it when the depth
+  // exceeds inlineTableStart (fuzz seed 724: { n: { h9nvi6w: { gfjsfiy } } }
+  // came back as `[n]` + `h9nvi6w = { … }`).  Insert ALL of them, in order;
+  // dropping everything after the first lost the value entirely.
+  let firstInserted: TreeNode | undefined;
+  for (let i = 0; i < replacementCst.length; i++) {
+    const item = replacementCst[i];
+    // The replacement can re-render a table header whose key is ALREADY
+    // present in the document: the prefix cleanup above removed a sibling
+    // structure (e.g. an [[array]] header) for the same logical parent, but
+    // an explicit [table] with that key survives.  Inserting the rendered
+    // header would duplicate it and fail the re-parse with "Table already
+    // defined" (fuzz seed 1219).  Merge the rendered rows into the
+    // surviving table instead.
+    const existingTable = isTable(item)
+      ? (original.items as TreeNode[]).find(t =>
+        isTable(t) && arraysEqual((t as Table).key.item.value, (item as Table).key.item.value))
+      : undefined;
+    if (existingTable) {
+      for (const row of (item as Table).items as TreeNode[]) {
+        insert(original, existingTable, row, undefined);
+      }
+      if (!firstInserted) firstInserted = existingTable;
+      continue;
+    }
+
+    // A regenerated inline-table key-value (`n = { "{&>*b0M" = -3566 }`)
+    // can collide with a surviving explicit `[n]` section that still owns
+    // unrelated keys.  Re-emitting the inline table defines `n` twice, and
+    // the `[n]` header then tries to extend the inline table, failing the
+    // re-parse with "Cannot extend inline table" (fuzz seed 37465).  Merge
+    // the inline table's rows into the surviving section instead.
+    if (isKeyValue(item) && isInlineTable(item.value)) {
+      const kvKey = item.key.value;
+      const survivingTable = (original.items as TreeNode[]).find(t =>
+        isTable(t) && arraysEqual((t as Table).key.item.value, kvKey));
+      if (survivingTable) {
+        for (const row of ((item.value as InlineTable).items as TreeNode[])) {
+          // Inline-table rows arrive as InlineItem wrappers; unwrap them so
+          // they land as plain KeyValues inside the block table.
+          const rowNode = isInlineItem(row) ? row.item : row;
+          insert(original, survivingTable, rowNode, undefined);
+        }
+        if (!firstInserted) firstInserted = survivingTable;
+        continue;
+      }
+
+      // The inline table's key can also be a prefix of a surviving IMPLICIT
+      // table expressed through dotted key-values (`a = { l1 = -4489 }`
+      // colliding with `a.p37xq = …`): re-emitting the inline table defines
+      // `a` twice and fails the re-parse with "Table already defined"
+      // (fuzz seed 43199).  Convert each inline-table row to a dotted KV
+      // under that prefix and insert those at the root scope instead.
+      // The implicit table can equally be expressed through a section header
+      // (`"" = { b = 5 }` colliding with `["".a]`, fuzz seed 68244), so any
+      // sibling whose key extends `kvKey` counts — not just dotted key-values.
+      const implicitSiblings = findDocumentItemsByKeyPrefix(original, kvKey)
+        .filter(t => isKeyValue(t) || isTable(t) || isTableArray(t));
+      if (implicitSiblings.length > 0) {
+        for (const row of ((item.value as InlineTable).items as TreeNode[])) {
+          const rowNode = isInlineItem(row) ? row.item : row;
+          if (isKeyValue(rowNode)) {
+            const oldRaw = rowNode.key.raw;
+            const dotted = kvKey.concat(rowNode.key.value);
+            rowNode.key.value = dotted;
+            rowNode.key.raw = dotted
+              .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+              .join('.');
+            const delta = rowNode.key.raw.length - oldRaw.length;
+            rowNode.key.loc.end.column = rowNode.key.loc.start.column + rowNode.key.raw.length;
+            rowNode.equals += delta;
+            shiftNode(rowNode.value, { lines: 0, columns: delta }, { first_line_only: true });
+            if (rowNode.loc.end.line === rowNode.loc.start.line) {
+              rowNode.loc.end.column += delta;
+            }
+          }
+          insert(original, original, rowNode, i === 0 ? insertIndex : undefined);
+          if (!firstInserted) firstInserted = rowNode;
+        }
+        continue;
+      }
+    }
+
+    // The rendered section may instead collide with an IMPLICIT table: the
+    // document expresses that key through dotted key-values (`"".a = 1`
+    // defines the "" table without a header).  Re-emitting the header
+    // would conflict with the implicit definition and fail the re-parse
+    // with "Implicit table already defined" (fuzz seed 1898).  Convert
+    // each rendered row to a dotted KV under the same prefix and insert
+    // those at the root scope instead.
+    if (isTable(item)) {
+      const tableKey = (item as Table).key.item.value;
+      const implicitChildren = findDocumentItemsByKeyPrefix(original, tableKey)
+        .filter(t => isKeyValue(t));
+      if (implicitChildren.length > 0) {
+        for (const row of (item as Table).items as TreeNode[]) {
+          if (isKeyValue(row)) {
+            const oldRaw = row.key.raw;
+            const dotted = tableKey.concat(row.key.value);
+            row.key.value = dotted;
+            row.key.raw = dotted
+              .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+              .join('.');
+            const delta = row.key.raw.length - oldRaw.length;
+            row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+            row.equals += delta;
+            // Shifting only the value's own start/end leaves its inner rows
+            // (absolute columns) behind — an inline table's first row then
+            // overwrites the opening brace (fuzz seed 7443).  Shift the
+            // whole first line of the value subtree.
+            shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+            if (row.loc.end.line === row.loc.start.line) {
+              row.loc.end.column += delta;
+            }
+          }
+          insert(original, original, row, i === 0 ? insertIndex : undefined);
+          if (!firstInserted) firstInserted = row;
+        }
+        continue;
+      }
+    }
+
+    // Subsequent key-value rows belong INSIDE the freshly inserted section
+    // header, not after it at document level: appending at the end leaves
+    // them past unrelated later sections, which capture them on re-parse
+    // (fuzz seed 7379: `aw3axx = {…}` landed inside [[y-g]]).
+    if (i > 0 && firstInserted && isTable(firstInserted) && isKeyValue(item)) {
+      insert(original, firstInserted, item, undefined);
+    } else {
+      insert(original, original, item, i === 0 ? insertIndex : undefined);
+    }
+    if (!firstInserted) firstInserted = item;
+  }
+
+  const replacementKV = firstInserted as KeyValue;
 
   // Track for blank-line fixup after applyWrites.
   if (isTable(replacementKV)) {
@@ -1793,7 +3635,74 @@ function tightenInlineContainerEnd(node: InlineTable | InlineArray): void {
     const lastItem = node.items[node.items.length - 1];
     node.loc.end.column = lastItem.loc.end.column + 1;
   } else {
+    // The end must land on the container's own line: a multiline container
+    // that was emptied by zeroing the removal offset still carries its old
+    // end line (fuzz seed 5522), and tightening only the column would leave
+    // the bracket floating below the `[]`.
+    node.loc.end.line = node.loc.start.line;
     node.loc.end.column = node.loc.start.column + 2;
+  }
+}
+
+function compactInlineContainerAncestors(
+  root: TreeNode,
+  target: InlineTable | InlineArray
+): void {
+  const path: TreeNode[] = [];
+  const locate = (node: TreeNode): boolean => {
+    path.push(node);
+    if (node === target) return true;
+    if (isKeyValue(node)) {
+      if (locate(node.value)) return true;
+    } else if (isInlineItem(node)) {
+      if (locate(node.item)) return true;
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) {
+        if (locate(item)) return true;
+      }
+    }
+    path.pop();
+    return false;
+  };
+
+  if (!locate(root)) return;
+  const enclosingRow = path.findLast(isInlineItem);
+  if (!enclosingRow) return;
+  const lineDelta = target.loc.end.line - enclosingRow.loc.end.line;
+  if (lineDelta === 0) return;
+
+  const inlineContainerIndex = path.findLastIndex(
+    (node, index) => index < path.length - 1 && (isInlineTable(node) || isInlineArray(node))
+  );
+  if (inlineContainerIndex < 0) return;
+  const inlineContainer = path[inlineContainerIndex] as InlineTable | InlineArray;
+  const child = path[inlineContainerIndex + 1];
+  const childIndex = inlineContainer.items.indexOf(child as never);
+  const next = childIndex >= 0 ? inlineContainer.items[childIndex + 1] as TreeNode | undefined : undefined;
+  if (childIndex < 0 || !next) return;
+
+  const gap = next.loc.start.column - child.loc.end.column;
+  const columnDelta = resolveInnerEndCol(child) + gap - next.loc.start.column;
+  for (let i = childIndex + 1; i < inlineContainer.items.length; i++) {
+    shiftNode(inlineContainer.items[i], { lines: lineDelta, columns: columnDelta });
+  }
+  inlineContainer.loc.end.column += columnDelta;
+  for (const node of path) {
+    if (node !== target && node.loc.end.line > target.loc.end.line) {
+      node.loc.end.line += lineDelta;
+    }
+  }
+
+  for (let i = path.length - 1; i >= 0; i--) {
+    const node = path[i];
+    if (isKeyValue(node)) {
+      node.loc.end = { ...node.value.loc.end };
+      if (node.value !== target && isInlineTable(node.value)) {
+        node.loc.end.column += columnDelta;
+      }
+    } else if (isInlineItem(node)) {
+      node.loc.end = { ...node.item.loc.end };
+    }
   }
 }
 
@@ -1913,11 +3822,60 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
   if (emptiedKeys.size === 0) return;
 
   for (const path of emptiedKeys.values()) {
+    // A nested AOT (e.g. `[["".Lpfz,]]` emptied inside `[[""]]`) must be
+    // re-materialised as a row INSIDE its parent AOT entry (`Lpfz, = []`),
+    // not as a root dotted key `"".Lpfz, = []` — that dotted key defines `""`
+    // as an implicit table and collides with the surviving `[[""]]` header on
+    // re-parse ("Implicit table already defined", fuzz seed 62163).
+    if (path.length > 1) {
+      const parentEntry = tryFindByPath(doc, (path.slice(0, -1) as Path).concat([0]));
+      if (parentEntry && isTableArray(parentEntry)) {
+        const lastSegment = path[path.length - 1];
+        const emptyArrayDoc = parseJS({ [lastSegment]: [] }, format);
+        const emptyKV = generateKeyValue([lastSegment], (emptyArrayDoc.items[0] as KeyValue).value);
+        // The removal that emptied the array left pending line offsets on the
+        // preceding siblings — flush first (same discipline as the root case,
+        // fuzz seed 7379).
+        applyWrites(doc);
+        insert(doc, parentEntry, emptyKV);
+        continue;
+      }
+
+      // An AOT declared inside an explicit [table] (e.g. `[["".b.c]]` under
+      // `[""]`) must be re-materialised inside that table with a RELATIVE
+      // key (`b.c = []`).  Materialising it as a root dotted key `"".b.c = []`
+      // defines `""` as an implicit table and collides with the surviving
+      // `[""]` header on re-parse ("Implicit table already defined", fuzz
+      // seed 67221).
+      let hostTable: Table | undefined;
+      for (let len = path.length - 1; len >= 1; len--) {
+        const ancestor = tryFindByPath(doc, path.slice(0, len));
+        if (ancestor && isTable(ancestor)) {
+          hostTable = ancestor;
+          break;
+        }
+      }
+      if (hostTable) {
+        const relativeKey = path.slice(hostTable.key.item.value.length);
+        const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
+        const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
+        applyWrites(doc);
+        insert(doc, hostTable, emptyKV);
+        continue;
+      }
+    }
+
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
     // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
     // root key literally named `a.b` instead of `b` nested under `a`.
     const emptyArrayDoc = parseJS({ [path[path.length - 1]]: [] }, format);
     const emptyKV = generateKeyValue(path, (emptyArrayDoc.items[0] as KeyValue).value);
+    // The removal that emptied the array left pending line offsets on the
+    // preceding siblings.  Inserting against their pre-offset locs and only
+    // then resolving drags the new KV up past line 1 — a negative render
+    // position (fuzz seed 7379).  Flush first, like every other insert that
+    // follows removals in the same patch.
+    applyWrites(doc);
     insert(doc, doc, emptyKV, rootKeyValueInsertIndex(doc));
   }
   applyWrites(doc);
@@ -2023,8 +3981,13 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
  * safely regenerated.
  */
 function regenerateValue(jsValue: any, format: TomlFormat): Value | undefined {
-  const freshDoc = parseJS({ __tmp__: jsValue }, format);
-  const replacementToml = toTOML(freshDoc.items, format);
+  // Always render inline: with the caller's inlineTableStart, parseJS may
+  // flatten a nested object into dotted keys (`__tmp__.k28 = …`), and taking
+  // the first item's value then returns the scalar instead of the object
+  // (fuzz seed 735: a restored nested value collapsed to its first leaf).
+  const inlineFmt = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+  const freshDoc = parseJS({ __tmp__: jsValue }, inlineFmt);
+  const replacementToml = toTOML(freshDoc.items, inlineFmt);
   const replacementCst = Array.from(parseTOML(replacementToml));
   const freshItem = replacementCst[0];
   if (isKeyValue(freshItem)) return freshItem.value;
@@ -2075,4 +4038,59 @@ function findDocumentItemsByKeyPrefix(
     }
   }
   return matchingNodes;
+}
+
+/**
+ * Converts a JS-object change path into CST key coordinates by dropping the
+ * numeric array-of-tables entry indices.  The diff walks the JS object, so a
+ * path into an AOT entry interleaves the entry's numeric index (e.g. `["", 0,
+ * "fv"]`), but CST keys carry no such index — `[[""]]` entries live at the
+ * document level and their sub-tables are keyed `["", "fv"]`.  A numeric
+ * segment is an AOT entry index when the accumulated path is a document-level
+ * TableArray key; inline-array indices (which ARE part of the CST path) never
+ * resolve to a document-level TableArray.
+ */
+function stripAotEntryIndices(original: Document, jsPath: Path): Path {
+  const cstPath: Path = [];
+  for (const seg of jsPath) {
+    if (typeof seg === 'number') {
+      const isAotIndex = findDocumentItemsByKeyPrefix(original, cstPath).some(isTableArray);
+      if (isAotIndex) continue;
+    }
+    cstPath.push(seg);
+  }
+  return cstPath;
+}
+
+/**
+ * Removes sibling key-values and table/table-array sections whose key extends
+ * `prefix` (i.e. `prefix` is a strict prefix of the sibling's key) from
+ * `container`'s items, leaving `keep` untouched.  Used when a key collapses to
+ * a scalar: any dotted-key or section that still nests under it would re-define
+ * the key on re-parse ("Value already defined").
+ *
+ * Iterates a snapshot of the items because `removeMember` splices the live
+ * array (fuzz seed 31662).
+ */
+function removeSiblingsExtendingPrefix(
+  original: Document,
+  container: Table | Document | TableArray,
+  prefix: Array<string | number>,
+  keep: TreeNode
+): void {
+  const parentItems = [...container.items] as Block[];
+  for (let si = parentItems.length - 1; si >= 0; si--) {
+    const sibling = parentItems[si];
+    if (sibling === keep) continue;
+    const siblingKey = isKeyValue(sibling)
+      ? sibling.key.value
+      : isTable(sibling) || isTableArray(sibling)
+        ? sibling.key.item.value
+        : undefined;
+    if (siblingKey
+        && siblingKey.length > prefix.length
+        && arraysEqual(siblingKey.slice(0, prefix.length), prefix)) {
+      removeMember(original, container, sibling);
+    }
+  }
 }

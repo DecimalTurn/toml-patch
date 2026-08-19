@@ -652,13 +652,13 @@ function zeroLoc(): Location {
  * This is a custom serializer for randomly generated CSTs that
  * doesn't require precise location information.
  */
-export function serializeDocument(doc: Document): string {
+export function serializeDocument(rng: SeededRandom, doc: Document): string {
   const lines: string[] = [];
-  serializeBlocks(doc.items, lines);
+  serializeBlocks(rng, doc.items, lines);
   return lines.join('\n') + '\n';
 }
 
-function serializeBlocks(blocks: Block[], lines: string[], indent = ''): void {
+function serializeBlocks(rng: SeededRandom, blocks: Block[], lines: string[], indent = ''): void {
   for (let i = 0; i < blocks.length; i++) {
     if (i > 0 && !isCommentNode(blocks[i - 1])) {
       // Add blank line before tables/table arrays (but not between comments and their targets)
@@ -666,7 +666,7 @@ function serializeBlocks(blocks: Block[], lines: string[], indent = ''): void {
         lines.push('');
       }
     }
-    serializeBlock(blocks[i], lines, indent);
+    serializeBlock(rng, blocks[i], lines, indent);
   }
 }
 
@@ -674,54 +674,54 @@ function isCommentNode(node: TreeNode): boolean {
   return node.type === NodeType.Comment;
 }
 
-function serializeBlock(block: Block, lines: string[], indent: string): void {
+function serializeBlock(rng: SeededRandom, block: Block, lines: string[], indent: string): void {
   switch (block.type) {
     case NodeType.KeyValue:
-      serializeKeyValue(block as KeyValue, lines, indent);
+      serializeKeyValue(rng, block as KeyValue, lines, indent);
       break;
     case NodeType.Comment:
       lines.push(indent + (block as Comment).raw);
       break;
     case NodeType.Table:
-      serializeTable(block as Table, lines, indent);
+      serializeTable(rng, block as Table, lines, indent);
       break;
     case NodeType.TableArray:
-      serializeTableArray(block as TableArray, lines, indent);
+      serializeTableArray(rng, block as TableArray, lines, indent);
       break;
   }
 }
 
-function serializeTable(table: Table, lines: string[], _: string): void {
+function serializeTable(rng: SeededRandom, table: Table, lines: string[], _: string): void {
   const keyRaw = table.key.item.raw;
   lines.push(`[${keyRaw}]`);
   for (const item of table.items) {
-    serializeRowItem(item, lines);
+    serializeRowItem(rng, item, lines);
   }
 }
 
-function serializeTableArray(tableArray: TableArray, lines: string[], _: string): void {
+function serializeTableArray(rng: SeededRandom, tableArray: TableArray, lines: string[], _: string): void {
   const keyRaw = tableArray.key.item.raw;
   lines.push(`[[${keyRaw}]]`);
   for (const item of tableArray.items) {
-    serializeRowItem(item, lines);
+    serializeRowItem(rng, item, lines);
   }
 }
 
-function serializeRowItem(item: RowItem, lines: string[]): void {
+function serializeRowItem(rng: SeededRandom, item: RowItem, lines: string[]): void {
   if (item.type === NodeType.KeyValue) {
-    serializeKeyValue(item as KeyValue, lines, '');
+    serializeKeyValue(rng, item as KeyValue, lines, '');
   } else {
     lines.push((item as Comment).raw);
   }
 }
 
-function serializeKeyValue(kv: KeyValue, lines: string[], indent: string): void {
+function serializeKeyValue(rng: SeededRandom, kv: KeyValue, lines: string[], indent: string): void {
   const keyStr = kv.key.raw;
-  const valueStr = serializeValue(kv.value);
+  const valueStr = serializeValue(rng, kv.value);
   lines.push(`${indent}${keyStr} = ${valueStr}`);
 }
 
-function serializeValue(value: Value): string {
+function serializeValue(rng: SeededRandom, value: Value): string {
   switch (value.type) {
     case NodeType.String:
       return (value as StringNode).raw;
@@ -734,40 +734,40 @@ function serializeValue(value: Value): string {
     case NodeType.DateTime:
       return (value as DateTime).raw;
     case NodeType.InlineArray:
-      return serializeInlineArray(value as InlineArray);
+      return serializeInlineArray(rng, value as InlineArray);
     case NodeType.InlineTable:
-      return serializeInlineTable(value as InlineTable);
+      return serializeInlineTable(rng, value as InlineTable);
     default:
       return '';
   }
 }
 
-function serializeInlineArray(arr: InlineArray): string {
+function serializeInlineArray(rng: SeededRandom, arr: InlineArray): string {
   if (arr.items.length === 0) return '[]';
-  if (arr.items.length <= 1 || Math.random() > 0.3) {
+  if (arr.items.length <= 1 || rng.next() > 0.3) {
     // Single-line
     const parts = arr.items.map(item => {
-      const val = serializeValue(item.item as Value);
+      const val = serializeValue(rng, item.item as Value);
       return item.comma ? val + ',' : val;
     });
     return '[' + parts.join(' ') + ']';
   }
   // Multi-line
   const parts = arr.items.map(item => {
-    const val = serializeValue(item.item as Value);
+    const val = serializeValue(rng, item.item as Value);
     return '    ' + val + (item.comma ? ',' : '');
   });
   return '[\n' + parts.join('\n') + ',\n]';
 }
 
-function serializeInlineTable(table: InlineTable): string {
+function serializeInlineTable(rng: SeededRandom, table: InlineTable): string {
   if (table.items.length === 0) return '{}';
-  if (table.items.length <= 1 || Math.random() > 0.4) {
+  if (table.items.length <= 1 || rng.next() > 0.4) {
     // Single-line
     const parts = table.items.map(item => {
       const kv = item.item as KeyValue;
       const keyStr = kv.key.raw;
-      const valueStr = serializeValue(kv.value);
+      const valueStr = serializeValue(rng, kv.value);
       return item.comma ? `${keyStr} = ${valueStr},` : `${keyStr} = ${valueStr}`;
     });
     return '{ ' + parts.join(' ') + ' }';
@@ -776,7 +776,7 @@ function serializeInlineTable(table: InlineTable): string {
   const parts = table.items.map(item => {
     const kv = item.item as KeyValue;
     const keyStr = kv.key.raw;
-    const valueStr = serializeValue(kv.value);
+    const valueStr = serializeValue(rng, kv.value);
     return '    ' + keyStr + ' = ' + valueStr + (item.comma ? ',' : '');
   });
   return '{\n' + parts.join('\n') + ',\n}';
@@ -817,7 +817,7 @@ export function randomToml(options?: RandomizerOptions): RandomTomlResult {
   const rng = new SeededRandom(opts.seed);
 
   const document = randomDocument(rng, opts);
-  const toml = serializeDocument(document);
+  const toml = serializeDocument(rng, document);
 
   return { toml, document, seed: opts.seed };
 }

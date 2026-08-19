@@ -3,9 +3,13 @@
  * applies patch(), and verifies the result round-trips correctly.
  *
  * Usage: npx tsx src/__tests__/fuzz-patch.ts [--count N] [--seed SEED] [--mutations M]
+ *
+ * To inspect a single seed's TOML, format, mutations and output:
+ *   npx tsx src/__tests__/inspect-fuzz-seed.ts <seed> [--mutations M]
  */
 import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
+import { NodeType } from '../cst';
 import { inspect } from 'util';
 
 // ─── Mutation helpers ────────────────────────────────────────────────────
@@ -118,18 +122,31 @@ function deleteAt(obj: any, path: (string | number)[]): void {
 
 // ─── Deep clone (handles Date subclasses, BigInt, arrays) ────────────────
 
-function deepClone(obj: unknown): unknown {
+export function deepClone(obj: unknown): unknown {
   if (obj == null || typeof obj !== 'object') return obj;
   if (typeof obj === 'bigint') return obj;
 
   // Date subclasses from toml-patch — use originalFormat if available,
-  // otherwise fall back to getTime()
+  // otherwise reconstruct through the subclass's own constructor so its
+  // toISOString() override survives.
+  //
+  // `LocalDate` has no originalFormat property; falling back to
+  // `new Date(getTime())` would produce a plain Date whose ISO form
+  // (2057-08-11T00:00:00.000Z) differs from the LocalDate's own
+  // (2057-08-11), making the library's diff treat an untouched value
+  // as edited.
   if (obj instanceof Date) {
     const format = (obj as any).originalFormat;
     if (format && typeof format === 'string') {
       try {
         const Ctor = obj.constructor as new (value: string) => Date;
         return new Ctor(format);
+      } catch { /* fall through */ }
+    }
+    if (obj.constructor !== Date) {
+      try {
+        const Ctor = obj.constructor as new (value: string) => Date;
+        return new Ctor(obj.toISOString());
       } catch { /* fall through */ }
     }
     return new Date(obj.getTime());
@@ -174,6 +191,58 @@ function deepEqual(a: unknown, b: unknown): boolean {
   );
 }
 
+/**
+ * Like `deepEqual` but normalises values that formatting options can change:
+ * - `truncateZeroTimeInDates`: converts Date objects to date-only ISO strings
+ *   before comparing, since the patched TOML drops the zero time component.
+ * - `newLine`: treats \r\n and \n as equivalent inside string values, since
+ *   the patched TOML normalises ALL line endings — including multiline string
+ *   content — to the requested style.  Only active when the option is set;
+ *   without it the document keeps its original newlines and untouched
+ *   strings are not rewritten.
+ */
+function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>): boolean {
+  const truncateDates = fmt?.truncateZeroTimeInDates === true;
+  const normalizeNewlines = fmt?.newLine !== undefined;
+
+  function normalise(val: unknown): unknown {
+    if (val == null) return val;
+    if (normalizeNewlines && typeof val === 'string') {
+      return val.replace(/\r\n/g, '\n');
+    }
+    if (truncateDates && val instanceof Date) {
+      // `truncateZeroTimeInDates` drops time when it's midnight UTC.
+      // Re-parsing a date-only TOML value gives a LocalDate-like object,
+      // so normalise both sides to a date-only ISO string for comparison.
+      if (val.getUTCHours() === 0 && val.getUTCMinutes() === 0 &&
+          val.getUTCSeconds() === 0 && val.getUTCMilliseconds() === 0) {
+        const y = val.getUTCFullYear();
+        const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(val.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      return val.toISOString();
+    }
+    if (Array.isArray(val)) return val.map(normalise);
+    if (val && typeof val === 'object' && !(val instanceof Date)) {
+      const acc: Record<string, unknown> = {};
+      for (const k of Object.keys(val as object)) {
+        acc[k] = normalise((val as any)[k]);
+      }
+      return acc;
+    }
+    return val;
+  }
+
+  // Normalise both sides when the format would affect the comparison, then
+  // use plain deepEqual on the normalised values.  When no normalising
+  // options are active this degrades to a regular deepEqual.
+  if (truncateDates || normalizeNewlines) {
+    return deepEqual(normalise(a), normalise(b));
+  }
+  return deepEqual(a, b);
+}
+
 // ─── Random value generator for mutations ────────────────────────────────
 
 function randomMutationValue(rng: SeededRandom): JsonValue {
@@ -207,7 +276,7 @@ function randomMutationValue(rng: SeededRandom): JsonValue {
 
 // ─── Mutation generator ──────────────────────────────────────────────────
 
-function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
+export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
   const paths = collectPaths(obj);
 
   const mutablePaths = paths.filter(p => {
@@ -253,7 +322,7 @@ function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | nul
   return { path, kind: 'add-key', newValue: randomMutationValue(rng) };
 }
 
-function applyMutation(obj: any, mutation: RandomMutation): void {
+export function applyMutation(obj: any, mutation: RandomMutation): void {
   switch (mutation.kind) {
     case 'add-key':
       setAt(obj, mutation.path, mutation.newValue);
@@ -289,7 +358,7 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
 
 // ─── Random TomlFormat generator ─────────────────────────────────────────
 
-function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
+export function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
   // 50% chance: no format override (use library defaults)
   if (rng.chance(0.5)) return undefined;
 
@@ -325,7 +394,7 @@ function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
   return format;
 }
 
-function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
+export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
   if (!fmt) return 'default';
   const parts: string[] = [];
   for (const [k, v] of Object.entries(fmt)) {
@@ -349,7 +418,7 @@ interface PatchFuzzResult {
   formatDesc?: string;
 }
 
-function fuzzOne(
+export function fuzzOne(
   seed: number,
   mutationCount: number
 ): PatchFuzzResult {
@@ -377,12 +446,47 @@ function fuzzOne(
     // 4. Apply mutations using a seeded RNG (offset from doc seed
     //    so mutationCount changes don't alter the same-seed sequence)
     const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
+
+    // Entries of an array-of-tables must be tables — a scalar/array/date
+    // element cannot be represented in TOML at all, so mutations that
+    // would write one into an AOT array are skipped (fuzz seed 52).
+    const aotKeyPaths = new Set<string>();
+    (function collectAotKeys(node: any) {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === NodeType.TableArray && node.key && node.key.item) {
+        aotKeyPaths.add((node.key.item.value as string[]).join('.'));
+      }
+      if (Array.isArray(node.items)) for (const item of node.items) collectAotKeys(item);
+      if (node.value) collectAotKeys(node.value);
+      if (node.item) collectAotKeys(node.item);
+    })(generated.document);
+    const isTableLike = (v: unknown) =>
+      v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+
     const mutationDescs: string[] = [];
-    for (let i = 0; i < mutationCount; i++) {
+    let applied = 0;
+    let attempts = 0;
+    while (applied < mutationCount && attempts < mutationCount * 5) {
+      attempts++;
       const mutation = generateMutation(obj2, mutationRng);
       if (!mutation) break;
+      if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
+        const lastSeg = mutation.path[mutation.path.length - 1];
+        const parentPath = mutation.path.slice(0, -1);
+        // The AOT keys in aotKeyPaths are stored in CST coordinates (no numeric
+        // entry indices), while mutation.path lives in JS-object coordinates
+        // where an array-of-tables parent interleaves a numeric index
+        // (e.g. ['', 0, 'azn_', 'I/(T'] vs the AOT key ['', 'azn_', 'I/(T']).
+        // Compare the string-segment projection so the guard actually fires for
+        // an AOT nested inside another AOT entry (fuzz seed 421089).
+        const stringPath = parentPath.filter(seg => typeof seg === 'string').join('.');
+        if (typeof lastSeg === 'number' && aotKeyPaths.has(stringPath)) {
+          continue; // unrepresentable in TOML — retry
+        }
+      }
       applyMutation(obj2, mutation);
       mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);
+      applied++;
     }
 
     if (mutationDescs.length === 0) {
@@ -418,8 +522,9 @@ function fuzzOne(
       return result;
     }
 
-    // 7. Compare
-    if (!deepEqual(obj2, reParsed)) {
+    // 7. Compare — uses format-aware comparison so that
+    // truncateZeroTimeInDates / minimumDecimals don't cause false positives.
+    if (!deepEqualWithFormat(obj2, reParsed, format)) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
       result.originalToml = generated.toml;
@@ -515,4 +620,8 @@ function main() {
   }
 }
 
-main();
+// Only run the CLI fuzz loop when executed directly, so local scripts can
+// import the helpers (fuzzOne, generateMutation, …) without side effects.
+if (import.meta.main) {
+  main();
+}

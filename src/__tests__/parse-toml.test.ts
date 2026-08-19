@@ -105,6 +105,16 @@ test('should return correct ParseError (not TypeError) for incomplete table at E
   }).toThrow(/Expected table key, reached end of file/);
 });
 
+test('regression for fuzz seed 40593: date-only value followed by a quoted key', () => {
+  const src = dedent`
+    a = 2017-04-13
+    "Bo5:6" = "x"
+  `;
+
+  const result = Array.from(parseTOML(src));
+  expect(result).toHaveLength(2);
+});
+
 describe('ParseError messages', () => {
   test('should show correct error for leading zeros in integers', () => {
     expect(() => {

@@ -24,7 +24,7 @@ import {
   Comment
 } from './cst';
 import { zero, cloneLocation, clonePosition, Position } from './location';
-import { LocalDate } from './parse-toml';
+import { LocalDate, LocalTime } from './parse-toml';
 import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
@@ -114,9 +114,13 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
 
   const equals = column + 1;
 
+  // Align the fresh value with the generated key.  The value's loc comes from
+  // its own round-trip (regenerateValue), which can put it on a LATER line
+  // than the key's line 1 — leaving the value one line below the `=` and
+  // producing invalid TOML (fuzz seed 735).
   shiftNode(
     value,
-    { lines: 0, columns: column + 3 - value.loc.start.column },
+    { lines: 1 - value.loc.start.line, columns: column + 3 - value.loc.start.column },
     { first_line_only: true }
   );
 
@@ -401,8 +405,13 @@ export function generateBoolean(value: boolean): Boolean {
 export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean = false): DateTime {
   
     // Convert Date objects with zero time components to LocalDate
-    // so they are serialized as date-only in TOML
+    // so they are serialized as date-only in TOML.
+    // LocalTime is time-only (its internal date is a meaningless year-0000
+    // base), so it must never be truncated — round-tripping a LocalTime with
+    // truncateZeroTimeInDates enabled would otherwise collapse it to a
+    // LocalDate("0000-01-01") and emit `0NaN-NaN-NaN` (fuzz seed 299772).
     if (truncateZeroTimeInDates &&
+        !(value instanceof LocalTime) &&
         value.getUTCHours() === 0 &&
         value.getUTCMinutes() === 0 &&
         value.getUTCSeconds() === 0 &&

@@ -18,6 +18,11 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
 
   const indexes: { [key: string]: number } = {};
   let found;
+  // Strict-prefix matches (key longer than the path) are deferred: an exact
+  // key match elsewhere in the container must win.  Otherwise a dotted row
+  // like `"".""."mfn31vru"` shadows the plain `""` row the path points at,
+  // and the caller edits the wrong key (fuzz seed 13057).
+  let prefixCandidate: TreeNode | undefined;
   if (hasItems(node)) {
     node.items.some((item, itemIndex) => {
       try {
@@ -84,20 +89,16 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
             found = findByPath(item, remainingPath);
           }
           return true;
-        } else if (isKeyValue(item) && key.length > path.length && arraysEqual(key.slice(0, path.length), path)) {
+        } else if ((isKeyValue(item) ||
+                    (isInlineItem(item) && isKeyValue(item.item))) &&
+                   key.length > path.length && arraysEqual(key.slice(0, path.length), path)) {
           // Path is a prefix of a dotted KeyValue's key (e.g. path ['a','b']
-          // matching key ['a','b','c']). The path is fully consumed — return
-          // the KV itself so the caller can handle the key-length mismatch
-          // as a structural edit.
-          found = item;
-          return true;
-        } else if (isInlineItem(item) && isKeyValue(item.item) && key.length > path.length && arraysEqual(key.slice(0, path.length), path)) {
-          // Path is a prefix of a dotted key inside an InlineTableItem
-          // (e.g. path ['bksb'] matching inline key ['bksb','eca7itb61','ismjjcc']).
-          // The path is fully consumed — return the InlineItem so the caller
-          // can handle the key-length mismatch as a structural edit.
-          found = item;
-          return true;
+          // matching key ['a','b','c']) — or of a dotted key inside an
+          // InlineTableItem.  The path is fully consumed; the caller can
+          // handle the key-length mismatch as a structural edit.  Deferred:
+          // keep scanning, an exact key match must take precedence.
+          if (!prefixCandidate) prefixCandidate = item;
+          return false;
         } else {
           return false;
         }
@@ -105,6 +106,10 @@ export default function findByPath(node: TreeNode, path: Path): TreeNode {
         return false;
       }
     });
+  }
+
+  if (!found && prefixCandidate) {
+    found = prefixCandidate;
   }
 
   if (!found) {

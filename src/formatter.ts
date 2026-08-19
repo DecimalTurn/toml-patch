@@ -150,7 +150,7 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
     return document;
   }
 
-  const additionalTables: Table[] = [];
+  const additionalTables: { table: Table; parent: Table | TableArray }[] = [];
   
   // Process all existing tables for nested inline tables
   for (const item of document.items) {
@@ -172,9 +172,20 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
     }
   }
   
-  // Add all the additional tables to the document
-  for (const table of additionalTables) {
-    insert(document, document, table);
+  // Insert each extracted table immediately after its parent block, preserving
+  // the parent-child positional relationship.  A flat append at the document
+  // end (the previous behaviour) misplaced a sub-table of an earlier entry —
+  // e.g. `[tp6.k41]` (a sub-table of `[[tp6]]` entry 0) landed after `[[tp6]]`
+  // entry 1, reassigning `k41` to the wrong entry.  `additionalTables` is in
+  // depth-first pre-order (a child is pushed before its own children), so
+  // inserting in order with a per-parent counter keeps every sub-table after
+  // its parent and before the parent's next sibling.
+  const insertedAfter = new Map<Table | TableArray, number>();
+  for (const { table, parent } of additionalTables) {
+    const index = document.items.indexOf(parent);
+    const offset = (insertedAfter.get(parent) ?? 0) + 1;
+    insertedAfter.set(parent, offset);
+    insert(document, document, table, index + offset);
   }
 
   applyWrites(document);
@@ -185,7 +196,7 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
  * Recursively processes a table for nested inline tables and extracts them as separate tables
  * when they are at a depth less than the inlineTableStart threshold.
  */
-function processTableForNestedInlines(table: Table | TableArray, additionalTables: Table[], format: TomlFormat): void {
+function processTableForNestedInlines(table: Table | TableArray, additionalTables: { table: Table; parent: Table | TableArray }[], format: TomlFormat): void {
   // Collect all inline tables that need extraction, then process in forward order
   // to preserve the original key order in the output.
   const toExtract: { item: KeyValue; nestedTableKey: string[] }[] = [];
@@ -217,7 +228,7 @@ function processTableForNestedInlines(table: Table | TableArray, additionalTable
     remove(table, table, item);
     postInlineItemRemovalAdjustment(table);
 
-    additionalTables.push(separateTable);
+    additionalTables.push({ table: separateTable, parent: table });
 
     processTableForNestedInlines(separateTable, additionalTables, format);
   }
