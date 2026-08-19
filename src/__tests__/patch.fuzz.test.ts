@@ -79,7 +79,7 @@ import dedent from 'dedent';
     `);
   });
 
-  test.fails('appending an AOT entry after a nested array sub-table (seed 21525 alt.1)', () => {
+  test('appending an AOT entry after a nested array sub-table (seed 21525 alt.1)', () => {
     const src = dedent`
       [[a]]
       child.value = 1
@@ -98,6 +98,34 @@ import dedent from 'dedent';
       x = true
 
       [[a]]
+      child.value = 2
+      tail = [ 1, 2 ]
+    `);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  test('appending an AOT entry does not drop an empty nested object during dotted-key flattening', () => {
+    const src = dedent`
+      [[a]]
+      child.value = 1
+
+      [a.child.deep]
+      x = true
+    `;
+    const obj = parse(src) as any;
+    obj.a.push({ child: { empty: {}, value: 2 }, tail: [1, 2] });
+
+    const result = patch(src, obj);
+
+    expect(result).toEqual(dedent`
+      [[a]]
+      child.value = 1
+
+      [a.child.deep]
+      x = true
+
+      [[a]]
+      child.empty = {}
       child.value = 2
       tail = [ 1, 2 ]
     `);
