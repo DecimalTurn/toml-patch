@@ -10136,6 +10136,214 @@ describe('indentation at the root level', () => {
 
 });
 
+describe('human-edited indentation', () => {
+
+  test('adds a key to a table with one-space indentation', () => {
+    const src = [
+      '[server]',
+      ' host = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      ' host = "localhost"',
+      ' port = 8080',
+    ].join('\n'));
+  });
+
+  test('matches the last table row after an indentation jump', () => {
+    const src = [
+      '[server]',
+      '  host = "localhost"',
+      '    port = 8080',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.timeout = 30;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '  host = "localhost"',
+      '    port = 8080',
+      '    timeout = 30',
+    ].join('\n'));
+  });
+
+  test('keeps four-space indentation for a new dotted table key', () => {
+    const src = [
+      '[database]',
+      '    connection.host = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.database.connection.port = 5432;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[database]',
+      '    connection.host = "localhost"',
+      '    connection.port = 5432',
+    ].join('\n'));
+  });
+
+  test('does not use an indented comment as the table row style if there is one key', () => {
+    const src = [
+      '[server]',
+      '      # managed by the platform',
+      '    host = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '      # managed by the platform',
+      '    host = "localhost"',
+      '    port = 8080',
+    ].join('\n'));
+  });
+
+    test.fails('does not use an indented comment as the table row style even when only a comment is present', () => {
+    const src = [
+      '[server]',
+      '      # managed by the platform',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '      # managed by the platform',
+      '',
+      'port = 8080',
+    ].join('\n'));
+  });
+
+  test('preserves indentation when adding a root key before a section', () => {
+    const src = [
+      '  name = "app"',
+      '',
+      '[server]',
+      'host = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.version = "1.0";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '  name = "app"',
+      '  version = "1.0"',
+      '',
+      '[server]',
+      'host = "localhost"',
+    ].join('\n'));
+  });
+
+  test('preserves tab indentation in a table body', () => {
+    const src = [
+      '[server]',
+      '\thost = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '\thost = "localhost"',
+      '\tport = 8080',
+    ].join('\n'));
+  });
+
+  test('does not reindent multiline string content when adding a sibling key', () => {
+    const src = [
+      'description = """',
+      '  first line',
+      '    second line',
+      '"""',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.title = "example";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'description = """',
+      '  first line',
+      '    second line',
+      '"""',
+      'title = "example"',
+    ].join('\n'));
+  });
+
+  test('adds a row to a multiline inline table using its existing row column', () => {
+    const src = [
+      'config = {',
+      '    host = "localhost",',
+      '}',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '    host = "localhost",',
+      '    port = 8080,',
+      '}',
+    ].join('\n'));
+  });
+
+  test('populates an empty multiline inline table below an indented closing brace', () => {
+    const src = [
+      'config = {',
+      '  }',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.host = "localhost";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '    host = "localhost"',
+      '  }',
+    ].join('\n'));
+  });
+
+  test('preserves four-space rows when replacing a dotted inline-table value', () => {
+    const src = [
+      'config = {',
+      '    service.host = "localhost",',
+      '    service.port = 80,',
+      '}',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.service = { secure: true };
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '    service.secure = true',
+      '}',
+    ].join('\n'));
+  });
+
+});
+
 
 /* The TOML spec allows extraneous spacing between the key and the dot 
    for dotted keys. This is not recommended, but it is allowed.
@@ -10195,3 +10403,27 @@ describe('patching dotted keys with extranous spacing', () => {
   });
 
 });
+
+
+
+  // For comment ownership, we need to ensure that a new key is added with 
+  // an empty line before it if the previous key has a comment. 
+  // This is to ensure that the comment is not associated with the new key.
+
+  test.fails('adding a new key after a comment with an empty line', () => {
+    const src = [
+      '[server]',
+      '# managed by the platform',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '# managed by the platform',
+      '',
+      'port = 8080',
+    ].join('\n'));
+  });
