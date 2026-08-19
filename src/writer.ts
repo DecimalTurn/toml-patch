@@ -467,7 +467,11 @@ function calculateInlinePositioning(
     const following = (parent.items as TreeNode[]).find(
       (item, i) => i > index && !isComment(item)
     );
-    if (following) start.column = following.loc.start.column;
+    if (following) {
+      start.column = following.loc.start.column;
+    } else if (parent.loc.end.line > parent.loc.start.line) {
+      start.column = parent.loc.end.column + 1;
+    }
   }
 
   let leading_lines = 0;

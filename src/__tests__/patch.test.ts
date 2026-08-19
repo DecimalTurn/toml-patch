@@ -10024,8 +10024,7 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
 });
 
 
-//WIP 
-test.fails('multiline empty array', () => {
+test('multiline empty array', () => {
   const src = dedent`
     [metadata]
     version = "1"
@@ -10051,5 +10050,23 @@ test.fails('multiline empty array', () => {
       "new-dependency"
     ]
     `);
+});
+
+test('multiline empty array uses the existing indentation level', () => {
+  const src = dedent`
+    [root]
+    dependencies = [
+      ]
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.dependencies = ['new-dependency'];
+
+  expect(patch(src, obj)).toEqual(dedent`
+    [root]
+    dependencies = [
+        "new-dependency"
+      ]
+  `);
 });
 
