@@ -3,24 +3,7 @@ import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 
-test('regression for fuzz seed 1845422 (array index leaks into dotted key)', () => {
-  const src = dedent`
-    [[a]]
-
-    [a.q]
-    v = [0, 0, 0, { p.g.h = 3 }]
-    `;
-
-  const obj = parse(src) as any;
-  // Deleting this dotted leaf should keep `p.g = {}` inside the inline table,
-  // but patch injects the array index (`3`) into the key path.
-  delete obj.a[0].q.v[3].p.g.h;
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-});
-
-test('restoring anchored rows also restores their key and value nodes (seed 19506)', () => {
+  test('restoring anchored rows also restores their key and value nodes (seed 19506)', () => {
     // Removing a leading item moves the inline table left; its interior rows
     // are anchored to the preceding multiline string's end.  The rigid
     // shift moved the row and KeyValue back but left the Key value node at
@@ -62,40 +45,6 @@ test('restoring anchored rows also restores their key and value nodes (seed 1950
 
       [[a]]
       k93 = true
-    `);
-  });
-
-  test('regression for fuzz seed 742554 (non-contiguous AOT sub-table skipped on append)', () => {
-    // `[[y."!"]]` is a sub-table of `y` entry 0, but it is separated from the
-    // `[[y]]` header by an unrelated `[[c]]` section.  Appending a new `y`
-    // entry must land AFTER that trailing sub-table, or the new `[[y]]`
-    // header cuts in front of it and TOML re-associates `!` with entry 1.
-    const src = dedent`
-      [[y]]
-      a = 1
-
-      [[c]]
-      b = 2
-
-      [[y."!"]]
-      ll = 3
-    `;
-    const obj = parse(src, { integersAsBigInt: false }) as any;
-    obj.y.push({ k33: 4597 });
-    const result = patch(src, obj);
-    expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
-    expect(result).toEqual(dedent`
-      [[y]]
-      a = 1
-
-      [[c]]
-      b = 2
-
-      [[y."!"]]
-      ll = 3
-
-      [[y]]
-      k33 = 4597
     `);
   });
 
@@ -835,34 +784,6 @@ test('regression for fuzz seed 272851', () => {
   expect((parse(result) as any).o6z).toEqual({ ut: { g7k5gct: { k12: 'OGB' } }, w: { x: 5 } });
 });
 
-test('regression for fuzz seed 863085 (delete dotted key empties nested inline table)', () => {
-  // A nested inline table `nn` holds a single dotted key `"k1".k2.k3` whose
-  // value is a multiline string, so `nn` spans several lines. Deleting the
-  // last segment (`k3`) empties the dotted prefix to `{}` and re-serialises
-  // `nn` as `{  k1.k2 = {} }`. The re-materialisation collapsed `nn` to a
-  // single line but left its `loc.end` on the multiline string's old end
-  // line, so the enclosing table's trailing siblings `sib1`/`sib2` were
-  // pulled inside `nn`.
-  const src = dedent`
-    root = { nn = { "k1".k2.k3 = '''
-    AAA
-    BBB''' }, sib1 = "x", sib2 = "y" }
-  `;
-
-  const obj = parse(src) as any;
-  delete obj.root.nn.k1.k2.k3;
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  // `sib1`/`sib2` must stay siblings of `nn` inside `root`, not be absorbed
-  // into `nn`.
-  expect((parse(result) as any).root).toEqual({
-    nn: { k1: { k2: {} } },
-    sib1: 'x',
-    sib2: 'y',
-  });
-});
-
 test('regression for fuzz seed 299772 (AOT entry replaced by scalar)', () => {
   // Replacing the first entry of an array-of-tables with a scalar collapses
   // the whole AOT to a plain array — the regenerated `hc8v = [...]` KV must
@@ -1011,6 +932,68 @@ test('regression for fuzz seed 599513: moving a multiline inline table left corr
         bv = 94479.23159,
     }, true]
   `);
+});
+
+test('regression for fuzz seed 742554 (non-contiguous AOT sub-table skipped on append)', () => {
+  // `[[y."!"]]` is a sub-table of `y` entry 0, but it is separated from the
+  // `[[y]]` header by an unrelated `[[c]]` section.  Appending a new `y`
+  // entry must land AFTER that trailing sub-table, or the new `[[y]]`
+  // header cuts in front of it and TOML re-associates `!` with entry 1.
+  const src = dedent`
+    [[y]]
+    a = 1
+
+    [[c]]
+    b = 2
+
+    [[y."!"]]
+    ll = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj.y.push({ k33: 4597 });
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[y]]
+    a = 1
+
+    [[c]]
+    b = 2
+
+    [[y."!"]]
+    ll = 3
+
+    [[y]]
+    k33 = 4597
+  `);
+});
+
+test('regression for fuzz seed 863085 (delete dotted key empties nested inline table)', () => {
+  // A nested inline table `nn` holds a single dotted key `"k1".k2.k3` whose
+  // value is a multiline string, so `nn` spans several lines. Deleting the
+  // last segment (`k3`) empties the dotted prefix to `{}` and re-serialises
+  // `nn` as `{  k1.k2 = {} }`. The re-materialisation collapsed `nn` to a
+  // single line but left its `loc.end` on the multiline string's old end
+  // line, so the enclosing table's trailing siblings `sib1`/`sib2` were
+  // pulled inside `nn`.
+  const src = dedent`
+    root = { nn = { "k1".k2.k3 = '''
+    AAA
+    BBB''' }, sib1 = "x", sib2 = "y" }
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.root.nn.k1.k2.k3;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  // `sib1`/`sib2` must stay siblings of `nn` inside `root`, not be absorbed
+  // into `nn`.
+  expect((parse(result) as any).root).toEqual({
+    nn: { k1: { k2: {} } },
+    sib1: 'x',
+    sib2: 'y',
+  });
 });
 
 test('regression for fuzz seed 1020868 (empty sub-table of an AOT entry leaks the entry index)', () => {
@@ -1182,6 +1165,31 @@ test('regression for fuzz seed 1428499 (delete implicit sub-table of an AOT entr
   `);
 });
 
+test('regression for fuzz seed 1657445 (AOT entry structural edit emitted as table is flattened back to dotted key)', () => {
+  // Under an AOT entry, changing `rw109.kjzi` from an object-shaped subtree
+  // (rendered as [["".rw109.kjzi]]) to a scalar must reinsert `rw109.kjzi =` in
+  // that SAME entry. parseJS can render the replacement tail as `[rw109]` + row;
+  // if we only accept root KeyValue nodes there, the replacement is dropped.
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".rw109.kjzi]]
+    x = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj[''][0].rw109.kjzi = 3495.677246246487;
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[""]]
+    a = 1
+    rw109.kjzi = 3495.677246246487
+  `);
+});
+
 test('regression for fuzz seed 1674968 (implicit dotted table collapsed to scalar leaves stale children)', () => {
   // `b.c` is an implicit table defined only by the dotted keys `b.c.k1` /
   // `b.c.k2`.  Collapsing `b.c` to a scalar must truncate the key to `b.c`
@@ -1206,29 +1214,21 @@ test('regression for fuzz seed 1674968 (implicit dotted table collapsed to scala
   `);
 });
 
-test('regression for fuzz seed 1657445 (AOT entry structural edit emitted as table is flattened back to dotted key)', () => {
-  // Under an AOT entry, changing `rw109.kjzi` from an object-shaped subtree
-  // (rendered as [["".rw109.kjzi]]) to a scalar must reinsert `rw109.kjzi =` in
-  // that SAME entry. parseJS can render the replacement tail as `[rw109]` + row;
-  // if we only accept root KeyValue nodes there, the replacement is dropped.
+test('regression for fuzz seed 1845422 (array index leaks into dotted key)', () => {
   const src = dedent`
-    [[""]]
-    a = 1
+    [[a]]
 
-    [["".rw109.kjzi]]
-    x = 2
-  `;
+    [a.q]
+    v = [0, 0, 0, { p.g.h = 3 }]
+    `;
 
   const obj = parse(src) as any;
-  obj[''][0].rw109.kjzi = 3495.677246246487;
+  // Deleting this dotted leaf should keep `p.g = {}` inside the inline table,
+  // but patch injects the array index (`3`) into the key path.
+  delete obj.a[0].q.v[3].p.g.h;
 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [[""]]
-    a = 1
-    rw109.kjzi = 3495.677246246487
-  `);
 });
 
 test('regression for fuzz seed 1947810 (AOT entry edited to scalar under existing parent table)', () => {
