@@ -153,7 +153,8 @@ function getMemberKey(member: TreeNode): string | undefined {
 function scanSlots(
   items: TreeNode[],
   initialLastMemberEndLine: number,
-  isEligibleForLeading: (member: TreeNode) => boolean
+  isEligibleForLeading: (member: TreeNode) => boolean,
+  memberKey = getMemberKey
 ): Slot[] {
   const slots: Slot[] = [];
 
@@ -210,15 +211,15 @@ function scanSlots(
         // key matches the KV's key stay in the run (they are "related").
         // This applies to all-dead runs too — when every dead entry's
         // key matches the KV, R6 does not apply and the run is owned.
-        const memberKey = getMemberKey(item);
-        if (memberKey !== undefined) {
+        const key = memberKey(item);
+        if (key !== undefined) {
           let lastBarrierIdx = -1;
           for (let i = pendingRun.length - 1; i >= 0; i--) {
             // Use looksLikeKV for barrier detection — a line like
             // `# key = val # extra` still severs ownership even though
             // it isn't a "pure" dead entry.
             const ck = looksLikeKV(pendingRun[i]) ? commentedOutFirstKey(pendingRun[i]) : undefined;
-            if (ck !== undefined && ck !== memberKey) {
+            if (ck !== undefined && ck !== key) {
               lastBarrierIdx = i;
               break;
             }
@@ -245,7 +246,7 @@ function scanSlots(
     const slot: Slot = {
       kind: 'member',
       member: item,
-      key: getMemberKey(item),
+      key: memberKey(item),
       items: slotItems,
       startLine: slotItems[0].loc.start.line,
       endLine: item.loc.end.line
@@ -270,13 +271,14 @@ function scanSlots(
  */
 export function resolveSlots(
   container: Document | Table | TableArray,
-  isEligibleForLeading: (member: TreeNode) => boolean = () => true
+  isEligibleForLeading: (member: TreeNode) => boolean = () => true,
+  memberKey: (member: TreeNode) => string | undefined = getMemberKey
 ): Slot[] {
   // For a table body, comments on the header's own line (`[a] # hdr`) are
   // owned by the header itself (R1) — initialising to the header's end line
   // makes that fall out of the same check as ownership by a preceding row.
   const initialLastMemberEndLine = isDocument(container) ? 0 : container.key.loc.end.line;
-  return scanSlots(container.items as TreeNode[], initialLastMemberEndLine, isEligibleForLeading);
+  return scanSlots(container.items as TreeNode[], initialLastMemberEndLine, isEligibleForLeading, memberKey);
 }
 
 /**
