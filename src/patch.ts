@@ -3206,9 +3206,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   if (needsTighten) applyWrites(original);
 
   let hasTightened = false;
+  const tightenedInlineContainers: (InlineTable | InlineArray)[] = [];
   traverse(original, {
     InlineTable: (node) => {
       if (hasInlineContainerNeedingTighten(node)) {
+        tightenedInlineContainers.push(node);
         tightenInlineContainerEnd(node);
         deleteInlineContainerNeedingTighten(node);
         applyBracketSpacing(original, node, format.bracketSpacing);
@@ -3226,6 +3228,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   });
   if (hasTightened) {
     applyWrites(original);
+    for (const container of tightenedInlineContainers) {
+      compactInlineContainerAncestors(original, container);
+    }
     // Nested inline container tightening doesn't propagate through the
     // offset system (the removed item's offset was zeroed), so parent
     // container end positions must be recalculated explicitly.
@@ -3636,6 +3641,68 @@ function tightenInlineContainerEnd(node: InlineTable | InlineArray): void {
     // the bracket floating below the `[]`.
     node.loc.end.line = node.loc.start.line;
     node.loc.end.column = node.loc.start.column + 2;
+  }
+}
+
+function compactInlineContainerAncestors(
+  root: TreeNode,
+  target: InlineTable | InlineArray
+): void {
+  const path: TreeNode[] = [];
+  const locate = (node: TreeNode): boolean => {
+    path.push(node);
+    if (node === target) return true;
+    if (isKeyValue(node)) {
+      if (locate(node.value)) return true;
+    } else if (isInlineItem(node)) {
+      if (locate(node.item)) return true;
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) {
+        if (locate(item)) return true;
+      }
+    }
+    path.pop();
+    return false;
+  };
+
+  if (!locate(root)) return;
+  const enclosingRow = path.findLast(isInlineItem);
+  if (!enclosingRow) return;
+  const lineDelta = target.loc.end.line - enclosingRow.loc.end.line;
+  if (lineDelta === 0) return;
+
+  const inlineContainerIndex = path.findLastIndex(
+    (node, index) => index < path.length - 1 && (isInlineTable(node) || isInlineArray(node))
+  );
+  if (inlineContainerIndex < 0) return;
+  const inlineContainer = path[inlineContainerIndex] as InlineTable | InlineArray;
+  const child = path[inlineContainerIndex + 1];
+  const childIndex = inlineContainer.items.indexOf(child as never);
+  const next = childIndex >= 0 ? inlineContainer.items[childIndex + 1] as TreeNode | undefined : undefined;
+  if (childIndex < 0 || !next) return;
+
+  const gap = next.loc.start.column - child.loc.end.column;
+  const columnDelta = resolveInnerEndCol(child) + gap - next.loc.start.column;
+  for (let i = childIndex + 1; i < inlineContainer.items.length; i++) {
+    shiftNode(inlineContainer.items[i], { lines: lineDelta, columns: columnDelta });
+  }
+  inlineContainer.loc.end.column += columnDelta;
+  for (const node of path) {
+    if (node !== target && node.loc.end.line > target.loc.end.line) {
+      node.loc.end.line += lineDelta;
+    }
+  }
+
+  for (let i = path.length - 1; i >= 0; i--) {
+    const node = path[i];
+    if (isKeyValue(node)) {
+      node.loc.end = { ...node.value.loc.end };
+      if (node.value !== target && isInlineTable(node.value)) {
+        node.loc.end.column += columnDelta;
+      }
+    } else if (isInlineItem(node)) {
+      node.loc.end = { ...node.item.loc.end };
+    }
   }
 }
 
