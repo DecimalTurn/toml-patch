@@ -23,6 +23,31 @@ import dedent from 'dedent';
     `);
   });
 
+  test('restoring anchored rows with a nested inline table replacement (seed 19506 alt.1)', () => {
+    const src = dedent`
+      k = [false, { x = '''
+      END''', a = 1 }, 9, false]
+    `;
+    const obj = parse(src) as any;
+    obj.k.splice(0, 1);
+    obj.k[0].a = { nested: true };
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  test('restoring anchored rows after removing the trailing duplicate (seed 19506 alt.2)', () => {
+    const src = dedent`
+      k = [false, { x = '''
+      END''', a = 1 }, 9, false]
+    `;
+    const obj = parse(src) as any;
+    obj.k.splice(0, 1);
+    obj.k.pop();
+    obj.k[0].x = "changed";
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+  });
+
   test('appending an AOT entry skips the previous entry sub-tables (seed 21525)', () => {
     // Deleting the last key of a dotted key (`vyujik.bwe`) empties `vyujik`
     // to `{}` and materialises `[a.vyujik]` as a document-level sub-table of
@@ -46,6 +71,45 @@ import dedent from 'dedent';
       [[a]]
       k93 = true
     `);
+  });
+
+  test.fails('appending an AOT entry after a nested array sub-table (seed 21525 alt.1)', () => {
+    const src = dedent`
+      [[a]]
+      child.value = 1
+
+      [a.child.deep]
+      x = true
+    `;
+    const obj = parse(src) as any;
+    obj.a.push({ child: { value: 2 }, tail: [1, 2] });
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+      [[a]]
+      child.value = 1
+      
+      [a.child.deep]
+      x = true
+
+      [[a]]
+      child.value = 2
+      tail = [ 1, 2 ]
+    `);
+    expect(parse(result)).toEqual(obj);
+  });
+
+  test('appending an AOT entry while preserving an empty prefix sub-table (seed 21525 alt.2)', () => {
+    const src = dedent`
+      [[a]]
+      vyujik.bwe = 1
+
+      [a.vyujik.cvf]
+    `;
+    const obj = parse(src) as any;
+    delete obj.a[0].vyujik.bwe;
+    obj.a.push({ k93: { nested: false } });
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
   });
 
 // FIXME(seed 30330): collapsing a dotted key whose value is a multiline array
@@ -80,6 +144,39 @@ test('collapsing a multiline-array dotted key into a flat array (seed 30330)', (
         b = [true, "x", "y",],
     }
   `);
+});
+
+test('collapsing a multiline-array dotted key into an inline table (seed 30330 alt.1)', () => {
+  const src = dedent`
+    a5 = [1]
+
+    h.z = {
+        b.c = [
+        true,
+        8,
+    ],
+    }
+  `;
+  const obj = parse(src) as any;
+  obj.h.z.b = { x: true, y: 'tail' };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a multiline-array dotted key into an empty array (seed 30330 alt.2)', () => {
+  const src = dedent`
+    h.z = {
+        b.c = [
+        true,
+        8,
+    ],
+        sibling = 1,
+    }
+  `;
+  const obj = parse(src) as any;
+  obj.h.z.b = [];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
 });
 
 
@@ -1250,5 +1347,1359 @@ test('regression for fuzz seed 1947810 (AOT entry edited to scalar under existin
     x = 1
     u60ke_j3 = [ -3754 ]
   `);
+});
+
+test('collapsing a dotted key to an inline table beside a section sibling (seed 31662 alt.1)', () => {
+  const src = dedent`
+    b.x = -inf
+    # c
+    [b.y]
+    z = 1
+  `;
+  const obj = parse(src) as any;
+  obj.b = { value: 2244, nested: false };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a dotted key to an array beside a section sibling (seed 31662 alt.2)', () => {
+  const src = dedent`
+    b.x = -inf
+    # c
+    [b.y]
+    z = 1
+  `;
+  const obj = parse(src) as any;
+  obj.b = [2244, 7];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a Date key with a child into an inline table (seed 32801 alt.1)', () => {
+  const src = dedent`
+    [[a]]
+    "" = 1998-03-05T13:50:08Z
+    "".x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a[0][""] = { nested: { value: 1 } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a Date key with a child into an array (seed 32801 alt.2)', () => {
+  const src = dedent`
+    [[a]]
+    "" = 1998-03-05T13:50:08Z
+    "".x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a[0][""] = ["str", 2];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('removing a duplicate after a nested multiline array (seed 35943 alt.1)', () => {
+  const src = dedent`
+    [[g--]]
+    v = [true, true, 50190.5, ["""
+    c
+    d
+    """, true], true]
+  `;
+  const obj = parse(src) as any;
+  obj["g--"][0].v.splice(0, 1);
+  const result = patch(src, obj, { trailingComma: true });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a duplicate above a nested multiline array (seed 35943 alt.2)', () => {
+  const src = dedent`
+    [[g--]]
+    v = [true, true, ["""
+    c
+    d
+    """, 2068-08-05T05:20:32], false]
+  `;
+  const obj = parse(src) as any;
+  obj["g--"][0].v[0] = false;
+  obj["g--"][0].v.splice(1, 1);
+  const result = patch(src, obj, { trailingComma: true });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an AOT child to an inline object while its parent table survives (seed 37465 alt.1)', () => {
+  const src = dedent`
+    [[n.a.x]]
+    b = true
+
+    [n]
+    c = 1
+  `;
+  const obj = parse(src) as any;
+  obj.n.a = { k: 42, nested: { ok: true } };
+  const result = patch(src, obj, { inlineTableStart: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an AOT child to an array while its parent table survives (seed 37465 alt.2)', () => {
+  const src = dedent`
+    [[n.a.x]]
+    b = true
+
+    [n]
+    c = 1
+  `;
+  const obj = parse(src) as any;
+  obj.n.a = [42, false];
+  const result = patch(src, obj, { inlineTableStart: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an empty key to an inline object with a surviving section (seed 39363 alt.1)', () => {
+  const src = dedent`
+    "" = 11:43:08
+    ["".g]
+    b = 1
+  `;
+  const obj = parse(src) as any;
+  obj[""] = { h: { value: 1 } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an empty key to a mixed array with a surviving section (seed 39363 alt.2)', () => {
+  const src = dedent`
+    "" = 11:43:08
+    ["".g]
+    b = 1
+  `;
+  const obj = parse(src) as any;
+  obj[""] = ["h", { value: true }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('removing a scalar before a nested array (seed 40181 alt.1)', () => {
+  const src = dedent`
+    a = [1, false, [2, "x"], 3, true]
+  `;
+  const obj = parse(src) as any;
+  obj.a.splice(3, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a nested array element while removing its preceding scalar (seed 40181 alt.2)', () => {
+  const src = dedent`
+    a = [1, false, [2, "x"], 3]
+  `;
+  const obj = parse(src) as any;
+  obj.a[2] = { nested: [2, "x"] };
+  obj.a.splice(1, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a table with a two-entry array-of-tables (seed 41613 alt.1)', () => {
+  const src = dedent`
+    [a.b]
+    x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a.b = [{ p: false }, { p: true, nested: { x: 1 } }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a table with an empty array-of-tables (seed 41613 alt.2)', () => {
+  const src = dedent`
+    [a.b]
+    x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a.b = [];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a nested object behind a multiline string while preserving comments (seed 43159 alt.1)', () => {
+  const src = dedent`
+    a = """
+    -x
+    y"""
+    "|t" = 99
+    # c
+    z = 1
+  `;
+  const obj = parse(src) as any;
+  obj["|t"] = { k8: { leaf: "x", list: [1, 2] } };
+  const result = patch(src, obj, { inlineTableStart: 2, updateOrder: true, trailingNewline: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving an array-valued quoted key behind a multiline string (seed 43159 alt.2)', () => {
+  const src = dedent`
+    a = """
+    -x
+    y"""
+    "|t" = 99
+    # c
+    z = 1
+  `;
+  const obj = parse(src) as any;
+  obj["|t"] = ["x", { k: false }];
+  const result = patch(src, obj, { inlineTableStart: 2, updateOrder: true, trailingNewline: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an AOT child to an inline object with a dotted sibling (seed 43199 alt.1)', () => {
+  const src = dedent`
+    a.p37xq = 61459
+    [[a.l1.zoyksoh]]
+    x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a.l1 = { value: -4489, nested: true };
+  const result = patch(src, obj, { inlineTableStart: 0, updateOrder: true });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an AOT child to a mixed array with a dotted sibling (seed 43199 alt.2)', () => {
+  const src = dedent`
+    a.p37xq = 61459
+    [[a.l1.zoyksoh]]
+    x = 1
+  `;
+  const obj = parse(src) as any;
+  obj.a.l1 = [-4489, { value: true }];
+  const result = patch(src, obj, { inlineTableStart: 0, updateOrder: true });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('renaming an AOT child while changing its value to an inline object (seed 46522 alt.1)', () => {
+  const src = dedent`
+    [[y]]
+    a.t = true
+  `;
+  const obj = parse(src) as any;
+  obj.y[0].a = { k75: { nested: false } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('renaming an AOT child while changing its value to an array (seed 46522 alt.2)', () => {
+  const src = dedent`
+    [[y]]
+    a.t = true
+  `;
+  const obj = parse(src) as any;
+  obj.y[0].a.k75 = [true, false];
+  delete obj.y[0].a.t;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a multiline array entry and removing its following tail (seed 54607 alt.1)', () => {
+  const src = dedent`
+    vvyka = [{
+        a = 1,
+    }, """
+    EY""", 'tail']
+  `;
+  const obj = parse(src) as any;
+  obj.vvyka[0] = { a: 2, nested: false };
+  obj.vvyka.splice(1, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a multiline array entry with an inline array and retaining the tail (seed 54607 alt.2)', () => {
+  const src = dedent`
+    vvyka = [{
+        a = 1,
+    }, """
+    EY""", 'tail']
+  `;
+  const obj = parse(src) as any;
+  obj.vvyka[1] = ["new", { ok: true }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a dotted-key inline table with an array beside an empty key (seed 61827 alt.1)', () => {
+  const src = dedent`
+    q = {
+        "".x = 1,
+        "".y = 2,
+    }
+  `;
+  const obj = parse(src) as any;
+  obj.q = [{ x: 1 }, { y: 2 }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a dotted-key inline table with a nested object (seed 61827 alt.2)', () => {
+  const src = dedent`
+    q = {
+        "".x = 1,
+        "".y = 2,
+    }
+  `;
+  const obj = parse(src) as any;
+  obj.q = { nested: { value: 2555 }, other: false };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('changing an AOT nested table from an array to an inline object (seed 62163 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    w4 = "x"
+    [["".Lpfz]]
+    xwd = 5
+  `;
+  const obj = parse(src) as any;
+  obj[""][0].Lpfz = { value: 1, nested: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('changing an AOT nested table from an array to a scalar (seed 62163 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    w4 = "x"
+    [["".Lpfz]]
+    xwd = 5
+  `;
+  const obj = parse(src) as any;
+  obj[""][0].Lpfz = 7;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a nested array item with a multiline literal string (seed 62263 alt.1)', () => {
+  const src = dedent`
+    a = [1, [false, true, '''
+    x
+    y'''], { a."b" = 1 }, true, 2, "z"]
+  `;
+  const obj = parse(src) as any;
+  obj.a[1] = `replaced
+value`;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('removing the multiline string from a nested array (seed 62263 alt.2)', () => {
+  const src = dedent`
+    a = [1, [false, true, '''
+    x
+    y'''], { a."b" = 1 }, true, 2, "z"]
+  `;
+  const obj = parse(src) as any;
+  obj.a[1].splice(2, 1);
+  obj.a[1].push({ tail: false });
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing one table while deleting a later sibling table (seed 65785 alt.1)', () => {
+  const src = dedent`
+    [a.b.c]
+
+    [d]
+    x = 1
+
+    [f]
+  `;
+  const obj = parse(src) as any;
+  obj.a.b = [1, 2];
+  delete obj.d;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing one table to an inline object while deleting the last table (seed 65785 alt.2)', () => {
+  const src = dedent`
+    [a.b.c]
+
+    [d]
+    x = 1
+
+    [f]
+  `;
+  const obj = parse(src) as any;
+  obj.a.b = { k: 4, nested: true };
+  delete obj.f;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('emptying an AOT nested array and adding a sibling value (seed 67221 alt.1)', () => {
+  const src = dedent`
+    [""]
+    a = 1
+
+    [["".b.c]]
+    d = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].b.c = [{ value: true }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('emptying an AOT nested array while retaining the parent as an inline object (seed 67221 alt.2)', () => {
+  const src = dedent`
+    [""]
+    a = 1
+
+    [["".b.c]]
+    d = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].b = { c: [] };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a section prefix to an inline object with another section before it (seed 68244 alt.1)', () => {
+  const src = dedent`
+    ["".a]
+    x = 1
+
+    ["".b.c]
+    y = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].b = { value: 5, nested: false };
+  const result = patch(src, obj, { inlineTableStart: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a section prefix to an array with another section before it (seed 68244 alt.2)', () => {
+  const src = dedent`
+    ["".a]
+    x = 1
+
+    ["".b.c]
+    y = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].b = [5, 6];
+  const result = patch(src, obj, { inlineTableStart: 0 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('inserting before a multiline array entry and changing its tail (seed 68861 alt.1)', () => {
+  const src = dedent`
+    [t]
+    xepe5 = ['''
+    n
+    J
+    ''', "v", -1, true, [-2, 'x']]
+  `;
+  const obj = parse(src) as any;
+  obj.t.xepe5.splice(0, 0, { inserted: true });
+  obj.t.xepe5[3] = 0;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('removing an item after a multiline array entry and appending a table (seed 68861 alt.2)', () => {
+  const src = dedent`
+    [t]
+    xepe5 = ['''
+    n
+    J
+    ''', "v", -1, true, [-2, 'x']]
+  `;
+  const obj = parse(src) as any;
+  obj.t.xepe5.splice(2, 1);
+  obj.t.xepe5.push({ tail: [1, 2] });
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a section child with an array while retaining the parent table (seed 78079 alt.1)', () => {
+  const src = dedent`
+    ["".i3asc2k3y]
+    a = false
+
+    [""]
+    b = 1
+  `;
+  const obj = parse(src) as any;
+  obj[""].i3asc2k3y = ["X", false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting a section child while adding a nested parent value (seed 78079 alt.2)', () => {
+  const src = dedent`
+    ["".i3asc2k3y]
+    a = false
+
+    [""]
+    b = 1
+  `;
+  const obj = parse(src) as any;
+  delete obj[""].i3asc2k3y;
+  obj[""].c = { nested: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a dated root key with a quoted dotted child to an object (seed 79938 alt.1)', () => {
+  const src = dedent`
+    q = 2019-06-13T09:28:26
+    q."X,O{&v6D".kwkxclp2d = true
+
+    [q."Zr%@lBr"]
+    lidz78h = 1
+  `;
+  const obj = parse(src) as any;
+  obj.q = { replacement: { value: false } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a dated root key with a quoted dotted child to an array (seed 79938 alt.2)', () => {
+  const src = dedent`
+    q = 2019-06-13T09:28:26
+    q."X,O{&v6D".kwkxclp2d = true
+
+    [q."Zr%@lBr"]
+    lidz78h = 1
+  `;
+  const obj = parse(src) as any;
+  obj.q = ["replacement", false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an empty-key Date with a child to an array (seed 80004 alt.1)', () => {
+  const src = dedent`
+    [a.b]
+    "" = 11:17:13.346128
+    "".x.y = "v"
+  `;
+  const obj = parse(src) as any;
+  obj.a.b[""] = ["v", 1];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an empty-key Date with a child to a nested object (seed 80004 alt.2)', () => {
+  const src = dedent`
+    [a.b]
+    "" = 11:17:13.346128
+    "".x.y = "v"
+  `;
+  const obj = parse(src) as any;
+  obj.a.b[""] = { x: { y: "changed" }, z: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an inline-table empty key to an array (seed 82825 alt.1)', () => {
+  const src = dedent`
+    x = { "".1.w46j = -916648, "".e-0cxz9.";" = "v" }
+  `;
+  const obj = parse(src) as any;
+  obj.x[""] = ["moq45", 2];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an inline-table empty key to an object with a dotted child (seed 82825 alt.2)', () => {
+  const src = dedent`
+    x = { "".1.w46j = -916648, "".e-0cxz9.";" = "v" }
+  `;
+  const obj = parse(src) as any;
+  obj.x[""] = { nested: { value: "moq45" } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing an array Date and inserting an inline object (seed 86547 alt.1)', () => {
+  const src = dedent`
+    b.c.d = [01:48:53, { iuqh = 7544.95655 }, "s", false]
+  `;
+  const obj = parse(src) as any;
+  obj.b.c.d[0] = { time: "01:48" };
+  obj.b.c.d.splice(2, 0, [1, 2]);
+  const result = patch(src, obj, { trailingComma: true, bracketSpacing: true, inlineTableStart: 2 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing an array object and removing its Date neighbour (seed 86547 alt.2)', () => {
+  const src = dedent`
+    b.c.d = [01:48:53, { iuqh = 7544.95655 }, "s", false]
+  `;
+  const obj = parse(src) as any;
+  obj.b.c.d[1].iuqh = { year: 2010 };
+  obj.b.c.d.splice(0, 1);
+  const result = patch(src, obj, { trailingComma: true, bracketSpacing: true, inlineTableStart: 2 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing an AOT with two inline objects (seed 86724 alt.1)', () => {
+  const src = dedent`
+    [[x_i42]]
+    m = 1
+    wxq = 2
+  `;
+  const obj = parse(src) as any;
+  obj.x_i42 = [{ m: 3, nested: true }, { wxq: 4 }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing an AOT with a mixed array containing a multiline string (seed 86724 alt.2)', () => {
+  const src = dedent`
+    [[x_i42]]
+    m = 1
+    wxq = 2
+  `;
+  const obj = parse(src) as any;
+  obj.x_i42 = ["first", `line\nvalue`];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a multiline literal past duplicate scalars while removing the head (seed 179377 alt.1)', () => {
+  const src = dedent`
+    o4s = [false, '''
+    aaa''', 30325, false, '''
+    bbb
+    ccc''', false, "x", 'y']
+  `;
+  const obj = parse(src) as any;
+  obj.o4s[1] = false;
+  obj.o4s[4] = "changed";
+  obj.o4s.splice(0, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('removing a duplicate scalar while replacing the later multiline literal (seed 179377 alt.2)', () => {
+  const src = dedent`
+    o4s = [false, '''
+    aaa''', 30325, false, '''
+    bbb
+    ccc''', false, "x", 'y']
+  `;
+  const obj = parse(src) as any;
+  obj.o4s[1] = false;
+  obj.o4s[4] = { value: "changed" };
+  obj.o4s.splice(3, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('shrinking a dotted inline-table key while adding a sibling key (seed 186384 alt.1)', () => {
+  const src = dedent`
+    K = { iw.h6dhsnnqm.ho = false }
+  `;
+  const obj = parse(src) as any;
+  obj.K.iw.h6dhsnnqm = { k75: false };
+  obj.K.iw.h6dhsnnqm.extra = "x";
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a dotted inline-table leaf with an array and nested object (seed 186384 alt.2)', () => {
+  const src = dedent`
+    K = { iw.h6dhsnnqm.ho = false }
+  `;
+  const obj = parse(src) as any;
+  obj.K.iw.h6dhsnnqm = { k75: [false, true], k85: { value: 66.66 } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing and trimming a nested multiline array in a different position (seed 208822 alt.1)', () => {
+  const src = dedent`
+    zrrm9 = ["a", ["fn", 1, false, true, "K", 2, "PLAIN", """
+    q9
+    FB""", 3], 4]
+  `;
+  const obj = parse(src) as any;
+  obj.zrrm9[1][1] = { value: 1 };
+  obj.zrrm9[1].splice(7, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing a duplicate in a nested multiline array and removing its head (seed 208822 alt.2)', () => {
+  const src = dedent`
+    zrrm9 = ["a", ["fn", 1, false, true, "K", 2, "PLAIN", """
+    q9
+    FB""", 3], 4]
+  `;
+  const obj = parse(src) as any;
+  obj.zrrm9[1][2] = true;
+  obj.zrrm9[1].splice(0, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting a different dotted leaf inside an AOT inline table (seed 224081 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    ["".o96]
+    GD64qOzFQn = { x.fj = "abc", x.keep = true }
+  `;
+  const obj = parse(src) as any;
+  delete obj[""][0].o96.GD64qOzFQn.x.fj;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting the last dotted leaf from an AOT inline table branch (seed 224081 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    ["".o96]
+    GD64qOzFQn = { x.fj = "abc" }
+  `;
+  const obj = parse(src) as any;
+  delete obj[""][0].o96.GD64qOzFQn.x.fj;
+  delete obj[""][0].o96.GD64qOzFQn.x;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('repopulating an emptied multiline inline table with an array (seed 272851 alt.1)', () => {
+  const src = dedent`
+    o6z = { ut = { g7k5gct = { kr9 = """
+    Bz5~
+    5
+    """ } }, w.x = 5 }
+  `;
+  const obj = parse(src) as any;
+  obj.o6z.ut.g7k5gct = { k12: ["O", "G"] };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('repopulating an emptied multiline inline table with a multiline value (seed 272851 alt.2)', () => {
+  const src = dedent`
+    o6z = { ut = { g7k5gct = { kr9 = """
+    Bz5~
+    5
+    """ } }, w.x = 5 }
+  `;
+  const obj = parse(src) as any;
+  obj.o6z.ut.g7k5gct = { k12: `O\nG` };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing the second AOT entry with a scalar (seed 299772 AOT alt.1)', () => {
+  const src = dedent`
+    [[hc8v]]
+    a = 1
+    [[hc8v]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj.hc8v[1] = -1937;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing both AOT entries with scalar values (seed 299772 AOT alt.2)', () => {
+  const src = dedent`
+    [[hc8v]]
+    a = 1
+    [[hc8v]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj.hc8v = [-1937, 4];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('preserving a LocalTime while changing an earlier dotted value (seed 299772 LocalTime alt.1)', () => {
+  const src = dedent`
+    nm5drkk.p9izjo3 = 00:00:00
+    other = 1
+  `;
+  const obj = parse(src) as any;
+  obj.nm5drkk.p9izjo3 = new Date('1970-01-01T12:34:56.000Z');
+  obj.other = 2;
+  const result = patch(src, obj, { truncateZeroTimeInDates: true, minimumDecimals: 1 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('preserving a LocalTime while adding a sibling object (seed 299772 LocalTime alt.2)', () => {
+  const src = dedent`
+    nm5drkk.p9izjo3 = 00:00:00
+    other = 1
+  `;
+  const obj = parse(src) as any;
+  obj.other = { nested: 2 };
+  obj.extra = false;
+  const result = patch(src, obj, { truncateZeroTimeInDates: true });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting the first table while collapsing a later table to an inline object (seed 358055 alt.1)', () => {
+  const src = dedent`
+    [v8]
+    x = 1
+
+    [other]
+    x = 1
+
+    [s]
+    y = 1
+  `;
+  const obj = parse(src) as any;
+  obj.s = { value: 282, nested: true };
+  delete obj.v8;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting the first table while collapsing a later table to an array (seed 358055 alt.2)', () => {
+  const src = dedent`
+    [v8]
+    x = 1
+
+    [other]
+    x = 1
+
+    [s]
+    y = 1
+  `;
+  const obj = parse(src) as any;
+  obj.s = [282, 283];
+  delete obj.v8;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a multiline string to the front while replacing the tail with an object (seed 421965 alt.1)', () => {
+  const src = dedent`
+    q7_8 = [false, """
+    AAA
+    """, "z"]
+  `;
+  const obj = parse(src) as any;
+  obj.q7_8[2] = { value: false };
+  obj.q7_8.splice(0, 1);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a multiline string to the front while keeping duplicate booleans (seed 421965 alt.2)', () => {
+  const src = dedent`
+    q7_8 = [false, """
+    AAA
+    """, "z"]
+  `;
+  const obj = parse(src) as any;
+  obj.q7_8[2] = false;
+  obj.q7_8.splice(0, 1);
+  obj.q7_8.push(`tail\nvalue`);
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a table with a three-entry array-of-tables (seed 460447 alt.1)', () => {
+  const src = dedent`
+    [jv_c.g5y2632gh]
+    k78 = "a"
+    k59 = "b"
+    k53 = 1
+  `;
+  const obj = parse(src) as any;
+  obj.jv_c.g5y2632gh = [{ k78: "a" }, { k59: "b" }, { k53: 1 }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing a table with an array-of-tables whose second entry is nested (seed 460447 alt.2)', () => {
+  const src = dedent`
+    [jv_c.g5y2632gh]
+    k78 = "a"
+    k59 = "b"
+    k53 = 1
+  `;
+  const obj = parse(src) as any;
+  obj.jv_c.g5y2632gh = [{ k78: "a", k59: "b" }, { nested: { k53: 1 } }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a multiline inline table left while editing its first row (seed 599513 alt.1)', () => {
+  const src = dedent`
+    a = ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', true, {
+        nx = -1.5,
+        bv = 94479.23159,
+    }, true]
+  `;
+  const obj = parse(src) as any;
+  obj.a[0] = true;
+  obj.a[2].nx = { value: -1.5 };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('moving a multiline inline table left while inserting a nested sibling (seed 599513 alt.2)', () => {
+  const src = dedent`
+    a = ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', true, {
+        nx = -1.5,
+        bv = 94479.23159,
+    }, true]
+  `;
+  const obj = parse(src) as any;
+  obj.a[0] = true;
+  obj.a[2].extra = { nested: [1, 2] };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('appending an AOT entry after a non-contiguous sub-table with a nested value (seed 742554 alt.1)', () => {
+  const src = dedent`
+    [[y]]
+    a = 1
+
+    [[c]]
+    b = 2
+
+    [[y."!"]]
+    ll = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj.y.push({ k33: { nested: true } });
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('appending two AOT entries after a non-contiguous sub-table (seed 742554 alt.2)', () => {
+  const src = dedent`
+    [[y]]
+    a = 1
+
+    [[c]]
+    b = 2
+
+    [[y."!"]]
+    ll = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj.y.push({ k33: 4597 }, { k34: false });
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('deleting a dotted key while adding a sibling to the enclosing inline table (seed 863085 alt.1)', () => {
+  const src = dedent`
+    root = { nn = { "k1".k2.k3 = '''
+    AAA
+    BBB''' }, sib1 = "x", sib2 = "y" }
+  `;
+  const obj = parse(src) as any;
+  delete obj.root.nn.k1.k2.k3;
+  obj.root.sib3 = { value: "z" };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting a dotted key while replacing a trailing sibling with an array (seed 863085 alt.2)', () => {
+  const src = dedent`
+    root = { nn = { "k1".k2.k3 = '''
+    AAA
+    BBB''' }, sib1 = "x", sib2 = "y" }
+  `;
+  const obj = parse(src) as any;
+  delete obj.root.nn.k1.k2.k3;
+  obj.root.sib2 = ["y", false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('emptying an AOT sub-table while adding a sibling key in the same entry (seed 1020868 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    x = 1
+
+    ["".fv.dtmo2qe]
+    y = 2
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  delete obj[""][0].fv.dtmo2qe;
+  obj[""][0].newKey = { value: true };
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('emptying an AOT sub-table while retaining another nested branch (seed 1020868 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    x = 1
+
+    ["".fv.dtmo2qe]
+    y = 2
+
+    ["".fv.keep]
+    z = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  delete obj[""][0].fv.dtmo2qe;
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('converting a table to an AOT with a nested array in the first entry (seed 1024477 alt.1)', () => {
+  const src = dedent`
+    tp6.":" = 451070
+  `;
+  const obj = parse(src) as any;
+  obj.tp6 = [
+    { k61: 439, k41: { k96: [1, 2] } },
+    { k76: -2790 },
+  ];
+  const result = patch(src, obj, { inlineTableStart: 2, minimumDecimals: 2 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('converting a table to a three-entry AOT with a nested second entry (seed 1024477 alt.2)', () => {
+  const src = dedent`
+    tp6.":" = 451070
+  `;
+  const obj = parse(src) as any;
+  obj.tp6 = [
+    { k61: 439 },
+    { k41: { k96: new Date('2012-04-07T00:00:00.000Z') } },
+    { k76: -2790 },
+  ];
+  const result = patch(src, obj, { inlineTableStart: 2, minimumDecimals: 2 });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('reordering multiline-array duplicates while adding a nested value (seed 1137525 alt.1)', () => {
+  const src = dedent`
+    nea32 = ["a", "b", "c", "d", "e", "f", "g"]
+  `;
+  const obj = parse(src) as any;
+  obj.nea32 = ['a', 'c', { nested: ['x'] }, 'c', 'd', 'e', 'g'];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('reordering multiline-array duplicates while removing an earlier item (seed 1137525 alt.2)', () => {
+  const src = dedent`
+    nea32 = ["a", "b", "c", "d", "e", "f", "g"]
+  `;
+  const obj = parse(src) as any;
+  obj.nea32 = ['c', ['x'], 'c', 'd', 'e', 'f'];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('compact inline array preserves commas when an object is inserted (seed 1137525 variant alt.1)', () => {
+  const src = dedent`
+    arr = ["a","b","c","d","e","f","g"]
+  `;
+  const obj = parse(src) as any;
+  obj.arr = ['a', { nested: true }, 'c', 'd', 'e', 'g'];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('compact inline array preserves commas after duplicate removal and insertion (seed 1137525 variant alt.2)', () => {
+  const src = dedent`
+    arr = ["a","b","c","d","e","f","g"]
+  `;
+  const obj = parse(src) as any;
+  obj.arr = ['a', 'c', ['x'], 'c', 'e', 'g'];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an AOT with a non-contiguous sub-table to a nested static array (seed 1285105 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [other]
+    b = 2
+
+    ["".c47eko_.bog8_vy3w]
+    c = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj[""] = [[1, { value: 2 }]];
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('collapsing an AOT with a non-contiguous sub-table to a scalar array (seed 1285105 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [other]
+    b = 2
+
+    ["".c47eko_.bog8_vy3w]
+    c = 3
+  `;
+  const obj = parse(src, { integersAsBigInt: false }) as any;
+  obj[""] = [1, 2, 3];
+  const result = patch(src, obj);
+  expect(parse(result, { integersAsBigInt: false })).toEqual(obj);
+});
+
+test('deleting an implicit AOT sub-table while adding a root sibling (seed 1428499 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".sub.q]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  delete obj[""][0].sub;
+  obj.extra = { value: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing an implicit AOT sub-table with a scalar (seed 1428499 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".sub.q]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""][0].sub = 7;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('flattening an AOT structural edit to a nested inline object (seed 1657445 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".rw109.kjzi]]
+    x = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""][0].rw109.kjzi = { nested: { value: 3495.677246246487 } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('flattening an AOT structural edit to an array-valued dotted key (seed 1657445 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    a = 1
+
+    [["".rw109.kjzi]]
+    x = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""][0].rw109.kjzi = [3495.677246246487, false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an implicit dotted table to an inline object (seed 1674968 alt.1)', () => {
+  const src = dedent`
+    [[a]]
+    b.c.k1 = 1
+    b.c.k2 = 2
+  `;
+  const obj = parse(src) as any;
+  obj.a[0].b.c = { value: "X", nested: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing an implicit dotted table to an array (seed 1674968 alt.2)', () => {
+  const src = dedent`
+    [[a]]
+    b.c.k1 = 1
+    b.c.k2 = 2
+  `;
+  const obj = parse(src) as any;
+  obj.a[0].b.c = ["X", 2];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting an indexed dotted leaf while adding a sibling leaf (seed 1845422 alt.1)', () => {
+  const src = dedent`
+    [[a]]
+
+    [a.q]
+    v = [0, 0, 0, { p.g.h = 3 }]
+  `;
+  const obj = parse(src) as any;
+  delete obj.a[0].q.v[3].p.g.h;
+  obj.a[0].q.v[3].p.g.extra = false;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting an indexed dotted leaf while replacing its inline parent (seed 1845422 alt.2)', () => {
+  const src = dedent`
+    [[a]]
+
+    [a.q]
+    v = [0, 0, 0, { p.g.h = 3 }]
+  `;
+  const obj = parse(src) as any;
+  delete obj.a[0].q.v[3].p.g.h;
+  obj.a[0].q.v[3].p.g = { replacement: 4 };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing an AOT entry to a nested inline object under its parent table (seed 1947810 alt.1)', () => {
+  const src = dedent`
+    [""]
+    x = 1
+
+    [["".u60ke_j3]]
+    a = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].u60ke_j3 = { nested: { value: -3754 } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('editing an AOT entry to a mixed array under its parent table (seed 1947810 alt.2)', () => {
+  const src = dedent`
+    [""]
+    x = 1
+
+    [["".u60ke_j3]]
+    a = 2
+  `;
+  const obj = parse(src) as any;
+  obj[""].u60ke_j3 = [{ value: -3754 }, false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing an inline array element with a nested multiline object (seed 121096 alt.1)', () => {
+  const src = dedent`
+    wn9c0 = [192915]
+  `;
+  const obj = parse(src) as any;
+  obj.wn9c0[0] = { k21: { text: `line\nvalue` } };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('replacing an inline array element with a nested array (seed 121096 alt.2)', () => {
+  const src = dedent`
+    wn9c0 = [192915]
+  `;
+  const obj = parse(src) as any;
+  obj.wn9c0[0] = ["zxZ", { nested: true }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('changing a nested AOT scalar into an inline object (seed 129645 alt.1)', () => {
+  const src = dedent`
+    [[""]]
+    x = 1
+    a = 2
+
+    [[""."=M._!wD>]".l8401w1]]
+    k = 1
+  `;
+  const obj = parse(src) as any;
+  obj[""][0]["=M._!wD>]"]["l8401w1"][0] = { value: 4567 };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('changing a nested AOT scalar into a two-element array (seed 129645 alt.2)', () => {
+  const src = dedent`
+    [[""]]
+    x = 1
+    a = 2
+
+    [[""."=M._!wD>]".l8401w1]]
+    k = 1
+  `;
+  const obj = parse(src) as any;
+  obj[""][0]["=M._!wD>]"]["l8401w1"][0] = [4567, false];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('deleting a table while retaining its nested AOT child as an empty array (seed 136292 alt.1)', () => {
+  const src = dedent`
+    [x]
+    a = 1
+
+    [[x.y]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj.x.y = [];
+  delete obj.x.a;
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('collapsing a table while removing its nested AOT entirely (seed 136292 alt.2)', () => {
+  const src = dedent`
+    [x]
+    a = 1
+
+    [[x.y]]
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  delete obj.x.y;
+  obj.x = { replacement: true };
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('converting an AOT into a three-element mixed array (seed 136865 alt.1)', () => {
+  const src = dedent`
+    [[ng.tll]]
+    a = 1
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj.ng.tll = [{ k8: 187 }, -4619, { k78: [3357.17] }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', () => {
+  const src = dedent`
+    [[ng.tll]]
+    a = 1
+    b = 2
+  `;
+  const obj = parse(src) as any;
+  obj.ng.tll = [-4619, { k8: 187, k78: [3357.17] }];
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
 });
 
