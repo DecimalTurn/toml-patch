@@ -2300,7 +2300,8 @@ test('moving a multiline literal past duplicate scalars while removing the head 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
-    o4s = [false, 30325, false, "changed", false, "x", 'y']
+    o4s = [false, 30325, false, '''
+    changed''', false, "x", 'y']
   `);
 });
 
