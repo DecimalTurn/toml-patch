@@ -461,3 +461,63 @@ describe('nested multiline arrays', () => {
 
 });
 
+describe('nested multiline inline tables', () => {
+
+  test('preserves each nesting level when adding an outer array element', () => {
+    const src = [
+      'values = [',
+      '  {',
+      '    name = "first",',
+      '    enabled = true,',
+      '  },',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push({ name: 'second', enabled: false });
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  {',
+      '    name = "first",',
+      '    enabled = true,',
+      '  },',
+      '  {',
+      '    name = "second",',
+      '    enabled = false,',
+      '  },',
+      ']'
+    ].join('\n'));
+  });
+
+  test('preserves four-space nesting when adding an outer array element', () => {
+    const src = [
+      'values = [',
+      '    {',
+      '        name = "first",',
+      '        enabled = true,',
+      '    },',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push({ name: 'second', enabled: false });
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '    {',
+      '        name = "first",',
+      '        enabled = true,',
+      '    },',
+      '    {',
+      '        name = "second",',
+      '        enabled = false,',
+      '    },',
+      ']'
+    ].join('\n'));
+  });
+
+});
+

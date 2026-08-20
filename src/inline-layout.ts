@@ -4,6 +4,7 @@ import {
   InlineItem,
   TreeNode,
   isInlineArray,
+  isInlineTable,
   isInlineItem
 } from './cst';
 import { clonePosition } from './location';
@@ -14,34 +15,40 @@ function hasOneItemPerLine(container: InlineArray | InlineTable): boolean {
     && container.loc.end.line - container.loc.start.line + 1 > container.items.length;
 }
 
-export function prepareInsertedNestedArray(
+function isInlineContainer(node: TreeNode): node is InlineArray | InlineTable {
+  return isInlineArray(node) || isInlineTable(node);
+}
+
+export function prepareInsertedNestedInlineContainer(
   parent: InlineArray | InlineTable,
   child: TreeNode,
   indentWidth: number
 ): void {
-  if (!isInlineItem(child) || !isInlineArray(child.item) || !hasOneItemPerLine(parent)) return;
+  if (!isInlineItem(child) || !isInlineContainer(child.item) || !hasOneItemPerLine(parent)) return;
 
   const template = (parent.items as InlineItem[]).find(item =>
-    isInlineArray(item.item) && hasOneItemPerLine(item.item)
+    isInlineContainer(item.item)
+      && item.item.type === child.item.type
+      && hasOneItemPerLine(item.item)
   );
-  if (!template || !isInlineArray(template.item)) return;
+  if (!template || !isInlineContainer(template.item)) return;
 
-  const childArray = child.item;
-  const templateArray = template.item;
-  const rowIndent = templateArray.items.length > 0
-    ? templateArray.items[0].loc.start.column - templateArray.loc.start.column
+  const childContainer = child.item;
+  const templateContainer = template.item;
+  const rowIndent = templateContainer.items.length > 0
+    ? templateContainer.items[0].loc.start.column - templateContainer.loc.start.column
     : indentWidth;
-  const firstRow = templateArray.items.length > 0
-    ? templateArray.items[0].loc.start.line - templateArray.loc.start.line
+  const firstRow = templateContainer.items.length > 0
+    ? templateContainer.items[0].loc.start.line - templateContainer.loc.start.line
     : 1;
-  const closingRows = templateArray.items.length > 0
-    ? templateArray.loc.end.line - templateArray.items[templateArray.items.length - 1].loc.end.line
+  const closingRows = templateContainer.items.length > 0
+    ? templateContainer.loc.end.line - templateContainer.items[templateContainer.items.length - 1].loc.end.line
     : 1;
-  const startLine = childArray.loc.start.line;
-  const startColumn = childArray.loc.start.column;
+  const startLine = childContainer.loc.start.line;
+  const startColumn = childContainer.loc.start.column;
 
   let nextLine = startLine + firstRow;
-  for (const item of childArray.items) {
+  for (const item of childContainer.items) {
     shiftNode(item, {
       lines: nextLine - item.loc.start.line,
       columns: startColumn + rowIndent - item.loc.start.column
@@ -49,9 +56,9 @@ export function prepareInsertedNestedArray(
     nextLine = item.loc.end.line + 1;
   }
 
-  childArray.loc.end = {
+  childContainer.loc.end = {
     line: nextLine - 1 + closingRows,
-    column: templateArray.loc.end.column
+    column: templateContainer.loc.end.column
   };
-  child.loc = { start: clonePosition(childArray.loc.start), end: clonePosition(childArray.loc.end) };
+  child.loc = { start: clonePosition(childContainer.loc.start), end: clonePosition(childContainer.loc.end) };
 }
