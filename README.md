@@ -459,6 +459,8 @@ class TomlFormat {
   bracketSpacing: boolean
   inlineTableStart?: number
   truncateZeroTimeInDates: boolean
+  useTabsForIndentation?: boolean
+  indentWidth: number
   minimumDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
@@ -537,6 +539,39 @@ const format = TomlFormat.default();
 format.bracketSpacing = true;   // [ 1, 2, 3 ] and { x = 1, y = 2 }
 format.bracketSpacing = false;  // [1, 2, 3] and {x = 1, y = 2}
 ```
+
+**useTabsForIndentation**
+- **Type:** `boolean` (optional)
+- **Default:** `false`; when patching without an explicit format, source indentation is auto-detected
+- **Description:** Whether newly generated structural indentation should use tabs instead of spaces. Existing formatting and indentation inside multiline string values are preserved.
+
+```js
+const format = TomlFormat.default();
+format.useTabsForIndentation = true;
+```
+
+**indentWidth**
+- **Type:** `number`
+- **Default:** `2`
+- **Description:** The number of spaces used for one structural indentation level when generating multiline arrays, inline tables, table rows, or other multiline values. When patching without an explicit value, the indentation width is auto-detected from the existing document. It must be a positive integer.
+
+```js
+const format = TomlFormat.default();
+format.indentWidth = 4;
+
+const existing = `values = [
+  1,
+]`;
+const updated = { values: [1, 2] };
+
+patch(existing, updated, format);
+// values = [
+//   1,
+//   2,
+// ]
+```
+
+`indentWidth` controls generated structural indentation. It does not reindent existing rows or change whitespace that is part of a multiline string value. It also does not by itself make compact arrays or inline tables produced by `stringify()` multiline.
 
 **leadingBom**
 - **Type:** `boolean`
