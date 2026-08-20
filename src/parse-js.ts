@@ -16,6 +16,7 @@ import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth } from './writer';
+import { prepareInsertedNestedArray } from './inline-layout';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -93,6 +94,7 @@ function walkInlineArray(value: Array<any>, format: TomlFormat): InlineArray {
     const item = walkValue(element, format);
     const inline_array_item = generateInlineItem(item);
 
+    prepareInsertedNestedArray(inline_array, inline_array_item, format.indentWidth);
     insert(inline_array, inline_array, inline_array_item);
   }
   applyBracketSpacing(inline_array, inline_array, format.bracketSpacing);

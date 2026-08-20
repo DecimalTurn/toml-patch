@@ -54,6 +54,7 @@ import {
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import traverse from './traverse';
+import { prepareInsertedNestedArray } from './inline-layout';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -1164,6 +1165,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           // [18:45:20, false, ["a","b"]]
           parent = parent.item;
         }
+      }
+
+      if (isInlineArray(parent) || isInlineTable(parent)) {
+        prepareInsertedNestedArray(parent, child, format.indentWidth);
       }
 
       if (isInlineArray(parent)) {

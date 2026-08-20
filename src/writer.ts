@@ -558,43 +558,6 @@ function insertInline(
     throw new Error(`Incompatible child type "${(child as TreeNode).type}"`);
   }
 
-  const childArray = isInlineArray(child.item) ? child.item : undefined;
-  if (childArray && perLine(parent)) {
-    const template = (parent.items as InlineItem[]).find(item =>
-      isInlineArray(item.item) && perLine(item.item)
-    );
-    if (template && isInlineArray(template.item)) {
-      const templateArray = template.item;
-      const rowIndent = templateArray.items.length > 0
-        ? templateArray.items[0].loc.start.column - templateArray.loc.start.column
-        : indentWidth;
-      const firstRow = templateArray.items.length > 0
-        ? templateArray.items[0].loc.start.line - templateArray.loc.start.line
-        : 1;
-      const closingRows = templateArray.items.length > 0
-        ? templateArray.loc.end.line - templateArray.items[templateArray.items.length - 1].loc.end.line
-        : 1;
-      const startLine = childArray.loc.start.line;
-      const startColumn = childArray.loc.start.column;
-
-      let nextLine = startLine + firstRow;
-      for (const item of childArray.items) {
-        const shift = {
-          lines: nextLine - item.loc.start.line,
-          columns: startColumn + rowIndent - item.loc.start.column
-        };
-        shiftNode(item, shift);
-        nextLine = item.loc.end.line + 1;
-      }
-
-      childArray.loc.end = {
-        line: nextLine - 1 + closingRows,
-        column: templateArray.loc.end.column
-      };
-      child.loc = { start: clonePosition(childArray.loc.start), end: clonePosition(childArray.loc.end) };
-    }
-  }
-
   // Measure the container's own comma spacing BEFORE splicing the child in
   // (the child's loc is still stale and would skew the measurement).
   const skip_comma_space = commaSpaceOf(parent);
