@@ -261,6 +261,60 @@ describe('human-edited indentation', () => {
     ].join('\n'));
   });
 
+  test('using indent when no elements are in the multiline inline table', () => {
+    const src = [
+      'config = {',
+      '}',
+    ].join('\n');
+    const fmt = { indentWidth: 4 };
+    const obj = parse(src) as any;
+    obj.config.service = true;
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '    service = true',
+      '}',
+    ].join('\n'));
+  });
+
+  test('using indent when no elements are in the multiline array', () => {
+    const src = [
+      'config = [',
+      ']',
+    ].join('\n');
+    const fmt = { indentWidth: 4 };
+    const obj = parse(src) as any;
+    obj.config.push(true);
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = [',
+      '    true',
+      ']',
+    ].join('\n'));
+  });
+
+    test('using indent when no elements are in the multiline array (default indent)', () => {
+    const src = [
+      'config = [',
+      ']',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.push(true);
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = [',
+      '  true',
+      ']',
+    ].join('\n'));
+  });
+
+
 });
 
 describe('nested multiline arrays', () => {
