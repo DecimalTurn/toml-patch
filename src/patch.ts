@@ -1422,7 +1422,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
               restoredKeySegments = true;
             }
           }
-          insert(original, parent, childToInsert);
+          const leadingLines = (isTable(parent) || isTableArray(parent))
+            && parent.items.length > 0
+            && parent.items.every(isComment)
+            ? 2
+            : undefined;
+          insert(original, parent, childToInsert, undefined, undefined, undefined, leadingLines);
           if (restoredKeySegments) restoredInsertContainers.add(parent);
         }
       }
