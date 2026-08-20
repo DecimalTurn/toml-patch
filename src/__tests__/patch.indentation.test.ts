@@ -1,9 +1,5 @@
 import patch from '../patch';
-import { parse, stringify } from '../';
-import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
-import { example } from '../__fixtures__';
-import dedent from 'dedent';
-import { TomlFormat } from '../toml-format';
+import { parse } from '../';
 
 
 describe('indentation at the root level', () => {
@@ -269,7 +265,7 @@ describe('human-edited indentation', () => {
 
 describe('nested multiline arrays', () => {
 
-  test.fails('preserves each nesting level when adding an outer array element', () => {
+  test('preserves each nesting level when adding an outer array element', () => {
     const src = [
       'values = [',
       '  [',
@@ -297,7 +293,7 @@ describe('nested multiline arrays', () => {
     ].join('\n'));
   });
 
-  test.fails('preserves four-space nesting when adding an outer array element', () => {
+  test('preserves four-space nesting when adding an outer array element', () => {
     const src = [
       'values = [',
       '    [',
@@ -325,7 +321,7 @@ describe('nested multiline arrays', () => {
     ].join('\n'));
   });
 
-  test.fails('does not reindent multiline string content inside a new nested array', () => {
+  test('does not reindent multiline string content inside a new nested array', () => {
     const src = [
       'values = [',
       '  [',
