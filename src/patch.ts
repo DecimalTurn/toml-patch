@@ -2146,6 +2146,13 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // string inside a nested array), preserve the existing item's comma
       // flag so the replacement doesn't introduce an unwanted trailing comma.
       if (isInlineItem(existing) && isInlineItem(replacement)) {
+        if (isString(existing.item) && isString(replacement.item)) {
+          preserveFormatting(existing.item, replacement.item);
+          replacement.loc = {
+            start: { ...replacement.item.loc.start },
+            end: { ...replacement.item.loc.end }
+          };
+        }
         replacement.comma = existing.comma;
       }
 

@@ -435,5 +435,33 @@ describe('nested multiline arrays', () => {
     ].join('\n'));
   });
 
+    test('does not reindent basic multiline string content inside an existing nested array', () => {
+    const src = [
+      'values = [',
+      '  [',
+      '    """',
+      '      first line',
+      '        second line""",',
+      '  ],',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values[0][0] += '\n      new value\n';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  [',
+      '    """',
+      '      first line',
+      '        second line',
+      '      new value',
+      '""",',
+      '  ],',
+      ']'
+    ].join('\n'));
+  });
+
 });
 
