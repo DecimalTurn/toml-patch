@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-08-21
+
 ### Fixed
 
 - Stringify: Fix extra blank lines when extracting nested inline tables via `inlineTableStart` ([#281])
