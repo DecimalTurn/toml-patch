@@ -236,7 +236,10 @@ export function detectTabsForIndentation(str: string): boolean {
   }
   
   // Prefer tabs if we see more tabs than spaces
-  return tabCount > spaceCount;
+  if (tabCount > 0) {
+    return tabCount >= spaceCount;
+  }
+  return false; // default to spaces if no evidence
 }
 /*
   Detect the indentation width (number of spaces) used in the existing TOML by examining the CST.
@@ -543,7 +546,7 @@ export class TomlFormat {
     this.inlineTableStart = inlineTableStart ?? DEFAULT_INLINE_TABLE_START;
     this.truncateZeroTimeInDates = truncateZeroTimeInDates ?? DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES;
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
-    this.indentWidth = indentWidth ?? DEFAULT_INDENT_WIDTH;
+    this.indentWidth = this.useTabsForIndentation ? 1 : indentWidth ?? DEFAULT_INDENT_WIDTH;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
     this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
     this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;

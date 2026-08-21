@@ -1,5 +1,5 @@
 import patch from '../patch';
-import { parse } from '../';
+import { parse, TomlFormat } from '../';
 
 
 describe('indentation at the root level', () => {
@@ -129,7 +129,7 @@ describe('tab indentation', () => {
     const obj = parse(src) as any;
     obj.config.host = 'localhost';
 
-    const result = patch(src, obj, { useTabsForIndentation: true });
+    const result = patch(src, obj, { useTabsForIndentation: true, indentWidth: 4 });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'config = {',
@@ -138,7 +138,17 @@ describe('tab indentation', () => {
     ].join('\n'));
   });
 
-  test('ignores an indented comment when detecting tab indentation', () => {
+  // The expected outcome of this test is not really ideal. Clearly if a document
+  // is using a mixed of tabs and spaces, ideally the patch operation would leave things 
+  // as they are, but the current implementation of the patcher will enforce only one
+  // type of indentation. This is a limitation of the current implementation and could be
+  // improved in the future, but we are being honest, mixed indentation is an abomination
+  // and people should be grateful that we fix it for them. However, the fact that we
+  // replace one space by a tab can be a bit surprising and introduce big shifts in the
+  // document. But hey, if that's whats needed to get the person's attention on the fact
+  // that they are using mixed indentation, then so be it. We can always improve this in
+  // the future if people complain.
+  test('preserves an indented comment when applying tab indentation', () => {
     const src = [
       '[server]',
       '  # managed by the platform',
@@ -147,14 +157,85 @@ describe('tab indentation', () => {
     const obj = parse(src) as any;
     obj.server.port = 8080;
 
+    const fmt = TomlFormat.autoDetectFormat(src);
+
+    expect(fmt.useTabsForIndentation).toBe(true);
+    expect(fmt.indentWidth).toBe(1);
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '\t\t# managed by the platform',
+      '\thost = "localhost"',
+      '\tport = 8080',
+    ].join('\n'));
+  });
+
+  test('preserves an indented comment when applying tab indentation', () => {
+    const src = [
+      '[server]',
+      '\t# managed by the platform',
+      '    host = "localhost"',
+      '    ip = "127.0.0.1"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const fmt = TomlFormat.autoDetectFormat(src);
+
+    expect(fmt.useTabsForIndentation).toBe(false);
+    expect(fmt.indentWidth).toBe(4);
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      ' # managed by the platform',
+      '    host = "localhost"',
+      '    ip = "127.0.0.1"',
+      '    port = 8080',
+    ].join('\n'));
+  });
+
+});
+
+describe('indentation edge cases', () => {
+
+  test('ignores leading blank and comment lines when detecting root indentation', () => {
+    const src = [
+      '',
+      '# application settings',
+      '    name = "app"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.version = '1.0';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '',
+      '# application settings',
+      '    name = "app"',
+      '    version = "1.0"',
+    ].join('\n'));
+  });
+
+  test('preserves CRLF when adding a tab-indented table row', () => {
+    const src = [
+      '[server]',
+      '\thost = "localhost"',
+    ].join('\r\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       '[server]',
-      '  # managed by the platform',
       '\thost = "localhost"',
       '\tport = 8080',
-    ].join('\n'));
+    ].join('\r\n'));
   });
 
 });
