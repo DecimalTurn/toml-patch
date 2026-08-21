@@ -76,6 +76,89 @@ describe('indentation at the root level', () => {
 
 });
 
+describe('tab indentation', () => {
+
+  test('detects tabs when adding a root-level sibling key', () => {
+    const src = [
+      '\tkey1 = "value1"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.key2 = 'value2';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '\tkey1 = "value1"',
+      '\tkey2 = "value2"',
+    ].join('\n'));
+  });
+
+  test('preserves tabs at each nested multiline-array level', () => {
+    const src = [
+      'values = [',
+      '\t[',
+      '\t\t1,',
+      '\t\t2,',
+      '\t],',
+      ']',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push([3, 4]);
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '\t[',
+      '\t\t1,',
+      '\t\t2,',
+      '\t],',
+      '\t[',
+      '\t\t3,',
+      '\t\t4,',
+      '\t],',
+      ']',
+    ].join('\n'));
+  });
+
+  test('uses tabs when explicitly populating an empty multiline inline table', () => {
+    const src = [
+      'config = {',
+      '}',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.host = 'localhost';
+
+    const result = patch(src, obj, { useTabsForIndentation: true });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '\thost = "localhost"',
+      '}',
+    ].join('\n'));
+  });
+
+  test('ignores an indented comment when detecting tab indentation', () => {
+    const src = [
+      '[server]',
+      '  # managed by the platform',
+      '\thost = "localhost"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '[server]',
+      '  # managed by the platform',
+      '\thost = "localhost"',
+      '\tport = 8080',
+    ].join('\n'));
+  });
+
+});
+
 describe('human-edited indentation', () => {
 
   test('adds a key to a table with one-space indentation', () => {
@@ -221,23 +304,6 @@ describe('human-edited indentation', () => {
       '',
       '[server]',
       'host = "localhost"',
-    ].join('\n'));
-  });
-
-  test('preserves tab indentation in a table body', () => {
-    const src = [
-      '[server]',
-      '\thost = "localhost"',
-    ].join('\n');
-    const obj = parse(src) as any;
-    obj.server.port = 8080;
-
-    const result = patch(src, obj);
-    expect(parse(result)).toEqual(obj);
-    expect(result).toBe([
-      '[server]',
-      '\thost = "localhost"',
-      '\tport = 8080',
     ].join('\n'));
   });
 
