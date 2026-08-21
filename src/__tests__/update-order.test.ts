@@ -553,6 +553,30 @@ describe('updateOrder warnings when a requested position could not be honored', 
     }
   });
 
+  test('uses nested move indices when unrelated rows precede AOT dotted-key members', () => {
+    const input = dedent`
+      [[a]]
+      unrelated = 0
+      y3.mklbjj.k36 = 1
+      y3.mklbjj.k99 = 2
+      y3.mklbjj.k17 = 3
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { a: [{ unrelated: 0, y3: { mklbjj: { k36: 1, k17: 3, k99: 9 } } }] },
+      { updateOrder: true }
+    );
+
+    expect(result).toEqual(dedent`
+      [[a]]
+      unrelated = 0
+      y3.mklbjj.k36 = 1
+      y3.mklbjj.k17 = 3
+      y3.mklbjj.k99 = 9
+    ` + '\n');
+  });
+
   test('warns when the requested order violates the root-KV/section validity partition', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
