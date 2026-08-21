@@ -213,6 +213,7 @@ export function countTrailingNewlines(str: string): number {
 
 // Detects if tabs are used for indentation by checking the first few indented lines
 export function detectTabsForIndentation(str: string): boolean {
+  //TODO: improve performance by finding the 
   const lines = str.split(/\r?\n/);
   let tabCount = 0;
   let spaceCount = 0;
@@ -237,6 +238,21 @@ export function detectTabsForIndentation(str: string): boolean {
   // Prefer tabs if we see more tabs than spaces
   return tabCount > spaceCount;
 }
+/*
+  Detect the indentation width (number of spaces) used in the existing TOML by examining the CST.
+
+  This function already assumes that the TOML document does not use tabs for indentation. 
+  Do not use this function if tabs are used for indentation!
+
+  It looks for the first indented line in the CST that is part of a nested 
+  structure (like a table or array) and measures the number of leading spaces 
+  to determine the indentation width.
+*/
+function countLeadingSpaces(line: string): number {
+  let count = 0;
+  while (count < line.length && line[count] === ' ') count++;
+  return count;
+}
 
 export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>): number {
   const lines = tomlString.split(/\r?\n/);
@@ -253,8 +269,8 @@ export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>
       node.loc?.start?.line > containerStartLine
     ) {
       const line = lines[node.loc.start.line - 1] ?? '';
-      const leading = line.match(/^[ \t]*/)?.[0] ?? '';
-      if (leading.length > 0) widths.push(leading.includes('\t') ? 1 : leading.length);
+      const leadingSpaces = countLeadingSpaces(line);
+      if (leadingSpaces > 0) widths.push(leadingSpaces);
     }
 
     const nextContainerStartLine = containers.has(node.type) && node.loc?.end?.line > node.loc?.start?.line
@@ -273,7 +289,6 @@ export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>
     : Array.from(syntaxTree ?? []);
   for (const node of nodes) visit(node);
 
-  if (detectTabsForIndentation(tomlString)) return 1;
   if (widths.length > 0) return Math.min(...widths);
 
   // A document with only an indented root key has no nested CST row from which to
@@ -281,7 +296,7 @@ export function detectIndentWidth(tomlString: string, syntaxTree?: Iterable<any>
   // and comments so a banner cannot become the detected indent.
   const rootIndentWidths = lines
     .filter(line => line.trim().length > 0 && !line.trimStart().startsWith('#'))
-    .map(line => line.match(/^ +/)?.[0].length ?? 0)
+    .map(countLeadingSpaces)
     .filter(width => width > 0);
   return rootIndentWidths.length > 0 ? Math.min(...rootIndentWidths) : DEFAULT_INDENT_WIDTH;
 }
@@ -628,7 +643,14 @@ export class TomlFormat {
     
     // Detect if tabs are used for indentation
     format.useTabsForIndentation = detectTabsForIndentation(tomlContent);
-    format.indentWidth = detectIndentWidth(tomlContent, cstNodes);
+    if (format.useTabsForIndentation) {
+      // If tabs are used, indentWidth is effectively 1 (one tab character)
+      format.indentWidth = 1;
+    } else {
+      // Otherwise, detect the number of spaces used for indentation
+      format.indentWidth = detectIndentWidth(tomlContent, cstNodes);
+    }
+    
     
     // inlineTableStart uses default value since auto-detection would require
     // complex analysis of nested table formatting preferences
