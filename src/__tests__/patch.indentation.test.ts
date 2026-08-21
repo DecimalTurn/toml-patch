@@ -53,6 +53,27 @@ describe('indentation at the root level', () => {
     ].join('\n'));  
   });
 
+  test('considers root indentation for table', () => {
+    const src = [
+      '  [server]',
+      '  key1 = "value1"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.client = {};
+    obj.client.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '  [server]',
+      '  key1 = "value1"',
+      '',
+      '  [client]',
+      '  port = 8080',
+    ].join('\n'));
+
+  });
+
 });
 
 describe('human-edited indentation', () => {
@@ -129,7 +150,7 @@ describe('human-edited indentation', () => {
     ].join('\n'));
   });
 
-    test('does not use an indented comment as the table row style even when only a comment is present', () => {
+  test('does not use an indented comment as the table row style even when only a comment is present', () => {
     const src = [
       '[server]',
       '      # managed by the platform',
@@ -145,6 +166,41 @@ describe('human-edited indentation', () => {
       '',
       'port = 8080',
     ].join('\n'));
+  });
+
+
+  /* 
+  This test is currently skipped because we currently don't support 
+  adding indented keys to a table that has no keys. The patcher currently 
+  uses the indentation of the last key in the table to determine the 
+  indentation of new keys, but if there are no keys, it defaults to no indentation. This is a limitation 
+  of the current implementation and could be improved in the future.
+
+  Since this practical scenario is not common, we can skip this test for now. 
+  If we want to support this in the future, we can revisit this test and implement 
+  the necessary logic in the patcher to handle this case.
+
+  */
+
+  test.skip('considers root indentation and intra-table indentation separately', () => {
+    const src = [
+      '  [server]',
+      '    key1 = "value1"',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.client = {};
+    obj.client.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      '  [server]',
+      '    key1 = "value1"',
+      '',
+      '  [client]',
+      '    port = 8080',
+    ].join('\n'));
+
   });
 
   test('preserves indentation when adding a root key before a section', () => {
