@@ -3370,7 +3370,7 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
 });
 
 
-test.fails('regression for fuzz seed 2591153', () => {
+test('regression for fuzz seed 2591153', () => {
   const src = dedent`
       gas = true
       sz = 178262

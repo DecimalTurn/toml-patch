@@ -366,6 +366,28 @@ function reorder(changes: Change[]): Change[] {
         if (isAdd(next_change)) {
           const bIdx = last(next_change.path);
           if (typeof bIdx === 'number' && arraysEqual(aPrefix, next_change.path.slice(0, -1))) {
+            // A source-coordinate remove remains valid against the original array and
+            // therefore has to run before a same-array Add, even when the diff emitted the
+            // remove after that Add (seed 2591153). Post-shift removes deliberately stay on
+            // the far side of the Add (seed 1137525).
+            if (change.coordinate === 'source') {
+              let sourceRemove = -1;
+              for (let k = j + 1; k < changes.length; k++) {
+                const candidate = changes[k];
+                if (isRemove(candidate)
+                    && candidate.coordinate === 'source'
+                    && arraysEqual(aPrefix, candidate.path.slice(0, -1))) {
+                  sourceRemove = k;
+                  break;
+                }
+              }
+              if (sourceRemove !== -1) {
+                const sourceChange = changes.splice(sourceRemove, 1)[0];
+                changes.splice(i, 0, sourceChange);
+                i = -1;
+                break;
+              }
+            }
             break;
           }
           j++;
@@ -437,7 +459,6 @@ function reorder(changes: Change[]): Change[] {
 function coalesceStructuralReplacements(original: Document, updated_js: any, changes: Change[]): Change[] {
   const consumed = new Set<Change>();
   const coalescedEdits: Change[] = [];
-
   // Strategy 1: Remove(prefix.oldKey) + Add(prefix.newKey) sharing an
   // implicit parent with no literal node of its own.
   const groups = new Map<string, { path: Change['path']; removes: Change[]; adds: Change[] }>();
@@ -445,7 +466,7 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     if (!isRemove(change) && !isAdd(change)) continue;
 
     const parentPath = change.path.slice(0, -1);
-    if (parentPath.length === 0) continue; // never coalesce at the document root itself
+    if (parentPath.length === 0) continue;
 
     const key = JSON.stringify(parentPath);
     let group = groups.get(key);
@@ -457,7 +478,7 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
   }
   for (const group of groups.values()) {
     if (group.removes.length === 0 || group.adds.length === 0) continue;
-    if (tryFindByPath(original, group.path)) continue; // parent still exists literally
+    if (tryFindByPath(original, group.path)) continue;
 
     group.removes.forEach(change => consumed.add(change));
     group.adds.forEach(change => consumed.add(change));
@@ -517,7 +538,6 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
 
     const firstEntry = tryFindByPath(original, prefix.concat(0));
     if (!firstEntry || !isTableArray(firstEntry)) continue;
-
     arrayPrefixes.set(JSON.stringify(prefix), prefix);
   }
   for (const prefix of arrayPrefixes.values()) {
@@ -1024,6 +1044,116 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
   // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
   const objectMoves: Move[] = [];
+
+  // Several writes into one multiline inline container can overlap through the container's
+  // stale end position even when each write is flushed individually. Treat only those
+  // multi-change, comment-free containers transactionally; a single edit still uses the
+  // formatting-preserving fine-grained path and comments retain their ownership handling.
+  const multilineChangeCounts = new Map<TreeNode, number>();
+  const multilineChangePaths = new Map<TreeNode, Path>();
+  const multilineChanges = new Map<TreeNode, Change[]>();
+  const multilineHasUnresolvedChange = new Set<TreeNode>();
+  const multilineAncestors = new WeakMap<TreeNode, TreeNode[]>();
+  const indexMultilineAncestors = (node: TreeNode, ancestors: TreeNode[] = []) => {
+    const nextAncestors = (isInlineTable(node) || isInlineArray(node)) &&
+      node.loc.end.line > node.loc.start.line
+      ? [...ancestors, node]
+      : ancestors;
+    multilineAncestors.set(node, nextAncestors);
+    if (isKeyValue(node)) {
+      indexMultilineAncestors(node.value, nextAncestors);
+    } else if (isInlineItem(node)) {
+      indexMultilineAncestors(node.item, nextAncestors);
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) indexMultilineAncestors(item, nextAncestors);
+    }
+  };
+  indexMultilineAncestors(original);
+  const commentCache = new WeakMap<TreeNode, boolean>();
+  const multilineStringCountCache = new WeakMap<TreeNode, number>();
+  function containsComment(node: TreeNode): boolean {
+    const cached = commentCache.get(node);
+    if (cached !== undefined) return cached;
+    let result: boolean;
+    if (isComment(node)) result = true;
+    else if (isKeyValue(node)) result = containsComment(node.value);
+    else if (isInlineItem(node)) result = containsComment(node.item);
+    else result = hasItems(node) && (node.items as TreeNode[]).some(containsComment);
+    commentCache.set(node, result);
+    return result;
+  }
+  function multilineStringCount(node: TreeNode): number {
+    const cached = multilineStringCountCache.get(node);
+    if (cached !== undefined) return cached;
+    let result: number;
+    if (isString(node)) result = node.loc.end.line > node.loc.start.line ? 1 : 0;
+    else if (isKeyValue(node)) result = multilineStringCount(node.value);
+    else if (isInlineItem(node)) result = multilineStringCount(node.item);
+    else result = hasItems(node)
+      ? (node.items as TreeNode[]).reduce((count, item) => count + multilineStringCount(item), 0)
+      : 0;
+    multilineStringCountCache.set(node, result);
+    return result;
+  }
+  for (const change of changes) {
+    let target = tryFindByPath(original, change.path);
+    const unresolved = !target;
+    if (!target) {
+      // An Add earlier in the same array can make a later Remove path refer to
+      // post-mutation coordinates. Resolve its nearest existing ancestor so
+      // both changes still contribute to the same transaction (seed 175924).
+      for (let length = change.path.length - 1; length >= 0 && !target; length--) {
+        target = tryFindByPath(original, change.path.slice(0, length));
+      }
+    }
+    if (!target) continue;
+    const ancestors = multilineAncestors.get(target) ?? [];
+    const targetIsMultiline = (isInlineTable(target) || isInlineArray(target)) &&
+      target.loc.end.line > target.loc.start.line;
+    
+    for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
+      if (containsComment(container) || multilineStringCount(container) < 1) continue;
+      multilineChangeCounts.set(container, (multilineChangeCounts.get(container) ?? 0) + 1);
+      const containerChanges = multilineChanges.get(container);
+      if (containerChanges) containerChanges.push(change);
+      else multilineChanges.set(container, [change]);
+      if (unresolved) multilineHasUnresolvedChange.add(container);
+      const path = absolutePathOf(container);
+      if (path !== undefined) multilineChangePaths.set(container, path);
+    }
+  }
+  const transactionalPaths = [...multilineChangeCounts]
+    .filter(([container, count]) => {
+      if (!multilineChangePaths.has(container)) return false;
+      const containerChanges = multilineChanges.get(container) ?? [];
+      const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
+      const strings = multilineStringCount(container);
+      const hasEnoughStrings = strings >= 2 ||
+        (strings >= 1 && multilineHasUnresolvedChange.has(container));
+      return hasEnoughStrings &&
+        (count >= 3 || (count === 2 && (!hasMoveOrAdd || multilineHasUnresolvedChange.has(container))) ||
+          (isInlineArray(container) && count === 1 && strings >= 2));
+    })
+    .map(([container]) => multilineChangePaths.get(container)!)
+    .filter((path, index, paths) => !paths.some((other, otherIndex) =>
+      otherIndex !== index && other.length > path.length &&
+      arraysEqual(other.slice(0, path.length), path)
+    ));
+  if (process.env.TOML_PATCH_DEBUG_TRANSACTION) {
+    console.warn([...multilineChangeCounts].map(([container, count]) => ({
+      type: container.type,
+      path: multilineChangePaths.get(container),
+      count,
+      strings: multilineStringCount(container),
+      changes: (multilineChanges.get(container) ?? []).map(change => change.type)
+    })));
+  }
+  if (transactionalPaths.length > 0) {
+    changes = changes.filter(change => !transactionalPaths.some(path =>
+      change.path.length >= path.length && arraysEqual(change.path.slice(0, path.length), path)
+    ));
+    changes.push(...transactionalPaths.map(path => ({ type: ChangeType.Edit as const, path })));
+  }
 
   // Potential Changes:
   //
