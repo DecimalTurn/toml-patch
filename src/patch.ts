@@ -33,7 +33,6 @@ import {
   isDateTime
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
-import type { Rename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets } from './writer';
@@ -125,6 +124,27 @@ function truncationMatchLen(changePath: Path, existingKey: string[], containerAb
     }
   }
   return matchLen;
+}
+
+function inlineTableAddIndex(parent: InlineTable, child: KeyValue, beforeKey?: string): number | undefined {
+  if (beforeKey === undefined) return undefined;
+
+  const childKey = child.key.value;
+  if (childKey.length < 2) return undefined;
+
+  const prefix = childKey.slice(0, -1);
+  for (let index = 0; index < parent.items.length; index++) {
+    const item = parent.items[index];
+    if (!isInlineItem(item) || !isKeyValue(item.item)) continue;
+    const existingKey = item.item.key.value;
+    if (existingKey.length === childKey.length &&
+        arraysEqual(existingKey.slice(0, -1), prefix) &&
+        existingKey[existingKey.length - 1] === beforeKey) {
+      return index;
+    }
+  }
+
+  return undefined;
 }
 
 /** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
@@ -262,7 +282,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 
   // Certain formatting options should not be applied to the updated document during patching, because it would
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
-  // convert all nested tables to multiline, which is not be desired during patching.
+  // convert all nested tables to multiline, which would not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
   // When inlineTableStart > 1, formatNestedTablesMultiline would split nested inline tables in the
   // updated document into separate sections, causing the diff to see only the empty parent. Clamp to
@@ -284,7 +304,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const changes = reorder(coalesceStructuralReplacements(
     existing_document,
     updated_js,
-    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder })
+    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder, orderSource: updated })
   ));
 
   if (changes.length === 0) {
@@ -672,46 +692,6 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * @param updated - The updated JS object whose key order is authoritative.
  * @returns The index before a later renamed sibling, or `undefined` to append.
  */
-function inlineTableAddIndex(
-  parent: InlineTable,
-  child: KeyValue,
-  addPath: Path,
-  renames: Rename[],
-  updated: any
-): number | undefined {
-  if (renames.length === 0) return undefined;
-
-  const childKey = child.key.value;
-  if (childKey.length < 2) return undefined;
-
-  let updatedParent = updated;
-  for (const segment of addPath.slice(0, -1)) updatedParent = updatedParent?.[segment as any];
-  if (updatedParent == null || typeof updatedParent !== 'object' || Array.isArray(updatedParent)) {
-    return undefined;
-  }
-
-  const targetOrder = Object.keys(updatedParent);
-  const addedKey = childKey[childKey.length - 1];
-  const addedIndex = targetOrder.indexOf(addedKey);
-  if (addedIndex < 0) return undefined;
-
-  const prefix = childKey.slice(0, -1);
-  for (let index = 0; index < parent.items.length; index++) {
-    const item = parent.items[index];
-    if (!isInlineItem(item) || !isKeyValue(item.item)) continue;
-    const existingKey = item.item.key.value;
-    if (existingKey.length !== childKey.length ||
-        !arraysEqual(existingKey.slice(0, -1), prefix)) continue;
-
-    const rename = renames.find(change => change.from === existingKey[existingKey.length - 1]);
-    const effectiveKey = rename?.to ?? existingKey[existingKey.length - 1];
-    const existingIndex = targetOrder.indexOf(effectiveKey);
-    if (existingIndex > addedIndex) return index;
-  }
-
-  return undefined;
-}
-
 /**
  * Applies a list of changes to the original TOML document CST while preserving formatting and structure.
  * 
@@ -747,14 +727,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // when the preceding item in Document.items is an R2-adjacent Comment
   // (R3 gaps are intentional and left alone).
   const materialisedTables = new Set<Table>();
-  const renamesByPath = new Map<string, Rename[]>();
-  for (const change of changes) {
-    if (!isRename(change)) continue;
-    const key = JSON.stringify(change.path);
-    const renames = renamesByPath.get(key);
-    if (renames) renames.push(change);
-    else renamesByPath.set(key, [change]);
-  }
 
   function trackAdjacentComment(table: Table) {
     const items = original.items as TreeNode[];
@@ -1459,13 +1431,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const inlineItem = generateInlineItem(child);
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
-          const insertIndex = inlineTableAddIndex(
-            parent,
-            child,
-            change.path,
-            renamesByPath.get(JSON.stringify(change.path.slice(0, -1))) ?? [],
-            rawUpdated
-          );
+          const insertIndex = inlineTableAddIndex(parent, child, change.before);
           insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
         } else if (isInlineItem(child) && isKeyValue(child.item)) {
           // The child was resolved through an inline table in the updated
@@ -1486,13 +1452,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
           const inlineItem = generateInlineItem(kv);
           inlineItem.comma = originalHadTrailingCommas;
-          const insertIndex = inlineTableAddIndex(
-            parent,
-            kv,
-            change.path,
-            renamesByPath.get(JSON.stringify(change.path.slice(0, -1))) ?? [],
-            rawUpdated
-          );
+          const insertIndex = inlineTableAddIndex(parent, kv, change.before);
           insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
           if (restored) restoredInsertContainers.add(parent);
         } else {

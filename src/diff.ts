@@ -12,6 +12,8 @@ export enum ChangeType {
 export interface Add {
   type: ChangeType.Add;
   path: Path;
+  /** Existing sibling key that the new member must be inserted before. */
+  before?: string;
 }
 export function isAdd(change: Change): change is Add {
   return change.type === ChangeType.Add;
@@ -65,6 +67,8 @@ export interface DiffOptions {
    * docs/PLAN-Update-Order.md.
    */
   updateOrder?: boolean;
+  /** Object graph whose key order represents the caller's requested order. */
+  orderSource?: any;
 }
 
 export default function diff(before: any, after: any, path: Path = [], options: DiffOptions = {}): Change[] {
@@ -155,6 +159,7 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
 
   const renamed = new Map<string, string>();
   const renameTargets = new Set<string>();
+  const renameSourcesByTarget = new Map<string, string>();
 
   for (const [value, sources] of disappeared) {
     const targets = appeared.get(value);
@@ -164,6 +169,7 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
     for (let i = 0; i < pairs; i++) {
       renamed.set(sources[i], targets[i]);
       renameTargets.add(targets[i]);
+      renameSourcesByTarget.set(targets[i], sources[i]);
     }
   }
 
@@ -190,12 +196,65 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   // 3. Check for additions
   after_keys.forEach(key => {
     if (!before_key_set.has(key) && !renameTargets.has(key)) {
-      changes.push({
+      const add: Add = {
         type: ChangeType.Add,
         path: path.concat(key)
-      });
+      };
+
+      // Adds normally append. If the caller supplied the original object whose order
+      // should be honoured, anchor this add before the next member that already has a
+      // slot. A rename uses its old key as the anchor because the rename runs in place.
+      if (options.orderSource !== undefined) {
+        let orderObject = options.orderSource;
+        for (const segment of path) orderObject = orderObject?.[segment as any];
+        if (isObject(orderObject)) {
+          const requestedKeys = Object.keys(orderObject);
+          const addedIndex = requestedKeys.indexOf(key);
+          for (let i = addedIndex + 1; i < requestedKeys.length; i++) {
+            const target = requestedKeys[i];
+            const source = renameSourcesByTarget.get(target)
+              ?? (before_key_set.has(target) ? target : undefined);
+            if (source !== undefined) {
+              add.before = source;
+              break;
+            }
+          }
+        }
+      }
+
+      changes.push(add);
     }
   });
+
+  let requestedKeys = after_keys;
+  if (options.orderSource !== undefined) {
+    let orderObject = options.orderSource;
+    for (const segment of path) orderObject = orderObject?.[segment as any];
+    if (isObject(orderObject)) {
+      const afterKeySet = new Set(after_keys);
+      requestedKeys = Object.keys(orderObject).filter(key => afterKeySet.has(key));
+    }
+  }
+
+  // A renamed member keeps its existing CST slot, while an added member is appended
+  // by the patcher. Emit direct Adds and Renames in the updated object order so an
+  // added dotted member can land before a renamed sibling without patch.ts inspecting
+  // the CST or the complete change list.
+  const directChanges = changes.filter(change =>
+    (isAdd(change) && change.path.length === path.length + 1) ||
+    (isRename(change) && change.path.length === path.length)
+  );
+  if (options.orderSource !== undefined && directChanges.length > 1) {
+    const orderedDirectChanges = [...directChanges].sort((a, b) => {
+      const aKey = isAdd(a) ? a.path[a.path.length - 1] : isRename(a) ? a.to : '';
+      const bKey = isAdd(b) ? b.path[b.path.length - 1] : isRename(b) ? b.to : '';
+      return requestedKeys.indexOf(aKey as string) - requestedKeys.indexOf(bKey as string);
+    });
+    let directIndex = 0;
+    changes = changes.map(change =>
+      directChanges.includes(change) ? orderedDirectChanges[directIndex++] : change
+    );
+  }
 
   // 4. Order emission (updateOrder only). Predict the key order the document will have
   // once Add/Remove/Rename above are applied, then walk the target order emitting a Move
