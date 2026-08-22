@@ -18,6 +18,8 @@ npx -y tsx scripts/fuzz-run.ts --seed <from> --to <to> --mutations 3
 The first warning was reproduced as seed `35388` and is covered by the recent
 implicit dotted-key ordering fix. Seed `135327` was the next warning found while
 working through this list and is covered by the inline-table insertion-order fix.
+Seed `1112646` was found while continuing the sweep and is covered by the nested
+inline-array replacement fix.
 If a rerun produces no seed-prefixed warning, consider that warning shape fixed
 by the same change.
 
@@ -87,7 +89,7 @@ by the same change.
 - 1050000..1059999: i0g.k96
 - 1060000..1069999: f86xoxxb.jqxw08.~N.rH.%.k70
 - 1060000..1069999: f86xoxxb.jqxw08.~N.rH.%.k11
-- 1110000..1119999: f7k3.pij21ppfrn.{Jvh#.b8f.oyo_dv5f.k0
+- 1110000..1119999: f7k3.pij21ppfrn.{Jvh#.b8f.oyo_dv5f.k0 (resolved as seed 1112646)
 - 1120000..1129999: pdju9i3fc2.s0c6-p_.j-.k69
 - 1150000..1159999: t.tg.k86
 - 1150000..1159999: t.tg.k74
