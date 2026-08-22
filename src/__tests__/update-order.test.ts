@@ -552,10 +552,11 @@ describe('updateOrder warnings when a requested position could not be honored', 
     }
   });
 
-  test('preserves JS order when new members replace a dotted key in an AOT inline table (seed 135327)', () => {
+  test('preserves JS order when new members replace a dotted key in an AOT inline table and one of them is interpreted as a rename (seed 135327)', () => {
     const input = dedent`
       [["service".""]]
       settings = {
+        # Original value
         nested.value = false,
       }
     ` + '\n';
@@ -569,6 +570,7 @@ describe('updateOrder warnings when a requested position could not be honored', 
       [["service".""]]
       settings = {
         nested.primary = 1,
+        # Original value
         nested.replica = false,
       }
     ` + '\n');

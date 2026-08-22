@@ -659,6 +659,19 @@ function preserveFormatting(existing: Value, replacement: Value): void {
   }
 }
 
+/**
+ * Finds the inline-table position for a newly added dotted member when a sibling
+ * is being inferred as a rename in the same object. Without this adjustment,
+ * inline-table insertion appends the new member before the rename changes its
+ * old sibling's key, reversing the requested JS key order.
+ *
+ * @param parent - The inline table receiving the new member.
+ * @param child - The new key-value member to insert.
+ * @param addPath - The full JS-object path of the Add change.
+ * @param renames - Renames emitted for the same object parent.
+ * @param updated - The updated JS object whose key order is authoritative.
+ * @returns The index before a later renamed sibling, or `undefined` to append.
+ */
 function inlineTableAddIndex(
   parent: InlineTable,
   child: KeyValue,
