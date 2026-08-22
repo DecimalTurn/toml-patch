@@ -3369,3 +3369,132 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
   `);
 });
 
+
+test.fails('regression for fuzz seed 2591153', () => {
+  const src = dedent`
+      gas = true
+      sz = 178262
+      "v^.aq/(w" = 2058-10-24T21:21:43
+      mt5434cc."Cx[+"."q(?TYenJR" = """
+      &m}Y"""
+      ix4t8ryk8."hBTJ&l&3bl".yt3z6_ = true
+      w2 = 2049-04-03T21:46:36.579301
+      "R " = 0o150531
+      clkd176.gs6 = -579731
+      "FkeQ?W".u5oxixqh = "w4*5](T\`Wgjlbi+@wYY2o~"
+      # yg=|nPERhmd_2Qj;Qu$O^|T2*u
+      ryhwr.m5tn.gsg1h = 207_795
+      p6jzbb677n.uud.fyoqco70y = 90023.48570
+      k0cxt83.iwobqz4vi.NQSltlW = 513513
+      # nx%JXe@oDPCx$/Iz-dV%:EI)/
+      [["".lcmm1m0.vfkm5_p]]
+      "Wg[" = 0b0011011
+      "m4}cz".jnyu = 2080-08-12T23:09:05Z
+      # |J^H\`E{/un~cEYJoJb
+      # 7ZBeQqq/ot<wmX
+      # 2+FkPyDGb?+8(aqS]r8
+      # |%pz=:$ux\`d&CDCr}G
+      # y3H{~*flYL}+A;taf
+      cmhm.g."" = "4eUtm4q+dyK9.o|+4!%?p|,ljoBLsl*0pt<EYDKG 9"
+      "!s&" = true
+      # sVW
+      # yk1kS3=CBFo6$L/GUT\`])!]uwPY8-Hqv*/)ywo93
+      s9s.abk = -212_411
+      w1zxuk = 516918
+      
+      [_]
+      
+      [hg64t37]
+      
+      [de3.psdzad0qf]
+      zncww-.l485oixh = 94624
+      imnm92591y = 23461.15283
+      i.mj4n.">:" = 258084
+      vhashp_7d-."zD_>~7Lf3" = -464765
+      "q=y".ojj = """
+      iB"""
+      x7co_.u.AtJ = 754_620
+      
+      [q2c."o!AxxvqZj"]
+      g9p75i5s_ = '''
+      !esM3g7w
+      }I2t-:Y-|#MD
+      E]
+      ,^vU
+      oEA
+      w
+      0
+      !
+      7nGBp
+      
+      '''
+      cmzsfzz.f3utn728zu = true
+      "^]jfx9Hz_" = 2053-10-21T07:50:22Z
+      f6ziybf.egyieof = false
+      "B3:c%G9".sf_90m7q.ncide1 = 1981-12-01T06:47:08Z
+      t = 986e-61
+      ez."yTxL(kP[j0"."SPCIi(YbYe" = 53780.13362
+      cpqdsgprv."%-+WE".x9vi = 2091-11-01T14:04:57
+      s-yvw-4f.jes8rouk = 82_668.64849
+      
+      [gspp.e.vg_08p5dgs]
+      eegf54qq.b3ff_g = true
+      bttb8h.vk5c."" = []
+      dx2feuc.3 = """
+      -z
+      =t9EF)
+      6+"""
+      # ~xsBrSdMAd;mr\`JPYi
+      yh3l3-g2x.gmw3_.ppq_ep3k3 = """
+      = VD95
+       v?{gW
+      j
+      1,]OS5"""
+      f6qrvqct.ny0fj-3 = 367707
+      fx = nan
+      # oO!S;$e^N>g{%,+eJzcq(}kE,@J=je+M
+      [[qqqk."C<4M\`%W2L"]]
+      
+      [[y9wecl5]]
+      rw3l2q8mk.d-ps = ']zgL)[hSjD.R+'
+      # i(M^R&yAn3x3pj]ayUh -^ *xi\`1,cQ(~
+      qe = 995783
+      vag."[Q&%][ 6ap" = 559418
+      aam48 = true
+      
+      ["AKy:}nV@"]
+      kl7u = true
+      # Vu_I\`CdTJh>9oacHXu\`o>|Nt\`=pHltLN
+      "hG b+T".oyyuk3 = 937467
+      r46f8rhrh.rprqr8g = -566314
+      p8 = {
+          uyvk4h."m}5?" = "Jl*~zOV7.6JlX?C~VdO$dA3A~},$#/*w<JO",
+          "(J<nemN,8".s2."+)3k/" = [967985, -25027300000000694064, true, true, 50_953.25829, ["yXG33^DO3b4iLEKw?", 0b100101, -650416], """
+      uP,\`RY
+      ,n\`
+      nZ7mx[
+      
+      P9
+      5=2O"""],
+          z8o4hp = 'sr3[0&q}/SDjQc)Ado5zrkdi4bAp0]nkTFHbTWgme<?a)',
+          "U8hQQ9/D".n2.sggpgaty7k = 976952,
+          "|".b1b = -613100,
+          "M3Z-VW\`" = false,
+      }
+      necvf.a.",PRvH " = 1980-07-09T00:13:38
+    `;
+
+  const obj = parse(src) as any;
+  delete obj.w2;
+  obj["AKy:}nV@"].p8["(J<nemN,8"].s2["+)3k/"] = [true, false, true, 3173];
+  obj["AKy:}nV@"].p8["(J<nemN,8"].s2["+)3k/"].splice(3, 0, 3173);
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  // TODO: Change the expected value to match the actual expected result after
+  // applying the edits to the src (and fixing the patch function).
+  // expect(result).toEqual(dedent`
+  //     [...]
+  //     `);
+});
+
