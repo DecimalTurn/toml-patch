@@ -68,7 +68,7 @@ rarely the minimal repro, so the distillation step below must be applied.
 ### Distillation of seed tests
 
 Because the TOML input might be too big to be a minimal example of the bug, we
-must start removing elements of the TOML input, simplifying some keys to
+must start removing elements of the TOML input, simplifying keys to
 make it more readable to a human (unless the keys special characters or arrangement are needed to trigger the bug) and remove mutations that don't contribute to the bug. After every change to the originally created test, we make
 sure that the test still fails in the same way as the original. When we reach
 the simplest version of the test we can think of, that is when the test is
