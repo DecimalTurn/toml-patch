@@ -8,7 +8,7 @@
  * (or, for the Add/Remove cases, the current — unreordered — behaviour).
  */
 import dedent from 'dedent';
-import { patch } from '../index';
+import { parse, patch } from '../index';
 
 describe('updateOrder: true', () => {
   test('reorders root key-values to match the JS object', () => {
@@ -550,6 +550,29 @@ describe('updateOrder warnings when a requested position could not be honored', 
     } finally {
       spy.mockRestore();
     }
+  });
+
+  test('preserves JS order when new members replace a dotted key in an AOT inline table (seed 135327)', () => {
+    const input = dedent`
+      [["service".""]]
+      settings = {
+        nested.value = false,
+      }
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } }
+    );
+
+    expect(result).toEqual(dedent`
+      [["service".""]]
+      settings = {
+        nested.primary = 1,
+        nested.replica = false,
+      }
+    ` + '\n');
+    expect(parse(result)).toEqual({ service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } });
   });
 
   test('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {

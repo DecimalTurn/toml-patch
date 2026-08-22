@@ -33,6 +33,7 @@ import {
   isDateTime
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
+import type { Rename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets } from './writer';
@@ -620,6 +621,46 @@ function preserveFormatting(existing: Value, replacement: Value): void {
   }
 }
 
+function inlineTableAddIndex(
+  parent: InlineTable,
+  child: KeyValue,
+  addPath: Path,
+  renames: Rename[],
+  updated: any
+): number | undefined {
+  if (renames.length === 0) return undefined;
+
+  const childKey = child.key.value;
+  if (childKey.length < 2) return undefined;
+
+  let updatedParent = updated;
+  for (const segment of addPath.slice(0, -1)) updatedParent = updatedParent?.[segment as any];
+  if (updatedParent == null || typeof updatedParent !== 'object' || Array.isArray(updatedParent)) {
+    return undefined;
+  }
+
+  const targetOrder = Object.keys(updatedParent);
+  const addedKey = childKey[childKey.length - 1];
+  const addedIndex = targetOrder.indexOf(addedKey);
+  if (addedIndex < 0) return undefined;
+
+  const prefix = childKey.slice(0, -1);
+  for (let index = 0; index < parent.items.length; index++) {
+    const item = parent.items[index];
+    if (!isInlineItem(item) || !isKeyValue(item.item)) continue;
+    const existingKey = item.item.key.value;
+    if (existingKey.length !== childKey.length ||
+        !arraysEqual(existingKey.slice(0, -1), prefix)) continue;
+
+    const rename = renames.find(change => change.from === existingKey[existingKey.length - 1]);
+    const effectiveKey = rename?.to ?? existingKey[existingKey.length - 1];
+    const existingIndex = targetOrder.indexOf(effectiveKey);
+    if (existingIndex > addedIndex) return index;
+  }
+
+  return undefined;
+}
+
 /**
  * Applies a list of changes to the original TOML document CST while preserving formatting and structure.
  * 
@@ -655,6 +696,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // when the preceding item in Document.items is an R2-adjacent Comment
   // (R3 gaps are intentional and left alone).
   const materialisedTables = new Set<Table>();
+  const renamesByPath = new Map<string, Rename[]>();
+  for (const change of changes) {
+    if (!isRename(change)) continue;
+    const key = JSON.stringify(change.path);
+    const renames = renamesByPath.get(key);
+    if (renames) renames.push(change);
+    else renamesByPath.set(key, [change]);
+  }
 
   function trackAdjacentComment(table: Table) {
     const items = original.items as TreeNode[];
@@ -1359,7 +1408,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const inlineItem = generateInlineItem(child);
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          const insertIndex = inlineTableAddIndex(
+            parent,
+            child,
+            change.path,
+            renamesByPath.get(JSON.stringify(change.path.slice(0, -1))) ?? [],
+            rawUpdated
+          );
+          insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
         } else if (isInlineItem(child) && isKeyValue(child.item)) {
           // The child was resolved through an inline table in the updated
           // CST, so it arrives as an InlineItem-wrapped KV.  When the
@@ -1379,7 +1435,14 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
           const inlineItem = generateInlineItem(kv);
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          const insertIndex = inlineTableAddIndex(
+            parent,
+            kv,
+            change.path,
+            renamesByPath.get(JSON.stringify(change.path.slice(0, -1))) ?? [],
+            rawUpdated
+          );
+          insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
           if (restored) restoredInsertContainers.add(parent);
         } else {
           insert(original, parent, child, undefined, undefined, inlineHostItems);

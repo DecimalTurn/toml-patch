@@ -7,6 +7,7 @@ import {
   isTable,
   isTableArray,
   isKeyValue,
+  isInlineItem,
   hasItem
 } from './cst';
 import { Move } from './diff';
@@ -214,6 +215,21 @@ function resolveContainer(
   return hasTarget ? { container: entry, dottedPrefix: dottedPrefix as string[] } : undefined;
 }
 
+function isNewMoveTarget(
+  document: Document,
+  move: Move,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  if (move.key === undefined) return false;
+  let target: TreeNode | undefined;
+  try {
+    target = tryFindByPath(document, move.path.concat(move.key));
+  } catch {
+    return false;
+  }
+  return target !== undefined && isInlineItem(target) && !commentEligibleNodes.has(target);
+}
+
 function applyContainerMoves(
   container: Document | Table | TableArray,
   moves: Move[],
@@ -380,6 +396,7 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], commentEli
     if (move.key === undefined) continue;
     const resolved = resolveContainer(document, move.path, move.key, commentEligibleNodes);
     if (!resolved) {
+      if (isNewMoveTarget(document, move, commentEligibleNodes)) continue;
       // Never throw — this is reached for shapes updateOrder doesn't support at all yet:
       // dotted-key implicit tables outside an AOT entry, inline-table interiors, and
       // AOT-entry sub-tables only reachable via document-sibling scanning.

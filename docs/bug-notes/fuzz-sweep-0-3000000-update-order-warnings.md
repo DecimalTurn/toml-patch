@@ -16,8 +16,10 @@ npx -y tsx scripts/fuzz-run.ts --seed <from> --to <to> --mutations 3
 ```
 
 The first warning was reproduced as seed `35388` and is covered by the recent
-implicit dotted-key ordering fix. If a rerun produces no seed-prefixed warning,
-consider that warning shape fixed by the same change.
+implicit dotted-key ordering fix. Seed `135327` was the next warning found while
+working through this list and is covered by the inline-table insertion-order fix.
+If a rerun produces no seed-prefixed warning, consider that warning shape fixed
+by the same change.
 
 ## Seeds 0-999999
 
@@ -28,7 +30,7 @@ consider that warning shape fixed by the same change.
 - 110000..119999: zu-a77lhfm.ddna..ywfsssuff.k14
 - 120000..129999: guo8x_y.n_o.jiroou5-.k12
 - 120000..129999: guo8x_y.n_o.jiroou5-.k4
-- 130000..139999: 9x:..0.vl..hk1grzv.tf.k84
+- 130000..139999: 9x:..0.vl..hk1grzv.tf.k84 (resolved as seed 135327)
 - 180000..189999: zi.vd18.ik7.0.vhbaz0fk42.hyqku3jmk-.p7u7_5_9.flzl.cVLV3j~.k22
 - 190000..199999: gotoqq.>[r|{{.RtFtwoS.uxf.k59
 - 190000..199999: gotoqq.>[r|{{.RtFtwoS.uxf.k0
