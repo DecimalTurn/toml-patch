@@ -1129,10 +1129,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
       const strings = multilineStringCount(container);
       const hasEnoughStrings = strings >= 2 ||
-        (strings >= 1 && multilineHasUnresolvedChange.has(container));
+        (strings >= 1 && (multilineHasUnresolvedChange.has(container) || count === 1));
       return hasEnoughStrings &&
         (count >= 3 || (count === 2 && (!hasMoveOrAdd || multilineHasUnresolvedChange.has(container))) ||
-          (isInlineArray(container) && count === 1 && strings >= 2));
+          (count === 1 && strings >= 1));
     })
     .map(([container]) => multilineChangePaths.get(container)!)
     .filter((path, index, paths) => !paths.some((other, otherIndex) =>

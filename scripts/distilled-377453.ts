@@ -1,4 +1,7 @@
-test.fails('distilled regression for fuzz seed 377453', () => {
+import dedent from 'dedent';
+import { parse, patch } from '../src';
+
+test('distilled regression for fuzz seed 377453', () => {
   const src = dedent`
     eqki- = {
         v1xubvr5b2 = [false, true, '''
@@ -11,7 +14,17 @@ test.fails('distilled regression for fuzz seed 377453', () => {
   const obj = parse(src) as any;
   obj["eqki-"].v1xubvr5b2[4] = { "k94": -4472 };
 
-  const result = patch(src, obj);
+  const result = patch(src, obj, {
+  trailingComma: true,
+  bracketSpacing: true,
+  updateOrder: false,
+  trailingNewline: 1,
+  newLine: '\n',
+  leadingBom: false,
+  truncateZeroTimeInDates: true,
+  useTabsForIndentation: false,
+  minimumDecimals: 1
+});
   expect(parse(result)).toEqual(obj);
   // TODO: assert exact output after the implementation fix.
   // expect(result).toEqual("eqki- = {\n    v1xubvr5b2 = [false, true, '''\n<6@Qd}q =`q]B>FSx''', -49_687.079945, { k94 = -4472.0 }, \"I3q/hH\", 753862, 'z', -64864.2541],\n\n}   gmpmfyn4.y1np1 = 0o4755211,\n");

@@ -224,6 +224,14 @@ function mutationSource(mutation: Mutation): string {
   return `${accessor(mutation.path)} = ${valueToSource(mutation.newValue)};`;
 }
 
+function formatSource(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  return JSON.stringify(value, null, 2)
+    .replace(/"([A-Za-z_$][A-Za-z0-9_$]*)":/g, '$1:')
+    .replace(/"\\r\\n"/g, "'\\r\\n'")
+    .replace(/"\\n"/g, "'\\n'");
+}
+
 const source = lines.join('\n');
 const postFixObject: any = deepClone(parse(source));
 for (const mutation of mutations) applyMutation(postFixObject, mutation);
@@ -237,7 +245,7 @@ const body = [
   '  const obj = parse(src) as any;',
   ...mutations.map(mutation => `  ${mutationSource(mutation)}`),
   '',
-  '  const result = patch(src, obj);',
+  `  const result = patch(src, obj, ${formatSource(format)});`,
   '  expect(parse(result)).toEqual(obj);',
   '  // TODO: assert exact output after the implementation fix.',
   `  // expect(result).toEqual(${JSON.stringify(expected)});`,
