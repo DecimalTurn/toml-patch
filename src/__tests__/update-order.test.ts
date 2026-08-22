@@ -526,6 +526,32 @@ describe('updateOrder warnings when a requested position could not be honored', 
     spy.mockRestore();
   });
 
+  test('enforces order when replacing a dotted key leaf creates an implicit table (seed 35388)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [config]
+      database.legacy = false
+    ` + '\n';
+
+    try {
+      const result = patch(
+        input,
+        { config: { database: { primary: -864, replica: false } } },
+        { updateOrder: true }
+      );
+
+      expect(result).toEqual(dedent`
+        [config]
+        database.primary = -864
+        database.replica = false
+      ` + '\n');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
