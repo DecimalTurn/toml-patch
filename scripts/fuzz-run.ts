@@ -63,7 +63,21 @@ for (let s = seed; s <= to; s++) {
       ` | elapsed ${formatDuration(elapsed)} | ETA ${formatDuration(remaining)}${reset}`
     );
   }
-  const result = fuzzOne(s, mutations);
+  const originalWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('toml-patch: updateOrder')) {
+      originalWarn(`SEED ${s} : ${args[0]}`, ...args.slice(1));
+      return;
+    }
+    originalWarn(...args);
+  };
+
+  let result;
+  try {
+    result = fuzzOne(s, mutations);
+  } finally {
+    console.warn = originalWarn;
+  }
   if (result.status !== 'ok') {
     const line = `SEED ${s} : ${result.status}${result.error ? ' | ' + result.error.split('\n')[0] : ''}`;
     failures.push(line);
