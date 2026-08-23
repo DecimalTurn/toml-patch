@@ -2,11 +2,11 @@ import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 
-/* The TOML spec allows extraneous spacing between the key and the dot 
+/* The TOML spec allows extraneous spacing between the key and the dot
    for dotted keys. This is not recommended, but it is allowed.
 
-   When adding a new dotted key to an existing TOML document, the spacing of and obvious
-   styling should be preserved. There might be cases where the appropriate spacing
+  When adding a new dotted key to an existing TOML document, the spacing and overall
+  style should be preserved. There might be cases where the appropriate spacing
    is not obvious, but the patcher should try to preserve the existing spacing as 
    much as possible.
    
