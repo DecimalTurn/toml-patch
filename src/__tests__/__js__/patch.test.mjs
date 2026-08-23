@@ -838,6 +838,31 @@ port = 5432
       }
     });
 
+    it.each([
+      '\r',
+      '\\r',
+      '',
+      'invalid'
+    ])('should reject unsupported newLine value %j', (newLine) => {
+      expect(() => patch(originalToml, baseUpdatedObject, { newLine }))
+        .toThrow('Invalid newLine value: expected LF or CRLF');
+    });
+
+    it.each([
+      ['\n', '\n'],
+      ['\r\n', '\r\n'],
+      ['\\n', '\n'],
+      ['\\r\\n', '\r\n'],
+      ['lf', '\n'],
+      ['CrLf', '\r\n'],
+      ['unix', '\n'],
+      ['DOS', '\r\n']
+    ])('should accept lenient newLine value %j as %j', (newLine, expectedNewLine) => {
+      const result = patch(originalToml, baseUpdatedObject, { newLine });
+      const lineEnding = result.includes('\r\n') ? '\r\n' : '\n';
+      expect(lineEnding).toBe(expectedNewLine);
+    });
+
     it('should handle TomlFormat constructor with all optional parameters', () => {
       // Test parameterless constructor - should work and use defaults
       expect(() => {
