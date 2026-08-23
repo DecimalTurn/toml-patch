@@ -605,6 +605,15 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ useTabsForIndentation: true })).toEqual({ useTabsForIndentation: true });
     });
 
+    test('accepts unset indentWidth values', () => {
+      expect(validateFormatObject({ indentWidth: undefined })).toEqual({ indentWidth: undefined });
+      expect(validateFormatObject({ indentWidth: null })).toEqual({ indentWidth: null });
+    });
+
+    test('accepts positive integer indentWidth', () => {
+      expect(validateFormatObject({ indentWidth: 4 })).toEqual({ indentWidth: 4 });
+    });
+
     test('accepts boolean updateOrder', () => {
       expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
     });
@@ -670,6 +679,11 @@ describe('validateFormatObject', () => {
 
     test('rejects non-boolean useTabsForIndentation', () => {
       expect(() => validateFormatObject({ useTabsForIndentation: 'yes' })).toThrow(TypeError);
+    });
+
+    test.each([0, -1, 1.5, '4'])('rejects invalid indentWidth value %p', (indentWidth) => {
+      expect(() => validateFormatObject({ indentWidth })).toThrow(TypeError);
+      expect(() => validateFormatObject({ indentWidth })).toThrow(/indentWidth/);
     });
 
     test('rejects non-boolean updateOrder', () => {

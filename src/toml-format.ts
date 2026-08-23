@@ -327,8 +327,8 @@ export function validateFormatObject(format: any): any {
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     truncateZeroTimeInDates: isBool,
     useTabsForIndentation: isBool,
-    indentWidth: v => typeof v === 'number' && Number.isInteger(v) && v > 0
-      ? null : `expected positive integer, got ${typeof v}`,
+    indentWidth: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v > 0)
+      ? null : `expected positive integer or undefined, got ${typeof v}`,
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     updateOrder: isBool,
