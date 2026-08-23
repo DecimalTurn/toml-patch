@@ -1159,7 +1159,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     const ancestors = multilineAncestors.get(target) ?? [];
     const targetIsMultiline = (isInlineTable(target) || isInlineArray(target)) &&
       target.loc.end.line > target.loc.start.line;
-    
+
     for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
       if (containsComment(container) || multilineStringCount(container) < 1) continue;
       multilineChangeCounts.set(container, (multilineChangeCounts.get(container) ?? 0) + 1);
