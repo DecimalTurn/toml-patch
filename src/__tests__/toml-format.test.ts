@@ -1,4 +1,4 @@
-import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat } from '../toml-format';
+import { TomlFormat, detectNewline, countTrailingNewlines, detectTabsForIndentation, validateFormatObject, resolveTomlFormat } from '../toml-format';
 import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
@@ -481,6 +481,14 @@ data = "test"`;
 
       expect(format.useTabsForIndentation).toBe(true);
       expect(format.indentWidth).toBe(1);
+    });
+
+    test('should prefer tabs when tab and space evidence is equal', () => {
+      const toml = '[server]\n\tport = 8080\n  host = "localhost"\n';
+
+      expect(detectTabsForIndentation(toml)).toBe(true);
+      expect(autoDetectFormat(toml).useTabsForIndentation).toBe(true);
+      expect(autoDetectFormat(toml).indentWidth).toBe(1);
     });
 
     test('should reuse an existing parse tree when auto-detecting format', () => {
