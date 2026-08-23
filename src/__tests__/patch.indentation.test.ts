@@ -148,7 +148,7 @@ describe('tab indentation', () => {
   // document. But hey, if that's whats needed to get the person's attention on the fact
   // that they are using mixed indentation, then so be it. We can always improve this in
   // the future if people complain.
-  test('preserves an indented comment when applying tab indentation', () => {
+  test('preserves an indented comment with mixed indentation', () => {
     const src = [
       '[server]',
       '  # managed by the platform',
@@ -172,7 +172,7 @@ describe('tab indentation', () => {
     ].join('\n'));
   });
 
-  test('preserves an indented comment when applying tab indentation', () => {
+  test('preserves an indented comment with space indentation', () => {
     const src = [
       '[server]',
       '\t# managed by the platform',
