@@ -21,7 +21,7 @@ describe('indentation at the root level', () => {
     ].join('\n'));
   });
 
-  // The indentaion of the new key should match the last sibling key in the container
+  // The indentation of the new key should match the last sibling key in the container
   test('single key added to a few keys with inconsistent indentation', () => {
     const src = [
       '  key1 = "test1"',
