@@ -10,9 +10,9 @@ import { TomlFormat } from '../toml-format';
 // transactional path when that validation fails. The getter changes the
 // requested value on every read, so the retry produces a result for a
 // different value. The retry must be validated too and must throw rather than
-// silently return TOML that does not match the requested object. test.fails is
-// intentional until that second validation is implemented.
-test.fails('retry result is validated before patch returns', () => {
+// silently return TOML that does not match the requested object. The assertion
+// documents the required fail-fast behavior when validation cannot succeed.
+test('retry result is validated before patch returns', () => {
   let reads = 0;
   const updated: Record<string, unknown> = {};
   Object.defineProperty(updated, 'value', {

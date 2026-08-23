@@ -93,16 +93,50 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 
   const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
   const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
+  if (!patchResultMatches(updated, retriedToml)) {
+    throw new Error('Patch retry failed round-trip validation');
+  }
   return fmt.leadingBom ? `${UTF8_BOM}${retriedToml}` : retriedToml;
 }
 
 function patchResultMatches(updated: any, toml: string): boolean {
   try {
     const parsed = Array.from(parseTOML(stripLeadingBom(toml)));
-    return stableStringify(toJS(parsed, '', { temporal: hasTemporal(updated) })) === stableStringify(updated);
+    const expected = normalizePatchComparison(updated);
+    const actual = toJS(parsed, '', { temporal: hasTemporal(updated) });
+    return stableStringify(normalizePatchComparison(actual)) === stableStringify(normalizePatchComparison(expected));
   } catch {
     return false;
   }
+}
+
+function normalizePatchComparison(value: any): any {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value.replace(/\r\n?/g, '\n');
+  if (Array.isArray(value)) return value.map(normalizePatchComparison);
+  if (value instanceof Date) {
+    if (value.getUTCFullYear() <= 0) {
+      const hours = String(value.getUTCHours()).padStart(2, '0');
+      const minutes = String(value.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(value.getUTCSeconds()).padStart(2, '0');
+      const milliseconds = String(value.getUTCMilliseconds()).padStart(3, '0');
+      return `Time:${hours}:${minutes}:${seconds}.${milliseconds}`;
+    }
+    return `Date:${value.getTime()}`;
+  }
+  if (isTemporal(value)) return value.toString();
+  if (value && typeof value.toJSON === 'function') {
+    return normalizePatchComparison(value.toJSON());
+  }
+  if (value && typeof value === 'object') {
+    const normalized: Record<string, any> = {};
+    for (const key of Object.keys(value)) {
+      const normalizedValue = normalizePatchComparison(value[key]);
+      if (normalizedValue !== undefined) normalized[key] = normalizedValue;
+    }
+    return normalized;
+  }
+  return value;
 }
 
 /**
