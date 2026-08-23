@@ -5,6 +5,24 @@ import { example } from '../__fixtures__';
 import dedent from 'dedent';
 import { TomlFormat } from '../toml-format';
 
+// This is a fault-injection test for the fallback in patch(), not a normal
+// usage example. patch() validates the first output and retries with the
+// transactional path when that validation fails. The getter changes the
+// requested value on every read, so the retry produces a result for a
+// different value. The retry must be validated too and must throw rather than
+// silently return TOML that does not match the requested object. test.fails is
+// intentional until that second validation is implemented.
+test.fails('retry result is validated before patch returns', () => {
+  let reads = 0;
+  const updated: Record<string, unknown> = {};
+  Object.defineProperty(updated, 'value', {
+    enumerable: true,
+    get: () => ++reads
+  });
+
+  expect(() => patch('value = 0\n', updated)).toThrow(/round-trip/i);
+});
+
 test('it should apply edit to key-value', () => {
   const value = parse(example);
   value.owner.name = 'Tim Hall';
