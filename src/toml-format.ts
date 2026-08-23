@@ -213,7 +213,6 @@ export function countTrailingNewlines(str: string): number {
 
 // Detects if tabs are used for indentation by checking the first few indented lines
 export function detectTabsForIndentation(str: string): boolean {
-  //TODO: improve performance by finding the 
   const lines = str.split(/\r?\n/);
   let tabCount = 0;
   let spaceCount = 0;
