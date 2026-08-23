@@ -234,7 +234,7 @@ export function detectTabsForIndentation(str: string): boolean {
     }
   }
   
-  // Prefer tabs if we see more tabs than spaces
+  // Prefer tabs when they are at least as common as spaces, provided there is tab evidence.
   if (tabCount > 0) {
     return tabCount >= spaceCount;
   }
