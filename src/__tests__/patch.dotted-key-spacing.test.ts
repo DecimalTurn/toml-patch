@@ -15,7 +15,7 @@ import dedent from 'dedent';
   // the new table should then have a similar spacing (to be confirmed).
 
 */
-describe('patching dotted keys with extranous spacing', () => {
+describe('patching dotted keys with extraneous spacing', () => {
 
   test.fails('editing a key with spacing preserves the spacing', () => {
     const src = dedent`
