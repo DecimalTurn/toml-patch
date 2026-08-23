@@ -72,7 +72,7 @@ for (let s = seed; s <= to; s++) {
     originalWarn(...args);
   };
 
-  let result;
+  let result: ReturnType<typeof fuzzOne>;
   try {
     result = fuzzOne(s, mutations);
   } finally {
