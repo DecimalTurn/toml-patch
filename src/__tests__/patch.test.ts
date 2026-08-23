@@ -10101,7 +10101,6 @@ test('multiline empty array accepts an explicit indentation width', () => {
     const obj = parse(src) as any;
     obj.server.port = 8080;
 
-    const fmt = {commentHandling: "none"};
     // const result = patch(src, obj, fmt);
     // expect(parse(result)).toEqual(obj);
     // expect(result).toBe([

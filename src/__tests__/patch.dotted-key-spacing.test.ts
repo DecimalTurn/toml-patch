@@ -1,5 +1,5 @@
 import patch from '../patch';
-import { parse, stringify } from '../';
+import { parse } from '../';
 import dedent from 'dedent';
 
 /* The TOML spec allows extraneous spacing between the key and the dot 
