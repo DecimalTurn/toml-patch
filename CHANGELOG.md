@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Fixed
+
+- Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
+
 ## [3.0.3] - 2026-08-21
 
 ### Fixed
@@ -399,4 +403,5 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#289]: https://github.com/DecimalTurn/toml-patch/pull/289
 [#290]: https://github.com/DecimalTurn/toml-patch/pull/290
 [#292]: https://github.com/DecimalTurn/toml-patch/pull/292
+[#293]: https://github.com/DecimalTurn/toml-patch/pull/293
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
