@@ -64,6 +64,9 @@ jobs:
     - name: Test
       run: pnpm run test:all
 
+    - name: Fuzz test
+      run: pnpm run fuzz
+
     - name: Specs
       run: pnpm run specs
 
