@@ -91,6 +91,12 @@ jobs:
           today=$(date +%Y-%m-%d)
           sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${{ steps.next_version.outputs.version }}] - $today/" CHANGELOG.md
 
+      - name: Update version-pinned README links
+        if: github.event.inputs.version_bump != 'no-bump'
+        run: |
+          tag="${{ steps.next_version.outputs.tag }}"
+          sed -E -i "s|(https://github\.com/${{ github.repository }}/blob/)v[0-9]+\.[0-9]+\.[0-9]+(/)|\1${tag}\2|g" README.md
+
       - name: Extract release notes from CHANGELOG
         id: release_notes
         run: |
@@ -131,7 +137,7 @@ jobs:
           if [[ "${{ github.event.inputs.version_bump }}" != "no-bump" ]]; then
             git config user.name "github-actions"
             git config user.email "github-actions@github.com"
-            git add package.json jsr.jsonc pnpm-lock.yaml CHANGELOG.md
+            git add package.json jsr.jsonc pnpm-lock.yaml CHANGELOG.md README.md
             git commit -m "chore: bump version to ${{ steps.next_version.outputs.version }}"
             git push origin ${{ github.ref_name }}
           else
