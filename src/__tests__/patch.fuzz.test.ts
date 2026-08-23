@@ -3491,8 +3491,8 @@ test('regression for fuzz seed 2591153', () => {
 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
-  // TODO: Change the expected value to match the actual expected result after
-  // applying the edits to the src (and fixing the patch function).
+  // TODO: Add an exact-output assertion once the intended formatting for this
+  // complex multi-change regression is specified.
   // expect(result).toEqual(dedent`
   //     [...]
   //     `);
