@@ -1155,7 +1155,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       otherIndex !== index && path.length > other.length &&
       arraysEqual(path.slice(0, other.length), other)
     ));
-  if (process.env.TOML_PATCH_DEBUG_TRANSACTION) {
+  if (typeof process !== 'undefined' && process.env.TOML_PATCH_DEBUG_TRANSACTION) {
     console.warn([...multilineChangeCounts].map(([container, count]) => ({
       type: container.type,
       path: multilineChangePaths.get(container),
