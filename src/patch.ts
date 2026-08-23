@@ -87,7 +87,22 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   }
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
-  return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
+  if (patchResultMatches(updated, patchedToml)) {
+    return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
+  }
+
+  const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
+  const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
+  return fmt.leadingBom ? `${UTF8_BOM}${retriedToml}` : retriedToml;
+}
+
+function patchResultMatches(updated: any, toml: string): boolean {
+  try {
+    const parsed = Array.from(parseTOML(stripLeadingBom(toml)));
+    return stableStringify(toJS(parsed, '', { temporal: hasTemporal(updated) })) === stableStringify(updated);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -253,7 +268,7 @@ function normalizeAotEntryComments(doc: Document): void {
   }
 }
 
-export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
+export function patchCst(existing_cst: CST, updated: any, format: TomlFormat, useMultilineTransactions = false): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
   // Auto-detect Temporal in the updated JS object so that the internal
@@ -324,7 +339,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
   const commentEligibleNodes = collectPrePatchNodes(existing_document);
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated, useMultilineTransactions);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -722,7 +737,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined, useMultilineTransactions = false): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
   // the dotted name for de-duplication, but carrying the path segments — a nested key like
   // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
@@ -1124,6 +1139,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   }
   const transactionalPaths = [...multilineChangeCounts]
     .filter(([container, count]) => {
+      if (!useMultilineTransactions) return false;
       if (!multilineChangePaths.has(container)) return false;
       const containerChanges = multilineChanges.get(container) ?? [];
       const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
@@ -1132,12 +1148,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         (strings >= 1 && (multilineHasUnresolvedChange.has(container) || count === 1));
       return hasEnoughStrings &&
         (count >= 3 || (count === 2 && (!hasMoveOrAdd || multilineHasUnresolvedChange.has(container))) ||
-          (count === 1 && strings >= 1));
+          (count === 1 && (multilineChanges.get(container) ?? []).some(isRemove)));
     })
     .map(([container]) => multilineChangePaths.get(container)!)
     .filter((path, index, paths) => !paths.some((other, otherIndex) =>
-      otherIndex !== index && other.length > path.length &&
-      arraysEqual(other.slice(0, path.length), path)
+      otherIndex !== index && path.length > other.length &&
+      arraysEqual(path.slice(0, other.length), other)
     ));
   if (process.env.TOML_PATCH_DEBUG_TRANSACTION) {
     console.warn([...multilineChangeCounts].map(([container, count]) => ({
