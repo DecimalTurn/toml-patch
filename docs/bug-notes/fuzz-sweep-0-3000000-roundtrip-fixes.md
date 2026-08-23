@@ -3,8 +3,7 @@
 The rerun reported 16 failures: 15 malformed round-trips and one patch exception.
 The original seeds were rechecked with `scripts/fuzz-run.ts` after the fixes and
 all report `FAILURES: 0`. The distilled regressions live in
-`src/__tests__/patch.distilled.fuzz.test.ts` and the format-faithful fixtures
-under `scripts/distilled-*.ts`.
+`src/__tests__/patch.fuzz.test.ts`.
 
 ## Fixes
 

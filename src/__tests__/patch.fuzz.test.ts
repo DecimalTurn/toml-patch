@@ -3498,3 +3498,351 @@ test('regression for fuzz seed 2591153', () => {
   //     `);
 });
 
+test('distilled regression for fuzz seed 1112646', () => {
+  const src = dedent`
+    [["2S38X#"]]
+    "dj/{gXY".sp_ya888x.mx7h8hlr = '''
+    D<'''
+    ln_n = [
+        '''
+    ,''',
+        [{ "t&R/jR" = '''
+    TPV!''' }, false, 287_173, "NAzv Be{}8z]C2QzJpyz}_]idd", 1984-04-16T12:37:13Z],
+    ]
+  `;
+
+  const obj = parse(src) as any;
+  obj["2S38X#"][0]["dj/{gXY"].sp_ya888x = [new Date(Date.UTC(2018, 5, 14)), -2069, 784];
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 1286183', () => {
+  const src = dedent`
+    i5qpju2q = """
+    8="""
+    [p7jqr__s]
+    j1."d<xHv+]#" = {
+        w1ps6jnb.rmo5yjem.ifd71k5 = { c_ww5.sp0r.psodl-swm- = '''
+    ''' },
+        qbidoiww1 = { irw1v_-6r.b9ntzo.aydex63ad = -65079.12231, z70g = false, ":m.$2".nokM.k2hl6 = false, o6 = { gqix0c.tnyivr = 770012, t0n9.qj = """
+    >1bJi gG""", i-43c9963p.bre5k8g28.guv2pn = 'l0-Y?;FYxwz', su.p = 36740, "Pv3!oN4".ub_k79_ = false, dnc3w6 = "", "ag/MY[2".ud = 527558, "Y][2vRao-".ekiao1h.t88fjn = 2080-12-04, "@" = 31256.58522, kqk32ihb.xcd01 = 819597, xf79wkh3q = 0x08, i = -284092, ZZ = 0o64, jbr.r0acvtrwd = true }, "&f".ck.pe = 2081-06-28T00:40:23Z, "5BN)X3P5:".b6dgagg = """
+    DU)$R8E>JL*""", do8b6z.f4f-0l = {}, zhd31f5qk.h862qtmhq = 90692.79376, hc."+ZlY;4|" = true },
+    }
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.p7jqr__s.j1["d<xHv+]#"].w1ps6jnb.rmo5yjem.ifd71k5.c_ww5.sp0r["psodl-swm-"];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 0,
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: '\r\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 1383962', () => {
+  const src = dedent`
+    "1vn[1flkZ".qmam4fx = [{ dxnzi0.d0hc = [true, 47577.29573, true, 2077-04-05, 282_582, """
+    s~""", 76968.6746, 'Qr+qJ|jGKM n=c1oEx^\`p2;L0H_Nyg*3K$:A{?jJg:I', 2069-08-08T04:34:33, "A3!)hHn6}I"] }, 574310, 28569, -63757100000000418476, """
+    8=Qed7]-^jftM""", -50759.88688, -inf, true]
+    [[kmza]]
+    ptvl.s2fdfonrz9 = 'vQb/mr3cU )zJScrEv2bQ-$}kK1U&o,5hpf9@N|Ke['
+  `;
+
+  const obj = parse(src) as any;
+  obj.kmza[0].ptvl = new Date(Date.UTC(2006, 1, 14));
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 1693919', () => {
+  const src = dedent`
+    [g3s_y5jv_d.mfdfdc]
+    "".c4esqy.t79d__y = {
+        bnJF1EQ = { jg08iizbia = """
+     fP=SCd-/e]!;bs(AR*w3L""" },
+        "#?VRmg"."<mhN6Oe|cu" = ["""
+    v[""", nan, "1T4f9 KxuH<=a3UzaPuktBT"],
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.g3s_y5jv_d.mfdfdc[""].c4esqy.t79d__y.bnJF1EQ = { "k27": { "k57": false, "k17": false, "k67": [new Date(Date.UTC(2036, 8, 23)), true, -1287.6224634237587] } };
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: '\r\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 175924', () => {
+  const src = dedent`
+    [[l."=".p]]
+    m = {
+    }
+    qsof = ["--2#k+z+M,Et1[EnDbG0_Ykh7^ ", 1988-12-04T04:19:06, [
+        0b000000110001011,
+        { t7a5uwjr2 = """
+    ]UjKeB""" },
+        -907693,
+    ], 65260.050825]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.l["="].p[0].qsof[2][1].t7a5uwjr2;
+
+  const result = patch(src, obj, {
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: '\r\n',
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 1896226', () => {
+  const src = dedent`
+    y0pgo = '''
+    zw$#+{rD] Q:|WI_5xV'''
+    [syn2x.b.o6y2i]
+    xx1dnmb-lu.i-b5qipqve = { kh5rr3tnn.tfv.acbd8jed_ = true, am7fwt.jri8xuo = "drC+m!9n vxA(?w8N+)9]jF1 /", eu0e.ygeqkl.rv5zela02z = -792779, c.teb.pe = 0xd45, fk-no = false, wvddr.gmv.d8iwt = "]49F#3@Gi^y{@4y(eYalh%@", piif.qwkfgiyp = false, "kNg6#mA".mmu1i.u1aubp = true, hk3wa8v.">uk|E\`!8a" = 2055-10-17T23:43:59.550334Z, "|EnD &e~>\`".npriy.OU = inf, m3y3lj.viyt2w.c = "U/qmv0wx=W/ib/M^t<t7vC[#J_?KpncFg?a", quumciha = {
+    }, q."5;" = 704498, k9zaeuluse."8%2Z?" = """
+    wU:Z""" }
+    yutxpp.uzz."/S|" = ["WM^ZLQ}e", -836_768, { c19.hv = { "Z\`xk2<4{" = "08RXrX/B]Wjo}v77}^Rx", be9z3h.gaxei2pmox = """
+    """, V.wgxp4xo62x."T~]x(@Au#" = '', "opB,{-|#" = 0o22, durkp54qyf.uOlU = "wnnD8=|KA1sc(Qy[ qz oX{quU11|g!22/*5W1", n3bwpes.eh.lc8ih = 0o15166757, w = "_j({", "dDSj9b{" = true, "X^(/t)".b_sxy."TU!{BR5hcx" = -6324.85055, qvvau = false, "CnF)-}9Y" = 30824.10286, z.iyyg2 = 0b010011 } }, {
+    }, 2004-04-25T17:21:11, -51408.63582, 2006-12-08T20:27:41.624602Z, true, nan, 743736]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.syn2x.b.o6y2i.yutxpp.uzz["/S|"][2].c19.hv;
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2185943', () => {
+  const src = dedent`
+    ei.Nj = """
+    >!~Wg-y)~"""
+    [[megac68k-]]
+    z = [
+    ]
+    kw = [46674.18719, 48559.13327, 2091-08-20T06:58:11, 2024-05-10, 275_068, {
+        cnoff = { l7."UMN$eUS9="."" = '''
+    C/,9''' },
+        aujqbb = '''
+    P/*''',
+    }, 22787.072880, 79051.79185, true]
+    "1x(4u.WK2x".v4r4evh1.c3pw90 = """
+    m@7"""
+  `;
+
+  const obj = parse(src) as any;
+  delete obj["megac68k-"][0].kw[5].cnoff.l7["UMN$eUS9="];
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2497422', () => {
+  const src = dedent`
+    "x^@zw" = [' ', -78860.81892, { ik4o2d6z4j = """
+    DM}T+uCZVx*t+qMtQtbPrFiI""" }, "\`kO^E(R8324tzB;#iBmn9aX!9KUL*N0eWvf/J:R", 36709.83314, [true, "ZrS|K#MaiwaYr4UOIP<$=8clcC*+Px{^#v@>G|(@>;a>w&X&Jb", 945e+85, -30134.83738, {
+    }, """
+    HLzq$8|?""", "<Rfs2A h+<TD:_8+oKb64ffE,uqNI-WjbafZn!", 17:57:10, false, false], -31687.66292]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj["x^@zw"][2].ik4o2d6z4j;
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2531104', () => {
+  const src = dedent`
+    mmx9rwvk7k.lqmp_-1cgl = '''
+     5>ZvY=\`r~ha'''
+    wcyw = {
+        tf."O\`aB" = [true, { "%#FUrN".cvmmswb.">&K?" = 115668, p2ohe0.sqh9uj."$Qk^~(" = -92131.88369, kvy9 = false, kvy9h1bo.fe7b1px4bb = """
+      :-i1""" }, 745102, 96226.27680, 0o21016, false, 802344, "#vH#E:o>J[jB||M"],
+        l."~u)HFjuZ" = 00:16:17,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.wcyw.tf["O`aB"][1] = { "k96": 1640, "k18": true };
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 1,
+    newLine: '\n',
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2667551', () => {
+  const src = dedent`
+    [[xwed7dv]]
+    w9ri7t6az = {
+    }
+    ax.dkibhxt = ['', """
+    >X+YrY\`N""", 2088-10-24T00:54:56, """
+    $e"""]
+  `;
+
+  const obj = parse(src) as any;
+  obj.xwed7dv[0].ax.dkibhxt.splice(2, 1);
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: false,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 1,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2824408', () => {
+  const src = dedent`
+    [ivk.nuan749c7]
+    pJ.kd7jct7_o = {
+        xwjbnijuw = { k-l259ef = "E2 U!/a", vi.dg5 = true, f4wkz1o_j.cgog.gw8umgy = '''
+    t5B02omW_Qc5gU}''', qcc3pxkelq._G = """
+    \`]cA6:81:-L__K?yaccQdE{zs{v$8?CN?be""" },
+        "\`pD".r = "U9SE]2S+<Ak^k|5lymMuq=\`2w_mfA%m-Q,NMYi1;:5e^v",
+    }
+    heo47x9_j.qoa2f-.qoyfi7jwn = [
+    ]
+    nbtq.sx6 = {
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.ivk.nuan749c7.pJ.kd7jct7_o.xwjbnijuw = { "k19": -188 };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 2,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 2858114', () => {
+  const src = dedent`
+    sw2.rfc4998bx = [true, 22866.4194, 890412, 399573, "qEZv", 0x703714, "p_\`:SMIvsp(<$", "m|2Z@v-c},BQ~+EDUZQr(lxlbX^iy0Mi>{G%c", """
+    ;(d7x""", {
+        e_8y4s = 59108.35246,
+    }]
+    xe_p.w5yln8z5 = '''
+    xo5o'''
+  `;
+
+  const obj = parse(src) as any;
+  obj.sw2.rfc4998bx.splice(5, 1);
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 377453', () => {
+  const src = dedent`
+    eqki- = {
+        v1xubvr5b2 = [false, true, '''
+    <6@Qd}q = \`q]B>FSx''', -49_687.079945, { czt."@C~NuX" = "o5!A|8C-ri)@-U{I", t7.V.v = 0x5c5fa0, ")iE=18F=" = "h#\`^&yX^7wqnyK}(2j?~uEXfHhW1VmI;7)zeF54:Z&+whORWa", zC."&E".p2-fnhimsk = true, zo.HK.o_etoxccp6 = 0o26771, y95lhy8.x.ibl4bqh4di = 0xcfe, hmmu35k7g.iit__292.zjjfy = 15:08:47, c4u9he.";[c76C".bkkhwx2_5w = """
+    o0q*""" }, "I3q/hH", 753862, 'z', -64864.2541],
+        gmpmfyn4.y1np1 = 0o4755211,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj["eqki-"].v1xubvr5b2[4] = { "k94": -4472 };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 771152', () => {
+  const src = dedent`
+    b_3cmsbhh.al1erl4-9 = [236463, '''
+    -xl6''', 0o34, 90356.53508, true, [{ us.xl."/" = """
+    fr;,Iq*!9""" }, 1986-03-02]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.b_3cmsbhh["al1erl4-9"][5][0].us.xl = { "k51": -3337.0673237368464, "k49": "QhvX_vl aKj9dsQ0r7" };
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 863664', () => {
+  const src = dedent`
+    [pm."+w_y2".nlgwd4]
+    k86xv_q."]7]P2g".xq99y = [
+        { chm72ws.si3 = 0xd5c289d, x = 2075-01-15T23:10:01.402080, s9gatl14xa.f6fbq_msjy = { f.nl = 597050, k.z30i = 939925, i_6d2w."g3}7A0" = 785203, 5C = 465053, e3tzu = 822110, "_hGRMk\`Qg~".ku = 412e-33, fvemmt = false, wrs2ylbfaf."AQ#B,[LL=c".ep = -282456, bs3o4.knr3jqyf.h = 70302.033641, h.z3ohf3j16 = -75001.099256, nju0p.tipdjb3pfk = 54219.46102 }, "w@LY+a#1<".z.")e$TtimN7" = 482015, "fa}@[\`"."ae,>ImvDxv".49e = true, "~/yZqL.$" = "gze@7dH;YExh", by1 = '|Xd', "".nytor2grmi."" = { h53y.uujhq.hxk5o = """
+    2^t""" }, axau5."NQ6U?Fo{" = false, ubqaz = 0b111111110111000 },
+        '''
+    ''',
+    ]
+    [d5.dlf.n]
+  `;
+
+  const obj = parse(src) as any;
+  obj.d5 = "P- L9H";
+
+  const result = patch(src, obj, undefined);
+  expect(parse(result)).toEqual(obj);
+});
+
