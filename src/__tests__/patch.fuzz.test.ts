@@ -3,6 +3,58 @@ import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 
+test('replacing an object in a nested multiline array preserves trailing siblings (seed 1112646)', () => {
+  const src = dedent`
+    values = [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      [
+        { old = '''
+    old content
+    ''' },
+        false,
+        287173,
+        "name",
+        1984-04-16T12:37:13Z,
+      ],
+      "//gIXi=9%%vqm;y",
+    ]
+  `;
+
+  const obj = parse(src) as any;
+  obj.values[7][0] = {
+    primary: -4807.689925655723,
+    details: { values: [-2765, new Date(Date.UTC(2016, 6, 12))] }
+  };
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    values = [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      [
+        { primary = -4807.689925655723, details = { values = [ -2765, 2016-07-12T00:00:00.000Z, ], }, },
+        false,
+        287173,
+        "name",
+        1984-04-16T12:37:13Z,
+      ],
+      "//gIXi=9%%vqm;y",
+    ]
+  `);
+});
+
   test('restoring anchored rows also restores their key and value nodes (seed 19506)', () => {
     // Removing a leading item moves the inline table left; its interior rows
     // are anchored to the preceding multiline string's end.  The rigid

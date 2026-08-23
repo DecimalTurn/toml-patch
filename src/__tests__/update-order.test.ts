@@ -8,7 +8,7 @@
  * (or, for the Add/Remove cases, the current — unreordered — behaviour).
  */
 import dedent from 'dedent';
-import { patch } from '../index';
+import { parse, patch } from '../index';
 
 describe('updateOrder: true', () => {
   test('reorders root key-values to match the JS object', () => {
@@ -524,6 +524,57 @@ describe('updateOrder warnings when a requested position could not be honored', 
     expect(spy.mock.calls[0][0]).toContain('unsupported location');
 
     spy.mockRestore();
+  });
+
+  test('enforces order when replacing a dotted key leaf creates an implicit table (seed 35388)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [config]
+      database.legacy = false
+    ` + '\n';
+
+    try {
+      const result = patch(
+        input,
+        { config: { database: { primary: -864, replica: false } } },
+        { updateOrder: true }
+      );
+
+      expect(result).toEqual(dedent`
+        [config]
+        database.primary = -864
+        database.replica = false
+      ` + '\n');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('preserves JS order when new members replace a dotted key in an AOT inline table and one of them is interpreted as a rename (seed 135327)', () => {
+    const input = dedent`
+      [["service".""]]
+      settings = {
+        # Original value
+        nested.value = false,
+      }
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } }
+    );
+
+    expect(result).toEqual(dedent`
+      [["service".""]]
+      settings = {
+        nested.primary = 1,
+        # Original value
+        nested.replica = false,
+      }
+    ` + '\n');
+    expect(parse(result)).toEqual({ service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } });
   });
 
   test('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {

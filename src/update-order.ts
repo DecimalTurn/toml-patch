@@ -7,6 +7,7 @@ import {
   isTable,
   isTableArray,
   isKeyValue,
+  isInlineItem,
   hasItem
 } from './cst';
 import { Move } from './diff';
@@ -124,7 +125,45 @@ interface ResolvedContainer {
   dottedPrefix?: string[];
 }
 
-function resolveContainer(document: Document, path: Path, moveKey?: string): ResolvedContainer | undefined {
+function resolveImplicitDottedContainer(
+  document: Document,
+  path: Path,
+  moveKey: string,
+  commentEligibleNodes: WeakSet<TreeNode>
+): ResolvedContainer | undefined {
+  if (path.some(segment => typeof segment !== 'string')) return undefined;
+
+  const target = [...path, moveKey];
+  const candidates: { container: Document | Table | TableArray; prefix: string[] }[] = [
+    { container: document, prefix: [] }
+  ];
+
+  for (const item of document.items as TreeNode[]) {
+    if (isTable(item) || isTableArray(item)) {
+      candidates.push({ container: item, prefix: item.key.item.value });
+    }
+  }
+
+  for (const candidate of candidates) {
+    for (const item of candidate.container.items as TreeNode[]) {
+      if (!isKeyValue(item) || item.key.value.length < 2) continue;
+      if (commentEligibleNodes.has(item)) continue;
+      const fullKey = [...candidate.prefix, ...item.key.value];
+      if (fullKey.length !== target.length) continue;
+      if (!fullKey.every((segment, index) => segment === target[index])) continue;
+      return { container: candidate.container, dottedPrefix: item.key.value.slice(0, -1) };
+    }
+  }
+
+  return undefined;
+}
+
+function resolveContainer(
+  document: Document,
+  path: Path,
+  moveKey: string | undefined,
+  commentEligibleNodes: WeakSet<TreeNode>
+): ResolvedContainer | undefined {
   if (path.length === 0) return { container: document };
 
   let node: TreeNode | undefined;
@@ -143,6 +182,9 @@ function resolveContainer(document: Document, path: Path, moveKey?: string): Res
   }
 
   if (moveKey === undefined) return undefined;
+
+  const implicit = resolveImplicitDottedContainer(document, path, moveKey, commentEligibleNodes);
+  if (implicit) return implicit;
 
   // A dotted key inside an AOT entry is represented as a KeyValue directly in the
   // entry's items. Its object path contains the AOT index, so resolve the entry first
@@ -171,6 +213,21 @@ function resolveContainer(document: Document, path: Path, moveKey?: string): Res
     item.key.value.every((segment, index) => segment === targetKey[index])
   );
   return hasTarget ? { container: entry, dottedPrefix: dottedPrefix as string[] } : undefined;
+}
+
+function isNewMoveTarget(
+  document: Document,
+  move: Move,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  if (move.key === undefined) return false;
+  let target: TreeNode | undefined;
+  try {
+    target = tryFindByPath(document, move.path.concat(move.key));
+  } catch {
+    return false;
+  }
+  return target !== undefined && isInlineItem(target) && !commentEligibleNodes.has(target);
 }
 
 function applyContainerMoves(
@@ -337,8 +394,9 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], commentEli
   >();
   for (const move of moves) {
     if (move.key === undefined) continue;
-    const resolved = resolveContainer(document, move.path, move.key);
+    const resolved = resolveContainer(document, move.path, move.key, commentEligibleNodes);
     if (!resolved) {
+      if (isNewMoveTarget(document, move, commentEligibleNodes)) continue;
       // Never throw — this is reached for shapes updateOrder doesn't support at all yet:
       // dotted-key implicit tables outside an AOT entry, inline-table interiors, and
       // AOT-entry sub-tables only reachable via document-sibling scanning.
