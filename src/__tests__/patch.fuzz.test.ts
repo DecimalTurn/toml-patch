@@ -32,8 +32,8 @@ test('replacing an object in a nested multiline array preserves trailing sibling
     details: { values: [-2765, new Date(Date.UTC(2016, 6, 12))] }
   };
 
-  //TODO: Decide if we should consider making the inline table multiline to preserve the
-  //original formatting of the array. Currently, it is being converted to an single line inline table.
+  // TODO: Decide if we should consider making the inline table multiline to preserve the
+  // original formatting of the array. Currently, it is being converted to a single-line inline table.
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
