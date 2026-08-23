@@ -127,6 +127,27 @@ function truncationMatchLen(changePath: Path, existingKey: string[], containerAb
   return matchLen;
 }
 
+function inlineTableAddIndex(parent: InlineTable, child: KeyValue, beforeKey?: string): number | undefined {
+  if (beforeKey === undefined) return undefined;
+
+  const childKey = child.key.value;
+  if (childKey.length < 2) return undefined;
+
+  const prefix = childKey.slice(0, -1);
+  for (let index = 0; index < parent.items.length; index++) {
+    const item = parent.items[index];
+    if (!isInlineItem(item) || !isKeyValue(item.item)) continue;
+    const existingKey = item.item.key.value;
+    if (existingKey.length === childKey.length &&
+        arraysEqual(existingKey.slice(0, -1), prefix) &&
+        existingKey[existingKey.length - 1] === beforeKey) {
+      return index;
+    }
+  }
+
+  return undefined;
+}
+
 /** Every node currently in `document`, seeding updateOrder's isEligibleForLeading guard. */
 function collectPrePatchNodes(document: Document): WeakSet<TreeNode> {
   const nodes = new WeakSet<TreeNode>();
@@ -263,7 +284,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
 
   // Certain formatting options should not be applied to the updated document during patching, because it would
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
-  // convert all nested tables to multiline, which is not be desired during patching.
+  // convert all nested tables to multiline, which would not be desired during patching.
   // Therefore, we create a modified format for generating the updated document used for diffing.
   // When inlineTableStart > 1, formatNestedTablesMultiline would split nested inline tables in the
   // updated document into separate sections, causing the diff to see only the empty parent. Clamp to
@@ -285,7 +306,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const changes = reorder(coalesceStructuralReplacements(
     existing_document,
     updated_js,
-    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder })
+    diff(existing_js, updated_js, [], { updateOrder: format.updateOrder, orderSource: updated })
   ));
 
   if (changes.length === 0) {
@@ -443,6 +464,44 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     group.removes.forEach(change => consumed.add(change));
     group.adds.forEach(change => consumed.add(change));
     coalescedEdits.push({ type: ChangeType.Edit, path: group.path });
+  }
+
+  // Replacing every member of an inline-table object inside an inline array is safer as one
+  // element replacement. Applying the individual Remove/Add changes can leave the emptied
+  // multiline inline table's offsets attached to its new rows and corrupt the enclosing array.
+  for (const change of changes) {
+    if (consumed.has(change) || (!isRemove(change) && !isAdd(change))) continue;
+
+    const elementPath = change.path.slice(0, -1);
+    if (elementPath.length === 0 || typeof last(elementPath) !== 'number') continue;
+    const element = tryFindByPath(original, elementPath);
+    if (!element || !isInlineItem(element) || !isInlineTable(element.item)) continue;
+
+    const siblings = changes.filter(candidate =>
+      !consumed.has(candidate) &&
+      (isRemove(candidate) || isAdd(candidate)) &&
+      arraysEqual(candidate.path.slice(0, -1), elementPath)
+    );
+    if (siblings.length === 0 || siblings.some(candidate => candidate.path.length !== elementPath.length + 1)) continue;
+
+    const existingKeys = new Set(
+      (element.item.items as TreeNode[])
+        .filter(isInlineItem)
+        .map(item => {
+          const keyValue = isKeyValue(item.item) ? item.item : undefined;
+          return keyValue?.key.value.length === 1 ? keyValue.key.value[0] : undefined;
+        })
+        .filter((key): key is string => key !== undefined)
+    );
+    const removedKeys = new Set(
+      siblings.filter(isRemove).map(candidate => last(candidate.path))
+    );
+    if (!siblings.some(isRemove) || !siblings.some(isAdd) ||
+        existingKeys.size !== removedKeys.size ||
+        [...existingKeys].some(key => !removedKeys.has(key))) continue;
+
+    for (const sibling of siblings) consumed.add(sibling);
+    coalescedEdits.push({ type: ChangeType.Edit, path: elementPath });
   }
 
   // Strategy 2: AOT being replaced by an array that no longer holds only
@@ -1365,7 +1424,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const inlineItem = generateInlineItem(child);
           // Override with the original table's format
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          const insertIndex = inlineTableAddIndex(parent, child, change.before);
+          insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
         } else if (isInlineItem(child) && isKeyValue(child.item)) {
           // The child was resolved through an inline table in the updated
           // CST, so it arrives as an InlineItem-wrapped KV.  When the
@@ -1385,7 +1445,8 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           }
           const inlineItem = generateInlineItem(kv);
           inlineItem.comma = originalHadTrailingCommas;
-          insert(original, parent, inlineItem, undefined, undefined, inlineHostItems);
+          const insertIndex = inlineTableAddIndex(parent, kv, change.before);
+          insert(original, parent, inlineItem, insertIndex, undefined, inlineHostItems);
           if (restored) restoredInsertContainers.add(parent);
         } else {
           insert(original, parent, child, undefined, undefined, inlineHostItems);

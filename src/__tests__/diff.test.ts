@@ -44,6 +44,18 @@ test('it should find object rename', () => {
   expect(diff({ a: { value: 1 } }, { b: { value: 1 } })).toMatchSnapshot();
 });
 
+test('it anchors an added member before a renamed sibling when requested order is supplied', () => {
+  expect(diff(
+    { value: false },
+    { replica: false, primary: 1 },
+    ['settings', 'nested'],
+    { orderSource: { settings: { nested: { primary: 1, replica: false } } } }
+  )).toEqual([
+    { type: 'Add', path: ['settings', 'nested', 'primary'], before: 'value' },
+    { type: 'Rename', path: ['settings', 'nested'], from: 'value', to: 'replica' }
+  ]);
+});
+
 // A rename is inferred by matching values across before/after. The heuristic asked only
 // whether the *source* key had disappeared, never whether the *target* was actually new — so
 // removing a key whose value happens to equal an untouched sibling's was read as a rename

@@ -7,6 +7,7 @@ import {
   isTable,
   isTableArray,
   isKeyValue,
+  isInlineItem,
   hasItem
 } from './cst';
 import { Move } from './diff';
@@ -54,7 +55,7 @@ function buildUnits(slots: Slot[]): Unit[] {
 
     const isSection = isTable(slot.member!) || isTableArray(slot.member!);
     const previous = units[units.length - 1];
-    if (previous && previous.kind === 'member' && previous.key === slot.key) {
+    if (previous && previous.kind === 'member' && slot.key !== undefined && previous.key === slot.key) {
       // Contiguous run sharing the same first key segment (AOT entries, or [a] then
       // [a.sub]) — coalesce into one unit that will move together.
       previous.slots.push(slot);
@@ -67,7 +68,7 @@ function buildUnits(slots: Slot[]): Unit[] {
       kind: 'member',
       key: slot.key,
       isSection,
-      movable: true, // corrected below once every unit for this container is known
+      movable: slot.key !== undefined, // corrected below once every unit for this container is known
       slots: [slot],
       startLine: slot.startLine,
       endLine: slot.endLine,
@@ -117,11 +118,53 @@ function describeMovePath(move: Move): string {
 }
 
 /** Resolves a Move's `path` to the Document/Table/TableArray it targets, unwrapping a
- *  KeyValue/InlineItem wrapper if `tryFindByPath` returns one. Returns undefined for any
- *  shape this feature doesn't (yet) support — inline-table interiors, dotted-key implicit
- *  tables, AOT-entry sub-tables reached only via document-sibling scanning, etc. Never throws. */
-function resolveContainer(document: Document, path: Path): Document | Table | TableArray | undefined {
-  if (path.length === 0) return document;
+ *  KeyValue/InlineItem wrapper if `tryFindByPath` returns one. Dotted-key members inside an
+ *  AOT entry are returned with a scoped prefix so they can be reordered in that entry. */
+interface ResolvedContainer {
+  container: Document | Table | TableArray;
+  dottedPrefix?: string[];
+}
+
+function resolveImplicitDottedContainer(
+  document: Document,
+  path: Path,
+  moveKey: string,
+  commentEligibleNodes: WeakSet<TreeNode>
+): ResolvedContainer | undefined {
+  if (path.some(segment => typeof segment !== 'string')) return undefined;
+
+  const target = [...path, moveKey];
+  const candidates: { container: Document | Table | TableArray; prefix: string[] }[] = [
+    { container: document, prefix: [] }
+  ];
+
+  for (const item of document.items as TreeNode[]) {
+    if (isTable(item) || isTableArray(item)) {
+      candidates.push({ container: item, prefix: item.key.item.value });
+    }
+  }
+
+  for (const candidate of candidates) {
+    for (const item of candidate.container.items as TreeNode[]) {
+      if (!isKeyValue(item) || item.key.value.length < 2) continue;
+      if (commentEligibleNodes.has(item)) continue;
+      const fullKey = [...candidate.prefix, ...item.key.value];
+      if (fullKey.length !== target.length) continue;
+      if (!fullKey.every((segment, index) => segment === target[index])) continue;
+      return { container: candidate.container, dottedPrefix: item.key.value.slice(0, -1) };
+    }
+  }
+
+  return undefined;
+}
+
+function resolveContainer(
+  document: Document,
+  path: Path,
+  moveKey: string | undefined,
+  commentEligibleNodes: WeakSet<TreeNode>
+): ResolvedContainer | undefined {
+  if (path.length === 0) return { container: document };
 
   let node: TreeNode | undefined;
   try {
@@ -134,12 +177,78 @@ function resolveContainer(document: Document, path: Path): Document | Table | Ta
   if (isKeyValue(node)) node = node.value;
   if (node && hasItem(node)) node = node.item;
 
-  if (node && (isDocument(node) || isTable(node) || isTableArray(node))) return node;
-  return undefined;
+  if (node && (isDocument(node) || isTable(node) || isTableArray(node))) {
+    return { container: node };
+  }
+
+  if (moveKey === undefined) return undefined;
+
+  const implicit = resolveImplicitDottedContainer(document, path, moveKey, commentEligibleNodes);
+  if (implicit) return implicit;
+
+  // A dotted key inside an AOT entry is represented as a KeyValue directly in the
+  // entry's items. Its object path contains the AOT index, so resolve the entry first
+  // and use the remaining dotted segments as a scoped member prefix.
+  let numericIndex = -1;
+  for (let i = path.length - 1; i >= 0; i--) {
+    if (typeof path[i] === 'number') {
+      numericIndex = i;
+      break;
+    }
+  }
+  if (numericIndex < 0) return undefined;
+
+  const dottedPrefix = path.slice(numericIndex + 1);
+  if (dottedPrefix.length === 0 || dottedPrefix.some(segment => typeof segment !== 'string')) {
+    return undefined;
+  }
+
+  const entry = tryFindByPath(document, path.slice(0, numericIndex + 1));
+  if (!entry || !isTableArray(entry)) return undefined;
+
+  const targetKey = [...dottedPrefix, moveKey];
+  const hasTarget = (entry.items as TreeNode[]).some(item =>
+    isKeyValue(item) &&
+    item.key.value.length === targetKey.length &&
+    item.key.value.every((segment, index) => segment === targetKey[index])
+  );
+  return hasTarget ? { container: entry, dottedPrefix: dottedPrefix as string[] } : undefined;
 }
 
-function applyContainerMoves(container: Document | Table | TableArray, moves: Move[], commentEligibleNodes: WeakSet<TreeNode>, warnings: string[]): void {
-  const slots = resolveSlots(container, node => commentEligibleNodes.has(node));
+function isNewMoveTarget(
+  document: Document,
+  move: Move,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  if (move.key === undefined) return false;
+  let target: TreeNode | undefined;
+  try {
+    target = tryFindByPath(document, move.path.concat(move.key));
+  } catch {
+    return false;
+  }
+  return target !== undefined && isInlineItem(target) && !commentEligibleNodes.has(target);
+}
+
+function applyContainerMoves(
+  container: Document | Table | TableArray,
+  moves: Move[],
+  commentEligibleNodes: WeakSet<TreeNode>,
+  warnings: string[],
+  dottedPrefix?: string[]
+): void {
+  const memberKey = dottedPrefix
+    ? (member: TreeNode): string | undefined => {
+        if (!isKeyValue(member)) return undefined;
+        const key = member.key.value;
+        if (key.length !== dottedPrefix.length + 1) return undefined;
+        for (let i = 0; i < dottedPrefix.length; i++) {
+          if (key[i] !== dottedPrefix[i]) return undefined;
+        }
+        return key[dottedPrefix.length];
+      }
+    : undefined;
+  const slots = resolveSlots(container, node => commentEligibleNodes.has(node), memberKey);
   const units = buildUnits(slots);
 
   const movableUnitsByKey = new Map<string, Unit>();
@@ -167,26 +276,24 @@ function applyContainerMoves(container: Document | Table | TableArray, moves: Mo
 
   if (movableUnitsByKey.size === 0) return; // nothing this container can safely reorder
 
-  // Move.from/to are indices into the FULL member key sequence compareObjects saw (every
-  // top-level key of this container's JS object, movable or not) -- replaying relevantMoves
-  // against a sequence that already excluded fixed-anchor keys would silently misinterpret
-  // those indices (a move meant to land after a fixed anchor could look like a no-op once
-  // that anchor's slot is gone from the sequence). So the replay runs over the FULL sequence,
-  // fixed anchors included as placeholder tokens (never themselves targeted, since no move's
-  // key can match a non-contiguous-group's un-unique real key here anyway -- see buildUnits),
-  // and only the RESULT is filtered down to movable keys afterward.
-  // NUL-prefixed: TOML keys (bare or quoted) can never contain a control character, so this
-  // placeholder can never collide with a real key name.
-  let anchorCounter = 0;
-  const fullCurrentOrder = units
-    .filter(u => u.kind === 'member')
-    .map(u => (u.movable ? u.key! : `\u0000anchor:${anchorCounter++}`));
+  // Move.from/to are indices in the object whose order was diffed. For a scoped AOT move,
+  // that object contains only the dotted members under `dottedPrefix`, not every row in the
+  // AOT entry. Simulating against unrelated rows would therefore interpret `move.to` in the
+  // wrong index space. The final placement below still walks every unit, keeping unrelated
+  // rows and pinned slots at their original positions.
+  const currentOrder = dottedPrefix
+    ? units
+        .filter(u => u.kind === 'member' && u.movable)
+        .map(u => u.key!)
+    : units
+        .filter(u => u.kind === 'member')
+        .map((u, index) => u.movable ? u.key! : `\u0000anchor:${index}`);
 
   const relevantMoves = moves.filter(m => m.key !== undefined && movableUnitsByKey.has(m.key));
   if (relevantMoves.length === 0) return;
 
-  const fullTargetOrder = computeTargetOrder(fullCurrentOrder, relevantMoves);
-  const targetOrder = fullTargetOrder.filter(k => movableUnitsByKey.has(k));
+  const targetOrder = computeTargetOrder(currentOrder, relevantMoves)
+    .filter(k => movableUnitsByKey.has(k));
 
   // Validity partition (docs/PLAN-Update-Order.md, Scope): a root key-value can never appear
   // after a section header. Root-KV positions and section positions are fixed by the
@@ -276,32 +383,44 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], commentEli
   // Collects every requested reposition this pass couldn't honor, across every container, so
   // a single consolidated console.warn can report them at the end (docs/PLAN-Update-Order.md
   // scope limitations: non-contiguous groups, the root-KV/section validity partition, and
-  // shapes reordering doesn't reach yet at all -- inline-table/array-of-tables interiors,
-  // dotted-key implicit tables, AOT-entry sub-tables). "Did nothing" for the affected entry is
+  // shapes reordering doesn't reach yet at all -- inline-table interiors, dotted-key implicit
+  // tables outside an AOT entry, and AOT-entry sub-tables. "Did nothing" for the affected entry is
   // the safe failure mode in every case; this only makes that silence visible to the caller.
   const warnings: string[] = [];
 
-  const movesByContainer = new Map<Document | Table | TableArray, Move[]>();
+  const movesByContainer = new Map<
+    Document | Table | TableArray,
+    Map<string, ResolvedContainer & { moves: Move[] }>
+  >();
   for (const move of moves) {
     if (move.key === undefined) continue;
-    const container = resolveContainer(document, move.path);
-    if (!container) {
+    const resolved = resolveContainer(document, move.path, move.key, commentEligibleNodes);
+    if (!resolved) {
+      if (isNewMoveTarget(document, move, commentEligibleNodes)) continue;
       // Never throw — this is reached for shapes updateOrder doesn't support at all yet:
-      // dotted-key implicit tables, inline-table/array-of-tables interiors, and AOT-entry
-      // sub-tables only reachable via document-sibling scanning.
+      // dotted-key implicit tables outside an AOT entry, inline-table interiors, and
+      // AOT-entry sub-tables only reachable via document-sibling scanning.
       warnings.push(
         `"${describeMovePath(move)}" -- unsupported location for reordering (e.g. a dotted-key ` +
         `implicit table, or an interior of an inline table/array-of-tables entry)`
       );
       continue;
     }
-    const bucket = movesByContainer.get(container);
-    if (bucket) bucket.push(move);
-    else movesByContainer.set(container, [move]);
+    const scopeKey = resolved.dottedPrefix?.join('\u0000') ?? '';
+    let scopedMoves = movesByContainer.get(resolved.container);
+    if (!scopedMoves) {
+      scopedMoves = new Map();
+      movesByContainer.set(resolved.container, scopedMoves);
+    }
+    const bucket = scopedMoves.get(scopeKey);
+    if (bucket) bucket.moves.push(move);
+    else scopedMoves.set(scopeKey, { ...resolved, moves: [move] });
   }
 
-  for (const [container, containerMoves] of movesByContainer) {
-    applyContainerMoves(container, containerMoves, commentEligibleNodes, warnings);
+  for (const scopedMoves of movesByContainer.values()) {
+    for (const target of scopedMoves.values()) {
+      applyContainerMoves(target.container, target.moves, commentEligibleNodes, warnings, target.dottedPrefix);
+    }
   }
 
   if (warnings.length > 0) {

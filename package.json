@@ -1,6 +1,6 @@
 {
   "name": "@decimalturn/toml-patch",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "contributors": [
     "Tim Hall <tim.hall.engr@gmail.com>",
     "Martin Leduc <31558169+DecimalTurn@users.noreply.github.com>"
@@ -54,6 +54,7 @@
     "specs": "vitest run --config vitest.specs.config.ts",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
+    "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",
@@ -95,8 +96,7 @@
     "printWidth": 100
   },
   "files": [
-    "dist/",
-    "CHANGELOG.md"
+    "dist/"
   ],
   "json-comments": {
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",

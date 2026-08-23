@@ -68,7 +68,7 @@ mode; "reordered half of it" is not.
 | Descoped | Why |
 |---|---|
 | Inline-table interiors `{ a = 1, b = 2 }` | Needs column relayout and trailing-comma fixups rather than line relayout. Separate follow-up. |
-| Interiors of `[[aot]]` entries | `compareArrays` short-circuits on stable-equal entries (`src/diff.ts:157-159`) and `stableStringify` **sorts keys** (`src/utils.ts:170`), so two entries differing only in key order are byte-identical and the diff never recurses. Reordering the AOT *blocks themselves* is in scope. |
+| Interiors of `[[aot]]` entries | Dotted-key members directly inside an entry can be reordered when `compareObjects` emits their moves. Inline-table interiors and AOT-entry sub-tables remain out of scope. `compareArrays` still short-circuits on stable-equal entries (`src/diff.ts:157-159`) and `stableStringify` **sorts keys** (`src/utils.ts:170`), so two entries differing only in key order are byte-identical and the diff never recurses. Reordering the AOT *blocks themselves* remains in scope. |
 | Non-contiguous document groups | `[a]`, `[b]`, `[a.c]` is valid TOML. Grouping by first key segment makes `a`'s group non-contiguous, and any permutation would silently coalesce `[a.c]` next to `[a]` and relocate `[b]`. Detect and bail out of the document-level reorder. |
 
 ### TOML validity beats JS order

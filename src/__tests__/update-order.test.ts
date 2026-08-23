@@ -8,7 +8,7 @@
  * (or, for the Add/Remove cases, the current — unreordered — behaviour).
  */
 import dedent from 'dedent';
-import { patch } from '../index';
+import { parse, patch } from '../index';
 
 describe('updateOrder: true', () => {
   test('reorders root key-values to match the JS object', () => {
@@ -526,14 +526,58 @@ describe('updateOrder warnings when a requested position could not be honored', 
     spy.mockRestore();
   });
 
-  // FIXME(seed 3214): reordering dotted-key implicit tables inside an
-  // array-of-tables entry is currently unsupported (updateOrder resolves the
-  // move's path -- which carries the numeric AOT index `a.0.y3.mklbjj.k99` --
-  // to no container and leaves it unchanged, emitting an "unsupported
-  // location" warning).  There is no user-facing reason the two keys can't be
-  // swapped in place; the expected behaviour is a real reorder with no
-  // warning.  Tracked as a known-failing test until the capacity is added.
-  test.fails('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
+  test('enforces order when replacing a dotted key leaf creates an implicit table (seed 35388)', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const input = dedent`
+      [config]
+      database.legacy = false
+    ` + '\n';
+
+    try {
+      const result = patch(
+        input,
+        { config: { database: { primary: -864, replica: false } } },
+        { updateOrder: true }
+      );
+
+      expect(result).toEqual(dedent`
+        [config]
+        database.primary = -864
+        database.replica = false
+      ` + '\n');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('preserves JS order when new members replace a dotted key in an AOT inline table and one of them is interpreted as a rename (seed 135327)', () => {
+    const input = dedent`
+      [["service".""]]
+      settings = {
+        # Original value
+        nested.value = false,
+      }
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } }
+    );
+
+    expect(result).toEqual(dedent`
+      [["service".""]]
+      settings = {
+        nested.primary = 1,
+        # Original value
+        nested.replica = false,
+      }
+    ` + '\n');
+    expect(parse(result)).toEqual({ service: { '': [{ settings: { nested: { primary: 1, replica: false } } }] } });
+  });
+
+  test('reorders dotted-key members inside an array-of-tables entry (seed 3214)', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const input = dedent`
@@ -558,6 +602,30 @@ describe('updateOrder warnings when a requested position could not be honored', 
     } finally {
       spy.mockRestore();
     }
+  });
+
+  test('uses nested move indices when unrelated rows precede AOT dotted-key members', () => {
+    const input = dedent`
+      [[a]]
+      unrelated = 0
+      y3.mklbjj.k36 = 1
+      y3.mklbjj.k99 = 2
+      y3.mklbjj.k17 = 3
+    ` + '\n';
+
+    const result = patch(
+      input,
+      { a: [{ unrelated: 0, y3: { mklbjj: { k36: 1, k17: 3, k99: 9 } } }] },
+      { updateOrder: true }
+    );
+
+    expect(result).toEqual(dedent`
+      [[a]]
+      unrelated = 0
+      y3.mklbjj.k36 = 1
+      y3.mklbjj.k17 = 3
+      y3.mklbjj.k99 = 9
+    ` + '\n');
   });
 
   test('warns when the requested order violates the root-KV/section validity partition', () => {
