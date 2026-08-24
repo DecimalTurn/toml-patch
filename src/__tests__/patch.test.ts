@@ -54,35 +54,37 @@ test('validate: false produces the same output on a patch that needs no repair',
   expect(patch(original, skipped, undefined, { validate: false })).toBe(expected);
 });
 
-// Distilled from fuzz seed 771152, which only round-trips because validation
-// catches the first attempt and retries transactionally. It is the clearest
-// demonstration of what opting out costs: the fine-grained write leaves the
-// enclosing array's separators stale, and the result does not even parse.
+// Structurally distilled from fuzz seed 771152, with the seed's random keys and
+// values renamed: what reproduces the bug is a multiline inline array holding
+// multiline strings, not the key spellings. This case only round-trips because
+// validation catches the first attempt and retries transactionally, so it is the
+// clearest demonstration of what opting out costs.
 test('validate: false returns the unrepaired result instead of retrying', () => {
   const original = dedent`
-    b_3cmsbhh.al1erl4-9 = [236463, '''
-    -xl6''', 0o34, 90356.53508, true, [{ us.xl."/" = """
-    fr;,Iq*!9""" }, 1986-03-02]]
+    build.artifacts = [1, '''
+    alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
+    detail""" }, 1986-03-02]]
   ` + '\n';
 
   const mutate = (obj: any) => {
-    obj.b_3cmsbhh['al1erl4-9'][5][0].us.xl = { k51: -3337.0673237368464, k49: 'QhvX_vl aKj9dsQ0r7' };
+    obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
     return obj;
   };
 
-  // Validated: the retry rewrites the whole multiline container, which loses
-  // the multiline literal string, the octal base and the dotted keys, but the
-  // result is valid TOML that matches the requested object.
+  // Validated: the retry rewrites the whole multiline container, which loses the
+  // multiline literal string, the octal base and the dotted keys, but the result
+  // is valid TOML that matches the requested object.
   expect(patch(original, mutate(parse(original)))).toBe(
-    'b_3cmsbhh.al1erl4-9 = [236463, "-xl6", 28, 90356.53508, true, ' +
-    '[{us = {xl = {k51 = -3337.0673237368464, k49 = "QhvX_vl aKj9dsQ0r7"}}}, 1986-03-02]]\n'
+    'build.artifacts = [1, "alpha", 28, 2.5, true, ' +
+    '[{meta = {notes = {width = 3, label = "measured value"}}}, 1986-03-02]]\n'
   );
 
-  // Opted out: the original formatting survives, but the output is malformed.
+  // Opted out: the original formatting survives, but the array loses its closing
+  // bracket and the output no longer parses.
   const unrepaired = patch(original, mutate(parse(original)), undefined, { validate: false });
   expect(unrepaired).toBe(dedent`
-    b_3cmsbhh.al1erl4-9 = [236463, '''
-    -xl6''', 0o34, 90356.53508,]true, [{us.xl.k51 = -3337.0673237368464, us.xl.k49 = "QhvX_vl aKj9dsQ0r7"}, 1986-03-02]
+    build.artifacts = [1, '''
+    alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02]
   ` + '\n');
   expect(() => parse(unrepaired)).toThrow();
 });

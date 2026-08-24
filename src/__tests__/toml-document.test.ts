@@ -1911,17 +1911,18 @@ describe('TomlDocument', () => {
   });
 
   describe('patch result validation', () => {
-    // Distilled from fuzz seed 771152. Before validation reached TomlDocument
-    // this produced TOML that did not parse, and the document silently kept it.
+    // Structurally distilled from fuzz seed 771152, with the seed's random keys
+    // and values renamed. Before validation reached TomlDocument this produced
+    // TOML that does not parse, and the document silently kept it.
     const trickyToml = dedent`
-      b_3cmsbhh.al1erl4-9 = [236463, '''
-      -xl6''', 0o34, 90356.53508, true, [{ us.xl."/" = """
-      fr;,Iq*!9""" }, 1986-03-02]]
+      build.artifacts = [1, '''
+      alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
+      detail""" }, 1986-03-02]]
     ` + '\n';
 
     const mutate = (doc: TomlDocument) => {
       const obj = doc.toJsObject;
-      obj.b_3cmsbhh['al1erl4-9'][5][0].us.xl = { k51: -3337.0673237368464, k49: 'QhvX_vl aKj9dsQ0r7' };
+      obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
       return obj;
     };
 
@@ -1930,10 +1931,12 @@ describe('TomlDocument', () => {
       doc.patch(mutate(doc));
 
       // The retry rewrites the whole multiline container, losing the multiline
-      // literal string and the octal base, but the result is valid TOML.
+      // literal string and the octal base, but the result is valid TOML. The
+      // date widening to an offset date-time is a separate pre-existing issue
+      // in toJsObject, pinned here so a fix to it shows up as a diff.
       expect(doc.toTomlString).toBe(
-        'b_3cmsbhh.al1erl4-9 = [236463, "-xl6", 28, 90356.53508, true, ' +
-        '[{us = {xl = {k51 = -3337.0673237368464, k49 = "QhvX_vl aKj9dsQ0r7"}}}, 1986-03-02T00:00:00.000Z]]\n'
+        'build.artifacts = [1, "alpha", 28, 2.5, true, ' +
+        '[{meta = {notes = {width = 3, label = "measured value"}}}, 1986-03-02T00:00:00.000Z]]\n'
       );
       expect(() => new TomlDocument(doc.toTomlString).toJsObject).not.toThrow();
     });
@@ -1943,8 +1946,8 @@ describe('TomlDocument', () => {
       doc.patch(mutate(doc), undefined, { validate: false });
 
       expect(doc.toTomlString).toBe(dedent`
-        b_3cmsbhh.al1erl4-9 = [236463, '''
-        -xl6''', 0o34, 90356.53508, true, [{us.xl.k51 = -3337.0673237368464, us.xl.k49 = "QhvX_vl aKj9dsQ0r7"}, 1986-03-02T00:00:00.000Z]
+        build.artifacts = [1, '''
+        alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02T00:00:00.000Z]
       ` + '\n');
       expect(() => new TomlDocument(doc.toTomlString).toJsObject).toThrow();
     });
