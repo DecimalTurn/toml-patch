@@ -23,6 +23,101 @@ test('retry result is validated before patch returns', () => {
   expect(() => patch('value = 0\n', updated)).toThrow(/round-trip/i);
 });
 
+// `validate: false` opts out of the round-trip check in the four tests below.
+// Together they pin the whole contract: the happy path is unchanged, the
+// retry stops repairing, the throw stops firing, and only an explicit `false`
+// turns any of it off.
+
+test('validate: false produces the same output on a patch that needs no repair', () => {
+  const original = dedent`
+    a = 1
+    b = "two"
+
+    [c]
+    d = [1, 2, 3]
+  ` + '\n';
+
+  const validated = parse(original);
+  validated.a = 42;
+  const skipped = parse(original);
+  skipped.a = 42;
+
+  const expected = dedent`
+    a = 42
+    b = "two"
+
+    [c]
+    d = [1, 2, 3]
+  ` + '\n';
+
+  expect(patch(original, validated)).toBe(expected);
+  expect(patch(original, skipped, undefined, { validate: false })).toBe(expected);
+});
+
+// Distilled from fuzz seed 771152, which only round-trips because validation
+// catches the first attempt and retries transactionally. It is the clearest
+// demonstration of what opting out costs: the fine-grained write leaves the
+// enclosing array's separators stale, and the result does not even parse.
+test('validate: false returns the unrepaired result instead of retrying', () => {
+  const original = dedent`
+    b_3cmsbhh.al1erl4-9 = [236463, '''
+    -xl6''', 0o34, 90356.53508, true, [{ us.xl."/" = """
+    fr;,Iq*!9""" }, 1986-03-02]]
+  ` + '\n';
+
+  const mutate = (obj: any) => {
+    obj.b_3cmsbhh['al1erl4-9'][5][0].us.xl = { k51: -3337.0673237368464, k49: 'QhvX_vl aKj9dsQ0r7' };
+    return obj;
+  };
+
+  // Validated: the retry rewrites the whole multiline container, which loses
+  // the multiline literal string, the octal base and the dotted keys, but the
+  // result is valid TOML that matches the requested object.
+  expect(patch(original, mutate(parse(original)))).toBe(
+    'b_3cmsbhh.al1erl4-9 = [236463, "-xl6", 28, 90356.53508, true, ' +
+    '[{us = {xl = {k51 = -3337.0673237368464, k49 = "QhvX_vl aKj9dsQ0r7"}}}, 1986-03-02]]\n'
+  );
+
+  // Opted out: the original formatting survives, but the output is malformed.
+  const unrepaired = patch(original, mutate(parse(original)), undefined, { validate: false });
+  expect(unrepaired).toBe(dedent`
+    b_3cmsbhh.al1erl4-9 = [236463, '''
+    -xl6''', 0o34, 90356.53508,]true, [{us.xl.k51 = -3337.0673237368464, us.xl.k49 = "QhvX_vl aKj9dsQ0r7"}, 1986-03-02]
+  ` + '\n');
+  expect(() => parse(unrepaired)).toThrow();
+});
+
+test('validate: false suppresses the round-trip throw', () => {
+  const makeUnsatisfiable = () => {
+    let reads = 0;
+    const updated: Record<string, unknown> = {};
+    Object.defineProperty(updated, 'value', { enumerable: true, get: () => ++reads });
+    return updated;
+  };
+
+  expect(() => patch('value = 0\n', makeUnsatisfiable())).toThrow(/round-trip/i);
+
+  // The exact number is deliberately not asserted: it depends on how many
+  // times patch() reads the property, which is an implementation detail.
+  // What matters is that opting out returns unvalidated output rather than
+  // throwing, even though that output disagrees with any single read.
+  const unvalidated = patch('value = 0\n', makeUnsatisfiable(), undefined, { validate: false });
+  expect(unvalidated).toMatch(/^value = \d+\n$/);
+});
+
+test('validation stays on unless validate is explicitly false', () => {
+  const makeUnsatisfiable = () => {
+    let reads = 0;
+    const updated: Record<string, unknown> = {};
+    Object.defineProperty(updated, 'value', { enumerable: true, get: () => ++reads });
+    return updated;
+  };
+
+  expect(() => patch('value = 0\n', makeUnsatisfiable(), undefined, {})).toThrow(/round-trip/i);
+  expect(() => patch('value = 0\n', makeUnsatisfiable(), undefined, { validate: true })).toThrow(/round-trip/i);
+  expect(() => patch('value = 0\n', makeUnsatisfiable(), undefined, undefined)).toThrow(/round-trip/i);
+});
+
 test('it should apply edit to key-value', () => {
   const value = parse(example);
   value.owner.name = 'Tim Hall';

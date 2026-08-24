@@ -53,6 +53,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import type { PatchOptions } from './patch-options';
 import traverse from './traverse';
 
 /**
@@ -63,12 +64,20 @@ import traverse from './traverse';
  * and updated data, then strategically applies only the necessary changes to maintain the
  * original document structure as much as possible.
  * 
+ * By default the result is verified: `patch()` re-parses its own output and
+ * checks that it round-trips back to `updated`, retrying with a coarser writer
+ * and ultimately throwing rather than returning TOML that disagrees with the
+ * requested object. Pass `{ validate: false }` to skip that check when
+ * patching is measurably hot; see {@link PatchOptions.validate}.
+ *
  * @param existing - The original TOML document as a string
  * @param updated - The updated JavaScript object with desired changes
  * @param format - Optional formatting options to apply to new or modified sections
+ * @param options - Optional patch options
+ * @param options.validate - Verify the output round-trips to `updated`. Default: true.
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
+export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat, options?: PatchOptions): string {
   // The tokenizer flags mixed line endings as it scans, so this requires no
   // separate pass over the input.
   const newlineState = createNewlineScanState();
@@ -87,24 +96,31 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   }
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
-  if (patchResultMatches(updated, patchedToml)) {
-    return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
-  }
+  const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
+
+  // Opting out returns the first attempt as-is, so nothing below runs.
+  if (options?.validate === false) return withBom(patchedToml);
+
+  // Detected once and threaded into both comparisons; patchCst() derives its
+  // own copy internally for the diff.
+  const temporal = hasTemporal(updated);
+  if (patchResultMatches(updated, patchedToml, temporal)) return withBom(patchedToml);
 
   const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
   const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
-  if (!patchResultMatches(updated, retriedToml)) {
+  if (!patchResultMatches(updated, retriedToml, temporal)) {
     throw new Error('Patch retry failed round-trip validation');
   }
-  return fmt.leadingBom ? `${UTF8_BOM}${retriedToml}` : retriedToml;
+  return withBom(retriedToml);
 }
 
-function patchResultMatches(updated: any, toml: string): boolean {
+function patchResultMatches(updated: any, toml: string, temporal: boolean): boolean {
   try {
     const parsed = Array.from(parseTOML(stripLeadingBom(toml)));
-    const expected = normalizePatchComparison(updated);
-    const actual = toJS(parsed, '', { temporal: hasTemporal(updated) });
-    return stableStringify(normalizePatchComparison(actual)) === stableStringify(normalizePatchComparison(expected));
+    const actual = toJS(parsed, '', { temporal });
+    // normalizePatchComparison is idempotent, so `updated` is normalized once
+    // here rather than twice as it was when `expected` was a separate local.
+    return stableStringify(normalizePatchComparison(actual)) === stableStringify(normalizePatchComparison(updated));
   } catch {
     return false;
   }
@@ -1131,7 +1147,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       for (const item of node.items as TreeNode[]) indexMultilineAncestors(item, nextAncestors);
     }
   };
-  indexMultilineAncestors(original);
   const commentCache = new WeakMap<TreeNode, boolean>();
   const multilineStringCountCache = new WeakMap<TreeNode, number>();
   function containsComment(node: TreeNode): boolean {
@@ -1158,36 +1173,41 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
     multilineStringCountCache.set(node, result);
     return result;
   }
-  for (const change of changes) {
-    let target = tryFindByPath(original, change.path);
-    const unresolved = !target;
-    if (!target) {
-      // An Add earlier in the same array can make a later Remove path refer to
-      // post-mutation coordinates. Resolve its nearest existing ancestor so
-      // both changes still contribute to the same transaction (seed 175924).
-      for (let length = change.path.length - 1; length >= 0 && !target; length--) {
-        target = tryFindByPath(original, change.path.slice(0, length));
+  // Only the transactional pass consumes any of this, and building it walks the
+  // whole document plus every change, so skip it entirely on the fine-grained
+  // pass. The maps stay empty and transactionalPaths below comes out empty.
+  if (useMultilineTransactions) {
+    indexMultilineAncestors(original);
+    for (const change of changes) {
+      let target = tryFindByPath(original, change.path);
+      const unresolved = !target;
+      if (!target) {
+        // An Add earlier in the same array can make a later Remove path refer to
+        // post-mutation coordinates. Resolve its nearest existing ancestor so
+        // both changes still contribute to the same transaction (seed 175924).
+        for (let length = change.path.length - 1; length >= 0 && !target; length--) {
+          target = tryFindByPath(original, change.path.slice(0, length));
+        }
       }
-    }
-    if (!target) continue;
-    const ancestors = multilineAncestors.get(target) ?? [];
-    const targetIsMultiline = (isInlineTable(target) || isInlineArray(target)) &&
-      target.loc.end.line > target.loc.start.line;
+      if (!target) continue;
+      const ancestors = multilineAncestors.get(target) ?? [];
+      const targetIsMultiline = (isInlineTable(target) || isInlineArray(target)) &&
+        target.loc.end.line > target.loc.start.line;
 
-    for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
-      if (containsComment(container) || multilineStringCount(container) < 1) continue;
-      multilineChangeCounts.set(container, (multilineChangeCounts.get(container) ?? 0) + 1);
-      const containerChanges = multilineChanges.get(container);
-      if (containerChanges) containerChanges.push(change);
-      else multilineChanges.set(container, [change]);
-      if (unresolved) multilineHasUnresolvedChange.add(container);
-      const path = absolutePathOf(container);
-      if (path !== undefined) multilineChangePaths.set(container, path);
+      for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
+        if (containsComment(container) || multilineStringCount(container) < 1) continue;
+        multilineChangeCounts.set(container, (multilineChangeCounts.get(container) ?? 0) + 1);
+        const containerChanges = multilineChanges.get(container);
+        if (containerChanges) containerChanges.push(change);
+        else multilineChanges.set(container, [change]);
+        if (unresolved) multilineHasUnresolvedChange.add(container);
+        const path = absolutePathOf(container);
+        if (path !== undefined) multilineChangePaths.set(container, path);
+      }
     }
   }
   const transactionalPaths = [...multilineChangeCounts]
     .filter(([container, count]) => {
-      if (!useMultilineTransactions) return false;
       if (!multilineChangePaths.has(container)) return false;
       const containerChanges = multilineChanges.get(container) ?? [];
       const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
@@ -1203,7 +1223,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       otherIndex !== index && path.length > other.length &&
       arraysEqual(path.slice(0, other.length), other)
     ));
-  if (typeof process !== 'undefined' && process.env.TOML_PATCH_DEBUG_TRANSACTION) {
+  if (useMultilineTransactions && typeof process !== 'undefined' && process.env.TOML_PATCH_DEBUG_TRANSACTION) {
     console.warn([...multilineChangeCounts].map(([container, count]) => ({
       type: container.type,
       path: multilineChangePaths.get(container),

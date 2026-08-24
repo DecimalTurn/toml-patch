@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Fixed
+### Added
+
+- Patching: `patch()` accepts a fourth optional `options` argument. Set `validate: false`
+  to skip round-trip verification of the output, which is the fastest path but returns
+  the unrepaired result instead of retrying or throwing ([#293])
+
+### Fixed
 
 - Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
 

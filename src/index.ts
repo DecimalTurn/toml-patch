@@ -8,6 +8,7 @@ import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import { TomlDocument } from './toml-document';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
+export type { PatchOptions } from './patch-options';
 
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
