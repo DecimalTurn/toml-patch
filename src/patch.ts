@@ -1074,7 +1074,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // stale end position even when each write is flushed individually. Treat only those
   // multi-change, comment-free containers transactionally; a single edit still uses the
   // formatting-preserving fine-grained path and comments retain their ownership handling.
-  const multilineChangeCounts = new Map<TreeNode, number>();
   const multilineChangePaths = new Map<TreeNode, Path>();
   const multilineChanges = new Map<TreeNode, Change[]>();
   const multilineHasUnresolvedChange = new Set<TreeNode>();
@@ -1142,7 +1141,6 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
 
       for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
         if (containsComment(container) || multilineStringCount(container) < 1) continue;
-        multilineChangeCounts.set(container, (multilineChangeCounts.get(container) ?? 0) + 1);
         const containerChanges = multilineChanges.get(container);
         if (containerChanges) containerChanges.push(change);
         else multilineChanges.set(container, [change]);
@@ -1152,17 +1150,17 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
     }
   }
-  const transactionalPaths = [...multilineChangeCounts]
-    .filter(([container, count]) => {
+  const transactionalPaths = [...multilineChanges]
+    .filter(([container, containerChanges]) => {
       if (!multilineChangePaths.has(container)) return false;
-      const containerChanges = multilineChanges.get(container) ?? [];
+      const count = containerChanges.length;
       const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
       const strings = multilineStringCount(container);
       const hasEnoughStrings = strings >= 2 ||
         (strings >= 1 && (multilineHasUnresolvedChange.has(container) || count === 1));
       return hasEnoughStrings &&
         (count >= 3 || (count === 2 && (!hasMoveOrAdd || multilineHasUnresolvedChange.has(container))) ||
-          (count === 1 && (multilineChanges.get(container) ?? []).some(isRemove)));
+          (count === 1 && containerChanges.some(isRemove)));
     })
     .map(([container]) => multilineChangePaths.get(container)!)
     .filter((path, index, paths) => !paths.some((other, otherIndex) =>
@@ -1170,12 +1168,12 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       arraysEqual(path.slice(0, other.length), other)
     ));
   if (useMultilineTransactions && typeof process !== 'undefined' && process.env.TOML_PATCH_DEBUG_TRANSACTION) {
-    console.warn([...multilineChangeCounts].map(([container, count]) => ({
+    console.warn([...multilineChanges].map(([container, containerChanges]) => ({
       type: container.type,
       path: multilineChangePaths.get(container),
-      count,
+      count: containerChanges.length,
       strings: multilineStringCount(container),
-      changes: (multilineChanges.get(container) ?? []).map(change => change.type)
+      changes: containerChanges.map(change => change.type)
     })));
   }
   if (transactionalPaths.length > 0) {
