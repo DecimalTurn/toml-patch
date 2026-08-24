@@ -45,11 +45,12 @@
   "scripts": {
     "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "vitest run",
+    "test:js": "vitest run --config vitest.js.config.ts",
     "test:watch": "vitest",
     "test:go": "./run-toml-test.bash",
     "test:playwright": "playwright test",
     "playwright:install": "playwright install --with-deps chromium",
-    "test:all": "pnpm run test && pnpm run test:playwright",
+    "test:all": "pnpm run test && pnpm run test:js && pnpm run test:playwright",
     "typecheck": "tsc",
     "specs": "vitest run --config vitest.specs.config.ts",
     "benchmark": "npm-run-all2 bench:*",
