@@ -42,6 +42,67 @@ describe('multiline delimiters appearing in content', () => {
     ` + '\n');
   });
 
+  test('a comment containing three quotes patches normally', () => {
+    const original = dedent`
+      # see """ for the quoting rules
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      # see """ for the quoting rules
+      port = 9090
+    ` + '\n');
+  });
+
+  // A multiline literal string may hold three double quotes verbatim, so this
+  // trips the `"""` half of the pre-filter. It is genuinely multiline, but sits
+  // at the top level rather than inside an inline container, so it is still not
+  // a transaction candidate.
+  test('a multiline literal string holding three quotes patches normally', () => {
+    const original = dedent`
+      note = '''
+      holds """ fine'''
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      note = '''
+      holds """ fine'''
+      port = 9090
+    ` + '\n');
+  });
+
+  // Same three quotes inside a multiline inline container, which IS a transaction
+  // candidate, so this one runs the full verification path.
+  test('a multiline literal string holding three quotes inside an inline table', () => {
+    const original = dedent`
+      cfg = {
+        note = '''
+      holds """ fine''',
+        retries = 2,
+      }
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.cfg.retries = 3;
+
+    expect(patch(original, updated)).toBe(dedent`
+      cfg = {
+        note = '''
+      holds """ fine''',
+        retries = 3,
+      }
+      port = 8080
+    ` + '\n');
+  });
+
   // A multiline literal string may hold up to two consecutive apostrophes. This
   // one is genuinely multiline, but sits at the top level rather than inside an
   // inline container, so it is still not a transaction candidate.
