@@ -35,7 +35,9 @@ $ npm install --save @decimalturn/toml-patch
 For browser usage, you can use unpkg:
 
 ```html
-<script src="https://unpkg.com/@decimalturn/toml-patch/dist/toml-patch.js"></script>
+<script type="module">
+  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch@browser/dist/browser/toml-patch.js';
+</script>
 ```
 
 ## API

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Build: Ship a separate minified browser build (`dist/browser/toml-patch.js`), published under the `browser` npm dist-tag, for direct `<script type="module">` usage via a CDN. The main `dist/toml-patch.js` build is now unminified so bundler consumers get better tree-shaking and readable stack traces.
+
+### Fixed
+
+- Docs: The README's browser install snippet loaded an ESM file via a non-module `<script src="...">` tag, which throws a `SyntaxError` in real browsers. It now uses `<script type="module">` and the new browser build.
+
 ## [3.0.4] - 2026-08-24
 
 ### Fixed

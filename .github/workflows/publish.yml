@@ -50,6 +50,14 @@ jobs:
         run: pnpm publish --provenance --no-git-checks
         continue-on-error: true
 
+      - name: Prepare browser package
+        if: steps.pnpm-publish.outcome == 'success'
+        run: pnpm run prepare:browser-package
+
+      - name: Publish browser package
+        if: steps.pnpm-publish.outcome == 'success'
+        run: npm publish ./dist/browser-package --tag browser --provenance --ignore-scripts
+
       - name: Check git status
         run: git status && git diff
 
