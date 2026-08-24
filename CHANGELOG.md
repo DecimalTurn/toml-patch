@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: `TomlDocument.patch()` now verifies its result the way `patch()` does, instead of
   silently keeping TOML that does not round-trip. A document that cannot be patched is rolled
   back to its pre-patch state rather than left partially modified ([#293])
+- Patching: `TomlDocument.patch()` no longer widens TOML dates when re-applying an object
+  read from `toJsObject`. That getter hands out plain `Date` objects, which the writer
+  rendered as full offset date-times, so one sibling edit rewrote every date in an inline
+  array (`1986-03-02` became `1986-03-02T00:00:00.000Z`). Dates the caller left alone keep
+  their original spelling; a date whose instant changed still widens, and the exported
+  `LocalDate` / `LocalTime` / `LocalDateTime` / `OffsetDateTime` classes state the intended
+  representation ([#293])
 
 ## [3.0.3] - 2026-08-21
 
