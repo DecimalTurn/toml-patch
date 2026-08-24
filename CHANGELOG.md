@@ -9,13 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Patching: `patch()` accepts a fourth optional `options` argument. Set `validate: false`
-  to skip round-trip verification of the output, which is the fastest path but returns
-  the unrepaired result instead of retrying or throwing ([#293])
+- Patching: `patch()` and `TomlDocument.patch()` accept an optional `options` argument. Set
+  `validate: false` to skip round-trip verification of the output, which is the fastest
+  path but returns the unrepaired result instead of retrying or throwing ([#293])
 
 ### Fixed
 
 - Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
+- Patching: `TomlDocument.patch()` now verifies its result the way `patch()` does, instead of
+  silently keeping TOML that does not round-trip. A document that cannot be patched is rolled
+  back to its pre-patch state rather than left partially modified ([#293])
 
 ## [3.0.3] - 2026-08-21
 

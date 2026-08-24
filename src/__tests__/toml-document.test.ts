@@ -1909,4 +1909,119 @@ describe('TomlDocument', () => {
       });
     });
   });
+
+  describe('patch result validation', () => {
+    // Distilled from fuzz seed 771152. Before validation reached TomlDocument
+    // this produced TOML that did not parse, and the document silently kept it.
+    const trickyToml = dedent`
+      b_3cmsbhh.al1erl4-9 = [236463, '''
+      -xl6''', 0o34, 90356.53508, true, [{ us.xl."/" = """
+      fr;,Iq*!9""" }, 1986-03-02]]
+    ` + '\n';
+
+    const mutate = (doc: TomlDocument) => {
+      const obj = doc.toJsObject;
+      obj.b_3cmsbhh['al1erl4-9'][5][0].us.xl = { k51: -3337.0673237368464, k49: 'QhvX_vl aKj9dsQ0r7' };
+      return obj;
+    };
+
+    it('retries so the patched document is always valid TOML', () => {
+      const doc = new TomlDocument(trickyToml);
+      doc.patch(mutate(doc));
+
+      // The retry rewrites the whole multiline container, losing the multiline
+      // literal string and the octal base, but the result is valid TOML.
+      expect(doc.toTomlString).toBe(
+        'b_3cmsbhh.al1erl4-9 = [236463, "-xl6", 28, 90356.53508, true, ' +
+        '[{us = {xl = {k51 = -3337.0673237368464, k49 = "QhvX_vl aKj9dsQ0r7"}}}, 1986-03-02T00:00:00.000Z]]\n'
+      );
+      expect(() => new TomlDocument(doc.toTomlString).toJsObject).not.toThrow();
+    });
+
+    it('validate: false keeps the unrepaired result', () => {
+      const doc = new TomlDocument(trickyToml);
+      doc.patch(mutate(doc), undefined, { validate: false });
+
+      expect(doc.toTomlString).toBe(dedent`
+        b_3cmsbhh.al1erl4-9 = [236463, '''
+        -xl6''', 0o34, 90356.53508, true, [{us.xl.k51 = -3337.0673237368464, us.xl.k49 = "QhvX_vl aKj9dsQ0r7"}, 1986-03-02T00:00:00.000Z]
+      ` + '\n');
+      expect(() => new TomlDocument(doc.toTomlString).toJsObject).toThrow();
+    });
+
+    // The getter changes the requested value on every read, so no output can
+    // ever round-trip. patchCst() mutates CST nodes as it goes, so without an
+    // explicit rollback the document would be left holding a tree that no
+    // longer agrees with its own TOML string.
+    const unsatisfiable = () => {
+      let reads = 0;
+      const updated: Record<string, unknown> = {};
+      Object.defineProperty(updated, 'value', { enumerable: true, get: () => ++reads });
+      return updated;
+    };
+
+    it('rolls the document back when no attempt round-trips', () => {
+      const original = 'value = 0\n';
+      const doc = new TomlDocument(original);
+
+      expect(() => doc.patch(unsatisfiable())).toThrow(/round-trip/i);
+
+      // Unchanged, still readable, and still patchable afterwards.
+      expect(doc.toTomlString).toBe(original);
+      expect(doc.toJsObject).toEqual({ value: 0 });
+
+      const obj = doc.toJsObject;
+      obj.value = 7;
+      doc.patch(obj);
+      expect(doc.toTomlString).toBe('value = 7\n');
+      expect(doc.toJsObject).toEqual({ value: 7 });
+    });
+
+    it('validate: false suppresses the rollback and the throw', () => {
+      const doc = new TomlDocument('value = 0\n');
+      doc.patch(unsatisfiable(), undefined, { validate: false });
+      expect(doc.toTomlString).toMatch(/^value = \d+\n$/);
+    });
+
+    // TOML has one integer type, so a document read as bigint accepts a plain
+    // number assigned back into it. Comparing 2 against 2n as different values
+    // would fail validation on a correct patch and destroy the formatting via a
+    // needless retry.
+    it.each([
+      ['asNeeded' as const, 'bigint'],
+      [true as const, 'bigint'],
+      [false as const, 'number']
+    ])('does not retry when integersAsBigInt is %j', (integersAsBigInt, expectedType) => {
+      const original = dedent`
+        big = 9007199254740993
+        note = [
+          """
+        line""",
+          1,
+        ]
+        x = 1
+      ` + '\n';
+
+      const doc = new TomlDocument(original, { integersAsBigInt });
+      const obj = doc.toJsObject;
+      expect(typeof obj.big).toBe(expectedType);
+
+      obj.x = 2;
+      doc.patch(obj);
+
+      // A retry would reflow the multiline array, so the indented `"""` and the
+      // trailing comma surviving proves the fine-grained path was kept.
+      const expectedBig = integersAsBigInt === false ? '9007199254740992.0' : '9007199254740993';
+      expect(doc.toTomlString).toBe(dedent`
+        big = ${expectedBig}
+        note = [
+          """
+        line""",
+          1,
+        ]
+        x = 2
+      ` + '\n');
+    });
+  });
+
 });

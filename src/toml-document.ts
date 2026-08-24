@@ -3,6 +3,8 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
 import { patchCst } from './patch';
+import { hasTemporal, patchResultMatches } from './patch-validate';
+import type { PatchOptions } from './patch-options';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -74,21 +76,76 @@ export class TomlDocument {
   /**
    * Applies a patch to the current CST using a modified JS object.
    * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
+   *
+   * By default the result is verified: the produced TOML is re-parsed and checked
+   * against `updatedObject`, retrying with a coarser writer if it does not match.
+   * If neither attempt round-trips, the document is rolled back to its pre-patch
+   * state and an error is thrown, so a caught failure never leaves a half-patched
+   * document behind. Pass `{ validate: false }` to skip the check; see
+   * {@link PatchOptions.validate}.
+   *
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
+   * @param options - Optional patch options
+   * @param options.validate - Verify the result round-trips to `updatedObject`. Default: true.
    */
-  patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat) : void {
+  patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat, options?: PatchOptions) : void {
 
     const fmt = resolveTomlFormat(format, this._format);
 
-    const { tomlString, document } = patchCst(
+    // patchCst() mutates the nodes it is handed, so this._cst is already spent
+    // once the call below returns, whether or not the result is usable. Keeping
+    // the pre-patch source lets every later path re-derive a clean CST from it.
+    const sourceBefore = this._currentTomlString;
+
+    const first = patchCst(
       this._cst,
       updatedObject,
       fmt
     );
-    this._cst = document.items;
-    this._format = fmt;
-    this._currentTomlString = tomlString;
+
+    const commit = (tomlString: string, cst: Block[]) => {
+      this._cst = cst;
+      this._format = fmt;
+      this._currentTomlString = tomlString;
+    };
+
+    if (options?.validate === false) {
+      commit(first.tomlString, first.document.items);
+      return;
+    }
+
+    // The comparison has to read values back the way this document produces
+    // them, or a correct patch looks like a mismatch: integersAsBigInt is the
+    // document's own setting, and temporal follows the updated object exactly
+    // as the internal diff does.
+    const comparison = {
+      temporal: hasTemporal(updatedObject),
+      integersAsBigInt: this._integersAsBigInt
+    };
+
+    if (patchResultMatches(updatedObject, first.tomlString, comparison)) {
+      commit(first.tomlString, first.document.items);
+      return;
+    }
+
+    const retried = patchCst(
+      Array.from(parseTOML(sourceBefore)),
+      updatedObject,
+      fmt,
+      true
+    );
+    if (patchResultMatches(updatedObject, retried.tomlString, comparison)) {
+      commit(retried.tomlString, retried.document.items);
+      return;
+    }
+
+    // Neither attempt round-trips. Both mutated CST nodes on their way through,
+    // so restore from the pre-patch source rather than leaving the document
+    // holding a tree that no longer matches its own TOML string.
+    this._cst = Array.from(parseTOML(sourceBefore));
+    this._currentTomlString = sourceBefore;
+    throw new Error('Patch retry failed round-trip validation');
   }
 
   /**

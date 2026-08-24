@@ -54,6 +54,7 @@ import {
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import type { PatchOptions } from './patch-options';
+import { hasTemporal, patchResultMatches } from './patch-validate';
 import traverse from './traverse';
 
 /**
@@ -103,72 +104,17 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 
   // Detected once and threaded into both comparisons; patchCst() derives its
   // own copy internally for the diff.
-  const temporal = hasTemporal(updated);
-  if (patchResultMatches(updated, patchedToml, temporal)) return withBom(patchedToml);
+  const comparison = { temporal: hasTemporal(updated) };
+  if (patchResultMatches(updated, patchedToml, comparison)) return withBom(patchedToml);
 
   const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
   const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
-  if (!patchResultMatches(updated, retriedToml, temporal)) {
+  if (!patchResultMatches(updated, retriedToml, comparison)) {
     throw new Error('Patch retry failed round-trip validation');
   }
   return withBom(retriedToml);
 }
 
-function patchResultMatches(updated: any, toml: string, temporal: boolean): boolean {
-  try {
-    const parsed = Array.from(parseTOML(stripLeadingBom(toml)));
-    const actual = toJS(parsed, '', { temporal });
-    // normalizePatchComparison is idempotent, so `updated` is normalized once
-    // here rather than twice as it was when `expected` was a separate local.
-    return stableStringify(normalizePatchComparison(actual)) === stableStringify(normalizePatchComparison(updated));
-  } catch {
-    return false;
-  }
-}
-
-function normalizePatchComparison(value: any): any {
-  if (value === undefined) return undefined;
-  if (typeof value === 'string') return value.replace(/\r\n?/g, '\n');
-  if (Array.isArray(value)) return value.map(normalizePatchComparison);
-  if (value instanceof Date) {
-    if (value.getUTCFullYear() <= 0) {
-      const hours = String(value.getUTCHours()).padStart(2, '0');
-      const minutes = String(value.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(value.getUTCSeconds()).padStart(2, '0');
-      const milliseconds = String(value.getUTCMilliseconds()).padStart(3, '0');
-      return `Time:${hours}:${minutes}:${seconds}.${milliseconds}`;
-    }
-    return `Date:${value.getTime()}`;
-  }
-  if (isTemporal(value)) return value.toString();
-  if (value && typeof value.toJSON === 'function') {
-    return normalizePatchComparison(value.toJSON());
-  }
-  if (value && typeof value === 'object') {
-    const normalized: Record<string, any> = {};
-    for (const key of Object.keys(value)) {
-      const normalizedValue = normalizePatchComparison(value[key]);
-      if (normalizedValue !== undefined) normalized[key] = normalizedValue;
-    }
-    return normalized;
-  }
-  return value;
-}
-
-/**
- * Recursively checks if an object graph contains any Temporal values.
- * Used to auto-detect whether temporal mode should be enabled for patching.
- */
-function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (obj == null || typeof obj !== 'object') return false;
-  if (isTemporal(obj)) return true;
-  if (seen.has(obj)) return false;
-  seen.add(obj);
-  for (const v of Object.values(obj)) {
-    if (hasTemporal(v, seen)) return true;
-  }
-  return false;
-}
 function normalizePatchFormat(format: Partial<TomlFormat> | TomlFormat | undefined): Partial<TomlFormat> | TomlFormat | undefined {
   if (!format || format instanceof TomlFormat || typeof format !== 'object') return format;
   if (typeof format.newLine !== 'string') return format;
