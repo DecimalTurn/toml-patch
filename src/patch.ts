@@ -484,6 +484,7 @@ function reorder(changes: Change[]): Change[] {
 function coalesceStructuralReplacements(original: Document, updated_js: any, changes: Change[]): Change[] {
   const consumed = new Set<Change>();
   const coalescedEdits: Change[] = [];
+
   // Strategy 1: Remove(prefix.oldKey) + Add(prefix.newKey) sharing an
   // implicit parent with no literal node of its own.
   const groups = new Map<string, { path: Change['path']; removes: Change[]; adds: Change[] }>();
@@ -491,7 +492,7 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
     if (!isRemove(change) && !isAdd(change)) continue;
 
     const parentPath = change.path.slice(0, -1);
-    if (parentPath.length === 0) continue;
+    if (parentPath.length === 0) continue; // never coalesce at the document root itself
 
     const key = JSON.stringify(parentPath);
     let group = groups.get(key);
@@ -503,7 +504,7 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
   }
   for (const group of groups.values()) {
     if (group.removes.length === 0 || group.adds.length === 0) continue;
-    if (tryFindByPath(original, group.path)) continue;
+    if (tryFindByPath(original, group.path)) continue; // parent still exists literally
 
     group.removes.forEach(change => consumed.add(change));
     group.adds.forEach(change => consumed.add(change));
@@ -563,6 +564,7 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
 
     const firstEntry = tryFindByPath(original, prefix.concat(0));
     if (!firstEntry || !isTableArray(firstEntry)) continue;
+
     arrayPrefixes.set(JSON.stringify(prefix), prefix);
   }
   for (const prefix of arrayPrefixes.values()) {
