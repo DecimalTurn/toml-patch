@@ -3,7 +3,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
 import { patchCst, hasTransactionCandidate } from './patch';
-import { hasTemporal, patchNeedsVerification, patchResultMatches } from './patch-validate';
+import { hasTemporal, hasMultilineStringDelimiter, patchResultMatches } from './patch-validate';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -95,7 +95,7 @@ export class TomlDocument {
     const sourceBefore = this._currentTomlString;
     // Decided before patchCst() runs, because it mutates these nodes. The cheap
     // string scan short-circuits before the CST walk.
-    const needsVerification = patchNeedsVerification(sourceBefore) && hasTransactionCandidate(this._cst);
+    const needsVerification = hasMultilineStringDelimiter(sourceBefore) && hasTransactionCandidate(this._cst);
 
     // Only worth deriving the pre-patch values when a stripped date could
     // actually be present; temporal mode hands out Temporal objects untouched.

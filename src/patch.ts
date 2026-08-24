@@ -53,7 +53,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
-import { hasTemporal, patchNeedsVerification, patchResultMatches } from './patch-validate';
+import { hasTemporal, hasMultilineStringDelimiter, patchResultMatches } from './patch-validate';
 import traverse from './traverse';
 
 /**
@@ -97,7 +97,7 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   // can be skipped entirely. patchCst() mutates the nodes it is handed, so this
   // has to be decided before it runs; the cheap string scan short-circuits
   // before the CST walk.
-  const needsVerification = patchNeedsVerification(existing) && hasTransactionCandidate(existing_cst);
+  const needsVerification = hasMultilineStringDelimiter(existing) && hasTransactionCandidate(existing_cst);
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
@@ -273,6 +273,12 @@ function normalizeAotEntryComments(doc: Document): void {
  * container, the retry reproduces the first attempt exactly, so verifying it
  * cannot change what patch() returns. One walk of a CST that is already parsed is
  * far cheaper than the re-parse and structural comparison it avoids.
+ *
+ * Deliberately looser than the planner in two ways: it does not exclude containers
+ * holding a comment, and it does not check that a change actually lands inside one.
+ * Both would narrow it further, and both are easy to get subtly wrong; erring wide
+ * only costs a verification that turns out to be unnecessary, whereas erring narrow
+ * would skip one that was needed.
  */
 export function hasTransactionCandidate(cst: CST): boolean {
   let found = false;

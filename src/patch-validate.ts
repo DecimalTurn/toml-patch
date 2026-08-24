@@ -21,16 +21,23 @@ export interface PatchComparison {
 }
 
 /**
- * Whether verifying a patch of this source could change its outcome.
+ * Whether the source contains a multiline string delimiter anywhere.
  *
- * The retry only differs from the first attempt when the transactional planner
- * finds a multiline inline container holding a multiline string. A source with no
- * multiline string delimiter cannot contain one, so the retry reproduces the first
- * attempt byte for byte and the fine-grained result is returned either way.
- * Skipping the check there is therefore not a trade: the output is identical, and
- * a re-parse plus a full structural comparison is avoided on every such call.
+ * This is only a cheap pre-filter, not the decision: it says nothing about where
+ * the delimiter sits. `hasTransactionCandidate()` in patch.ts is what checks the
+ * condition that actually matters, namely a multiline string inside a multiline
+ * inline container, and the two are used together. This runs first because it is
+ * two indexOf calls against a string that is already in hand, and it rules out
+ * most documents before anything walks the tree.
+ *
+ * Sound as a pre-filter because TOML has no other way to spell a string that
+ * spans lines: a raw newline is rejected inside single-quoted and double-quoted
+ * strings, and a line-ending backslash is only legal within `"""` delimiters. So a
+ * String node whose span crosses lines implies one of these delimiters is present.
+ * False positives are fine and cost only the tree walk; a false negative would
+ * silently skip verification, which is why the check is stated this loosely.
  */
-export function patchNeedsVerification(existing: string): boolean {
+export function hasMultilineStringDelimiter(existing: string): boolean {
   return existing.indexOf('"""') !== -1 || existing.indexOf("'''") !== -1;
 }
 
