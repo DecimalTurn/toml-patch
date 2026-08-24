@@ -30,6 +30,8 @@ export function isEdit(change: Change): change is Edit {
 export interface Remove {
   type: ChangeType.Remove;
   path: Path;
+  /** Internal marker for array removes whose index refers to the original array. */
+  coordinate?: 'source';
 }
 export function isRemove(change: Change): change is Remove {
   return change.type === ChangeType.Remove;
@@ -327,6 +329,11 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
     return false;
   };
   const multilineArray = before.some(hasMultilineValue) || after.some(hasMultilineValue);
+  const hasInlineObject = (value: any) =>
+    value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
+  const hasMixedStringAndObject = (values: any[]) =>
+    values.length > 4 && values.some(value => typeof value === 'string') && values.some(hasInlineObject);
+  const layoutSensitiveArray = multilineArray || hasMixedStringAndObject(before) || hasMixedStringAndObject(after);
 
   // Simulation of the actual VALUES, mutated in lockstep with before_stable.
   // The "removed -> edited in place" branch below must diff the element the
@@ -345,6 +352,15 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // descending index order (see reorder() in patch.ts), so each emitted
   // index must stay valid against the un-shifted array.
   let removedBefore = 0;
+  let sameArrayAddEmitted = false;
+
+  const removeChange = (index: number): Remove => {
+    const change: Remove = { type: ChangeType.Remove, path: path.concat(index) };
+    if (!sameArrayAddEmitted || removedBefore > 0) {
+      Object.defineProperty(change, 'coordinate', { value: 'source' });
+    }
+    return change;
+  };
 
   // 2. Step through after array making changes to before array as-needed
   for (let index = 0; index < after_stable.length; index++) {
@@ -383,11 +399,8 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       // from a multiline inline array dropped a line of a multiline string;
       // fuzz seed 35943: removing one of several duplicate scalars above a
       // nested multiline array chain-moved the array and corrupted its tail).
-      if (multilineArray && (after_stable.indexOf(before_stable[index]) === -1 || surplusDuplicate)) {
-        changes.push({
-          type: ChangeType.Remove,
-          path: path.concat(index + removedBefore)
-        });
+      if (layoutSensitiveArray && (after_stable.indexOf(before_stable[index]) === -1 || surplusDuplicate)) {
+        changes.push(removeChange(index + removedBefore));
         before_stable.splice(index, 1);
         before_sim.splice(index, 1);
         removedBefore++;
@@ -407,10 +420,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       // `multilineArray` is set, but kept for the non-multiline case where a
       // prior splice already shifted indices and the surplus is unambiguous.)
       if (removedBefore > 0 && surplusDuplicate) {
-        changes.push({
-          type: ChangeType.Remove,
-          path: path.concat(index + removedBefore)
-        });
+        changes.push(removeChange(index + removedBefore));
         before_stable.splice(index, 1);
         before_sim.splice(index, 1);
         removedBefore++;
@@ -425,11 +435,12 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       // anyway, and the writer corrupts their content (fuzz seed 62263: a
       // nested array above a multiline inline table replaced by a duplicate
       // scalar emitted Remove + Move + Add and mangled the table).
-      if (multilineArray && removedBefore > 0) {
+      if (layoutSensitiveArray && removedBefore > 0) {
         changes.push({
           type: ChangeType.Add,
           path: path.concat(index)
         });
+        sameArrayAddEmitted = true;
         before_stable.splice(index, 0, value);
         before_sim.splice(index, 0, after[index]);
         // The fresh copy is spliced in BEFORE the original (at `from`), so it
@@ -498,6 +509,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       type: ChangeType.Add,
       path: path.concat(index)
     });
+    sameArrayAddEmitted = true;
     before_stable.splice(index, 0, value);
     before_sim.splice(index, 0, after[index]);
     // Same source-index bookkeeping as the refused-move Add above: splicing a
@@ -512,10 +524,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
 
   // 3. Remove any remaining overflow items
   for (let i = after_stable.length; i < before_stable.length; i++) {
-    changes.push({
-      type: ChangeType.Remove,
-      path: path.concat(i + removedBefore)
-    });
+    changes.push(removeChange(i + removedBefore));
   }
 
   return changes;

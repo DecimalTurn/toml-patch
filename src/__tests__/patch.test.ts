@@ -5,6 +5,125 @@ import { example } from '../__fixtures__';
 import dedent from 'dedent';
 import { TomlFormat } from '../toml-format';
 
+// A `"""` or `'''` can appear in content -- inside a basic string, or in a
+// comment -- without the document containing any multiline string at all. The
+// cheap pre-filter in hasMultilineStringDelimiter() cannot tell the difference and
+// lets these through; hasTransactionCandidate() then finds no multiline inline
+// container and verification is skipped. That is the harmless direction, but only
+// because the output is right either way, which is what these pin.
+describe('multiline delimiters appearing in content', () => {
+  test('a basic string containing three apostrophes patches normally', () => {
+    const original = dedent`
+      note = "contains ''' inside"
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      note = "contains ''' inside"
+      port = 9090
+    ` + '\n');
+  });
+
+  test('a comment containing three apostrophes patches normally', () => {
+    const original = dedent`
+      # see ''' for the quoting rules
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      # see ''' for the quoting rules
+      port = 9090
+    ` + '\n');
+  });
+
+  test('a comment containing three quotes patches normally', () => {
+    const original = dedent`
+      # see """ for the quoting rules
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      # see """ for the quoting rules
+      port = 9090
+    ` + '\n');
+  });
+
+  // A multiline literal string may hold three double quotes verbatim, so this
+  // trips the `"""` half of the pre-filter. It is genuinely multiline, but sits
+  // at the top level rather than inside an inline container, so it is still not
+  // a transaction candidate.
+  test('a multiline literal string holding three quotes patches normally', () => {
+    const original = dedent`
+      note = '''
+      holds """ fine'''
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      note = '''
+      holds """ fine'''
+      port = 9090
+    ` + '\n');
+  });
+
+  // Same three quotes inside a multiline inline container, which IS a transaction
+  // candidate, so this one runs the full verification path.
+  test('a multiline literal string holding three quotes inside an inline table', () => {
+    const original = dedent`
+      cfg = {
+        note = '''
+      holds """ fine''',
+        retries = 2,
+      }
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.cfg.retries = 3;
+
+    expect(patch(original, updated)).toBe(dedent`
+      cfg = {
+        note = '''
+      holds """ fine''',
+        retries = 3,
+      }
+      port = 8080
+    ` + '\n');
+  });
+
+  // A multiline literal string may hold up to two consecutive apostrophes. This
+  // one is genuinely multiline, but sits at the top level rather than inside an
+  // inline container, so it is still not a transaction candidate.
+  test('a multiline literal string holding two apostrophes patches normally', () => {
+    const original = dedent`
+      note = '''
+      it can hold '' safely'''
+      port = 8080
+    ` + '\n';
+
+    const updated = parse(original);
+    updated.port = 9090;
+
+    expect(patch(original, updated)).toBe(dedent`
+      note = '''
+      it can hold '' safely'''
+      port = 9090
+    ` + '\n');
+  });
+});
+
 test('it should apply edit to key-value', () => {
   const value = parse(example);
   value.owner.name = 'Tim Hall';

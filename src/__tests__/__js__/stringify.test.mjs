@@ -230,6 +230,8 @@ describe('stringify() Function JavaScript Integration', () => {
       const format = {
         bracketSpacing: true,
         trailingComma: true,
+        // The two-character escape spelling now resolves to a real LF; it used
+        // to be written out verbatim between every pair of lines.
         newLine: "\\n",
         trailingNewline: 2
       };
@@ -238,7 +240,7 @@ describe('stringify() Function JavaScript Integration', () => {
       
       expect(result).toContain('servers = [ "web", "api", "db", ]');
       expect(result).toContain('auth = [ "basic", "oauth", ]');
-      expect(result.endsWith('\\n\\n')).toBe(true);
+      expect(result.endsWith('\n\n')).toBe(true);
     });
 
     it('should work with format objects created from prototypes', () => {

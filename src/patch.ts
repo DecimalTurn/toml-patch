@@ -53,6 +53,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { hasTemporal, hasMultilineStringDelimiter, patchResultMatches } from './patch-validate';
 import traverse from './traverse';
 
 /**
@@ -63,6 +64,12 @@ import traverse from './traverse';
  * and updated data, then strategically applies only the necessary changes to maintain the
  * original document structure as much as possible.
  * 
+ * The result is verified internally: the output is re-parsed and checked against
+ * `updated`, and if it does not round-trip the patch is retried with a coarser
+ * writer that rewrites whole multiline inline containers. A patch that neither
+ * attempt can satisfy returns the fine-grained result, so this never fails where
+ * earlier versions succeeded.
+ *
  * @param existing - The original TOML document as a string
  * @param updated - The updated JavaScript object with desired changes
  * @param format - Optional formatting options to apply to new or modified sections
@@ -86,23 +93,28 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     );
   }
 
-  const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
-  return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
-}
+  // Nothing below can change the result without such a container, so the check
+  // can be skipped entirely. patchCst() mutates the nodes it is handed, so this
+  // has to be decided before it runs; the cheap string scan short-circuits
+  // before the CST walk.
+  const needsVerification = hasMultilineStringDelimiter(existing) && hasTransactionCandidate(existing_cst);
 
-/**
- * Recursively checks if an object graph contains any Temporal values.
- * Used to auto-detect whether temporal mode should be enabled for patching.
- */
-function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (obj == null || typeof obj !== 'object') return false;
-  if (isTemporal(obj)) return true;
-  if (seen.has(obj)) return false;
-  seen.add(obj);
-  for (const v of Object.values(obj)) {
-    if (hasTemporal(v, seen)) return true;
-  }
-  return false;
+  const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
+  const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
+
+  if (!needsVerification) return withBom(patchedToml);
+
+  // Detected once and threaded into both comparisons; patchCst() derives its
+  // own copy internally for the diff.
+  const comparison = { temporal: hasTemporal(updated) };
+  if (patchResultMatches(updated, patchedToml, comparison)) return withBom(patchedToml);
+
+  const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
+  const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
+  // Neither attempt round-trips: return the fine-grained result, which is what
+  // earlier versions produced. Nothing here makes the output worse than before.
+  if (!patchResultMatches(updated, retriedToml, comparison)) return withBom(patchedToml);
+  return withBom(retriedToml);
 }
 
 /**
@@ -253,7 +265,45 @@ function normalizeAotEntryComments(doc: Document): void {
   }
 }
 
-export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
+/**
+ * Sound over-approximation of "the transactional retry could change the output".
+ *
+ * The planner only produces a transaction for a multiline inline container that
+ * holds a multiline string and carries no comment. If the document has no such
+ * container, the retry reproduces the first attempt exactly, so verifying it
+ * cannot change what patch() returns. One walk of a CST that is already parsed is
+ * far cheaper than the re-parse and structural comparison it avoids.
+ *
+ * Deliberately looser than the planner in two ways: it does not exclude containers
+ * holding a comment, and it does not check that a change actually lands inside one.
+ * Both would narrow it further, and both are easy to get subtly wrong; erring wide
+ * only costs a verification that turns out to be unnecessary, whereas erring narrow
+ * would skip one that was needed.
+ */
+export function hasTransactionCandidate(cst: CST): boolean {
+  let found = false;
+  const spansLines = (node: TreeNode) => node.loc.end.line > node.loc.start.line;
+
+  const scan = (node: TreeNode, insideMultilineContainer: boolean): void => {
+    if (found) return;
+    if (isString(node) && spansLines(node) && insideMultilineContainer) {
+      found = true;
+      return;
+    }
+    const nested = insideMultilineContainer ||
+      ((isInlineTable(node) || isInlineArray(node)) && spansLines(node));
+    if (isKeyValue(node)) scan(node.value, nested);
+    else if (isInlineItem(node)) scan(node.item, nested);
+    else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) scan(item, nested);
+    }
+  };
+
+  for (const block of cst) scan(block as TreeNode, false);
+  return found;
+}
+
+export function patchCst(existing_cst: CST, updated: any, format: TomlFormat, useMultilineTransactions = false): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
   // Auto-detect Temporal in the updated JS object so that the internal
@@ -324,7 +374,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
   const commentEligibleNodes = collectPrePatchNodes(existing_document);
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
+  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated, useMultilineTransactions);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOML(patched_document.items, format),
@@ -366,6 +416,28 @@ function reorder(changes: Change[]): Change[] {
         if (isAdd(next_change)) {
           const bIdx = last(next_change.path);
           if (typeof bIdx === 'number' && arraysEqual(aPrefix, next_change.path.slice(0, -1))) {
+            // A source-coordinate remove remains valid against the original array and
+            // therefore has to run before a same-array Add, even when the diff emitted the
+            // remove after that Add (seed 2591153). Post-shift removes deliberately stay on
+            // the far side of the Add (seed 1137525).
+            if (change.coordinate === 'source') {
+              let sourceRemove = -1;
+              for (let k = j + 1; k < changes.length; k++) {
+                const candidate = changes[k];
+                if (isRemove(candidate)
+                    && candidate.coordinate === 'source'
+                    && arraysEqual(aPrefix, candidate.path.slice(0, -1))) {
+                  sourceRemove = k;
+                  break;
+                }
+              }
+              if (sourceRemove !== -1) {
+                const sourceChange = changes.splice(sourceRemove, 1)[0];
+                changes.splice(i, 0, sourceChange);
+                i = -1;
+                break;
+              }
+            }
             break;
           }
           j++;
@@ -702,7 +774,7 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined): Document {
+function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined, useMultilineTransactions = false): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
   // the dotted name for de-duplication, but carrying the path segments — a nested key like
   // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
@@ -1024,6 +1096,119 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
   // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
   const objectMoves: Move[] = [];
+
+  // Several writes into one multiline inline container can overlap through the container's
+  // stale end position even when each write is flushed individually. Treat only those
+  // multi-change, comment-free containers transactionally; a single edit still uses the
+  // formatting-preserving fine-grained path and comments retain their ownership handling.
+  const multilineChangePaths = new Map<TreeNode, Path>();
+  const multilineChanges = new Map<TreeNode, Change[]>();
+  const multilineHasUnresolvedChange = new Set<TreeNode>();
+  const multilineAncestors = new WeakMap<TreeNode, TreeNode[]>();
+  const indexMultilineAncestors = (node: TreeNode, ancestors: TreeNode[] = []) => {
+    const nextAncestors = (isInlineTable(node) || isInlineArray(node)) &&
+      node.loc.end.line > node.loc.start.line
+      ? [...ancestors, node]
+      : ancestors;
+    multilineAncestors.set(node, nextAncestors);
+    if (isKeyValue(node)) {
+      indexMultilineAncestors(node.value, nextAncestors);
+    } else if (isInlineItem(node)) {
+      indexMultilineAncestors(node.item, nextAncestors);
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) indexMultilineAncestors(item, nextAncestors);
+    }
+  };
+  const commentCache = new WeakMap<TreeNode, boolean>();
+  const multilineStringCountCache = new WeakMap<TreeNode, number>();
+  function containsComment(node: TreeNode): boolean {
+    const cached = commentCache.get(node);
+    if (cached !== undefined) return cached;
+    let result: boolean;
+    if (isComment(node)) result = true;
+    else if (isKeyValue(node)) result = containsComment(node.value);
+    else if (isInlineItem(node)) result = containsComment(node.item);
+    else result = hasItems(node) && (node.items as TreeNode[]).some(containsComment);
+    commentCache.set(node, result);
+    return result;
+  }
+  function multilineStringCount(node: TreeNode): number {
+    const cached = multilineStringCountCache.get(node);
+    if (cached !== undefined) return cached;
+    let result: number;
+    if (isString(node)) result = node.loc.end.line > node.loc.start.line ? 1 : 0;
+    else if (isKeyValue(node)) result = multilineStringCount(node.value);
+    else if (isInlineItem(node)) result = multilineStringCount(node.item);
+    else result = hasItems(node)
+      ? (node.items as TreeNode[]).reduce((count, item) => count + multilineStringCount(item), 0)
+      : 0;
+    multilineStringCountCache.set(node, result);
+    return result;
+  }
+  // Only the transactional pass consumes any of this, and building it walks the
+  // whole document plus every change, so skip it entirely on the fine-grained
+  // pass. The maps stay empty and transactionalPaths below comes out empty.
+  if (useMultilineTransactions) {
+    indexMultilineAncestors(original);
+    for (const change of changes) {
+      let target = tryFindByPath(original, change.path);
+      const unresolved = !target;
+      if (!target) {
+        // An Add earlier in the same array can make a later Remove path refer to
+        // post-mutation coordinates. Resolve its nearest existing ancestor so
+        // both changes still contribute to the same transaction (seed 175924).
+        for (let length = change.path.length - 1; length >= 0 && !target; length--) {
+          target = tryFindByPath(original, change.path.slice(0, length));
+        }
+      }
+      if (!target) continue;
+      const ancestors = multilineAncestors.get(target) ?? [];
+      const targetIsMultiline = (isInlineTable(target) || isInlineArray(target)) &&
+        target.loc.end.line > target.loc.start.line;
+
+      for (const container of targetIsMultiline ? [...ancestors, target] : ancestors) {
+        if (containsComment(container) || multilineStringCount(container) < 1) continue;
+        const containerChanges = multilineChanges.get(container);
+        if (containerChanges) containerChanges.push(change);
+        else multilineChanges.set(container, [change]);
+        if (unresolved) multilineHasUnresolvedChange.add(container);
+        const path = absolutePathOf(container);
+        if (path !== undefined) multilineChangePaths.set(container, path);
+      }
+    }
+  }
+  const transactionalPaths = [...multilineChanges]
+    .filter(([container, containerChanges]) => {
+      if (!multilineChangePaths.has(container)) return false;
+      const count = containerChanges.length;
+      const hasMoveOrAdd = containerChanges.some(change => isMove(change) || isAdd(change));
+      const strings = multilineStringCount(container);
+      const hasEnoughStrings = strings >= 2 ||
+        (strings >= 1 && (multilineHasUnresolvedChange.has(container) || count === 1));
+      return hasEnoughStrings &&
+        (count >= 3 || (count === 2 && (!hasMoveOrAdd || multilineHasUnresolvedChange.has(container))) ||
+          (count === 1 && containerChanges.some(isRemove)));
+    })
+    .map(([container]) => multilineChangePaths.get(container)!)
+    .filter((path, index, paths) => !paths.some((other, otherIndex) =>
+      otherIndex !== index && path.length > other.length &&
+      arraysEqual(path.slice(0, other.length), other)
+    ));
+  if (useMultilineTransactions && typeof process !== 'undefined' && process.env.TOML_PATCH_DEBUG_TRANSACTION) {
+    console.warn([...multilineChanges].map(([container, containerChanges]) => ({
+      type: container.type,
+      path: multilineChangePaths.get(container),
+      count: containerChanges.length,
+      strings: multilineStringCount(container),
+      changes: containerChanges.map(change => change.type)
+    })));
+  }
+  if (transactionalPaths.length > 0) {
+    changes = changes.filter(change => !transactionalPaths.some(path =>
+      change.path.length >= path.length && arraysEqual(change.path.slice(0, path.length), path)
+    ));
+    changes.push(...transactionalPaths.map(path => ({ type: ChangeType.Edit as const, path })));
+  }
 
   // Potential Changes:
   //

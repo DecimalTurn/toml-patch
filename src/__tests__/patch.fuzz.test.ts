@@ -1,7 +1,25 @@
 
 import patch from '../patch';
 import { parse } from '../';
+import diff from '../diff';
 import dedent from 'dedent';
+import { fuzzOne } from './fuzz-patch';
+
+const historicalFuzzSeeds = [
+  19506, 21525, 30330, 31662, 32801, 35943, 37465, 39363, 40181, 41613,
+  43159, 43199, 46522, 54607, 61827, 62163, 62263, 65785, 67221, 68244,
+  68861, 78079, 79938, 80004, 82825, 86547, 86724, 121096, 129645, 136292,
+  136865, 175924, 179377, 186384, 208822, 224081, 272851, 299772, 358055,
+  377453, 421965, 460447, 599513, 742554, 771152, 863085, 863664, 1020868,
+  1024477, 1112646, 1137525, 1285105, 1286183, 1383962, 1428499, 1657445,
+  1674968, 1693919, 1845422, 1896226, 1947810, 2185943, 2497422, 2531104,
+  2591153, 2667551, 2824408, 2858114
+];
+
+test.each(historicalFuzzSeeds)('historical fuzz seed %d still passes the full harness', (seed) => {
+  const result = fuzzOne(seed, 3);
+  expect(result.status, result.error).toBe('ok');
+});
 
 test('replacing an object in a nested multiline array preserves trailing siblings (seed 1112646)', () => {
   const src = dedent`
@@ -9,10 +27,6 @@ test('replacing an object in a nested multiline array preserves trailing sibling
       0,
       1,
       2,
-      3,
-      4,
-      5,
-      6,
       [
         { old = '''
     old content
@@ -26,14 +40,54 @@ test('replacing an object in a nested multiline array preserves trailing sibling
     ]
   `;
 
+  const original = parse(src) as any;
   const obj = parse(src) as any;
-  obj.values[7][0] = {
+  // Replace the inline table in the nested array with a new inline table that has a different structure and values.
+  obj.values[3][0] = {
     primary: -4807.689925655723,
     details: { values: [-2765, new Date(Date.UTC(2016, 6, 12))] }
   };
 
-  //TODO: Decide if we should consider making the inline table multiline to preserve the
-  //original formatting of the array. Currently, it is being converted to an single line inline table.
+  const changes = diff(original, obj);
+  expect(changes).toHaveLength(3);
+  expect(changes).toMatchInlineSnapshot(`
+    Array [
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "old",
+        ],
+        "type": "Remove",
+      },
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "primary",
+        ],
+        "type": "Add",
+      },
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "details",
+        ],
+        "type": "Add",
+      },
+    ]
+  `);
+
+  // TODO: Decide if we should consider making the inline table multiline to preserve the
+  // original formatting of the inline table that is being replaced (or using the fact
+  // that we are already inside a multiline array). Alternatively, we could just have the
+  // decision of using a multi-line inline table be based on the desired print-width (only
+  // using MLIT if they allow to shrink the inline table to fit the print-width). 
+  // Currently, it is being converted to a single-line inline table.
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
@@ -41,10 +95,6 @@ test('replacing an object in a nested multiline array preserves trailing sibling
       0,
       1,
       2,
-      3,
-      4,
-      5,
-      6,
       [
         { primary = -4807.689925655723, details = { values = [ -2765, 2016-07-12T00:00:00.000Z, ], }, },
         false,
@@ -3369,3 +3419,534 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
   `);
 });
 
+
+// The cases below are reductions of fuzz seeds, distilled down to the structure
+// that actually triggers each bug: the random keys, values and padding the seed
+// happened to generate are renamed or removed, since the reproduction depends on
+// the shape (multiline strings inside multiline inline containers, how many
+// writes land in one container) and not on the characters. The seeds themselves
+// stay covered byte-for-byte by the historical harness test above.
+//
+// Each asserts the exact TOML produced, not just that the result round-trips.
+// Most of them only round-trip because patch() validates its first attempt and
+// retries transactionally, and that retry rewrites whole multiline inline
+// containers: multiline strings collapse to basic strings, non-decimal integer
+// bases are normalised, dotted keys expand into nested inline tables. The
+// snapshots record that, so recovering any original formatting shows up as a
+// reviewable diff. Regenerate with `vitest -u` once a change is confirmed good.
+
+// Deleting a root key shifts every offset below it, and the nested array is
+// replaced by a shorter one plus a spliced duplicate. The removals are emitted
+// in original-array coordinates, so reorder() has to place them before the
+// same-array additions or a later removal addresses an index that is gone.
+test('removing a root key while shrinking a nested array in a multiline inline table (seed 2591153)', () => {
+  const src = dedent`
+    removed = 2049-04-03T21:46:36.579301
+    ["host config"]
+    enabled = true
+    options = {
+        label = "a value",
+        nested.items.list = [967985, -25027300000000694064, true, true, 50_953.25829, ["inner", 0b100101, -650416], """
+    ml text"""],
+        tail = 'another value',
+    }
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.removed;
+  obj['host config'].options.nested.items.list = [true, false, true, 3173];
+  obj['host config'].options.nested.items.list.splice(3, 0, 3173);
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "[\\"host config\\"]
+    enabled = true
+    options = {
+        label = \\"a value\\",
+        nested.items.list = [true, false, true, 3173, 3173],
+        tail = 'another value',
+    }"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The dotted key loses its last segment and becomes an array, while the
+// multiline inline array below it must keep its own layout untouched.
+test('replacing a dotted-key subtable with an array beside a multiline inline array (seed 1112646)', () => {
+  const src = dedent`
+    [["release notes"]]
+    "doc path".summary.detail = '''
+    ok'''
+    items = [
+        '''
+    ,''',
+        [{ "inner key" = '''
+    text!''' }, false, 287_173, "a plain string value", 1984-04-16T12:37:13Z],
+    ]
+  `;
+
+  const obj = parse(src) as any;
+  obj['release notes'][0]['doc path'].summary = [new Date(Date.UTC(2018, 5, 14)), -2069, 784];
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "[[\\"release notes\\"]]
+    \\"doc path\\".summary = [ 2018-06-14T00:00:00.000Z, -2069, 784, ]
+    items = [
+        '''
+    ,''',
+        [{ \\"inner key\\" = '''
+    text!''' }, false, 287_173, \\"a plain string value\\", 1984-04-16T12:37:13Z],
+    ]"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The deleted key is the first member of a multiline inline table whose
+// remaining members span two more lines, so every following offset moves.
+test('deleting a deep dotted key inside a multiline inline table (seed 1286183)', () => {
+  const src = dedent`
+    header = """
+    ab"""
+    [section]
+    outer."quoted key" = {
+        first.second.third = { alpha.beta.gamma = '''
+    ''' },
+        filler = { one.two.three = -65079.12231, flag = false, "q one".mid.leaf = false, group = { count.total = 770012, note.body = """
+    first inline note""", a-b.c.d = 'short lit', e.f = 36740, "q two".g = false, empty = "", "q three".h = 527558, "q four".date.stamp = 2080-12-04, "q five" = 31256.58522, i.j = 819597, k = 0x08, l = -284092, MM = 0o64, n.o = true }, "q six".p.q = 2081-06-28T00:40:23Z, "q seven".r = """
+    second inline note""", s.t = {}, u.v = 90692.79376, w."q eight" = true },
+    }
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.section.outer['quoted key'].first.second.third.alpha.beta.gamma;
+
+  const result = patch(src, obj, {
+    inlineTableStart: 0,
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: "\r\n",
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "header = \\"\\"\\"
+    ab\\"\\"\\"
+    [section]
+    outer.\\"quoted key\\" = { first = { second = { third = { alpha = { beta = {} } } } }, filler = { one = { two = { three = -65079.12231 } }, flag = false, \\"q one\\" = { mid = { leaf = false } }, group = { count = { total = 770012 }, note = { body = \\"first inline note\\" }, a-b = { c = { d = \\"short lit\\" } }, e = { f = 36740 }, \\"q two\\" = { g = false }, empty = \\"\\", \\"q three\\" = { h = 527558 }, \\"q four\\" = { date = { stamp = 2080-12-04 } }, \\"q five\\" = 31256.58522, i = { j = 819597 }, k = 8, l = -284092, MM = 52, n = { o = true } }, \\"q six\\" = { p = { q = 2081-06-28T00:40:23Z } }, \\"q seven\\" = { r = \\"second inline note\\" }, s = { t = {} }, u = { v = 90692.79376 }, w = { \\"q eight\\" = true } } }
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The array of tables entry collapses to a single date value while the
+// multiline inline array above it, holding a bigint and -inf, stays put.
+test('replacing an AOT subtable with a date beside a multiline inline array (seed 1383962)', () => {
+  const src = dedent`
+    "quoted key".items = [{ inner.values = [true, 47577.29573, true, 2077-04-05, 282_582, """
+    ml""", 76968.6746, 'literal text', 2069-08-08T04:34:33, "basic text"] }, 574310, 28569, -63757100000000418476, """
+    second ml""", -50759.88688, -inf, true]
+    [[entries]]
+    label.name = 'another literal'
+  `;
+
+  const obj = parse(src) as any;
+  obj.entries[0].label = new Date(Date.UTC(2006, 1, 14));
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "\\"quoted key\\".items = [{ inner.values = [true, 47577.29573, true, 2077-04-05, 282_582, \\"\\"\\"
+    ml\\"\\"\\", 76968.6746, 'literal text', 2069-08-08T04:34:33, \\"basic text\\"] }, 574310, 28569, -63757100000000418476, \\"\\"\\"
+    second ml\\"\\"\\", -50759.88688, -inf, true]
+    [[entries]]
+    label = 2006-02-14T00:00:00.000Z"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The replacement is deeper than what it replaces, so the container grows
+// while a sibling multiline array below it has to keep its own positions.
+test('replacing an inline-table member with a nested object in a multiline inline table (seed 1693919)', () => {
+  const src = dedent`
+    [outer.inner]
+    "".middle.target = {
+        first = { nested = """
+     indented text""" },
+        "quoted a"."quoted b" = ["""
+    ml""", nan, "plain text"],
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.outer.inner[''].middle.target.first = { alpha: { beta: false, gamma: false, delta: [new Date(Date.UTC(2036, 8, 23)), true, -1287.6224634237587] } };
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: "\r\n",
+    leadingBom: false,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "[outer.inner]
+    \\"\\".middle.target = { first = { alpha = { beta = false, gamma = false, delta = [ 2036-09-23T00:00:00.000Z, true, -1287.6224634237587, ], }, }, \\"quoted a\\" = { \\"quoted b\\" = [ \\"ml\\", nan, \\"plain text\\", ], }, }
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// Emptying the inline table removes a multiline string, which shortens the
+// enclosing array and leaves its closing bracket and comma offsets stale.
+test('deleting the only member of an inline table inside a multiline array (seed 175924)', () => {
+  const src = dedent`
+    [[outer."=".inner]]
+    empty = {
+    }
+    items = ["plain text", 1988-12-04T04:19:06, [
+        0b000000110001011,
+        { target = """
+    ml""" },
+        -907693,
+    ], 65260.050825]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.outer['='].inner[0].items[2][1].target;
+
+  const result = patch(src, obj, {
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: "\r\n",
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "﻿[[outer.\\"=\\".inner]]
+    empty = {
+    }
+    items = [ \\"plain text\\", 1988-12-04T04:19:06, [ 395, {}, -907693 ], 65260.050825 ]
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The removed inline table contains a multiline string, so the elements after
+// it in the same array shift by more than one line.
+test('deleting a nested inline table inside a multiline inline array (seed 1896226)', () => {
+  const src = dedent`
+    top = '''
+    lit text'''
+    [section.a.b]
+    first.leaf = { one.two.three = true, four.five = "basic one", six.seven.eight = -792779, nine.ten.eleven = 0xd45, twelve = false }
+    second.middle."quoted" = ["basic two", -836_768, { outer.inner = { "quoted a" = "basic three", nested.leaf = """
+    """, deep.path."quoted b" = '', "quoted c" = 0o22, other = 0b010011 } }, {
+    }, 2004-04-25T17:21:11, -51408.63582, 2006-12-08T20:27:41.624602Z, true, nan, 743736]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.section.a.b.second.middle['quoted'][2].outer.inner;
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "top = '''
+    lit text'''
+    [section.a.b]
+    first.leaf = { one.two.three = true, four.five = \\"basic one\\", six.seven.eight = -792779, nine.ten.eleven = 0xd45, twelve = false }
+    second.middle.\\"quoted\\" = [ \\"basic two\\", -836768, { outer = {} }, {}, 2004-04-25T17:21:11, -51408.63582, 2006-12-08T20:27:41.624Z, true, nan, 743736 ]"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The deletion empties one branch of a dotted key while its sibling member,
+// another multiline literal string, has to keep its own layout.
+test('deleting a dotted key inside an inline table in a multiline array (seed 2185943)', () => {
+  const src = dedent`
+    top.name = """
+    ml"""
+    [[entries]]
+    empty = [
+    ]
+    values = [46674.18719, 48559.13327, 2091-08-20T06:58:11, 2024-05-10, 275_068, {
+        outer = { inner."quoted"."" = '''
+    lit''' },
+        other = '''
+    lit two''',
+    }, 22787.072880, 79051.79185, true]
+    "quoted key".middle.leaf = """
+    ml two"""
+  `;
+
+  const obj = parse(src) as any;
+  delete obj.entries[0].values[5].outer.inner['quoted'];
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "top.name = \\"\\"\\"
+    ml\\"\\"\\"
+    [[entries]]
+    empty = [
+    ]
+    values = [ 46674.18719, 48559.13327, 2091-08-20T06:58:11, 2024-05-10, 275068, { outer = { inner = {} }, other = \\"lit two\\" }, 22787.07288, 79051.79185, true ]
+    \\"quoted key\\".middle.leaf = \\"\\"\\"
+    ml two\\"\\"\\""
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The inline table becomes empty mid-array, and the array continues with a
+// nested array that itself spans lines.
+test('deleting the only member of an inline table holding a multiline string (seed 2497422)', () => {
+  const src = dedent`
+    "quoted key" = [' ', -78860.81892, { target = """
+    ml text""" }, "basic one", 36709.83314, [true, "basic two", 945e+85, -30134.83738, {
+    }, """
+    ml two""", "basic three", 17:57:10, false, false], -31687.66292]
+  `;
+
+  const obj = parse(src) as any;
+  delete obj['quoted key'][2].target;
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`"\\"quoted key\\" = [\\" \\", -78860.81892, {}, \\"basic one\\", 36709.83314, [true, \\"basic two\\", 9.45e+87, -30134.83738, {}, \\"ml two\\", \\"basic three\\", 17:57:10, false, false], -31687.66292]"`);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The replacement drops the multiline string the original member held, so the
+// array shrinks by a line while later elements keep their positions.
+test('replacing an inline table inside a multiline array (seed 2531104)', () => {
+  const src = dedent`
+    top.name = '''
+     lit text'''
+    outer = {
+        inner."quoted" = [true, { "a b".c.d = 115668, e.f."g h" = -92131.88369, flag = false, other.leaf = """
+      ml""" }, 745102, 96226.27680, 0o21016, false, 802344, "basic text"],
+        tail."other q" = 00:16:17,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.outer.inner['quoted'][1] = { alpha: 1640, beta: true };
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 1,
+    newLine: "\n",
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "﻿top.name = '''
+     lit text'''
+    [outer]
+    inner = {quoted = [true, {alpha = 1640.0, beta = true,}, 745102.0, 96226.2768, 8718.0, false, 802344.0, \\"basic text\\",],}
+    tail = {\\"other q\\" = 00:16:17,}
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The removed element sits between two multiline basic strings, so the writer
+// has to close the gap without disturbing either delimiter.
+test('removing a date element from a multiline array of multiline strings (seed 2667551)', () => {
+  const src = dedent`
+    [[entries]]
+    empty = {
+    }
+    outer.items = ['', """
+    ml one""", 2088-10-24T00:54:56, """
+    ml two"""]
+  `;
+
+  const obj = parse(src) as any;
+  obj.entries[0].outer.items.splice(2, 1);
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: false,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 1,
+    newLine: "\n",
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "[[entries]]
+    empty = {
+    }
+    outer.items = [\\"\\", \\"ml one\\", \\"ml two\\"]
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The replaced member holds both a multiline literal and a multiline basic
+// string, so the container collapses from three lines to one.
+test('replacing an inline-table member with a single-key object (seed 2824408)', () => {
+  const src = dedent`
+    [build.rollout]
+    job.settings = {
+        artifacts = { logpath = "staging", db.host = true, deploy.stages.rollback = '''
+    rollback plan a''', credential.id = """
+    a generated token for the deploy job""" },
+        "a b".r = "checked against the last recorded release set",
+    }
+    report.summaries.artifacts = [
+    ]
+    note.tag = {
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.build.rollout.job.settings.artifacts = { alpha: -188 };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 2,
+    newLine: "\n",
+    leadingBom: false,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "[build.rollout]
+    job.settings = {artifacts = {alpha = -188.0,}, \\"a b\\" = {r = \\"checked against the last recorded release set\\",},}
+    report.summaries.artifacts = [
+    ]
+    note.tag = {
+    }
+
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The array holds a multiline string and ends with an inline table on its own
+// lines, both of which have to survive the element removal.
+test('removing an element from a multiline array before an inline table (seed 2858114)', () => {
+  const src = dedent`
+    outer.values = [true, 22866.4194, 890412, 399573, "one", 0x703714, "two", "three", """
+    ml""", {
+        inner = 59108.35246,
+    }]
+    other.name = '''
+    lit'''
+  `;
+
+  const obj = parse(src) as any;
+  obj.outer.values.splice(5, 1);
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "outer.values = [true, 22866.4194, 890412, 399573, \\"one\\", \\"two\\", \\"three\\", \\"\\"\\"
+    ml\\"\\"\\", {
+        inner = 59108.35246,
+    }]
+    other.name = '''
+    lit'''"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The replaced element is a dense inline table spanning two lines; the array
+// around it keeps its trailing scalars.
+test('replacing an inline-table element inside a multiline array (seed 377453)', () => {
+  const src = dedent`
+    outer = {
+        values = [false, true, '''
+    lit with = sign''', -49_687.079945, { a."q one" = "basic one", b.c.d = 0x5c5fa0, "q two" = "basic two", e."q three".f = true, g.h.i = 0o26771, j.k.l = 0xcfe, m.n.o = 15:08:47, p."q four".r = """
+    ml""" }, "basic three", 753862, 'z', -64864.2541],
+        tail.leaf = 0o4755211,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.outer.values[4] = { alpha: -4472 };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 1,
+    newLine: "\n",
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    minimumDecimals: 1
+  });
+  expect(result).toMatchInlineSnapshot(`
+    "[outer]
+    values = [ false, true, \\"lit with = sign\\", -49687.079945, { alpha = -4472.0, }, \\"basic three\\", 753862.0, \\"z\\", -64864.2541, ]
+    tail = { leaf = 1301129.0, }
+    "
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+// Two writes land in the same multiline inline array through the nested inline
+// table, and they overlap via the array's stale end position.
+test('replacing a dotted-key subtable inside a nested inline table (seed 771152)', () => {
+  const src = dedent`
+    build.artifacts = [1, '''
+    alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
+    detail""" }, 1986-03-02]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`"build.artifacts = [1, \\"alpha\\", 28, 2.5, true, [{meta = {notes = {width = 3, label = \\"measured value\\"}}}, 1986-03-02]]"`);
+  expect(parse(result)).toEqual(obj);
+});
+
+// The replaced table is declared after a multiline array of tables value, so
+// the whole preceding block has to keep its positions.
+test('replacing a table with a scalar after a multiline AOT array (seed 863664)', () => {
+  const src = dedent`
+    [report."by target".details]
+    summary."run label".entries = [
+        { size.bytes = 0xd5c289d, built = 2075-01-15T23:10:01.402080, stats.counts = { lines.total = 597050, words.total = 939925, chars."with space" = 785203, files = 465053, dirs = 822110, "ratio a".value = 412e-33, cached = false, delta."ratio b".amount = -282456, mean.load.value = 70302.033641, min.load = -75001.099256, max.load = 54219.46102 }, "group a".index."sub key" = 482015, "group b"."sub b".enabled = true, "group c" = "basic one", tag = 'lit', "".marker."" = { note.body.text = """
+    ml""" }, flags."opt in" = false, mask = 0b111111110111000 },
+        '''
+    ''',
+    ]
+    [replaced.sub.leaf]
+  `;
+
+  const obj = parse(src) as any;
+  obj.replaced = 'replacement';
+
+  const result = patch(src, obj, undefined);
+  expect(result).toMatchInlineSnapshot(`
+    "replaced = \\"replacement\\"
+
+    [report.\\"by target\\".details]
+    summary.\\"run label\\".entries = [
+        { size.bytes = 0xd5c289d, built = 2075-01-15T23:10:01.402080, stats.counts = { lines.total = 597050, words.total = 939925, chars.\\"with space\\" = 785203, files = 465053, dirs = 822110, \\"ratio a\\".value = 412e-33, cached = false, delta.\\"ratio b\\".amount = -282456, mean.load.value = 70302.033641, min.load = -75001.099256, max.load = 54219.46102 }, \\"group a\\".index.\\"sub key\\" = 482015, \\"group b\\".\\"sub b\\".enabled = true, \\"group c\\" = \\"basic one\\", tag = 'lit', \\"\\".marker.\\"\\" = { note.body.text = \\"\\"\\"
+    ml\\"\\"\\" }, flags.\\"opt in\\" = false, mask = 0b111111110111000 },
+        '''
+    ''',
+    ]"
+  `);
+  expect(parse(result)).toEqual(obj);
+});
