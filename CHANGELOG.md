@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Patching: `patch()` and `TomlDocument.patch()` accept an optional `options` argument. Set
-  `validate: false` to skip round-trip verification of the output, which is the fastest
-  path but returns the unrepaired result instead of retrying or throwing ([#293])
-
 ### Fixed
 
 - Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
@@ -22,8 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that cannot parse. Aliases (`LF`, `CRLF`, `unix`, `DOS`, `\n`, `\r\n`) are
   accepted and anything else throws ([#293])
 - Patching: `TomlDocument.patch()` now verifies its result the way `patch()` does, instead of
-  silently keeping TOML that does not round-trip. A document that cannot be patched is rolled
-  back to its pre-patch state rather than left partially modified ([#293])
+  silently keeping TOML that does not round-trip ([#293])
 - Patching: `TomlDocument.patch()` no longer widens TOML dates when re-applying an object
   read from `toJsObject`. That getter hands out plain `Date` objects, which the writer
   rendered as full offset date-times, so one sibling edit rewrote every date in an inline

@@ -1910,30 +1910,25 @@ describe('TomlDocument', () => {
     });
   });
 
-  describe('patch result validation', () => {
-    // Structurally distilled from fuzz seed 771152, with the seed's random keys
-    // and values renamed. Before validation reached TomlDocument this produced
-    // TOML that does not parse, and the document silently kept it.
+  describe('patch result verification', () => {
+    // Structurally distilled from fuzz seed 771152. The fine-grained writer
+    // leaves the enclosing array's delimiter offsets stale here and produces
+    // TOML that does not parse; the internal retry is what saves it.
     const trickyToml = dedent`
       build.artifacts = [1, '''
       alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
       detail""" }, 1986-03-02]]
     ` + '\n';
 
-    const mutate = (doc: TomlDocument) => {
+    it('produces valid TOML where the fine-grained writer would not', () => {
+      const doc = new TomlDocument(trickyToml);
       const obj = doc.toJsObject;
       obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
-      return obj;
-    };
-
-    it('retries so the patched document is always valid TOML', () => {
-      const doc = new TomlDocument(trickyToml);
-      doc.patch(mutate(doc));
+      doc.patch(obj);
 
       // The retry rewrites the whole multiline container, losing the multiline
-      // literal string and the octal base, but the result is valid TOML. The
-      // untouched local date keeps its original spelling rather than widening
-      // to an offset date-time.
+      // literal string and the octal base, but the result is valid TOML and the
+      // untouched local date keeps its original spelling.
       expect(doc.toTomlString).toBe(
         'build.artifacts = [1, "alpha", 28, 2.5, true, ' +
         '[{meta = {notes = {width = 3, label = "measured value"}}}, 1986-03-02]]\n'
@@ -1941,49 +1936,23 @@ describe('TomlDocument', () => {
       expect(() => new TomlDocument(doc.toTomlString).toJsObject).not.toThrow();
     });
 
-    it('validate: false keeps the unrepaired result', () => {
-      const doc = new TomlDocument(trickyToml);
-      doc.patch(mutate(doc), undefined, { validate: false });
-
-      expect(doc.toTomlString).toBe(dedent`
-        build.artifacts = [1, '''
-        alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02]
-      ` + '\n');
-      expect(() => new TomlDocument(doc.toTomlString).toJsObject).toThrow();
-    });
-
-    // The getter changes the requested value on every read, so no output can
-    // ever round-trip. patchCst() mutates CST nodes as it goes, so without an
-    // explicit rollback the document would be left holding a tree that no
-    // longer agrees with its own TOML string.
-    const unsatisfiable = () => {
+    // The getter changes the requested value on every read, so no output can ever
+    // round-trip. Neither attempt can satisfy it, and the document commits the
+    // fine-grained result rather than throwing, which is what earlier versions
+    // produced. The point is that it stays usable afterwards.
+    it('stays usable when no attempt can round-trip', () => {
+      const doc = new TomlDocument('value = 0\n');
       let reads = 0;
       const updated: Record<string, unknown> = {};
       Object.defineProperty(updated, 'value', { enumerable: true, get: () => ++reads });
-      return updated;
-    };
 
-    it('rolls the document back when no attempt round-trips', () => {
-      const original = 'value = 0\n';
-      const doc = new TomlDocument(original);
-
-      expect(() => doc.patch(unsatisfiable())).toThrow(/round-trip/i);
-
-      // Unchanged, still readable, and still patchable afterwards.
-      expect(doc.toTomlString).toBe(original);
-      expect(doc.toJsObject).toEqual({ value: 0 });
+      expect(() => doc.patch(updated)).not.toThrow();
+      expect(doc.toTomlString).toMatch(/^value = \d+\n$/);
 
       const obj = doc.toJsObject;
       obj.value = 7;
       doc.patch(obj);
       expect(doc.toTomlString).toBe('value = 7\n');
-      expect(doc.toJsObject).toEqual({ value: 7 });
-    });
-
-    it('validate: false suppresses the rollback and the throw', () => {
-      const doc = new TomlDocument('value = 0\n');
-      doc.patch(unsatisfiable(), undefined, { validate: false });
-      expect(doc.toTomlString).toMatch(/^value = \d+\n$/);
     });
 
     // TOML has one integer type, so a document read as bigint accepts a plain

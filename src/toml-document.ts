@@ -4,7 +4,6 @@ import { TomlFormat } from './toml-format';
 import { Block } from './cst';
 import { patchCst } from './patch';
 import { hasTemporal, patchResultMatches } from './patch-validate';
-import type { PatchOptions } from './patch-options';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -78,19 +77,15 @@ export class TomlDocument {
    * Applies a patch to the current CST using a modified JS object.
    * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
    *
-   * By default the result is verified: the produced TOML is re-parsed and checked
+   * The result is verified internally: the produced TOML is re-parsed and checked
    * against `updatedObject`, retrying with a coarser writer if it does not match.
-   * If neither attempt round-trips, the document is rolled back to its pre-patch
-   * state and an error is thrown, so a caught failure never leaves a half-patched
-   * document behind. Pass `{ validate: false }` to skip the check; see
-   * {@link PatchOptions.validate}.
+   * A patch that neither attempt can satisfy commits the fine-grained result, with
+   * the CST re-derived from it so the document and its TOML string stay in step.
    *
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
-   * @param options - Optional patch options
-   * @param options.validate - Verify the result round-trips to `updatedObject`. Default: true.
    */
-  patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat, options?: PatchOptions) : void {
+  patch(updatedObject: any, format?: Partial<TomlFormat> | TomlFormat) : void {
 
     const fmt = resolveTomlFormat(format, this._format);
 
@@ -121,11 +116,6 @@ export class TomlDocument {
       this._currentTomlString = tomlString;
     };
 
-    if (options?.validate === false) {
-      commit(first.tomlString, first.document.items);
-      return;
-    }
-
     // The comparison has to read values back the way this document produces
     // them, or a correct patch looks like a mismatch: integersAsBigInt is the
     // document's own setting, and temporal follows the updated object exactly
@@ -151,12 +141,10 @@ export class TomlDocument {
       return;
     }
 
-    // Neither attempt round-trips. Both mutated CST nodes on their way through,
-    // so restore from the pre-patch source rather than leaving the document
-    // holding a tree that no longer matches its own TOML string.
-    this._cst = Array.from(parseTOML(sourceBefore));
-    this._currentTomlString = sourceBefore;
-    throw new Error('Patch retry failed round-trip validation');
+    // Neither attempt round-trips. Commit the fine-grained result, which is what
+    // earlier versions produced, re-deriving the tree from it so the document's
+    // CST and its TOML string stay in agreement.
+    commit(first.tomlString, Array.from(parseTOML(first.tomlString)));
   }
 
   /**

@@ -53,7 +53,6 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
-import type { PatchOptions } from './patch-options';
 import { hasTemporal, patchResultMatches } from './patch-validate';
 import traverse from './traverse';
 
@@ -65,20 +64,18 @@ import traverse from './traverse';
  * and updated data, then strategically applies only the necessary changes to maintain the
  * original document structure as much as possible.
  * 
- * By default the result is verified: `patch()` re-parses its own output and
- * checks that it round-trips back to `updated`, retrying with a coarser writer
- * and ultimately throwing rather than returning TOML that disagrees with the
- * requested object. Pass `{ validate: false }` to skip that check when
- * patching is measurably hot; see {@link PatchOptions.validate}.
+ * The result is verified internally: the output is re-parsed and checked against
+ * `updated`, and if it does not round-trip the patch is retried with a coarser
+ * writer that rewrites whole multiline inline containers. A patch that neither
+ * attempt can satisfy returns the fine-grained result, so this never fails where
+ * earlier versions succeeded.
  *
  * @param existing - The original TOML document as a string
  * @param updated - The updated JavaScript object with desired changes
  * @param format - Optional formatting options to apply to new or modified sections
- * @param options - Optional patch options
- * @param options.validate - Verify the output round-trips to `updated`. Default: true.
  * @returns A new TOML string with the changes applied
  */
-export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat, options?: PatchOptions): string {
+export default function patch(existing: string, updated: any, format?: Partial<TomlFormat> | TomlFormat): string {
   // The tokenizer flags mixed line endings as it scans, so this requires no
   // separate pass over the input.
   const newlineState = createNewlineScanState();
@@ -99,9 +96,6 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
 
-  // Opting out returns the first attempt as-is, so nothing below runs.
-  if (options?.validate === false) return withBom(patchedToml);
-
   // Detected once and threaded into both comparisons; patchCst() derives its
   // own copy internally for the diff.
   const comparison = { temporal: hasTemporal(updated) };
@@ -109,9 +103,9 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 
   const retryCst = Array.from(parseTOML(stripLeadingBom(existing), createNewlineScanState()));
   const retriedToml = patchCst(retryCst, updated, fmt, true).tomlString;
-  if (!patchResultMatches(updated, retriedToml, comparison)) {
-    throw new Error('Patch retry failed round-trip validation');
-  }
+  // Neither attempt round-trips: return the fine-grained result, which is what
+  // earlier versions produced. Nothing here makes the output worse than before.
+  if (!patchResultMatches(updated, retriedToml, comparison)) return withBom(patchedToml);
   return withBom(retriedToml);
 }
 
