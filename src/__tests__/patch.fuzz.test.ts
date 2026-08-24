@@ -1,6 +1,7 @@
 
 import patch from '../patch';
 import { parse } from '../';
+import diff from '../diff';
 import dedent from 'dedent';
 import { fuzzOne } from './fuzz-patch';
 
@@ -26,10 +27,6 @@ test('replacing an object in a nested multiline array preserves trailing sibling
       0,
       1,
       2,
-      3,
-      4,
-      5,
-      6,
       [
         { old = '''
     old content
@@ -43,14 +40,54 @@ test('replacing an object in a nested multiline array preserves trailing sibling
     ]
   `;
 
+  const original = parse(src) as any;
   const obj = parse(src) as any;
-  obj.values[7][0] = {
+  // Replace the inline table in the nested array with a new inline table that has a different structure and values.
+  obj.values[3][0] = {
     primary: -4807.689925655723,
     details: { values: [-2765, new Date(Date.UTC(2016, 6, 12))] }
   };
 
+  const changes = diff(original, obj);
+  expect(changes).toHaveLength(3);
+  expect(changes).toMatchInlineSnapshot(`
+    Array [
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "old",
+        ],
+        "type": "Remove",
+      },
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "primary",
+        ],
+        "type": "Add",
+      },
+      Object {
+        "path": Array [
+          "values",
+          3,
+          0,
+          "details",
+        ],
+        "type": "Add",
+      },
+    ]
+  `);
+
   // TODO: Decide if we should consider making the inline table multiline to preserve the
-  // original formatting of the array. Currently, it is being converted to a single-line inline table.
+  // original formatting of the inline table that is being replaced (or using the fact
+  // that we are already inside a multiline array). Alternatively, we could just have the
+  // decision of using a multi-line inline table be based on the desired print-width (only
+  // using MLIT if they allow to shrink the inline table to fit the print-width). 
+  // Currently, it is being converted to a single-line inline table.
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
@@ -58,10 +95,6 @@ test('replacing an object in a nested multiline array preserves trailing sibling
       0,
       1,
       2,
-      3,
-      4,
-      5,
-      6,
       [
         { primary = -4807.689925655723, details = { values = [ -2765, 2016-07-12T00:00:00.000Z, ], }, },
         false,
