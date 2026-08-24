@@ -86,7 +86,7 @@ export default function patch(existing: string, updated: any, format?: Partial<T
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
-  const fmt = resolveTomlFormat(normalizePatchFormat(format), autoDetectedFormat);
+  const fmt = resolveTomlFormat(format, autoDetectedFormat);
 
   if (newlineState.mixed) {
     const normalized = fmt.newLine === '\r\n' ? 'CRLF' : 'LF';
@@ -113,21 +113,6 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     throw new Error('Patch retry failed round-trip validation');
   }
   return withBom(retriedToml);
-}
-
-function normalizePatchFormat(format: Partial<TomlFormat> | TomlFormat | undefined): Partial<TomlFormat> | TomlFormat | undefined {
-  if (!format || format instanceof TomlFormat || typeof format !== 'object') return format;
-  if (typeof format.newLine !== 'string') return format;
-  if (format.newLine === '\\n') return { ...format, newLine: '\n' };
-  if (format.newLine === '\\r\\n') return { ...format, newLine: '\r\n' };
-  const name = format.newLine.toUpperCase();
-  if (name === 'LF' || name === 'UNIX') return { ...format, newLine: '\n' };
-  if (name === 'CRLF' || name === 'DOS') return { ...format, newLine: '\r\n' };
-  if (format.newLine !== '\n' && format.newLine !== '\r\n') {
-    throw new TypeError('Invalid newLine value: expected LF or CRLF');
-  }
-
-  return format;
 }
 
 /**

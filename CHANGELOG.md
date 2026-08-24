@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
+- Stringify: `newLine` is now normalized and validated wherever a format is resolved, not
+  only in `patch()`. `stringify(value, { newLine: 'LF' })` wrote the literal text `LF`
+  between lines, and `{ newLine: '\r' }` or `{ newLine: '' }` silently produced TOML
+  that cannot parse. Aliases (`LF`, `CRLF`, `unix`, `DOS`, `\n`, `\r\n`) are
+  accepted and anything else throws ([#293])
 - Patching: `TomlDocument.patch()` now verifies its result the way `patch()` does, instead of
   silently keeping TOML that does not round-trip. A document that cannot be patched is rolled
   back to its pre-patch state rather than left partially modified ([#293])

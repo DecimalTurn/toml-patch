@@ -243,6 +243,40 @@ export function detectTabsForIndentation(str: string): boolean {
  * @param format - The format object to validate
  * @returns The validated format object with only supported properties and correct types
  */
+/**
+ * Spellings accepted for `newLine`, mapped to the line ending they denote.
+ * A Map rather than an object literal so that a key like `constructor` cannot
+ * resolve through Object.prototype.
+ */
+const NEW_LINE_ALIASES = new Map<string, string>([
+  ['\n', '\n'],
+  ['\r\n', '\r\n'],
+  ['\\n', '\n'],
+  ['\\r\\n', '\r\n'],
+  ['LF', '\n'],
+  ['CRLF', '\r\n'],
+  ['UNIX', '\n'],
+  ['DOS', '\r\n']
+]);
+
+/**
+ * Resolves an accepted `newLine` spelling to the literal it denotes.
+ *
+ * TOML permits only LF and CRLF, so anything else would silently produce a
+ * document that does not parse (a bare '\\r', or the literal text 'LF' written
+ * between every pair of lines). Rejecting it here means every entry point that
+ * resolves a format gets the check, rather than just `patch()`.
+ *
+ * @throws TypeError when the value denotes neither LF nor CRLF
+ */
+export function normalizeNewLine(value: string): string {
+  const resolved = NEW_LINE_ALIASES.get(value) ?? NEW_LINE_ALIASES.get(value.toUpperCase());
+  if (resolved === undefined) {
+    throw new TypeError('Invalid newLine value: expected LF or CRLF');
+  }
+  return resolved;
+}
+
 export function validateFormatObject(format: any): any {
   if (!format || typeof format !== 'object') {
     return {};
@@ -290,6 +324,12 @@ export function validateFormatObject(format: any): any {
   }
   if (invalid.length > 0) {
     throw new TypeError(`Invalid types for format properties: ${invalid.join(', ')}`);
+  }
+
+  // Runs after the type checks so a non-string newLine is still reported as a
+  // type error rather than an unsupported value.
+  if ('newLine' in validatedFormat) {
+    validatedFormat.newLine = normalizeNewLine(validatedFormat.newLine);
   }
 
   return validatedFormat;
@@ -462,7 +502,7 @@ export class TomlFormat {
     updateOrder?: boolean
   ) {
     // Use provided values or fall back to defaults
-    this.newLine = newLine ?? DEFAULT_NEWLINE;
+    this.newLine = newLine == null ? DEFAULT_NEWLINE : normalizeNewLine(newLine);
     this.trailingNewline = trailingNewline ?? DEFAULT_TRAILING_NEWLINE;
     this.trailingComma = trailingComma ?? DEFAULT_TRAILING_COMMA;
     this.bracketSpacing = bracketSpacing ?? DEFAULT_BRACKET_SPACING;
