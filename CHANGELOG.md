@@ -10,20 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patching: Resolve additional patching roundtrip errors from fuzzing harness (3M seeds) ([#293])
-- Stringify: `newLine` is now normalized and validated wherever a format is resolved, not
-  only in `patch()`. `stringify(value, { newLine: 'LF' })` wrote the literal text `LF`
-  between lines, and `{ newLine: '\r' }` or `{ newLine: '' }` silently produced TOML
-  that cannot parse. Aliases (`LF`, `CRLF`, `unix`, `DOS`, `\n`, `\r\n`) are
-  accepted and anything else throws ([#293])
-- Patching: `TomlDocument.patch()` now verifies its result the way `patch()` does, instead of
-  silently keeping TOML that does not round-trip ([#293])
-- Patching: `TomlDocument.patch()` no longer widens TOML dates when re-applying an object
-  read from `toJsObject`. That getter hands out plain `Date` objects, which the writer
-  rendered as full offset date-times, so one sibling edit rewrote every date in an inline
-  array (`1986-03-02` became `1986-03-02T00:00:00.000Z`). Dates the caller left alone keep
-  their original spelling; a date whose instant changed still widens, and the exported
-  `LocalDate` / `LocalTime` / `LocalDateTime` / `OffsetDateTime` classes state the intended
-  representation ([#293])
+- Stringify: `newLine` is now normalized and validated wherever a format is resolved ([#293])
+- Patching: `TomlDocument.patch()` no longer widens TOML dates when re-applying an object read from `toJsObject` ([#293])
 
 ## [3.0.3] - 2026-08-21
 
