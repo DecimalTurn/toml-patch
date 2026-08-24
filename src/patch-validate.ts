@@ -21,6 +21,20 @@ export interface PatchComparison {
 }
 
 /**
+ * Whether verifying a patch of this source could change its outcome.
+ *
+ * The retry only differs from the first attempt when the transactional planner
+ * finds a multiline inline container holding a multiline string. A source with no
+ * multiline string delimiter cannot contain one, so the retry reproduces the first
+ * attempt byte for byte and the fine-grained result is returned either way.
+ * Skipping the check there is therefore not a trade: the output is identical, and
+ * a re-parse plus a full structural comparison is avoided on every such call.
+ */
+export function patchNeedsVerification(existing: string): boolean {
+  return existing.indexOf('"""') !== -1 || existing.indexOf("'''") !== -1;
+}
+
+/**
  * Recursively checks if an object graph contains any Temporal values.
  * Used to auto-detect whether temporal mode should be enabled for patching,
  * and to decide how date/time values are read back when verifying a result.

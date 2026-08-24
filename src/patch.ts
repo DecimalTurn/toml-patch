@@ -53,7 +53,7 @@ import {
 } from './comment-alignment';
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
-import { hasTemporal, patchResultMatches } from './patch-validate';
+import { hasTemporal, patchNeedsVerification, patchResultMatches } from './patch-validate';
 import traverse from './traverse';
 
 /**
@@ -93,8 +93,16 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     );
   }
 
+  // Nothing below can change the result without such a container, so the check
+  // can be skipped entirely. patchCst() mutates the nodes it is handed, so this
+  // has to be decided before it runs; the cheap string scan short-circuits
+  // before the CST walk.
+  const needsVerification = patchNeedsVerification(existing) && hasTransactionCandidate(existing_cst);
+
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
+
+  if (!needsVerification) return withBom(patchedToml);
 
   // Detected once and threaded into both comparisons; patchCst() derives its
   // own copy internally for the diff.
@@ -255,6 +263,38 @@ function normalizeAotEntryComments(doc: Document): void {
       }
     }
   }
+}
+
+/**
+ * Sound over-approximation of "the transactional retry could change the output".
+ *
+ * The planner only produces a transaction for a multiline inline container that
+ * holds a multiline string and carries no comment. If the document has no such
+ * container, the retry reproduces the first attempt exactly, so verifying it
+ * cannot change what patch() returns. One walk of a CST that is already parsed is
+ * far cheaper than the re-parse and structural comparison it avoids.
+ */
+export function hasTransactionCandidate(cst: CST): boolean {
+  let found = false;
+  const spansLines = (node: TreeNode) => node.loc.end.line > node.loc.start.line;
+
+  const scan = (node: TreeNode, insideMultilineContainer: boolean): void => {
+    if (found) return;
+    if (isString(node) && spansLines(node) && insideMultilineContainer) {
+      found = true;
+      return;
+    }
+    const nested = insideMultilineContainer ||
+      ((isInlineTable(node) || isInlineArray(node)) && spansLines(node));
+    if (isKeyValue(node)) scan(node.value, nested);
+    else if (isInlineItem(node)) scan(node.item, nested);
+    else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) scan(item, nested);
+    }
+  };
+
+  for (const block of cst) scan(block as TreeNode, false);
+  return found;
 }
 
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat, useMultilineTransactions = false): { tomlString: string; document: Document } {

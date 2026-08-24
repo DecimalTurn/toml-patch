@@ -2,8 +2,8 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
-import { patchCst } from './patch';
-import { hasTemporal, patchResultMatches } from './patch-validate';
+import { patchCst, hasTransactionCandidate } from './patch';
+import { hasTemporal, patchNeedsVerification, patchResultMatches } from './patch-validate';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -93,6 +93,9 @@ export class TomlDocument {
     // once the call below returns, whether or not the result is usable. Keeping
     // the pre-patch source lets every later path re-derive a clean CST from it.
     const sourceBefore = this._currentTomlString;
+    // Decided before patchCst() runs, because it mutates these nodes. The cheap
+    // string scan short-circuits before the CST walk.
+    const needsVerification = patchNeedsVerification(sourceBefore) && hasTransactionCandidate(this._cst);
 
     // Only worth deriving the pre-patch values when a stripped date could
     // actually be present; temporal mode hands out Temporal objects untouched.
@@ -115,6 +118,11 @@ export class TomlDocument {
       this._format = fmt;
       this._currentTomlString = tomlString;
     };
+
+    if (!needsVerification) {
+      commit(first.tomlString, first.document.items);
+      return;
+    }
 
     // The comparison has to read values back the way this document produces
     // them, or a correct patch looks like a mismatch: integersAsBigInt is the
