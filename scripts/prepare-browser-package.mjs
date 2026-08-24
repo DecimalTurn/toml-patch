@@ -18,7 +18,7 @@ cpSync(join(root, 'dist', 'browser', 'toml-patch.js'), join(browserPackageDir, b
 
 const browserPackageJson = {
   name: packageJson.name,
-  version: `${packageJson.version}-browser.0`,
+  version: `${packageJson.version}-browser`,
   description: packageJson.description,
   homepage: packageJson.homepage,
   repository: packageJson.repository,
