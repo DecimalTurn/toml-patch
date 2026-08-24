@@ -2,6 +2,23 @@
 import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
+import { fuzzOne } from './fuzz-patch';
+
+const historicalFuzzSeeds = [
+  19506, 21525, 30330, 31662, 32801, 35943, 37465, 39363, 40181, 41613,
+  43159, 43199, 46522, 54607, 61827, 62163, 62263, 65785, 67221, 68244,
+  68861, 78079, 79938, 80004, 82825, 86547, 86724, 121096, 129645, 136292,
+  136865, 175924, 179377, 186384, 208822, 224081, 272851, 299772, 358055,
+  377453, 421965, 460447, 599513, 742554, 771152, 863085, 863664, 1020868,
+  1024477, 1112646, 1137525, 1285105, 1286183, 1383962, 1428499, 1657445,
+  1674968, 1693919, 1845422, 1896226, 1947810, 2185943, 2497422, 2531104,
+  2591153, 2667551, 2824408, 2858114
+];
+
+test.each(historicalFuzzSeeds)('historical fuzz seed %d still passes the full harness', (seed) => {
+  const result = fuzzOne(seed, 3);
+  expect(result.status, result.error).toBe('ok');
+});
 
 test('replacing an object in a nested multiline array preserves trailing siblings (seed 1112646)', () => {
   const src = dedent`
