@@ -115,6 +115,9 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   const before_stable = before_keys.map(key => stableStringify(before[key]));
   const after_keys = Object.keys(after);
   const after_stable = after_keys.map(key => stableStringify(after[key]));
+  const after_stable_by_key = new Map(
+    after_keys.map((key, index) => [key, after_stable[index]])
+  );
 
   // Membership is tested once per key in each pass below, so these are Sets rather than the
   // key arrays: `includes` inside those loops makes the whole function quadratic in the
@@ -176,10 +179,18 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   }
 
   // 2. Check for changes, rename, and removed
-  before_keys.forEach(key => {
+  before_keys.forEach((key, index) => {
     const sub_path = path.concat(key);
     if (after_key_set.has(key)) {
-      merge(changes, diff(before[key], after[key], sub_path, options));
+      const beforeValue = before[key];
+      const afterValue = after[key];
+      const hasNonFiniteNumber =
+        (typeof beforeValue === 'number' && !Number.isFinite(beforeValue)) ||
+        (typeof afterValue === 'number' && !Number.isFinite(afterValue));
+      if (options.updateOrder || hasNonFiniteNumber ||
+          before_stable[index] !== after_stable_by_key.get(key)) {
+        merge(changes, diff(before[key], after[key], sub_path, options));
+      }
     } else if (renamed.has(key)) {
       changes.push({
         type: ChangeType.Rename,

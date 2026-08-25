@@ -5,12 +5,9 @@ import { example } from '../__fixtures__';
 import dedent from 'dedent';
 import { TomlFormat } from '../toml-format';
 
-// A `"""` or `'''` can appear in content -- inside a basic string, or in a
-// comment -- without the document containing any multiline string at all. The
-// cheap pre-filter in hasMultilineStringDelimiter() cannot tell the difference and
-// lets these through; hasTransactionCandidate() then finds no multiline inline
-// container and verification is skipped. That is the harmless direction, but only
-// because the output is right either way, which is what these pin.
+// A `"""` or `'''` can appear in content inside a basic string or comment
+// without the document containing a multiline string. These pin that such
+// content remains ordinary text during patching.
 describe('multiline delimiters appearing in content', () => {
   test('a basic string containing three apostrophes patches normally', () => {
     const original = dedent`
@@ -3342,10 +3339,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     delete value['tbl-1'].only;
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-      tbl-1 = {
-      }
-      ` + '\n');
+    expect(patched).toEqual('tbl-1 = {}\n');
   });
 
   test('should delete a nested inline table key leaving empty nested table', () => {
@@ -3363,8 +3357,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
 
     expect(patched).toEqual(dedent`
       tbl-1 = {
-              tbl = {
-              }
+              tbl = {}
       }
       ` + '\n');
   });
@@ -10096,7 +10089,7 @@ def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
     delete obj['fo2i'].X['bp-nt'].r9cq39r657['@#ft7'];
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(`fo2i.X.bp-nt = { j620-i = {},  r9cq39r657 = {}, ZilE9tvZ = 1 }
+    expect(result).toEqual(`fo2i.X.bp-nt = { j620-i = {}, r9cq39r657 = {}, ZilE9tvZ = 1 }
 `);
   });
 

@@ -1,10 +1,46 @@
 import parseTOML from '../parse-toml';
-import { Table, KeyValue, InlineArray, DateTime } from '../cst';
+import {
+  Table,
+  KeyValue,
+  InlineArray,
+  DateTime,
+  TreeNode,
+  hasItems,
+  isInlineItem,
+  isKeyValue,
+  isTable,
+  isTableArray
+} from '../cst';
 import { example, fruit, hard_example, hard_example_unicode, kitchen_sink } from '../__fixtures__';
 import dedent from 'dedent';
+import { createLocate } from '../location';
 
 test('it should parse inline table', () => {
   expect([...parseTOML(`key = { end = true}`)]).toMatchSnapshot();
+});
+
+test('parsed CST ranges agree with node locations', () => {
+  const source = `# heading\n[section]\nvalue = [1, { nested = """\ntext""" }, 3]\n`;
+  const locate = createLocate(source);
+
+  function check(node: TreeNode): void {
+    expect(node.range).toBeDefined();
+    expect(locate(node.range![0], node.range![1])).toEqual(node.loc);
+
+    if (isKeyValue(node)) {
+      check(node.key);
+      check(node.value);
+    } else if (isInlineItem(node)) {
+      check(node.item);
+    } else if (isTable(node) || isTableArray(node)) {
+      check(node.key);
+      for (const item of node.items as TreeNode[]) check(item);
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) check(item);
+    }
+  }
+
+  for (const block of parseTOML(source)) check(block);
 });
 
 test('it should parse examples', () => {
