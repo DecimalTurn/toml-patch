@@ -1,8 +1,8 @@
 # Plan: make CST positions derived, not maintained
 
-> **Line references** are against `dev-fuzz-bug-fixes`@caefc6d.
+> **Line references** are against `dev-fuzz-bug-fixes`@59512ef.
 
-> **Goal:** replace validate-and-retry with a direct fix. Today the writer maintains absolute coordinates
+> **Goal:** replace coordinate maintenance with a direct fix. The writer still maintains absolute coordinates
 > through a side-channel offset system, gets them wrong for a specific and well-understood class of edit,
 > and the library compensates by re-parsing its own output and redoing the patch with a coarser writer.
 > This plan removes the cause so the compensation can be deleted.
@@ -83,8 +83,7 @@ just after `true` — while its content now ends at column 100.
 
 ## Why a repair pass cannot fix this
 
-Worth reading before proposing one. Three attempts, all measured against the baseline as it stood at the
-time (**30 failures**; it is 25 at `caefc6d`, because the validation-specific tests were since removed):
+Worth reading before proposing one. Three attempts were measured against the pre-cursor baseline:
 
 | attempt | result |
 | :--- | :--- |
@@ -212,20 +211,17 @@ That write-back is not optional — two consumers depend on `loc` after patching
 
 Both keep working, because they read `loc` after emission rather than during it.
 
-### Idea 5 — keep verification, demote it to a development assertion
+### Idea 5 — verification is retired from production
 
-The verification machinery is the best oracle available for this work. Do not delete it at the start —
-invert it:
+The production retry and verification path has been removed. The historical fuzz suite remains the oracle:
 
 ```ts
-if (process.env.TOML_PATCH_ASSERT_POSITIONS) {
-  // re-parse the output, compare structurally, throw loudly on mismatch
-}
+pnpm run test -- --testNamePattern="historical fuzz seed"
 ```
 
-During development it catches every regression immediately. When the new emitter is trusted, the production
-fallback goes and the assertion stays for the fuzz harness. See
-[`PLAN-Patch-Verification.md`](./PLAN-Patch-Verification.md) for what happens to the public-facing side.
+The removed `patch-validate.ts` module is no longer part of the build. A temporary assertion can still be
+added in a development branch if a new fuzz failure needs a round-trip oracle, but it must not return to
+the public patch path.
 
 ---
 
@@ -234,57 +230,116 @@ fallback goes and the assertion stays for the fuzz harness. See
 Each phase is independently shippable and independently revertable. None of them changes output until
 Phase 3.
 
-**Phase 0 — ranges, no behaviour change.** Add `range` to nodes in `parse-toml.ts`. Assert in tests that
+**Phase 0 — ranges, complete.** Add `range` to nodes in `parse-toml.ts`. Assert in tests that
 `range` and `loc` agree for every node of every fixture (a locator round-trip). Output identical.
 
-**Phase 1 — dirtiness, no behaviour change.** Add the `dirty` flag and ancestor propagation to the
+**Phase 1 — dirtiness, complete.** Add the `dirty` flag and ancestor propagation to the
 `writer.ts` mutators (`insert`, `remove`, `replace`). Keep the offset system running and authoritative.
 Verify the new signal against the old by asserting that every root the old system marks dirty contains at
 least one node the new one marks dirty. Output identical.
 
-**Phase 2 — new emitter behind a flag.** Implement Ideas 2 and 4 as a second emitter. Differential-test it
-against the current one across the whole corpus: 2501 tests, 896 spec tests, and the 68-seed historical
-harness. Divergence is a bug in the new emitter until proven otherwise. Existing verification runs
-underneath the whole time, so a mistake surfaces as a test failure rather than as corrupt output.
+**Phase 2 — cursor emitter, complete for patch output.** Implement source ranges, dirty subtree copying,
+relative inline gaps and append-only emission. The direct path passes 2,503 tests and the 68-seed historical
+fuzz suite without verification. The remaining work is to remove the writer's coordinate dependency rather
+than to add more repair cases.
 
-**Phase 3 — flip the default, delete the workarounds.** Once the differential is clean:
+**Phase 3 — rewrite the writer and delete coordinate workarounds.** The next implementation phase is:
 
 | removal | size |
 | :--- | :--- |
-| offset machinery in `writer.ts` (`enter_offsets`, `exit_offsets`, `applyWrites`, `shiftNode`, `recalcContainerEnd`, `addExitOffset`, …) | ~52 references across 1337 lines |
-| multiline transaction planner in `patch.ts` | 111 lines |
-| `layoutSensitiveArray` / `hasMixedStringAndObject` in `diff.ts` | 6 references, including the `values.length > 4` magic threshold |
-| `recalcInlineContainerEnds`, `compactInlineContainerAncestors` in `patch.ts` | ~110 lines |
-| coordinate painting in `to-toml.ts` (`write`, `writeSingle`, the tab post-pass) | most of 319 lines |
+| offset machinery in `writer.ts` (`enter_offsets`, `exit_offsets`, `applyWrites`, `shiftNode`, `recalcContainerEnd`, `addExitOffset`, and related state) | 1,343 lines today, replace with a smaller layout-aware writer |
+| insertion and removal flush guards in `patch.ts` (`insertedInlineContainers`, `restoredInsertContainers`, `getPendingEnterOffsets`) | about 70 lines |
+| inline end repair in `patch.ts` (`tightenInlineContainerEnd`, `compactInlineContainerAncestors`, `recalcInlineContainerEnds`) | about 150 lines |
+| manual coordinate shifts in `patch.ts` used only to prepare `applyWrites` | about 100 lines |
+| coordinate painting in `to-toml.ts` (`write`, `writeSingle`, old tab pass) | replace the old canvas portion with the final cursor emitter |
 
-**Phase 4 — retire verification.** Delete `patch-validate.ts` (115 lines) and the retry, keeping the
-Phase-2 assertion behind an env var for the fuzz harness.
+**Phase 4 — size and compatibility gate.** Keep the rewrite only if the measured source and bundle costs
+stay below the limits in the next section.
+
+## Writer rewrite
+
+The writer should stop changing positions. Its public mutation operations should change tree structure and
+layout metadata only:
+
+1. `insert(root, parent, child, index)` records the child in the parent's item list, copies the relevant
+  sibling style and marks the parent chain dirty. It does not calculate a line or column shift.
+2. `remove(root, parent, child)` removes the child, transfers or drops comments through the existing
+  ownership rules and marks the parent chain dirty. It does not install an enter or exit offset.
+3. `replace(root, parent, old, next)` preserves the old node's style metadata where requested, swaps the
+  node and marks the parent chain dirty. It does not rigidly translate the replacement subtree.
+4. Parent links belong in the existing source metadata layer. Generated nodes must be linked when inserted,
+  and a removed node must not be needed to find the surviving parent.
+5. Each container keeps literal gaps between its original children. For a parsed container those gaps come
+  from source ranges. For a generated container they come from sibling style or the active format.
+6. The emitter walks `gap, child, gap, child`, appends delimiters after children and writes final `loc`
+  values as it goes. It must handle comments as owned or pinned items without a second coordinate repair
+  pass.
+
+The first writer rewrite should cover inline arrays, inline tables, key-values and comments. Table and
+array-of-table insertion can keep their existing document ordering rules until the relative emitter is stable.
+After each step, remove the corresponding guard and run its focused tests. The important tests are the
+historical seeds `4`, `92`, `10469`, `11557`, `14262`, `272851`, `3780`, `7379` and `86547`, plus the
+inline comment ownership suite.
+
+## Size gate
+
+The current source baseline is approximately 7,297 lines across the affected modules:
+
+| module | lines |
+| :--- | ---: |
+| `src/patch.ts` | 4,284 |
+| `src/writer.ts` | 1,343 |
+| `src/to-toml.ts` | 710 |
+| `src/cst-source.ts` | 129 |
+| `src/diff.ts` | 542 |
+| `src/toml-document.ts` | 289 |
+| **total** | **7,297** |
+
+These numbers are a planning baseline, not a promise about formatted output. A plausible target after the
+writer rewrite is 5,900 to 6,500 lines. That would remove roughly 800 to 1,400 lines even after keeping
+source metadata and the final emitter. The estimate depends on deleting coordinate machinery rather than
+layering a second writer beside it.
+
+Measure every phase with:
+
+```powershell
+pnpm run build
+(Get-Content src/patch.ts).Count
+(Get-Content src/writer.ts).Count
+(Get-Content src/to-toml.ts).Count
+(Get-Item dist/toml-patch.js).Length
+```
+
+Stop the plan if either condition holds after two consecutive phases:
+
+- affected source lines exceed 7,700, or
+- the gzipped browser bundle grows by more than 5 percent without a measured runtime win.
+
+The plan is worth implementing only if the final writer is smaller than the current `writer.ts` plus the
+coordinate-only portions removed from `patch.ts`, and the bundle does not grow materially. Correctness is
+the first gate, size is the second gate.
 
 ---
 
 ## How we will know it worked
 
-The test that matters is not "the suite is green" — it is green today via the fallback. It is:
+The test that matters is not only "the suite is green". It is green today on the direct path:
 
-> With verification disabled entirely, everything passes.
+> With verification and retry removed, everything passes.
 
-**That baseline is 25 failures at `caefc6d`**, and it is cheap to re-check: stub the `needsVerification`
-branch in `patch.ts` and `toml-document.ts`, then run `pnpm run test`. The breakdown is stable and worth
-knowing, because it tells you which layer a phase actually helped:
+The current baseline is 2,503 passing tests and 2 expected failures from the full TypeScript suite, plus
+3 passing browser smoke tests. The 68 historical fuzz seeds pass without a retry. The breakdown remains
+useful because it tells us which layer a future writer change affects:
 
 | group | count |
 | :--- | ---: |
-| `historical fuzz seed N still passes the full harness` | 13 |
-| distilled regressions in `patch.fuzz.test.ts` | 11 |
-| `TomlDocument` produces valid TOML where the fine-grained writer would not | 1 |
+| historical fuzz seed harness | 68 |
+| full TypeScript suite | 2503 passing, 2 expected failures |
+| browser smoke suite | 3 passing |
 
-The 13 harness seeds are the demanding set. They run `fuzzOne` with three mutations rather than one
-reduced case, so a phase can fix all 11 distilled regressions and still leave harness seeds failing. Any
-phase that does not move 25 toward 0 has not addressed the cause.
-
-A second, stronger check once Phase 3 lands: run the transaction planner *never* rather than *on retry*.
-Today forcing it always-on fixes the seeds but breaks 21 formatting tests, because it rewrites whole
-containers. If the positions work is correct, deleting it should break nothing.
+Any writer phase must keep the historical harness at 68 passing and the full suite at its current result.
+The focused comment ownership tests must also stay green because source gaps and comment ownership share
+the same layout decisions.
 
 ---
 
