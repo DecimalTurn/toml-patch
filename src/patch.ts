@@ -239,21 +239,6 @@ function normalizeAotEntryComments(doc: Document): void {
   }
 }
 
-/**
- * Sound over-approximation of "the transactional retry could change the output".
- *
- * The planner only produces a transaction for a multiline inline container that
- * holds a multiline string and carries no comment. If the document has no such
- * container, the retry reproduces the first attempt exactly, so verifying it
- * cannot change what patch() returns. One walk of a CST that is already parsed is
- * far cheaper than the re-parse and structural comparison it avoids.
- *
- * Deliberately looser than the planner in two ways: it does not exclude containers
- * holding a comment, and it does not check that a change actually lands inside one.
- * Both would narrow it further, and both are easy to get subtly wrong; erring wide
- * only costs a verification that turns out to be unnecessary, whereas erring narrow
- * would skip one that was needed.
- */
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
 
@@ -280,7 +265,6 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     loc: { start: { line: 1, column: 0 }, end: { line: endLine, column: endColumn } },
     items
   };
-  const emitToml = (cst: CST) => toTOMLCursor(cst, format);
 
   // Certain formatting options should not be applied to the updated document during patching, because it would
   // override the existing formatting too aggressively. For example, preferNestedTablesMultiline would
@@ -335,7 +319,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
-    emitToml(patched_document.items),
+    toTOMLCursor(patched_document.items, format),
     format
   );
 
