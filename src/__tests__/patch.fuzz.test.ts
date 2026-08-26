@@ -3419,12 +3419,7 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
 // stay covered byte-for-byte by the historical harness test above.
 //
 // Each asserts the exact TOML produced, not just that the result round-trips.
-// Most of them only round-trip because patch() validates its first attempt and
-// retries transactionally, and that retry rewrites whole multiline inline
-// containers: multiline strings collapse to basic strings, non-decimal integer
-// bases are normalised, dotted keys expand into nested inline tables. The
-// snapshots record that, so recovering any original formatting shows up as a
-// reviewable diff. Regenerate with `vitest -u` once a change is confirmed good.
+// The expected text records the formatting that the direct emitter preserves.
 
 // Deleting a root key shifts every offset below it, and the nested array is
 // replaced by a shorter one plus a spliced duplicate. The removals are emitted

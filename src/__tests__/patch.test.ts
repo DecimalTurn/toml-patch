@@ -75,8 +75,8 @@ describe('multiline delimiters appearing in content', () => {
     ` + '\n');
   });
 
-  // Same three quotes inside a multiline inline container, which IS a transaction
-  // candidate, so this one runs the full verification path.
+  // The same content inside a multiline inline container must remain ordinary
+  // string content when a sibling value changes.
   test('a multiline literal string holding three quotes inside an inline table', () => {
     const original = dedent`
       cfg = {
@@ -3340,6 +3340,27 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     const patched = patch(existing, value);
 
     expect(patched).toEqual('tbl-1 = {}\n');
+  });
+
+  // This is the same test as above, but with a trailing newline after the closing brace.
+  // The patcher should preserve the newline.
+  // FIXME: This test currently fails because the patcher does not preserve the trailing
+  // newline.
+  test.fails('should delete the only key from a multiline inline table and leave it empty and preserve multi-line formatting', () => {
+    const existing = dedent`
+      tbl-1 = {
+              only = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = {
+    }
+    ` + '\n');
   });
 
   test('should delete a nested inline table key leaving empty nested table', () => {
