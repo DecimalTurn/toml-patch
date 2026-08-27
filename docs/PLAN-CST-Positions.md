@@ -2,10 +2,14 @@
 
 > **Line references** are against `dev-fuzz-bug-fixes`@59512ef.
 
-> **Goal:** replace coordinate maintenance with a direct fix. The writer still maintains absolute coordinates
-> through a side-channel offset system, gets them wrong for a specific and well-understood class of edit,
-> and the library compensates by re-parsing its own output and redoing the patch with a coarser writer.
-> This plan removes the cause so the compensation can be deleted.
+> **Status:** the compensation described in the original goal is already gone. The re-parse + retry path and
+> `patch-validate.ts` were removed, and the direct path now passes the full suite and the historical fuzz
+> seeds on its own. Phase 0 (ranges) and Phase 1 (dirtiness) are also already in the tree. What remains is
+> the cause: the coordinate-offset system and the post-hoc repair passes in `patch.ts`.
+
+> **Goal:** replace coordinate maintenance with derived positions. The writer still maintains absolute
+> coordinates through a side-channel offset system, and `patch.ts` still repairs inline container ends after
+> emission. This plan replaces both with a writer that computes positions as it emits.
 
 ---
 
@@ -50,8 +54,9 @@ let offsetLines = 0;
 const offsetColumns: { [line: number]: number } = {};
 ```
 
-and shifts every node's `loc` by them. **`offsetColumns` is keyed by the pre-shift line number.** So a
-column delta recorded for line *N* applies to nodes whose recorded line is *N*.
+and shifts every node's `loc` by them. **`offsetColumns` is keyed by the post-shift line number** — the
+line after the running line offset is applied. So a column delta recorded for line *N* applies to nodes
+whose shifted line is *N*.
 
 When a member's own line span changes — a multiline string collapsing onto one line, an element removed —
 the enclosing container's closing delimiter needs to move to a *different line* than the one its column
@@ -59,6 +64,47 @@ delta was recorded against. `shiftEnd(container)` applies the delta anyway. `Tab
 escape this because `applyWrites` calls `recalcContainerEnd()` on them, recomputing the end from their
 children. `InlineArray`/`InlineTable` get no such treatment, because their end carries a delimiter and so
 cannot simply be the max of the children.
+
+Here is the failure, traced. Replacing the last item of a multiline inline array with a value that spans
+one extra line:
+
+```toml
+a = [
+  1,
+  2
+]
+```
+
+Parsed `loc` values (1-indexed lines, 0-indexed columns):
+
+| node | `loc` |
+| :--- | :--- |
+| `ia` (InlineArray) | start `{1,4}` · end `{4,1}` |
+| item0 `1` | `{2,2}` .. `{2,5}` |
+| item1 `2` | `{3,2}` .. `{3,3}` |
+
+`replace()` swaps `2` for a two-line string, installing an exit offset that changes both line count and
+width:
+
+```ts
+// replacement span {lines:2, columns:2} minus existing span {lines:1, columns:1}
+exit_offsets.set(item1, { lines: +1, columns: +1 });
+```
+
+`applyWrites` then walks depth-first, mutating the two state variables:
+
+| step | `offsetLines` | `offsetColumns` |
+| :--- | ---: | :--- |
+| `shiftEnd(item0)` — no exit offset | 0 | `{}` |
+| `shiftEnd(item1)` — exit `{+1,+1}` | **+1** | `{ 4: +1 }` |
+| `shiftPositionsNoOffsetsEnd(ia)` | +1 | `{ 4: +1 }` (never read) |
+
+Two failures at the last step. The `+1` column delta lands in `offsetColumns[4]`, but the delimiter reads
+`offsetColumns[5]` and gets `0`, so the column shift is lost. And `ia.loc.end.line` becomes `4 + 1 = 5`
+(parse end plus the running line counter) while the last item now ends on line 4, so the bracket is one
+line low. In a multiline array the lost column is masked because the bracket sits on its own line at
+column 0; in a compact array the same mechanism is the section 3 corruption, where the outer array's
+`loc.end` stays at line 2 column 25 while its content now ends at column 100.
 
 ### 3. Every failure is one bug
 
@@ -118,18 +164,21 @@ The organising principle: **positions become outputs of emission, never inputs t
 
 *This is the load-bearing idea. Everything else is easier if this lands first.*
 
-Add a byte range to every node at parse time:
+Add a UTF-16 offset range to every node at parse time:
 
 ```ts
 export interface TreeNode {
   type: NodeType;
   loc: Location;          // derived; see Idea 4
-  range: [number, number];  // absolute offsets into the source
+  range: [number, number];  // absolute UTF-16 offsets into the source
 }
 ```
 
-The parser already has this — `createLocate(input)` converts offsets to positions, so the offsets exist and
-are discarded. Keeping them buys the single most valuable property available here:
+These are UTF-16 code units, which is what `source.slice(start, end)` consumes, so a range is slice-correct
+by definition. The current scaffolding in `cst-source.ts` reconstructs `range` from `loc` via
+`positionToOffset` rather than keeping the tokenizer's native offsets. Prefer the native offsets, and make
+Phase 0's round-trip assertion cover CRLF and astral characters, which is where a `loc`-derived range would
+drift. Keeping the range buys the single most valuable property available here:
 
 > **An untouched subtree is emitted by copying its source slice verbatim.**
 
@@ -160,6 +209,10 @@ multiline strings — a hack that only exists because whitespace is not represen
 Layout then becomes relative: *gap, node, gap, node*. A member whose line span changes shifts everything
 after it automatically, because nothing downstream holds an absolute coordinate.
 
+The hard case is inserting into a *parsed* container. The new node must split its successor's existing
+`before` gap into a before half and an after half, using the sibling style the insertion already copies.
+That split rule is where most insertion bugs will move, so it belongs in the design, not in the emitter.
+
 ### Idea 3 — dirtiness in the CST, per node, not per root
 
 Today dirtiness is a root-level `WeakSet` plus per-node offset `WeakMap`s — a side channel that emission
@@ -187,9 +240,17 @@ Three consequences worth spelling out:
 - **Ancestor propagation is what makes it sound.** A dirty leaf must dirty every container that encloses
   it, because those containers' delimiters have to be re-laid-out. This is precisely the relationship the
   current offset system fails to maintain.
-- **`dirty` replaces `enter_offsets`, `exit_offsets`, `dirty_roots`, `emptiedByRemove`,
-  `hadNonLastRemoval`, and `inlineContainersNeedingTighten`** — six side tables collapsing into one field
-  with an obvious meaning.
+- **`dirty` replaces the dirtiness side tables, not the layout policy.** `enter_offsets`, `exit_offsets`,
+  and `dirty_roots` collapse into the flag. `emptiedByRemove`, `hadNonLastRemoval`,
+  `inlineContainersNeedingTighten`, and `applyBracketSpacing` encode *layout policy* (compact an emptied
+  container, tighten, bracket spacing), which a boolean cannot express. That policy moves into the
+  emitter's gap rules.
+
+The invariant the flag must hold is exact: **`dirty` is set whenever the bytes to emit for a node no longer
+equal `source.slice(...node.range)`.** Writer mutations are only one way that happens. Comment ownership
+transfers and gap compaction change which bytes belong to a node without editing the node itself, so
+`remove` and `replace` must dirty every node whose emitted bytes change, including a node that gains or
+loses a comment. Ancestor propagation alone does not cover that case.
 
 A `revision: number` counter on the document is a reasonable alternative if incremental re-emission is ever
 wanted (compare node revision against the last-emitted revision). Start with the boolean; it is enough.
@@ -209,9 +270,18 @@ That write-back is not optional — two consumers depend on `loc` after patching
   difference (`truncateCst`, `continueParsingTOML`)
 - `comment-alignment.ts` reads columns to keep aligned trailing comments aligned
 
-Both keep working, because they read `loc` after emission rather than during it.
+Both keep working, because they read `loc` after emission rather than during it. Two details must be
+resolved first:
 
-### Idea 5 — verification is retired from production
+- **What advances the cursor past a clean subtree.** Once `loc` is derived, a clean node's shape has to
+  come from somewhere: either keep the parse-time `loc` snapshot for clean nodes (so `loc` is still an
+  input for them) or derive the span from `range` each time. Pick one; the plan currently assumes both.
+- **`comment-alignment.ts` writes `loc` before emission.** If the emitter stops reading `loc`, that
+  adjustment is silently dropped. Alignment must become a gap computation or a post-emission string pass,
+  not a pre-emission `loc` mutation. `KeyValue.equals` has the same problem: `applyWrites` adjusts it
+  today, so the emitter must derive it from the key text instead.
+
+### Idea 5 — verification is retired from production (already done)
 
 The production retry and verification path has been removed. The historical fuzz suite remains the oracle:
 
@@ -230,10 +300,10 @@ the public patch path.
 Each phase is independently shippable and independently revertable. None of them changes output until
 Phase 3.
 
-**Phase 0 — ranges, complete.** Add `range` to nodes in `parse-toml.ts`. Assert in tests that
+**Phase 0 — ranges, complete (done).** Add `range` to nodes in `parse-toml.ts`. Assert in tests that
 `range` and `loc` agree for every node of every fixture (a locator round-trip). Output identical.
 
-**Phase 1 — dirtiness, complete.** Add the `dirty` flag and ancestor propagation to the
+**Phase 1 — dirtiness, complete (done).** Add the `dirty` flag and ancestor propagation to the
 `writer.ts` mutators (`insert`, `remove`, `replace`). Keep the offset system running and authoritative.
 Verify the new signal against the old by asserting that every root the old system marks dirty contains at
 least one node the new one marks dirty. Output identical.
@@ -247,8 +317,9 @@ than to add more repair cases.
 
 | removal | size |
 | :--- | :--- |
-| offset machinery in `writer.ts` (`enter_offsets`, `exit_offsets`, `applyWrites`, `shiftNode`, `recalcContainerEnd`, `addExitOffset`, and related state) | 1,343 lines today, replace with a smaller layout-aware writer |
-| insertion and removal flush guards in `patch.ts` (`insertedInlineContainers`, `restoredInsertContainers`, `getPendingEnterOffsets`) | about 70 lines |
+| offset machinery in `writer.ts` (`enter_offsets`, `exit_offsets`, `dirty_roots`, `applyWrites`, `shiftNode`, `recalcContainerEnd`, `addExitOffset`, `markDirty`, `getPendingEnterOffsets`, `getExitOffsets`, and related state) | 1,343 lines today, replace with a smaller layout-aware writer |
+| bracket-spacing policy in `writer.ts` (`applyBracketSpacing`, `hasInlineContainerNeedingTighten`, `deleteInlineContainerNeedingTighten`) — moves into gap computation, not deleted | counted in the writer line total above |
+| insertion and removal flush guards in `patch.ts` (`insertedInlineContainers`, `restoredInsertContainers`) | about 70 lines |
 | inline end repair in `patch.ts` (`tightenInlineContainerEnd`, `compactInlineContainerAncestors`, `recalcInlineContainerEnds`) | about 150 lines |
 | manual coordinate shifts in `patch.ts` used only to prepare `applyWrites` | about 100 lines |
 | coordinate painting in `to-toml.ts` (`write`, `writeSingle`, old tab pass) | replace the old canvas portion with the final cursor emitter |
@@ -323,9 +394,9 @@ the first gate, size is the second gate.
 
 ## How we will know it worked
 
-The test that matters is not only "the suite is green". It is green today on the direct path:
-
-> With verification and retry removed, everything passes.
+The suite staying green is not the acceptance test, because it is already green on the direct path with the
+retry removed. The suite must simply not regress. The real acceptance test is the size gate in Phase 4: the
+rewrite only pays for itself if it deletes more coordinate machinery than it adds. Both must be met.
 
 The current baseline is 2,503 passing tests and 2 expected failures from the full TypeScript suite, plus
 3 passing browser smoke tests. The 68 historical fuzz seeds pass without a retry. The breakdown remains
@@ -364,5 +435,5 @@ the same layout decisions.
   distinction if possible (`range?: [number, number]` and require `dirty` when absent) rather than a
   runtime guard.
 - **Scale.** This is a major version. `parse-toml.ts` (1301 lines changed on this branch alone),
-  `writer.ts`, `to-toml.ts`, and `patch.ts` all move. Phases 0 and 1 are safe and additive; Phase 2 is the
+  `writer.ts`, `to-toml.ts`, and `patch.ts` all move. Phases 0 and 1 are already done; Phase 2 is the
   real work and can sit behind a flag indefinitely.
