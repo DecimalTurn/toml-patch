@@ -310,6 +310,26 @@ function compareObjects(before: any, after: any, path: Path = [], options: DiffO
   return changes;
 }
 
+// Multiline-formatting proxies, hoisted so compareArrays doesn't rebuild them
+// per call. See the layoutSensitiveArray comment in compareArrays.
+function hasMultilineValue(v: any): boolean {
+  if (typeof v === 'string') return v.includes('\n');
+  if (Array.isArray(v)) return v.length > 0;
+  if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
+    const vals = Object.values(v);
+    return vals.some(x => x !== null && typeof x === 'object') || vals.some(hasMultilineValue);
+  }
+  return false;
+}
+
+function hasInlineObject(value: any): boolean {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
+}
+
+function hasMixedStringAndObject(values: any[]): boolean {
+  return values.length > 4 && values.some(value => typeof value === 'string') && values.some(hasInlineObject);
+}
+
 function compareArrays(before: any[], after: any[], path: Path = [], options: DiffOptions = {}): Change[] {
   let changes: Change[] = [];
 
@@ -330,20 +350,7 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   // and the diff cannot tell from values alone (fuzz seed 40181: removing a
   // scalar above a multiline `[218561, "…"]` chain-moved the array and dropped
   // columns out of its tail).
-  const hasMultilineValue = (v: any): boolean => {
-    if (typeof v === 'string') return v.includes('\n');
-    if (Array.isArray(v)) return v.length > 0;
-    if (v !== null && typeof v === 'object' && !(v instanceof Date)) {
-      const vals = Object.values(v);
-      return vals.some(x => x !== null && typeof x === 'object') || vals.some(hasMultilineValue);
-    }
-    return false;
-  };
   const multilineArray = before.some(hasMultilineValue) || after.some(hasMultilineValue);
-  const hasInlineObject = (value: any) =>
-    value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
-  const hasMixedStringAndObject = (values: any[]) =>
-    values.length > 4 && values.some(value => typeof value === 'string') && values.some(hasInlineObject);
   const layoutSensitiveArray = multilineArray || hasMixedStringAndObject(before) || hasMixedStringAndObject(after);
 
   // Simulation of the actual VALUES, mutated in lockstep with before_stable.
@@ -368,6 +375,8 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
   const removeChange = (index: number): Remove => {
     const change: Remove = { type: ChangeType.Remove, path: path.concat(index) };
     if (!sameArrayAddEmitted || removedBefore > 0) {
+      // Non-enumerable so `coordinate` stays out of the diff output that
+      // callers and tests compare: it's an internal marker for reorder().
       Object.defineProperty(change, 'coordinate', { value: 'source' });
     }
     return change;
@@ -428,8 +437,9 @@ function compareArrays(before: any[], after: any[], path: Path = [], options: Di
       // where they are, so nothing needs to move.
       //
       // (Redundant with the surplus-duplicate removal above when
-      // `multilineArray` is set, but kept for the non-multiline case where a
-      // prior splice already shifted indices and the surplus is unambiguous.)
+      // `layoutSensitiveArray` is set, but kept for the non-multiline case
+      // where a prior splice already shifted indices and the surplus is
+      // unambiguous.)
       if (removedBefore > 0 && surplusDuplicate) {
         changes.push(removeChange(index + removedBefore));
         before_stable.splice(index, 1);
