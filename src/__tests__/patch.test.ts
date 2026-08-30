@@ -3327,8 +3327,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       ` + '\n');
   });
 
-
-  test('should delete the only key from a multiline inline table and leave it empty', () => {
+  test('should delete the only key from a multiline inline table and leave it empty and preserve multi-line formatting', () => {
     const existing = dedent`
       tbl-1 = {
               only = 1,
@@ -3339,7 +3338,27 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     delete value['tbl-1'].only;
     const patched = patch(existing, value);
 
-    expect(patched).toEqual('tbl-1 = {}\n');
+    expect(patched).toEqual(dedent`
+    tbl-1 = {
+    }
+    ` + '\n');
+  });
+
+  test('should delete the only element from a multiline inline array and leave it empty and preserve multi-line formatting', () => {
+    const existing = dedent`
+      tbl-1 = [
+        "1"
+      ]
+      ` + '\n';
+
+    const value = parse(existing);
+    value['tbl-1'].splice(0, 1);
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = [
+    ]
+    ` + '\n');
   });
 
   test('should delete a nested inline table key leaving empty nested table', () => {
@@ -10136,8 +10155,7 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
 });
 
 
-//WIP 
-test.fails('multiline empty array', () => {
+test('multiline empty array', () => {
   const src = dedent`
     [metadata]
     version = "1"
@@ -10165,3 +10183,61 @@ test.fails('multiline empty array', () => {
     `);
 });
 
+test('multiline empty array uses the existing indentation level', () => {
+  const src = dedent`
+    [root]
+    dependencies = [
+      ]
+  ` + '\n';
+
+  const obj = parse(src) as any;
+  obj.root.dependencies = ['new-dependency'];
+
+  expect(patch(src, obj)).toEqual(dedent`
+    [root]
+    dependencies = [
+        "new-dependency"
+      ]
+  ` + '\n');
+});
+
+test('multiline empty array accepts an explicit indentation width', () => {
+  const src = 'dependencies = [\n]\n';
+  const obj = parse(src) as any;
+  obj.dependencies = ['new-dependency'];
+
+  const result = patch(src, obj, { indentWidth: 4 });
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    dependencies = [
+        "new-dependency"
+    ]
+  ` + '\n');
+});
+
+
+
+  // For comment ownership, we need to ensure that a new key is added with 
+  // an empty line before it if the previous key has a comment. 
+  // This is to ensure that the comment is not associated with the new key.
+
+  // TODO: make sure to implement the granular comment ownership logic in the patch 
+  // function to handle this case correctly.
+
+  test('adding a new key after a comment with an empty line', () => {
+    const src = dedent`
+      [server]
+      # managed by the platform
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.server.port = 8080;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [server]
+      # managed by the platform
+      
+      port = 8080
+    ` + '\n');
+  });

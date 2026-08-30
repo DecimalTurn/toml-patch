@@ -132,6 +132,8 @@ class TomlFormat {
   bracketSpacing: boolean
   inlineTableStart?: number
   truncateZeroTimeInDates: boolean
+  useTabsForIndentation?: boolean
+  indentWidth: number
   minimumDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean

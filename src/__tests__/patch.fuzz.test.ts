@@ -311,8 +311,8 @@ test('collapsing a multiline-array dotted key into an inline table (seed 30330 a
     a5 = [1]
 
     h.z = {
-          b.x = true,
-          b.y = "tail"
+        b.x = true,
+        b.y = "tail",
     }
   `);
 });
@@ -2401,7 +2401,8 @@ test('moving a multiline literal past duplicate scalars while removing the head 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
-    o4s = [false, 30325, false, "changed", false, "x", 'y']
+    o4s = [false, 30325, false, '''
+    changed''', false, "x", 'y']
   `);
 });
 
