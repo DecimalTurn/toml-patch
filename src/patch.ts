@@ -242,6 +242,7 @@ function normalizeAotEntryComments(doc: Document): void {
 
 export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
   const items = [...existing_cst];
+  updated = compactSparseArrays(updated);
 
   // Auto-detect Temporal in the updated JS object so that the internal
   // toJS() diff uses Temporal objects when the user provides them.
@@ -376,6 +377,34 @@ function hasTemporal(value: any, seen: WeakSet<object> = new WeakSet()): boolean
   if (seen.has(value)) return false;
   seen.add(value);
   return Object.values(value).some(child => hasTemporal(child, seen));
+}
+
+function compactSparseArrays(value: any): any {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const compacted: any[] = [];
+    for (let index = 0; index < value.length; index++) {
+      if (!Object.prototype.hasOwnProperty.call(value, index)) {
+        changed = true;
+        continue;
+      }
+      const child = compactSparseArrays(value[index]);
+      changed ||= child !== value[index];
+      compacted.push(child);
+    }
+    return changed ? compacted : value;
+  }
+  if (!isObject(value)) return value;
+
+  let normalized = value;
+  for (const key of Object.keys(value)) {
+    const child = compactSparseArrays(value[key]);
+    if (child !== value[key]) {
+      if (normalized === value) normalized = { ...value };
+      normalized[key] = child;
+    }
+  }
+  return normalized;
 }
 
 function reorder(changes: Change[]): Change[] {
@@ -1081,6 +1110,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // flush be paid just-in-time there rather than after every insertion — a patch touching
   // many containers once each (the common shape) then pays nothing.
   const insertedInlineContainers = new Set<TreeNode>();
+  const removedInlineTrailingCommas = new WeakMap<InlineArray | InlineTable, boolean>();
+
+  function trailingCommaForAddedItem(
+    container: InlineArray | InlineTable,
+    detected: boolean
+  ): boolean {
+    const carried = removedInlineTrailingCommas.get(container);
+    return carried ?? detected;
+  }
 
   // Object-key Moves (updateOrder) are only collected here, not applied — they're relayed
   // out in one batch at the very end, after every other structural change in this patch has
@@ -1325,7 +1363,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
-          const originalHadTrailingCommas = arrayHadTrailingCommas(parent);
+          const originalHadTrailingCommas = trailingCommaForAddedItem(
+            parent,
+            arrayHadTrailingCommas(parent)
+          );
           // If this is an InlineItem being added to an array, check its comma setting
           if (isInlineItem(child)) {
             // The child comes from the updated document with global format applied
@@ -1479,7 +1520,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
         // Special handling for adding KeyValue to InlineTable
         // Preserve original trailing comma format
-        const originalHadTrailingCommas = tableHadTrailingCommas(parent);
+        const originalHadTrailingCommas = trailingCommaForAddedItem(
+          parent,
+          tableHadTrailingCommas(parent)
+        );
         // InlineTable items must be wrapped in InlineItem
         if (isKeyValue(child)) {
           const inlineItem = generateInlineItem(child);
@@ -2576,6 +2620,11 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
         const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
+        if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
+            containerItemIndex === parent.items.length - 1 &&
+            removedInlineComma !== undefined) {
+          removedInlineTrailingCommas.set(parent, removedInlineComma);
+        }
         // The bracket gap of a multiline inline container, captured BEFORE the
         // removal: removeMember flushes pending offsets for multiline inline
         // containers, so the post-removal fixup below can no longer measure

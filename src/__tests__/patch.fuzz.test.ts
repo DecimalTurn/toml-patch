@@ -312,7 +312,7 @@ test('collapsing a multiline-array dotted key into an inline table (seed 30330 a
 
     h.z = {
         b.x = true,
-        b.y = "tail"
+        b.y = "tail",
     }
   `);
 });

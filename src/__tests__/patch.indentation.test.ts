@@ -537,7 +537,7 @@ describe('human-edited indentation', () => {
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'config = {',
-      '    service.secure = true',
+      '    service.secure = true,',
       '}',
     ].join('\n'));
   });
