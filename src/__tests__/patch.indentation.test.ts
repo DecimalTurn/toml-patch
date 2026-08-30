@@ -355,6 +355,27 @@ describe('indentation edge cases', () => {
     ].join('\n'));
   });
 
+  test('deletes then re-adds an element to an array preserving local indentation even with format override', () => {
+    const existing = [
+      '  tbl-1 = [',
+      '        "2"',
+      '  ]',
+    ].join('\n');
+
+    const value = parse(existing);
+    delete value['tbl-1'][0];
+    value['tbl-1'].push("3");
+
+    const fmt = TomlFormat.autoDetectFormat(existing);
+    fmt.indentWidth = 2;
+    const patched = patch(existing, value, fmt);
+
+    expect(patched).toEqual([
+      '  tbl-1 = [',
+      '        "3"',
+      '  ]',
+    ].join('\n'));
+  });
 
 });
 
