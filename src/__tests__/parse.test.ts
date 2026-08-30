@@ -207,3 +207,28 @@ k33 = 4597
     c: [{ b: 2 }]
   });
 });
+
+// BUG: a single-line literal string cannot hold an odd number of double quotes.
+// Literal strings have no escaping at all -- everything between the delimiters is
+// taken verbatim -- so `'has " inside'` is valid TOML and should parse. It does
+// not: an odd count fails while an even count succeeds, which means the tokenizer
+// is pairing double quotes in a context where they carry no meaning.
+//
+//   a = '"'    -> throws        a = '""'   -> ok
+//   a = '"""'  -> throws        a = '""""' -> ok
+//
+// Multiline literal strings are unaffected, so this is specific to the
+// single-quote scanner. Predates the current work and is reproducible on 3.0.3.
+// The official toml-test suite passes, so it does not cover this case.
+test.fails('a single-line literal string holds an odd number of double quotes', () => {
+  expect(parse(`a = '"'\n`)).toEqual({ a: '"' });
+});
+
+test('a single-line literal string holds an even number of double quotes', () => {
+  expect(parse(`a = '""'\n`)).toEqual({ a: '""' });
+});
+
+test('a multiline literal string holds double quotes at any count', () => {
+  expect(parse(`a = '''"'''\n`)).toEqual({ a: '"' });
+  expect(parse(`a = '''"""'''\n`)).toEqual({ a: '"""' });
+});

@@ -64,8 +64,13 @@ To run the main test suite:
 pnpm test
 ```
 
-This executes all unit and integration tests in the `src/__tests__/` directory using [Vitest](https://vitest.dev/).
-It includes both TypeScript tests and JavaScript integration tests (which verify the built output works for plain JS consumers).
+This executes the TypeScript unit tests in the `src/__tests__/` directory using [Vitest](https://vitest.dev/).
+
+To run the JavaScript integration tests, which verify the built output works for plain JS consumers:
+
+```bash
+pnpm run test:js
+```
 
 #### Running All Tests Together
 

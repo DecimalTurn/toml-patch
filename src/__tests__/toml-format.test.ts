@@ -1,4 +1,4 @@
-import { TomlFormat, detectNewline, countTrailingNewlines, detectTabsForIndentation, validateFormatObject, resolveTomlFormat } from '../toml-format';
+import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat } from '../toml-format';
 import { patch } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
@@ -130,13 +130,10 @@ describe('TomlFormat comprehensive tests', () => {
       expect(format.bracketSpacing).toBe(true); // Default value
     });
 
-    test('should handle empty string as newLine', () => {
-      const format = new TomlFormat('', 1);
-      
-      expect(format.newLine).toBe('');
-      expect(format.trailingNewline).toBe(1);
-      expect(format.trailingComma).toBe(false); // Default value
-      expect(format.bracketSpacing).toBe(true); // Default value
+    // An empty newLine runs every line together (`a = 1b = 2`), so the
+    // constructor rejects it rather than producing TOML that cannot parse.
+    test('should reject empty string as newLine', () => {
+      expect(() => new TomlFormat('', 1)).toThrow('Invalid newLine value: expected LF or CRLF');
     });
 
     test('should handle zero as trailingNewline', () => {
@@ -771,5 +768,87 @@ describe('updateOrder option wiring (docs/PLAN-Update-Order.md)', () => {
     expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+// Before this moved into resolveTomlFormat, only patch() normalized newLine.
+// stringify() took the raw value, so `{ newLine: 'LF' }` wrote the literal text
+// "LF" between lines and `{ newLine: '\r' }` produced TOML that cannot parse,
+// both silently. These cover every entry point that resolves a format.
+describe('newLine normalization', () => {
+  const config = { title: 'example', port: 8080 };
+
+  describe.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['lf', '\n'],
+    ['CrLf', '\r\n'],
+    ['unix', '\n'],
+    ['DOS', '\r\n'],
+    ['\n', '\n'],
+    ['\r\n', '\r\n'],
+    ['\n', '\n'],
+    ['\r\n', '\r\n']
+  ])('accepts %j as %j', (newLine, expected) => {
+    it('via stringify', () => {
+      expect(stringify(config, { newLine })).toBe(`title = "example"${expected}port = 8080${expected}`);
+    });
+
+    it('via patch', () => {
+      const original = 'title = "example"\nport = 8080\n';
+      expect(patch(original, { title: 'example', port: 9090 }, { newLine }))
+        .toBe(`title = "example"${expected}port = 9090${expected}`);
+    });
+
+    it('via the TomlFormat constructor', () => {
+      expect(new TomlFormat(newLine).newLine).toBe(expected);
+    });
+
+    it('via validateFormatObject', () => {
+      expect(validateFormatObject({ newLine }).newLine).toBe(expected);
+    });
+  });
+
+  // '\r' alone is a legal string but not a legal TOML line ending, and '' runs
+  // every line together. Both used to pass straight through to the writer.
+  describe.each(['\r', '\r', '', 'invalid', 'CR', '\n\n'])('rejects %j', (newLine) => {
+    const message = 'Invalid newLine value: expected LF or CRLF';
+
+    it('via stringify', () => {
+      expect(() => stringify(config, { newLine })).toThrow(message);
+    });
+
+    it('via patch', () => {
+      expect(() => patch('title = "example"\n', { title: 'other' }, { newLine })).toThrow(message);
+    });
+
+    it('via the TomlFormat constructor', () => {
+      expect(() => new TomlFormat(newLine)).toThrow(message);
+    });
+  });
+
+  it('reports a non-string newLine as a type error, not a value error', () => {
+    expect(() => stringify({ title: 'example' }, { newLine: 42 as any }))
+      .toThrow('Invalid types for format properties: newLine (expected string, got number)');
+  });
+
+  it('treats a missing newLine as absent rather than invalid', () => {
+    expect(new TomlFormat().newLine).toBe('\n');
+    expect(new TomlFormat(undefined).newLine).toBe('\n');
+    expect(new TomlFormat(null as any).newLine).toBe('\n');
+    expect(validateFormatObject({}).newLine).toBeUndefined();
+  });
+
+  // A TomlFormat instance is returned from resolveTomlFormat untouched, so the
+  // constructor is the only place that can normalize what it carries.
+  it('normalizes through a TomlFormat instance passed to stringify', () => {
+    expect(stringify(config, new TomlFormat('CRLF')))
+      .toBe('title = "example"\r\nport = 8080\r\n');
+  });
+
+  it('does not resolve aliases through Object.prototype', () => {
+    for (const newLine of ['constructor', 'toString', 'valueOf', '__proto__']) {
+      expect(() => new TomlFormat(newLine)).toThrow('Invalid newLine value: expected LF or CRLF');
+    }
   });
 });

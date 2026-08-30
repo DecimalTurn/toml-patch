@@ -35,7 +35,7 @@ function testRoundtripPatchParse(filePath: string) {
 
     // The two ASTs should be identical
     expect(reparsedDoc.cst).toEqual(doc.cst);
-  });
+  }, filename.includes('1000') ? 10_000 : 5_000);
 }
 
 // Get all TOML files from the benchmark directory

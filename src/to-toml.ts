@@ -1,4 +1,9 @@
 import {
+  getNodeSource,
+  originalFirstChildStartedAfterOpener,
+  sourceStructureUnchanged
+} from './cst-source';
+import {
   NodeType,
   CST,
   TreeNode,
@@ -19,6 +24,7 @@ import {
   InlineItem,
   Comment,
   hasItems,
+  hasItem,
   isKeyValue,
   isInlineItem
 } from './cst';
@@ -26,6 +32,7 @@ import { Location } from './location';
 import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';
 import { isIterable } from './utils';
+import { getCommaSpace } from './inline-comma-space';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -200,6 +207,393 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
   }
 
   return lines.join(format.newLine) + format.newLine.repeat(format.trailingNewline);
+}
+
+/**
+ * Source-aware emitter used while CST ranges replace coordinate painting.
+ * Clean nodes copy their original text. Dirty nodes emit in structural order,
+ * so a stale coordinate can add whitespace but cannot overwrite later text.
+ */
+export function toTOMLCursor(cst: CST, format: TomlFormat): string {
+  const roots = isIterable(cst)
+    ? Array.from(cst as Iterable<TreeNode>)
+    : [cst as unknown as TreeNode];
+  const chunks: string[] = [];
+  const copiedRanges: Array<{ source: string; start: number; end: number }> = [];
+  const hostedComments: Comment[] = [];
+  const consumedComments = new WeakSet<Comment>();
+  let line = 1;
+  let column = 0;
+
+  const collectComments = (node: TreeNode): void => {
+    if (node.type === NodeType.Comment) hostedComments.push(node as Comment);
+    if (isKeyValue(node)) collectComments(node.value);
+    else if (isInlineItem(node)) collectComments(node.item);
+    else if (node.type === NodeType.Table || node.type === NodeType.TableArray) {
+      for (const item of (node as Table | TableArray).items) collectComments(item);
+    } else if (hasItems(node)) {
+      for (const item of node.items as TreeNode[]) collectComments(item);
+    }
+  };
+  for (const root of roots) collectComments(root);
+
+  const indentation = (width: number): string =>
+    (format.useTabsForIndentation ? '\t' : SPACE).repeat(width);
+
+  const append = (text: string): void => {
+    if (text.length === 0) return;
+    chunks.push(text);
+    const parts = text.split(/\r\n|\n/);
+    if (parts.length === 1) {
+      column += text.length;
+    } else {
+      line += parts.length - 1;
+      column = parts[parts.length - 1].length;
+    }
+  };
+
+  const advanceTo = (targetLine: number, targetColumn: number): void => {
+    if (targetLine > line) {
+      append(format.newLine.repeat(targetLine - line));
+      if (targetColumn > 0) append(indentation(targetColumn));
+    } else if (targetLine === line && targetColumn > column) {
+      append(SPACE.repeat(targetColumn - column));
+    } else if (chunks.length > 0 &&
+        (targetLine < line || (targetLine === line && targetColumn < column))) {
+      append(format.newLine);
+      if (targetColumn > 0) append(indentation(targetColumn));
+    }
+  };
+
+  const leafText = (node: TreeNode): string | undefined => {
+    switch (node.type) {
+      case NodeType.Key: return (node as Key).raw;
+      case NodeType.String: return (node as StringNode).raw;
+      case NodeType.Integer: return (node as Integer).raw;
+      case NodeType.Float: return (node as Float).raw;
+      case NodeType.Boolean: return (node as BooleanNode).value.toString();
+      case NodeType.DateTime: return (node as DateTime).raw;
+      case NodeType.Comment: return (node as Comment).raw;
+      default: return undefined;
+    }
+  };
+
+  const directChildren = (node: TreeNode): TreeNode[] => {
+    if (isKeyValue(node)) return [node.key, node.value];
+    if (isInlineItem(node)) return [node.item];
+    if (hasItem(node)) return [node.item];
+    if (node.type === NodeType.Table || node.type === NodeType.TableArray) {
+      const table = node as Table | TableArray;
+      return [table.key, ...table.items];
+    }
+    return hasItems(node) ? node.items as TreeNode[] : [];
+  };
+
+  const sourceSubtreeReusable = (node: TreeNode): boolean => {
+    const pending = [node];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (current.dirty) return false;
+      const text = leafText(current);
+      if (text !== undefined) {
+        const source = getNodeSource(current);
+        if (!source || !current.range || source.slice(current.range[0], current.range[1]) !== text) {
+          return false;
+        }
+      } else if (!sourceStructureUnchanged(current)) {
+        return false;
+      }
+      pending.push(...directChildren(current));
+    }
+    return true;
+  };
+
+  const canCopyWholeNode = (node: TreeNode): boolean =>
+    node.type !== NodeType.Document &&
+    node.type !== NodeType.InlineItem &&
+    node.type !== NodeType.TableKey &&
+    node.type !== NodeType.TableArrayKey &&
+    (leafText(node) !== undefined || sourceStructureUnchanged(node));
+
+  const appendRelativeGap = (
+    from: { line: number; column: number },
+    to: { line: number; column: number }
+  ): void => {
+    if (to.line > from.line) {
+      append(format.newLine.repeat(to.line - from.line));
+      if (to.column > 0) append(indentation(to.column));
+    } else if (to.line === from.line && to.column > from.column) {
+      append(SPACE.repeat(to.column - from.column));
+    }
+  };
+
+  const sourceGap = (
+    container: InlineArray | InlineTable,
+    previous: InlineItem | undefined,
+    current: InlineItem | undefined
+  ): string | undefined => {
+    const source = getNodeSource(container);
+    if (!source || !container.range) return undefined;
+    if (previous && getNodeSource(previous) !== source) return undefined;
+    if (current && getNodeSource(current) !== source) return undefined;
+    const start = previous?.range?.[1] ?? container.range[0] + 1;
+    const end = current?.range?.[0] ?? container.range[1] - 1;
+    if (start === undefined || end === undefined || end < start) return undefined;
+
+    let gap = source.slice(start, end);
+    if (previous?.comma && gap.startsWith(',')) gap = gap.slice(1);
+    return /^[\t \r\n]*$/.test(gap) ? gap : undefined;
+  };
+
+  const commentBelongsTo = (comment: Comment, container: InlineArray | InlineTable): boolean => {
+    const source = getNodeSource(container);
+    return source !== undefined &&
+      getNodeSource(comment) === source &&
+      container.range !== undefined &&
+      comment.range !== undefined &&
+      comment.range[0] >= container.range[0] &&
+      comment.range[1] <= container.range[1];
+  };
+
+  const emitInlineItems = (container: InlineArray | InlineTable): void => {
+    let previous: InlineItem | undefined;
+    for (const current of container.items as InlineItem[]) {
+      let from = previous
+        ? {
+            line: previous.loc.end.line,
+            column: previous.loc.end.column + (previous.comma ? 1 : 0)
+          }
+        : {
+            line: container.loc.start.line,
+            column: container.loc.start.column + 1
+          };
+      const commentsBefore = hostedComments
+        .filter(comment => !consumedComments.has(comment) && commentBelongsTo(comment, container) &&
+          comment.loc.start.line >= from.line &&
+          comment.loc.end.line <= current.loc.start.line &&
+          (comment.loc.start.line > from.line || comment.loc.start.column >= from.column) &&
+          (comment.loc.end.line < current.loc.start.line || comment.loc.end.column <= current.loc.start.column) &&
+          comment.loc.start.line >= container.loc.start.line &&
+          comment.loc.end.line <= container.loc.end.line)
+        .sort((left, right) =>
+          left.loc.start.line - right.loc.start.line ||
+          left.loc.start.column - right.loc.start.column);
+
+      if (commentsBefore.length > 0) {
+        for (const comment of commentsBefore) {
+          appendRelativeGap(from, comment.loc.start);
+          append(comment.raw);
+          consumedComments.add(comment);
+          from = comment.loc.end;
+        }
+        appendRelativeGap(from, current.loc.start);
+      } else {
+        const gap = sourceGap(container, previous, current);
+        if (gap !== undefined) {
+          append(gap);
+        } else {
+        const crossSource = getNodeSource(current) !== getNodeSource(container);
+        if (previous && crossSource && current.loc.start.line === previous.loc.end.line) {
+          const commaGap = getCommaSpace(container) ?? 2;
+          const wantedSpaces = Math.max(0, commaGap - 1);
+          if (wantedSpaces > 0) append(SPACE.repeat(wantedSpaces));
+        } else {
+          appendRelativeGap(from, current.loc.start);
+        }
+        }
+      }
+      emitNode(current, false);
+      for (const comment of hostedComments) {
+        if (consumedComments.has(comment)) continue;
+        if (!commentBelongsTo(comment, container)) continue;
+        if (comment.loc.start.line !== current.loc.end.line) continue;
+        if (comment.loc.start.column < current.loc.end.column) continue;
+        if (comment.loc.start.line < container.loc.start.line ||
+            comment.loc.end.line > container.loc.end.line) continue;
+        const separatorEnd = current.loc.end.column + (current.comma ? 1 : 0);
+        if (comment.loc.start.column > separatorEnd) {
+          append(SPACE.repeat(comment.loc.start.column - separatorEnd));
+        }
+        append(comment.raw);
+        consumedComments.add(comment);
+      }
+      previous = current;
+    }
+
+    let trailingFrom = previous
+      ? {
+          line: previous.loc.end.line,
+          column: previous.loc.end.column + (previous.comma ? 1 : 0)
+        }
+      : { line: container.loc.start.line, column: container.loc.start.column + 1 };
+    const trailingComments = hostedComments
+      .filter(comment => !consumedComments.has(comment) && commentBelongsTo(comment, container) &&
+        comment.loc.start.line >= trailingFrom.line &&
+        comment.loc.end.line <= container.loc.end.line)
+      .sort((left, right) =>
+        left.loc.start.line - right.loc.start.line ||
+        left.loc.start.column - right.loc.start.column);
+    if (trailingComments.length > 0) {
+      for (const comment of trailingComments) {
+        appendRelativeGap(trailingFrom, comment.loc.start);
+        append(comment.raw);
+        consumedComments.add(comment);
+        trailingFrom = comment.loc.end;
+      }
+      appendRelativeGap(trailingFrom, {
+        line: container.loc.end.line,
+        column: container.loc.end.column - 1
+      });
+    } else {
+      const trailingGap = sourceGap(container, previous, undefined);
+      if (trailingGap !== undefined) append(trailingGap);
+      else if (previous) appendRelativeGap(trailingFrom, {
+        line: container.loc.end.line,
+        column: container.loc.end.column - 1
+      });
+      else {
+        const source = getNodeSource(container);
+        if (source && container.range) {
+          const original = source.slice(container.range[0], container.range[1]);
+          const lastNewline = Math.max(original.lastIndexOf('\n'), original.lastIndexOf('\r'));
+          // Only preserve the original multiline closing bracket while the
+          // container still has items. Once emptied, the writer tightens it to
+          // a single line, and the deleted first child must not re-add a line.
+          if (lastNewline !== -1 && container.items.length > 0 && originalFirstChildStartedAfterOpener(container)) {
+            const closingIndent = original.slice(lastNewline + 1, -1).match(/^[\t ]*/)?.[0] ?? '';
+            append(format.newLine + closingIndent);
+          }
+        }
+      }
+    }
+  };
+
+  const emitNode = (node: TreeNode, place = true): void => {
+    if (node.type === NodeType.Comment && consumedComments.has(node as Comment)) return;
+    const source = getNodeSource(node);
+    if (source !== undefined && node.range && copiedRanges.some(copied =>
+      copied.source === source && copied.start <= node.range![0] && copied.end >= node.range![1]
+    )) {
+      return;
+    }
+    if (canCopyWholeNode(node) && sourceSubtreeReusable(node) && node.range && source !== undefined) {
+      const slice = source.slice(node.range[0], node.range[1]);
+      const expectedLeaf = leafText(node);
+      if (expectedLeaf === undefined || expectedLeaf === slice) {
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append(slice);
+        copiedRanges.push({ source, start: node.range[0], end: node.range[1] });
+        return;
+      }
+    }
+
+    switch (node.type) {
+      case NodeType.Document:
+        for (const item of (node as Document).items) emitNode(item);
+        break;
+      case NodeType.Table: {
+        const table = node as Table;
+        emitNode(table.key, place);
+        for (const item of table.items) emitNode(item);
+        break;
+      }
+      case NodeType.TableKey: {
+        const tableKey = node as TableKey;
+        if (place) advanceTo(tableKey.loc.start.line, tableKey.loc.start.column);
+        append(`[${tableKey.item.raw}]`);
+        break;
+      }
+      case NodeType.TableArray: {
+        const tableArray = node as TableArray;
+        emitNode(tableArray.key, place);
+        for (const item of tableArray.items) emitNode(item);
+        break;
+      }
+      case NodeType.TableArrayKey: {
+        const tableArrayKey = node as TableArrayKey;
+        if (place) advanceTo(tableArrayKey.loc.start.line, tableArrayKey.loc.start.column);
+        append(`[[${tableArrayKey.item.raw}]]`);
+        break;
+      }
+      case NodeType.KeyValue: {
+        const keyValue = node as KeyValue;
+        if (place) advanceTo(keyValue.loc.start.line, keyValue.loc.start.column);
+        emitNode(keyValue.key, false);
+        appendRelativeGap(keyValue.key.loc.end, {
+          line: keyValue.loc.start.line,
+          column: keyValue.equals
+        });
+        append('=');
+        appendRelativeGap({ line: keyValue.loc.start.line, column: keyValue.equals + 1 }, keyValue.value.loc.start);
+        emitNode(keyValue.value, false);
+        break;
+      }
+      case NodeType.Key:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as Key).raw);
+        break;
+      case NodeType.String:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as StringNode).raw);
+        break;
+      case NodeType.Integer:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as Integer).raw);
+        break;
+      case NodeType.Float:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as Float).raw);
+        break;
+      case NodeType.Boolean:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as BooleanNode).value.toString());
+        break;
+      case NodeType.DateTime:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as DateTime).raw);
+        break;
+      case NodeType.InlineArray: {
+        const array = node as InlineArray;
+        if (place) advanceTo(array.loc.start.line, array.loc.start.column);
+        append('[');
+        emitInlineItems(array);
+        append(']');
+        break;
+      }
+      case NodeType.InlineTable: {
+        const table = node as InlineTable;
+        if (place) advanceTo(table.loc.start.line, table.loc.start.column);
+        append('{');
+        emitInlineItems(table);
+        append('}');
+        break;
+      }
+      case NodeType.InlineItem: {
+        const item = node as InlineItem;
+        emitNode(item.item, false);
+        if (item.comma) {
+          const source = getNodeSource(item);
+          if (source && item.range && item.item.range && getNodeSource(item.item) === source) {
+            const beforeComma = source.slice(item.item.range[1], item.range[1]);
+            if (/^[\t ]*$/.test(beforeComma)) append(beforeComma);
+          }
+          append(',');
+        }
+        break;
+      }
+      case NodeType.Comment:
+        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
+        append((node as Comment).raw);
+        break;
+      default:
+        throw new Error(`toTOMLCursor: Unrecognized node type: ${String((node as any).type)}`);
+    }
+  };
+
+  for (const root of roots) emitNode(root);
+
+  const output = chunks.join('').replace(/\r\n|\n/g, format.newLine);
+  return output + format.newLine.repeat(format.trailingNewline);
 }
 
 /**

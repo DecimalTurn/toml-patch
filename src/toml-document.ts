@@ -7,6 +7,7 @@ import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
 import { decodeUtf8Bytes, hasLeadingBom, stripLeadingBom, UTF8_BOM } from './decode-utf8';
+import { isObject } from './utils';
 
 /**
  * TomlDocument encapsulates a TOML CST and provides methods to interact with it.
@@ -74,6 +75,7 @@ export class TomlDocument {
   /**
    * Applies a patch to the current CST using a modified JS object.
    * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
+   *
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
@@ -81,14 +83,26 @@ export class TomlDocument {
 
     const fmt = resolveTomlFormat(format, this._format);
 
-    const { tomlString, document } = patchCst(
+    const sourceBefore = this._currentTomlString;
+
+    // Only worth deriving the pre-patch values when a stripped date could
+    // actually be present; temporal mode hands out Temporal objects untouched.
+    if (!this._temporal && hasPlainDate(updatedObject)) {
+      const originalObject = toJS(this._cst, sourceBefore, {
+        integersAsBigInt: this._integersAsBigInt,
+        temporal: false
+      });
+      updatedObject = restoreDateRepresentations(updatedObject, originalObject);
+    }
+
+    const result = patchCst(
       this._cst,
       updatedObject,
       fmt
     );
-    this._cst = document.items;
+    this._cst = Array.from(parseTOML(result.tomlString));
     this._format = fmt;
-    this._currentTomlString = tomlString;
+    this._currentTomlString = result.tomlString;
   }
 
   /**
@@ -181,6 +195,76 @@ export class TomlDocument {
     // Update the auto-detected format with the new string's characteristics
     this._format = TomlFormat.autoDetectFormatWithCst(tomlString, this._cst);
   }
+}
+
+/**
+ * True when `value` holds a plain `Date` anywhere, i.e. one of the objects
+ * toJsObject() produced by stripping a TOML date class. Used to skip the work
+ * in restoreDateRepresentations() for the common case of a document with no
+ * dates in it. Cycle-safe.
+ */
+function hasPlainDate(value: any, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (value instanceof Date) return value.constructor === Date;
+  if (!value || typeof value !== 'object') return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (Array.isArray(value)) return value.some(item => hasPlainDate(item, seen));
+  return Object.keys(value).some(key => hasPlainDate(value[key], seen));
+}
+
+/**
+ * Re-attaches the TOML date representation that toJsObject() strips.
+ *
+ * toJsObject() deliberately hands out plain `Date` objects so that callers get
+ * the standard Date contract, notably a standard toISOString(). But the writer
+ * derives a value's TOML text from toISOString(), and the TOML date classes
+ * override it to return the original spelling. A plain Date handed back in
+ * therefore writes as a full offset date-time, so read-modify-write turned
+ * `1986-03-02` into `1986-03-02T00:00:00.000Z` whenever the surrounding node was
+ * rewritten rather than preserved from the CST.
+ *
+ * Where the caller left a date alone (still a plain Date, same instant), the
+ * original typed instance goes back in so the original spelling is written. A
+ * date whose instant actually changed is left as-is: only the caller knows
+ * whether a new instant is still meant to be a local date, and they can say so
+ * by passing LocalDate / LocalTime / LocalDateTime / OffsetDateTime, which are
+ * exported for that purpose. Instances of those classes are never touched.
+ *
+ * The caller's object is not mutated; a node is copied only when something
+ * beneath it changed, so an untouched tree is returned by reference.
+ */
+function restoreDateRepresentations(updated: any, original: any, seen: WeakSet<object> = new WeakSet()): any {
+  if (updated instanceof Date) {
+    const erased = updated.constructor === Date
+      && original instanceof Date
+      && original.constructor !== Date
+      && original.getTime() === updated.getTime();
+    return erased ? original : updated;
+  }
+  if (!updated || typeof updated !== 'object' || seen.has(updated)) return updated;
+  seen.add(updated);
+
+  if (Array.isArray(updated)) {
+    if (!Array.isArray(original)) return updated;
+    let changed = false;
+    const restored = updated.map((item, index) => {
+      const next = restoreDateRepresentations(item, original[index], seen);
+      if (next !== item) changed = true;
+      return next;
+    });
+    return changed ? restored : updated;
+  }
+
+  if (!isObject(original)) return updated;
+  let changed = false;
+  const restored: Record<string, any> = {};
+  for (const key of Object.keys(updated)) {
+    const value = updated[key];
+    const next = restoreDateRepresentations(value, original[key], seen);
+    restored[key] = next;
+    if (next !== value) changed = true;
+  }
+  return changed ? restored : updated;
 }
 
 /**

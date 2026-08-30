@@ -1909,4 +1909,187 @@ describe('TomlDocument', () => {
       });
     });
   });
+
+  describe('derived CST positions', () => {
+    // Structurally distilled from fuzz seed 771152. The enclosing array must
+    // be emitted from its current structure without rewriting untouched values.
+    const trickyToml = dedent`
+      build.artifacts = [1, '''
+      alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
+      detail""" }, 1986-03-02]]
+    ` + '\n';
+
+    it('preserves formatting while updating a nested multiline container', () => {
+      const doc = new TomlDocument(trickyToml);
+      const obj = doc.toJsObject;
+      obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(dedent`
+        build.artifacts = [1, '''
+        alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02]]
+      ` + '\n');
+      expect(() => new TomlDocument(doc.toTomlString).toJsObject).not.toThrow();
+    });
+
+    // The getter changes the requested value on every read, so no output can ever
+    // round-trip. Neither attempt can satisfy it, and the document commits the
+    // fine-grained result rather than throwing, which is what earlier versions
+    // produced. The point is that it stays usable afterwards.
+    it('stays usable when no attempt can round-trip', () => {
+      const doc = new TomlDocument('value = 0\n');
+      let reads = 0;
+      const updated: Record<string, unknown> = {};
+      Object.defineProperty(updated, 'value', { enumerable: true, get: () => ++reads });
+
+      expect(() => doc.patch(updated)).not.toThrow();
+      expect(doc.toTomlString).toMatch(/^value = \d+\n$/);
+
+      const obj = doc.toJsObject;
+      obj.value = 7;
+      doc.patch(obj);
+      expect(doc.toTomlString).toBe('value = 7\n');
+    });
+
+    // TOML has one integer type, so a document read as bigint accepts a plain
+    // number assigned back into it. Comparing 2 against 2n as different values
+    // would fail validation on a correct patch and destroy the formatting via a
+    // needless retry.
+    it.each([
+      ['asNeeded' as const, 'bigint'],
+      [true as const, 'bigint'],
+      [false as const, 'number']
+    ])('does not retry when integersAsBigInt is %j', (integersAsBigInt, expectedType) => {
+      const original = dedent`
+        big = 9007199254740993
+        note = [
+          """
+        line""",
+          1,
+        ]
+        x = 1
+      ` + '\n';
+
+      const doc = new TomlDocument(original, { integersAsBigInt });
+      const obj = doc.toJsObject;
+      expect(typeof obj.big).toBe(expectedType);
+
+      obj.x = 2;
+      doc.patch(obj);
+
+      // A retry would reflow the multiline array, so the indented `"""` and the
+      // trailing comma surviving proves the fine-grained path was kept.
+      const expectedBig = integersAsBigInt === false ? '9007199254740992.0' : '9007199254740993';
+      expect(doc.toTomlString).toBe(dedent`
+        big = ${expectedBig}
+        note = [
+          """
+        line""",
+          1,
+        ]
+        x = 2
+      ` + '\n');
+    });
+  });
+
+
+  // toJsObject() hands out plain Date objects, but the writer derives a value's
+  // TOML text from toISOString(), which the TOML date classes override to return
+  // the original spelling. A plain Date handed back therefore used to write as a
+  // full offset date-time: a single sibling edit in an inline array rewrote every
+  // date in it, e.g. `1986-03-02` became `1986-03-02T00:00:00.000Z`.
+  describe('date representation through read-modify-write', () => {
+    const stamps = 'stamps = [ 1986-03-02, 07:32:00, 1979-05-27T07:32:00, 1979-05-27T07:32:00Z, "tail" ]\n';
+
+    it('keeps every date kind when only a sibling changes', () => {
+      const doc = new TomlDocument(stamps);
+      const obj = doc.toJsObject;
+      obj.stamps[4] = 'changed';
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(
+        'stamps = [ 1986-03-02, 07:32:00, 1979-05-27T07:32:00, 1979-05-27T07:32:00Z, "changed" ]\n'
+      );
+    });
+
+    it('keeps a date when the value beside it forces the container to be rewritten', () => {
+      const original = dedent`
+        list = [ 1986-03-02, '''
+        alpha''', "tail" ]
+      ` + '\n';
+
+      const doc = new TomlDocument(original);
+      const obj = doc.toJsObject;
+      obj.list[2] = 'changed';
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(dedent`
+        list = [ 1986-03-02, '''
+        alpha''', "changed" ]
+      ` + '\n');
+    });
+
+    // A caller who changes the instant may or may not still mean a local date,
+    // and a plain Date cannot express which. The value widens, and the exported
+    // date classes are how the caller says what they meant.
+    it('widens a date whose instant actually changed', () => {
+      const doc = new TomlDocument(stamps);
+      const obj = doc.toJsObject;
+      obj.stamps[0] = new Date(Date.UTC(2001, 0, 2));
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(
+        'stamps = [ 2001-01-02T00:00:00.000Z, 07:32:00, 1979-05-27T07:32:00, 1979-05-27T07:32:00Z, "tail" ]\n'
+      );
+    });
+
+    it('honours a LocalDate supplied by the caller', () => {
+      const doc = new TomlDocument(stamps);
+      const obj = doc.toJsObject;
+      obj.stamps[0] = new LocalDate('2001-01-02');
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(
+        'stamps = [ 2001-01-02, 07:32:00, 1979-05-27T07:32:00, 1979-05-27T07:32:00Z, "tail" ]\n'
+      );
+    });
+
+    // Known limitation: the pre-patch values are matched by position, so a date
+    // that moves no longer lines up with its original node and widens. Pinned so
+    // the boundary is visible rather than discovered.
+    it('widens dates that swap positions', () => {
+      const original = 'window = [ 1986-03-02, 1991-07-14, "tail" ]\n';
+      const doc = new TomlDocument(original);
+      const obj = doc.toJsObject;
+      [obj.window[0], obj.window[1]] = [obj.window[1], obj.window[0]];
+      doc.patch(obj);
+
+      expect(doc.toTomlString).toBe(
+        'window = [ 1991-07-14T00:00:00.000Z, 1986-03-02T00:00:00.000Z, "tail" ]\n'
+      );
+    });
+
+    it('leaves the caller object untouched', () => {
+      const doc = new TomlDocument(stamps);
+      const obj = doc.toJsObject;
+      obj.stamps[4] = 'changed';
+      doc.patch(obj);
+
+      // Still the plain Date toJsObject handed out, not the internal class.
+      expect(obj.stamps[0].constructor).toBe(Date);
+      expect(obj.stamps[0]).toBeInstanceOf(Date);
+    });
+
+    it('still exposes plain Date objects from toJsObject', () => {
+      const doc = new TomlDocument(stamps);
+      const dates = doc.toJsObject.stamps.slice(0, 4);
+
+      for (const value of dates) {
+        expect(value.constructor).toBe(Date);
+      }
+      // The standard Date contract, which the TOML classes deliberately break.
+      expect(dates[0].toISOString()).toBe('1986-03-02T00:00:00.000Z');
+    });
+  });
+
 });

@@ -16,7 +16,7 @@
  */
 
 import { vi } from 'vitest';
-import { patch, TomlFormat } from "../../../dist/toml-patch.js";
+import { parse, patch, TomlFormat } from "../../../dist/toml-patch.js";
 
 describe('patch() Function JavaScript Integration', () => {
   const originalToml = `# Configuration file
@@ -265,6 +265,37 @@ cache = true
       expect(result).toContain('\n\tdebug = true\n');
       // Newly inserted line should also use tabs (auto-detected)
       expect(result).toContain('\n\tservers = [ "web", "api" ]\n');
+    });
+  });
+
+  describe('newer public behavior', () => {
+    it('should preserve large integers as BigInt when patching', () => {
+      const original = 'count = 9007199254740993\n';
+      const updated = { count: 9007199254740995n };
+
+      const result = patch(original, updated);
+
+      expect(result).toBe('count = 9007199254740995\n');
+      expect(parse(result).count).toBe(9007199254740995n);
+    });
+
+    it('should reorder root keys when updateOrder is enabled', () => {
+      const original = 'first = 1\nsecond = 2\n';
+      const updated = { second: 2, first: 1 };
+
+      const result = patch(original, updated, { updateOrder: true });
+
+      expect(result).toBe('second = 2\nfirst = 1\n');
+    });
+
+    it('should append entries to an existing array of tables', () => {
+      const original = '[[servers]]\nname = "web"\n';
+      const updated = { servers: [{ name: 'web' }, { name: 'api' }] };
+
+      const result = patch(original, updated);
+
+      expect(result).toBe('[[servers]]\nname = "web"\n\n[[servers]]\nname = "api"\n');
+      expect(parse(result).servers).toEqual(updated.servers);
     });
   });
 
@@ -836,6 +867,31 @@ port = 5432
       } finally {
         console.warn = originalWarn;
       }
+    });
+
+    it.each([
+      '\r',
+      '\\r',
+      '',
+      'invalid'
+    ])('should reject unsupported newLine value %j', (newLine) => {
+      expect(() => patch(originalToml, baseUpdatedObject, { newLine }))
+        .toThrow('Invalid newLine value: expected LF or CRLF');
+    });
+
+    it.each([
+      ['\n', '\n'],
+      ['\r\n', '\r\n'],
+      ['\\n', '\n'],
+      ['\\r\\n', '\r\n'],
+      ['lf', '\n'],
+      ['CrLf', '\r\n'],
+      ['unix', '\n'],
+      ['DOS', '\r\n']
+    ])('should accept lenient newLine value %j as %j', (newLine, expectedNewLine) => {
+      const result = patch(originalToml, baseUpdatedObject, { newLine });
+      const lineEnding = result.includes('\r\n') ? '\r\n' : '\n';
+      expect(lineEnding).toBe(expectedNewLine);
     });
 
     it('should handle TomlFormat constructor with all optional parameters', () => {

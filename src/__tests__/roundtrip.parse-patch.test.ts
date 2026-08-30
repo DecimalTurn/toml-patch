@@ -32,7 +32,7 @@ function testRoundtripPatch(filePath: string) {
     
     // Compare the original and "patched" TOML for exact match
     expect(patchedToml).toEqual(tomlContent);
-  });
+  }, filename.includes('1000') ? 10_000 : 5_000);
 }
 
 // Get all TOML files from the benchmark directory

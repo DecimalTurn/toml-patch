@@ -1,7 +1,7 @@
 import parseTOML from './parse-toml';
 import parseJS from './parse-js';
 import toJS from './to-js';
-import toTOML from './to-toml';
+import toTOML, { toTOMLCursor } from './to-toml';
 import { TomlFormat } from './toml-format';
 import {
   isKeyValue,
@@ -88,22 +88,8 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   }
 
   const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
-  return fmt.leadingBom ? `${UTF8_BOM}${patchedToml}` : patchedToml;
-}
-
-/**
- * Recursively checks if an object graph contains any Temporal values.
- * Used to auto-detect whether temporal mode should be enabled for patching.
- */
-function hasTemporal(obj: any, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (obj == null || typeof obj !== 'object') return false;
-  if (isTemporal(obj)) return true;
-  if (seen.has(obj)) return false;
-  seen.add(obj);
-  for (const v of Object.values(obj)) {
-    if (hasTemporal(v, seen)) return true;
-  }
-  return false;
+  const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
+  return withBom(patchedToml);
 }
 
 /**
@@ -303,6 +289,12 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const updated_js = format.updateOrder
     ? applyRequestedRootKeyOrder(updated, updated_js_raw, diffing_fmt, useTemporal)
     : updated_js_raw;
+  if (!format.updateOrder && valuesEqualIterative(existing_js, updated_js)) {
+    return {
+      tomlString: toTOML(items, format),
+      document: existing_document
+    };
+  }
   const changes = reorder(coalesceStructuralReplacements(
     existing_document,
     updated_js,
@@ -329,7 +321,7 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
-    toTOML(patched_document.items, format),
+    toTOMLCursor(patched_document.items, format),
     format
   );
 
@@ -337,6 +329,53 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
     tomlString,
     document: patched_document
   };
+}
+
+function valuesEqualIterative(left: any, right: any): boolean {
+  const pending: Array<[any, any]> = [[left, right]];
+  while (pending.length > 0) {
+    const [a, b] = pending.pop()!;
+    if (typeof a === 'number' && typeof b === 'number' &&
+        (!Number.isFinite(a) || !Number.isFinite(b))) {
+      return false;
+    }
+    if (typeof a === 'number' && typeof b === 'number' &&
+        Number.isNaN(a) && Number.isNaN(b)) {
+      return false;
+    }
+    if (Object.is(a, b)) continue;
+    if (a instanceof Date && b instanceof Date) {
+      if (a.getTime() !== b.getTime()) return false;
+      continue;
+    }
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (!Array.isArray(a)) {
+      const aPrototype = Object.getPrototypeOf(a);
+      const bPrototype = Object.getPrototypeOf(b);
+      if ((aPrototype !== Object.prototype && aPrototype !== null) ||
+          (bPrototype !== Object.prototype && bPrototype !== null)) {
+        return false;
+      }
+    }
+
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+      if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+      pending.push([a[key], b[key]]);
+    }
+  }
+  return true;
+}
+
+function hasTemporal(value: any, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (value == null || typeof value !== 'object') return false;
+  if (isTemporal(value)) return true;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some(child => hasTemporal(child, seen));
 }
 
 function reorder(changes: Change[]): Change[] {
@@ -368,6 +407,28 @@ function reorder(changes: Change[]): Change[] {
         if (isAdd(next_change)) {
           const bIdx = last(next_change.path);
           if (typeof bIdx === 'number' && arraysEqual(aPrefix, next_change.path.slice(0, -1))) {
+            // A source-coordinate remove remains valid against the original array and
+            // therefore has to run before a same-array Add, even when the diff emitted the
+            // remove after that Add (seed 2591153). Post-shift removes deliberately stay on
+            // the far side of the Add (seed 1137525).
+            if (change.coordinate === 'source') {
+              let sourceRemove = -1;
+              for (let k = j + 1; k < changes.length; k++) {
+                const candidate = changes[k];
+                if (isRemove(candidate)
+                    && candidate.coordinate === 'source'
+                    && arraysEqual(aPrefix, candidate.path.slice(0, -1))) {
+                  sourceRemove = k;
+                  break;
+                }
+              }
+              if (sourceRemove !== -1) {
+                const sourceChange = changes.splice(sourceRemove, 1)[0];
+                changes.splice(i, 0, sourceChange);
+                i = -1;
+                break;
+              }
+            }
             break;
           }
           j++;
@@ -3394,6 +3455,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
   // patched object's key order. Must run last — see the comment on objectMoves above.
   applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+  if (objectMoves.length > 0) markDirty(original);
 
   return original;
 }
