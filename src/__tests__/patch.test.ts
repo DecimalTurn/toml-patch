@@ -3327,26 +3327,7 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
       ` + '\n');
   });
 
-
-  test('should delete the only key from a multiline inline table and leave it empty', () => {
-    const existing = dedent`
-      tbl-1 = {
-              only = 1,
-      }
-      ` + '\n';
-
-    const value = parse(existing);
-    delete value['tbl-1'].only;
-    const patched = patch(existing, value);
-
-    expect(patched).toEqual('tbl-1 = {}\n');
-  });
-
-  // This is the same test as above, but with a trailing newline after the closing brace.
-  // The patcher should preserve the newline.
-  // FIXME: This test currently fails because the patcher does not preserve the trailing
-  // newline.
-  test.fails('should delete the only key from a multiline inline table and leave it empty and preserve multi-line formatting', () => {
+  test('should delete the only key from a multiline inline table and leave it empty and preserve multi-line formatting', () => {
     const existing = dedent`
       tbl-1 = {
               only = 1,
@@ -3360,6 +3341,23 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
     expect(patched).toEqual(dedent`
     tbl-1 = {
     }
+    ` + '\n');
+  });
+
+  test('should delete the only element from a multiline inline array and leave it empty and preserve multi-line formatting', () => {
+    const existing = dedent`
+      tbl-1 = [
+        "1"
+      ]
+      ` + '\n';
+
+    const value = parse(existing);
+    value['tbl-1'].splice(0, 1);
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = [
+    ]
     ` + '\n');
   });
 
