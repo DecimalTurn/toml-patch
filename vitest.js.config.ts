@@ -4,12 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/__tests__/**/*.test.ts'],
+    include: ['src/__tests__/**/*.mjs'],
     exclude: ['node_modules/**', 'worktrees/**', 'submodules/**'],
     setupFiles: ['src/__tests__/setup.ts'],
-    snapshotFormat: {
-      escapeString: true,
-      printBasicPrototype: true,
-    },
   },
 });
