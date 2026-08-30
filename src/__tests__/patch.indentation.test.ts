@@ -1,5 +1,6 @@
 import patch from '../patch';
 import { parse, TomlFormat } from '../';
+import dedent from 'dedent';
 
 
 describe('indentation at the root level', () => {
@@ -236,6 +237,45 @@ describe('indentation edge cases', () => {
       '\thost = "localhost"',
       '\tport = 8080',
     ].join('\r\n'));
+  });
+
+  //Delete then re-add a key to a table should preserve indentation style
+  test('deletes then re-adds a key to a table preserving indentation', () => {
+    const existing = dedent`
+      tbl-1 = {
+              only = 1,
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    value['tbl-1'].new = 2;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = {
+            new = 2,
+    }
+    ` + '\n');
+  });
+
+  test('deletes then re-adds a key to a table preserving indentation 2', () => {
+    const existing = dedent`
+      tbl-1 = {
+              only = 1
+      }
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    value['tbl-1'].new = 2;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = {
+            new = 2
+    }
+    ` + '\n');
   });
 
 });
