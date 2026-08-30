@@ -1,5 +1,5 @@
-import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat } from '../toml-format';
-import { patch } from '../index';
+import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat, detectTabsForIndentation } from '../toml-format';
+import { patch, stringify } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import { stripLeadingBom } from '../decode-utf8';
