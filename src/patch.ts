@@ -35,7 +35,7 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
@@ -2620,6 +2620,9 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           ? (parent.items as TreeNode[]).indexOf(node)
           : -1;
         const removedInlineComma = isInlineItem(node) ? (node as InlineItem).comma : undefined;
+        if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent))) {
+          setInlineIndentColumn(parent, node.loc.start.column);
+        }
         if (isInlineItem(node) && (isInlineArray(parent) || isInlineTable(parent)) &&
             containerItemIndex === parent.items.length - 1 &&
             removedInlineComma !== undefined) {

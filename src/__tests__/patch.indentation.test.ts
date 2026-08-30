@@ -241,80 +241,120 @@ describe('indentation edge cases', () => {
 
   //Delete then re-add a key to a table should preserve indentation style
   test('deletes then re-adds a key to a table preserving indentation', () => {
-    const existing = dedent`
-      tbl-1 = {
-              only = 1,
-      }
-      ` + '\n';
+    const existing = [
+      'tbl-1 = {',
+      '        only = 1,',
+      '}',
+    ].join('\n');
 
     const value = parse(existing);
     delete value['tbl-1'].only;
     value['tbl-1'].new = 2;
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-    tbl-1 = {
-            new = 2,
-    }
-    ` + '\n');
+    expect(patched).toEqual([
+      'tbl-1 = {',
+      '        new = 2,',
+      '}',
+    ].join('\n'));
   });
 
   test('deletes then re-adds a key to a table preserving indentation 2', () => {
-    const existing = dedent`
-      tbl-1 = {
-              only = 1
-      }
-      ` + '\n';
+    const existing = [
+      'tbl-1 = {',
+      '        only = 1',
+      '}',
+    ].join('\n');
 
     const value = parse(existing);
     delete value['tbl-1'].only;
     value['tbl-1'].new = 2;
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-    tbl-1 = {
-            new = 2
-    }
-    ` + '\n');
+    expect(patched).toEqual([
+      'tbl-1 = {',
+      '        new = 2',
+      '}',
+    ].join('\n'));
   });
 
   test('deletes then re-adds a value to an array preserving indentation', () => {
-    const existing = dedent`
-      tbl-1 = [
-              "2",
-      ]
-      ` + '\n';
+    const existing = [
+      'tbl-1 = [',
+      '        "2"',
+      ']',
+    ].join('\n');
 
     const value = parse(existing);
     delete value['tbl-1'][0];
     value['tbl-1'].push("3");
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-    tbl-1 = [
-            "3",
-    ]
-    ` + '\n');
+    expect(patched).toEqual([
+      'tbl-1 = [',
+      '        "3"',
+      ']',
+    ].join('\n'));
   });
 
   test('deletes then re-adds a value to an array preserving indentation 2', () => {
-    const existing = dedent`
-      tbl-1 = [
-              "2"
-      ]
-      ` + '\n';
+    const existing = [
+      'tbl-1 = [',
+      '        "2"',
+      ']',
+    ].join('\n');
 
     const value = parse(existing);
     delete value['tbl-1'][0];
     value['tbl-1'].push("3");
     const patched = patch(existing, value);
 
-    expect(patched).toEqual(dedent`
-    tbl-1 = [
-            "3"
-    ]
-    ` + '\n');
+    expect(patched).toEqual([
+      'tbl-1 = [',
+      '        "3"',
+      ']',
+    ].join('\n'));
   });
+
+  //Delete then re-add a key to a table should preserve indentation style
+  test('deletes then re-adds a key to a table preserving local indentation', () => {
+    const existing = [
+      '  tbl-1 = {',
+      '        only = 1,',
+      '  }',
+    ].join('\n');
+
+    const value = parse(existing);
+    delete value['tbl-1'].only;
+    value['tbl-1'].new = 2;
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual([
+      '  tbl-1 = {',
+      '        new = 2,',
+      '  }',
+    ].join('\n'));
+  });
+
+    test('deletes then re-adds an element to an array preserving local indentation', () => {
+    const existing = [
+      '  tbl-1 = [',
+      '        "2"',
+      '  ]',
+    ].join('\n');
+
+    const value = parse(existing);
+    delete value['tbl-1'][0];
+    value['tbl-1'].push("3");
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual([
+      '  tbl-1 = [',
+      '        "3"',
+      '  ]',
+    ].join('\n'));
+  });
+
 
 });
 

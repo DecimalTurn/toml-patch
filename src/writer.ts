@@ -59,9 +59,14 @@ const dirty_roots: WeakSet<Root> = new WeakSet();
 const stringifyRoots: WeakSet<Root> = new WeakSet();
 
 const rootIndentWidths: WeakMap<Root, number> = new WeakMap();
+const inlineIndentColumns: WeakMap<InlineArray | InlineTable, number> = new WeakMap();
 
 export function setRootIndentWidth(root: Root, indentWidth: number): void {
   rootIndentWidths.set(root, indentWidth);
+}
+
+export function setInlineIndentColumn(container: InlineArray | InlineTable, column: number): void {
+  inlineIndentColumns.set(container, column);
 }
 
 /** Mark a root as being built by parseJS — enables stringify fast paths. */
@@ -483,7 +488,10 @@ function calculateInlinePositioning(
     if (following) {
       start.column = following.loc.start.column;
     } else if (parent.loc.end.line > parent.loc.start.line) {
-      start.column = parent.loc.end.column - 1 + indentWidth;
+      const preservedColumn = (isInlineArray(parent) || isInlineTable(parent))
+        ? inlineIndentColumns.get(parent)
+        : undefined;
+      start.column = preservedColumn ?? parent.loc.end.column - 1 + indentWidth;
     }
   }
 
