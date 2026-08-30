@@ -278,6 +278,44 @@ describe('indentation edge cases', () => {
     ` + '\n');
   });
 
+  test('deletes then re-adds a value to an array preserving indentation', () => {
+    const existing = dedent`
+      tbl-1 = [
+              "2",
+      ]
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'][0];
+    value['tbl-1'].push("3");
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = [
+            "3",
+    ]
+    ` + '\n');
+  });
+
+  test('deletes then re-adds a value to an array preserving indentation 2', () => {
+    const existing = dedent`
+      tbl-1 = [
+              "2"
+      ]
+      ` + '\n';
+
+    const value = parse(existing);
+    delete value['tbl-1'][0];
+    value['tbl-1'].push("3");
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    tbl-1 = [
+            "3"
+    ]
+    ` + '\n');
+  });
+
 });
 
 describe('human-edited indentation', () => {
