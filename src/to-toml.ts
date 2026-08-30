@@ -257,7 +257,11 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
       append(format.newLine.repeat(targetLine - line));
       if (targetColumn > 0) append(indentation(targetColumn));
     } else if (targetLine === line && targetColumn > column) {
-      append(SPACE.repeat(targetColumn - column));
+      // At the start of a line the gap up to the node is leading indentation,
+      // so it must follow the document's tab/spaces preference rather than
+      // always padding with spaces (a tab-indented first line would otherwise
+      // be re-emitted with a space).
+      append(column === 0 ? indentation(targetColumn) : SPACE.repeat(targetColumn - column));
     } else if (chunks.length > 0 &&
         (targetLine < line || (targetLine === line && targetColumn < column))) {
       append(format.newLine);
