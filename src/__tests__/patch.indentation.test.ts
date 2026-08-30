@@ -336,7 +336,7 @@ describe('indentation edge cases', () => {
     ].join('\n'));
   });
 
-    test('deletes then re-adds an element to an array preserving local indentation', () => {
+  test('deletes then re-adds an element to an array preserving local indentation', () => {
     const existing = [
       '  tbl-1 = [',
       '        "2"',
@@ -827,7 +827,7 @@ describe('nested multiline arrays', () => {
     ].join('\n'));
   });
 
-    test('does not reindent basic multiline string content inside an existing nested array', () => {
+  test('does not reindent basic multiline string content inside an existing nested array', () => {
     const src = [
       'values = [',
       '  [',
@@ -855,9 +855,109 @@ describe('nested multiline arrays', () => {
     ].join('\n'));
   });
 
+  test('mixed indentation with nested array still favors the closest indentation level', () => {
+    const src = [
+      'values = [',
+      '  [',
+      '      "test1",',
+      '      "test2",',
+      '  ],',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+
+    // Add another value to the array
+    obj.values[0].push('test3');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  [',
+      '      "test1",',
+      '      "test2",',
+      '      "test3",',
+      '  ],',
+      ']'
+    ].join('\n'));
+  });
+
+  test('mixed indentation with nested array still favors the closest indentation level 2', () => {
+    const src = [
+      'values = [',
+      '  [',
+      '  ],',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+
+    // Add another value to the array
+    obj.values[0].push('test3');
+
+    const fmt = { indentWidth: 4 };
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  [',
+      '      "test3"',
+      '  ],',
+      ']'
+    ].join('\n'));
+  });
+
 });
 
 describe('nested multiline inline tables', () => {
+
+  test('uses indentWidth when populating an empty nested inline table', () => {
+    const src = [
+      'config = {',
+      '  inner = {',
+      '  },',
+      '}',
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.config.inner.value = true;
+
+    const result = patch(src, obj, { indentWidth: 4 });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'config = {',
+      '  inner = {',
+      '      value = true',
+      '  },',
+      '}',
+    ].join('\n'));
+  });
+
+  test('mixed indentation with nested inline table favors the closest indentation level', () => {
+    const src = [
+      'values = [',
+      '  {',
+      '      name = "first",',
+      '      enabled = true,',
+      '  },',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values[0].active = false;
+
+    const fmt = { indentWidth: 2 };
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  {',
+      '      name = "first",',
+      '      enabled = true,',
+      '      active = false,',
+      '  },',
+      ']'
+    ].join('\n'));
+  });
 
   test('preserves each nesting level when adding an outer array element', () => {
     const src = [
