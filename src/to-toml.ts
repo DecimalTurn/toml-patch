@@ -26,7 +26,11 @@ import {
   hasItems,
   hasItem,
   isKeyValue,
-  isInlineItem
+  isInlineItem,
+  isTable,
+  isTableArray,
+  isInlineTable,
+  isInlineArray
 } from './cst';
 import { Location } from './location';
 import { SPACE } from './tokenizer';
@@ -236,6 +240,25 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
     }
   };
   for (const root of roots) collectComments(root);
+
+  // Inline containers that are direct values of block-level key-values
+  // (Document, Table or TableArray). When such a container is emptied, its
+  // multiline closing bracket is preserved. Containers nested inside another
+  // inline container tighten to a single line instead.
+  const blockLevelInlineContainers = new WeakSet<InlineTable | InlineArray>();
+  const markBlockLevelInlineContainers = (items: TreeNode[]): void => {
+    for (const item of items) {
+      if (isKeyValue(item)) {
+        const value = item.value;
+        if (isInlineTable(value) || isInlineArray(value)) {
+          blockLevelInlineContainers.add(value);
+        }
+      } else if (isTable(item) || isTableArray(item)) {
+        markBlockLevelInlineContainers((item as Table | TableArray).items as TreeNode[]);
+      }
+    }
+  };
+  markBlockLevelInlineContainers(roots);
 
   const indentation = (width: number): string =>
     (format.useTabsForIndentation ? '\t' : SPACE).repeat(width);
@@ -460,10 +483,7 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
         if (source && container.range) {
           const original = source.slice(container.range[0], container.range[1]);
           const lastNewline = Math.max(original.lastIndexOf('\n'), original.lastIndexOf('\r'));
-          // Only preserve the original multiline closing bracket while the
-          // container still has items. Once emptied, the writer tightens it to
-          // a single line, and the deleted first child must not re-add a line.
-          if (lastNewline !== -1 && container.items.length > 0 && originalFirstChildStartedAfterOpener(container)) {
+          if (lastNewline !== -1 && blockLevelInlineContainers.has(container) && originalFirstChildStartedAfterOpener(container)) {
             const closingIndent = original.slice(lastNewline + 1, -1).match(/^[\t ]*/)?.[0] ?? '';
             append(format.newLine + closingIndent);
           }
