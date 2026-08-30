@@ -398,7 +398,7 @@ export function* tokenize(input: string, newlineState?: NewlineScanState): Itera
       }
 
       const currentChar = input[pos];
-      if (currentChar === DOUBLE_QUOTE) double_quoted = !double_quoted;
+      if (currentChar === DOUBLE_QUOTE && !single_quoted) double_quoted = !double_quoted;
       if (currentChar === SINGLE_QUOTE && !double_quoted) single_quoted = !single_quoted;
 
       if (pos + 1 >= len) break;

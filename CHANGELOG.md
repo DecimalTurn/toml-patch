@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Changed 
+### Changed
 
 - Patching: remove extra validation by enforcing validity on the first pass.
+
+### Fixed
+
+- Parsing: allow an odd number of double quotes in single-line literal strings (`a = '"'`) ([f97d571])
 
 ## [3.0.4] - 2026-08-24
 
@@ -413,3 +417,4 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#292]: https://github.com/DecimalTurn/toml-patch/pull/292
 [#293]: https://github.com/DecimalTurn/toml-patch/pull/293
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
+[f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903

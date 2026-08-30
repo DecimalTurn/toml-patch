@@ -220,8 +220,9 @@ k33 = 4597
 // Multiline literal strings are unaffected, so this is specific to the
 // single-quote scanner. Predates the current work and is reproducible on 3.0.3.
 // The official toml-test suite passes, so it does not cover this case.
-test.fails('a single-line literal string holds an odd number of double quotes', () => {
+test('a single-line literal string holds an odd number of double quotes', () => {
   expect(parse(`a = '"'\n`)).toEqual({ a: '"' });
+  expect(parse(`a = '"""'\n`)).toEqual({ a: '"""' });
 });
 
 test('a single-line literal string holds an even number of double quotes', () => {
