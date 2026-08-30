@@ -172,20 +172,26 @@ export function datesEqual(a: any, b: any): boolean {
 
 export function stableStringify(object: any): string {
   const output: string[] = [];
-  const pending: Array<{ value: any } | { text: string }> = [{ value: object }];
+  const active = new WeakSet<object>();
+  const pending: Array<{ value: any } | { text: string } | { leave: object; text: string }> = [{ value: object }];
 
   while (pending.length > 0) {
     const token = pending.pop()!;
     if ('text' in token) {
       output.push(token.text);
+      if ('leave' in token) active.delete(token.leave);
       continue;
     }
 
     const value = token.value;
     if (isObject(value)) {
+      if (active.has(value)) {
+        throw new TypeError('Cannot stableStringify a circular structure');
+      }
+      active.add(value);
       const keys = Object.keys(value).sort();
       output.push('{');
-      pending.push({ text: '}' });
+      pending.push({ leave: value, text: '}' });
       for (let index = keys.length - 1; index >= 0; index--) {
         const key = keys[index];
         if (index < keys.length - 1) pending.push({ text: ',' });
@@ -194,8 +200,12 @@ export function stableStringify(object: any): string {
         pending.push({ text: JSON.stringify(key) });
       }
     } else if (Array.isArray(value)) {
+      if (active.has(value)) {
+        throw new TypeError('Cannot stableStringify a circular structure');
+      }
+      active.add(value);
       output.push('[');
-      pending.push({ text: ']' });
+      pending.push({ leave: value, text: ']' });
       for (let index = value.length - 1; index >= 0; index--) {
         if (index < value.length - 1) pending.push({ text: ',' });
         pending.push({ value: value[index] });
