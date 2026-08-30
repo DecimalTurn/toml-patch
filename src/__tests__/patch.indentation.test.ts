@@ -932,7 +932,7 @@ describe('nested multiline inline tables', () => {
     ].join('\n'));
   });
 
-  test('mixed indentation with nested inline table favors the closest indentation level', () => {
+  test('mixed indentation with nested inline table favors the closest indentation level (sibling)', () => {
     const src = [
       'values = [',
       '  {',
@@ -1010,6 +1010,82 @@ describe('nested multiline inline tables', () => {
       '    {',
       '        name = "second",',
       '        enabled = false,',
+      '    },',
+      ']'
+    ].join('\n'));
+  });
+
+  test('will use indentWidth for empty multiline nested inline table', () => {
+    const src = [
+      'values = [',
+      '    {',
+      '    },',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values[0].name = 'new';
+    obj.values[0].enabled = false;
+
+    const fmt = { indentWidth: 2 };
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '    {',
+      '      name = "new",',
+      '      enabled = false',
+      '    },',
+      ']'
+    ].join('\n'));
+  });
+
+  // This is currently marked as failing since we haven't implemented a formatting
+  // optins that would allow to indicate that a new table should be written as multiline.
+  // We could introduce a formatting option like `preferMultiline` (bolean) that would 
+  // allow to specify that a new inline table (or array) should be written in multiline format.
+  test.fails('will write table as multiline if already nested', () => {
+    const src = [
+      'values = [',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push({});
+    obj.values[0].name = 'new';
+    obj.values[0].enabled = false;
+
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '    {',
+      '        name = "new",',
+      '        enabled = false',
+      '    },',
+      ']'
+    ].join('\n'));
+  });
+
+  test.fails('will use indentWidth for new multiline nested inline table?', () => {
+    const src = [
+      'values = [',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push({});
+    obj.values[0].name = 'new';
+    obj.values[0].enabled = false;
+
+    const fmt = { indentWidth: 2 };
+
+    const result = patch(src, obj, fmt);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '    {',
+      '      name = "new",',
+      '      enabled = false',
       '    },',
       ']'
     ].join('\n'));

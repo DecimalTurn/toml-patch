@@ -21,6 +21,22 @@ The writer already handles the common case well:
 
 The current implementation adds a document-level `indentWidth` with a default of two columns and detects a smallest observed space indentation. This is a useful first step, but the detector and propagation rules need the cases below before the option should be considered complete.
 
+## Where `indentWidth` is used
+
+`patch()` resolves the format against the format detected from the existing document. An explicit `indentWidth` wins over detection. The resolved value is stored as internal metadata on the patch root and is available to the writer when it inserts generated nodes.
+
+For multiline inline arrays and inline tables, the writer checks indentation in this order:
+
+1. If a following row exists, copy that row's absolute column.
+2. If the container has a surviving row, use the container's existing local row style for additions.
+3. If the container is empty and has no row to copy, calculate a starting column from the closing delimiter and the resolved `indentWidth`.
+
+This means `indentWidth` controls generated rows only when local row evidence is unavailable. It does not reindent existing rows, moved value-content lines, or leading whitespace inside multiline strings. A removed row can also leave its column as local evidence when the same container is populated again in the same patch.
+
+Generated nested inline containers follow the same rule. If a sibling container provides a row template, its relative row indentation wins. If the generated container has no template row, `indentWidth` supplies the indentation step. The setting is therefore most visible when populating an empty multiline array or inline table, including an empty nested container.
+
+Block table and array-of-tables insertion uses line and sibling positions rather than the inline-container fallback above. Their new rows should inherit the surrounding block row style; `indentWidth` should not be described as a global reformatter for those rows.
+
 ## Design principles
 
 1. **Preserve local evidence first.** A sibling row, an adjacent comment row, or an enclosing container's established row style outranks the global default.

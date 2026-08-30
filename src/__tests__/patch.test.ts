@@ -10224,19 +10224,20 @@ test('multiline empty array accepts an explicit indentation width', () => {
   // TODO: make sure to implement the granular comment ownership logic in the patch 
   // function to handle this case correctly.
 
-  test.skip('adding a new key after a comment with an empty line', () => {
-    const src = [
-      '[server]',
-      '# managed by the platform',
-    ].join('\n');
+  test('adding a new key after a comment with an empty line', () => {
+    const src = dedent`
+      [server]
+      # managed by the platform
+    ` + '\n';
     const obj = parse(src) as any;
     obj.server.port = 8080;
 
-    // const result = patch(src, obj, fmt);
-    // expect(parse(result)).toEqual(obj);
-    // expect(result).toBe([
-    //   '[server]',
-    //   '# managed by the platform',
-    //   'port = 8080',
-    // ].join('\n'));
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [server]
+      # managed by the platform
+      
+      port = 8080
+    ` + '\n');
   });
