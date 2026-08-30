@@ -2,8 +2,7 @@ import parseTOML, { continueParsingTOML } from './parse-toml';
 import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
-import { patchCst, hasTransactionCandidate } from './patch';
-import { hasTemporal, hasMultilineStringDelimiter, patchResultMatches } from './patch-validate';
+import { patchCst } from './patch';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -77,11 +76,6 @@ export class TomlDocument {
    * Applies a patch to the current CST using a modified JS object.
    * Updates the internal CST. Use toTomlString getter to retrieve the updated TOML string.
    *
-   * The result is verified internally: the produced TOML is re-parsed and checked
-   * against `updatedObject`, retrying with a coarser writer if it does not match.
-   * A patch that neither attempt can satisfy commits the fine-grained result, with
-   * the CST re-derived from it so the document and its TOML string stay in step.
-   *
    * @param updatedObject - The modified JS object to patch with
    * @param format - Optional formatting options
    */
@@ -89,13 +83,7 @@ export class TomlDocument {
 
     const fmt = resolveTomlFormat(format, this._format);
 
-    // patchCst() mutates the nodes it is handed, so this._cst is already spent
-    // once the call below returns, whether or not the result is usable. Keeping
-    // the pre-patch source lets every later path re-derive a clean CST from it.
     const sourceBefore = this._currentTomlString;
-    // Decided before patchCst() runs, because it mutates these nodes. The cheap
-    // string scan short-circuits before the CST walk.
-    const needsVerification = hasMultilineStringDelimiter(sourceBefore) && hasTransactionCandidate(this._cst);
 
     // Only worth deriving the pre-patch values when a stripped date could
     // actually be present; temporal mode hands out Temporal objects untouched.
@@ -107,52 +95,14 @@ export class TomlDocument {
       updatedObject = restoreDateRepresentations(updatedObject, originalObject);
     }
 
-    const first = patchCst(
+    const result = patchCst(
       this._cst,
       updatedObject,
       fmt
     );
-
-    const commit = (tomlString: string, cst: Block[]) => {
-      this._cst = cst;
-      this._format = fmt;
-      this._currentTomlString = tomlString;
-    };
-
-    if (!needsVerification) {
-      commit(first.tomlString, first.document.items);
-      return;
-    }
-
-    // The comparison has to read values back the way this document produces
-    // them, or a correct patch looks like a mismatch: integersAsBigInt is the
-    // document's own setting, and temporal follows the updated object exactly
-    // as the internal diff does.
-    const comparison = {
-      temporal: hasTemporal(updatedObject),
-      integersAsBigInt: this._integersAsBigInt
-    };
-
-    if (patchResultMatches(updatedObject, first.tomlString, comparison)) {
-      commit(first.tomlString, first.document.items);
-      return;
-    }
-
-    const retried = patchCst(
-      Array.from(parseTOML(sourceBefore)),
-      updatedObject,
-      fmt,
-      true
-    );
-    if (patchResultMatches(updatedObject, retried.tomlString, comparison)) {
-      commit(retried.tomlString, retried.document.items);
-      return;
-    }
-
-    // Neither attempt round-trips. Commit the fine-grained result, which is what
-    // earlier versions produced, re-deriving the tree from it so the document's
-    // CST and its TOML string stay in agreement.
-    commit(first.tomlString, Array.from(parseTOML(first.tomlString)));
+    this._cst = Array.from(parseTOML(result.tomlString));
+    this._format = fmt;
+    this._currentTomlString = result.tomlString;
   }
 
   /**

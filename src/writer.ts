@@ -33,6 +33,7 @@ import { Span, getSpan, clonePosition } from './location';
 import { last } from './utils';
 import traverse from './traverse';
 import { getCommaSpace } from './inline-comma-space';
+import { markMutation, markTreeDirty } from './cst-source';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -89,6 +90,7 @@ export function addExitOffset(root: Root, node: TreeNode, span: Span): void {
 
 /** Marks a root so the next applyWrites() walk actually processes it. */
 export function markDirty(root: Root): void {
+  markTreeDirty(root);
   dirty_roots.add(root);
 }
 
@@ -181,6 +183,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   };
 
   addOffset(offset, getExitOffsets(root), replacement, existing);
+  markMutation(root, parent, replacement);
   dirty_roots.add(root);
 }
 /**
@@ -260,6 +263,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 
   const offsets = getExitOffsets(root);
   offsets.set(child, offset);
+  markMutation(root, parent, child);
   dirty_roots.add(root);
 }
 
@@ -645,6 +649,8 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${parent.type}" for remove`);
   }
+
+  markMutation(root, parent);
 
   let index = parent.items.indexOf(node);
   if (index < 0) {

@@ -24,6 +24,7 @@ import Cursor from './cursor';
 import { clonePosition, cloneLocation, Location } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
+import { createSourceAttacher } from './cst-source';
 
 import {
   DateFormatHelper,
@@ -254,10 +255,12 @@ export {
 export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
   const cursor = new Cursor(tokenize(input, newlineState));
+  const attachSource = createSourceAttacher(input);
   
   while (!cursor.next().done) {
     const blocks = walkBlock(cursor, input);
     for (const block of blocks) {
+      attachSource(block);
       yield block;
     }
   }

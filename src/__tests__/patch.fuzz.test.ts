@@ -1041,10 +1041,7 @@ test('regression for fuzz seed 272851', () => {
   // absorbed into `ut`.
   expect((parse(result) as any).o6z).toEqual({ ut: { g7k5gct: { k12: 'OGB' } }, w: { x: 5 } });
   expect(result).toEqual(dedent`
-    o6z = { ut = { g7k5gct = { k12 = "OGB" }
-
-
-          }, w.x = 5 }
+    o6z = { ut = { g7k5gct = { k12 = "OGB" } }, w.x = 5 }
   `);
 });
 
@@ -2542,10 +2539,7 @@ test('repopulating an emptied multiline inline table with an array (seed 272851 
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
-    o6z = { ut = { g7k5gct = { k12 = [ "O", "G" ] }
-
-
-          }, w.x = 5 }
+    o6z = { ut = { g7k5gct = { k12 = [ "O", "G" ] } }, w.x = 5 }
   `);
 });
 
@@ -2561,10 +2555,7 @@ test('repopulating an emptied multiline inline table with a multiline value (see
   const result = patch(src, obj);
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent.withOptions({ escapeSpecialCharacters: false })`
-    o6z = { ut = { g7k5gct = { k12 = "O${String.fromCharCode(92)}nG" }
-
-
-          }, w.x = 5 }
+    o6z = { ut = { g7k5gct = { k12 = "O${String.fromCharCode(92)}nG" } }, w.x = 5 }
   `);
 });
 
@@ -3428,12 +3419,7 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
 // stay covered byte-for-byte by the historical harness test above.
 //
 // Each asserts the exact TOML produced, not just that the result round-trips.
-// Most of them only round-trip because patch() validates its first attempt and
-// retries transactionally, and that retry rewrites whole multiline inline
-// containers: multiline strings collapse to basic strings, non-decimal integer
-// bases are normalised, dotted keys expand into nested inline tables. The
-// snapshots record that, so recovering any original formatting shows up as a
-// reviewable diff. Regenerate with `vitest -u` once a change is confirmed good.
+// The expected text records the formatting that the direct emitter preserves.
 
 // Deleting a root key shifts every offset below it, and the nested array is
 // replaced by a shorter one plus a spliced duplicate. The removals are emitted
@@ -3458,14 +3444,14 @@ test('removing a root key while shrinking a nested array in a multiline inline t
   obj['host config'].options.nested.items.list.splice(3, 0, 3173);
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "[\\"host config\\"]
+  expect(result).toEqual(dedent`
+    ["host config"]
     enabled = true
     options = {
-        label = \\"a value\\",
+        label = "a value",
         nested.items.list = [true, false, true, 3173, 3173],
         tail = 'another value',
-    }"
+    }
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3489,15 +3475,15 @@ test('replacing a dotted-key subtable with an array beside a multiline inline ar
   obj['release notes'][0]['doc path'].summary = [new Date(Date.UTC(2018, 5, 14)), -2069, 784];
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "[[\\"release notes\\"]]
-    \\"doc path\\".summary = [ 2018-06-14T00:00:00.000Z, -2069, 784, ]
+  expect(result).toEqual(dedent`
+    [["release notes"]]
+    "doc path".summary = [ 2018-06-14T00:00:00.000Z, -2069, 784, ]
     items = [
         '''
     ,''',
-        [{ \\"inner key\\" = '''
-    text!''' }, false, 287_173, \\"a plain string value\\", 1984-04-16T12:37:13Z],
-    ]"
+        [{ "inner key" = '''
+    text!''' }, false, 287_173, "a plain string value", 1984-04-16T12:37:13Z],
+    ]
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3532,13 +3518,17 @@ test('deleting a deep dotted key inside a multiline inline table (seed 1286183)'
     truncateZeroTimeInDates: true,
     useTabsForIndentation: false
   });
-  expect(result).toMatchInlineSnapshot(`
-    "header = \\"\\"\\"
-    ab\\"\\"\\"
+  expect(result).toEqual(dedent`
+    header = """
+    ab"""
     [section]
-    outer.\\"quoted key\\" = { first = { second = { third = { alpha = { beta = {} } } } }, filler = { one = { two = { three = -65079.12231 } }, flag = false, \\"q one\\" = { mid = { leaf = false } }, group = { count = { total = 770012 }, note = { body = \\"first inline note\\" }, a-b = { c = { d = \\"short lit\\" } }, e = { f = 36740 }, \\"q two\\" = { g = false }, empty = \\"\\", \\"q three\\" = { h = 527558 }, \\"q four\\" = { date = { stamp = 2080-12-04 } }, \\"q five\\" = 31256.58522, i = { j = 819597 }, k = 8, l = -284092, MM = 52, n = { o = true } }, \\"q six\\" = { p = { q = 2081-06-28T00:40:23Z } }, \\"q seven\\" = { r = \\"second inline note\\" }, s = { t = {} }, u = { v = 90692.79376 }, w = { \\"q eight\\" = true } } }
-    "
-  `);
+    outer."quoted key" = {
+        first.second.third = {  alpha.beta = {} },
+        filler = { one.two.three = -65079.12231, flag = false, "q one".mid.leaf = false, group = { count.total = 770012, note.body = """
+    first inline note""", a-b.c.d = 'short lit', e.f = 36740, "q two".g = false, empty = "", "q three".h = 527558, "q four".date.stamp = 2080-12-04, "q five" = 31256.58522, i.j = 819597, k = 0x08, l = -284092, MM = 0o64, n.o = true }, "q six".p.q = 2081-06-28T00:40:23Z, "q seven".r = """
+    second inline note""", s.t = {}, u.v = 90692.79376, w."q eight" = true },
+    }
+  `.replace(/\n/g, '\r\n') + '\r\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3557,12 +3547,12 @@ test('replacing an AOT subtable with a date beside a multiline inline array (see
   obj.entries[0].label = new Date(Date.UTC(2006, 1, 14));
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "\\"quoted key\\".items = [{ inner.values = [true, 47577.29573, true, 2077-04-05, 282_582, \\"\\"\\"
-    ml\\"\\"\\", 76968.6746, 'literal text', 2069-08-08T04:34:33, \\"basic text\\"] }, 574310, 28569, -63757100000000418476, \\"\\"\\"
-    second ml\\"\\"\\", -50759.88688, -inf, true]
+  expect(result).toEqual(dedent`
+    "quoted key".items = [{ inner.values = [true, 47577.29573, true, 2077-04-05, 282_582, """
+    ml""", 76968.6746, 'literal text', 2069-08-08T04:34:33, "basic text"] }, 574310, 28569, -63757100000000418476, """
+    second ml""", -50759.88688, -inf, true]
     [[entries]]
-    label = 2006-02-14T00:00:00.000Z"
+    label = 2006-02-14T00:00:00.000Z
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3594,11 +3584,14 @@ test('replacing an inline-table member with a nested object in a multiline inlin
     truncateZeroTimeInDates: false,
     useTabsForIndentation: true
   });
-  expect(result).toMatchInlineSnapshot(`
-    "[outer.inner]
-    \\"\\".middle.target = { first = { alpha = { beta = false, gamma = false, delta = [ 2036-09-23T00:00:00.000Z, true, -1287.6224634237587, ], }, }, \\"quoted a\\" = { \\"quoted b\\" = [ \\"ml\\", nan, \\"plain text\\", ], }, }
-    "
-  `);
+  expect(result).toEqual(dedent`
+    [outer.inner]
+    "".middle.target = {
+        first = { alpha = { beta = false, gamma = false, delta = [ 2036-09-23T00:00:00.000Z, true, -1287.6224634237587, ], } },
+        "quoted a"."quoted b" = ["""
+    ml""", nan, "plain text"],
+    }
+  `.replace(/\n/g, '\r\n') + '\r\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3630,13 +3623,16 @@ test('deleting the only member of an inline table inside a multiline array (seed
     truncateZeroTimeInDates: false,
     useTabsForIndentation: false
   });
-  expect(result).toMatchInlineSnapshot(`
-    "﻿[[outer.\\"=\\".inner]]
+  expect(result).toEqual('\uFEFF' + dedent`
+    [[outer."=".inner]]
     empty = {
     }
-    items = [ \\"plain text\\", 1988-12-04T04:19:06, [ 395, {}, -907693 ], 65260.050825 ]
-    "
-  `);
+    items = ["plain text", 1988-12-04T04:19:06, [
+        0b000000110001011,
+        {},
+        -907693,
+    ], 65260.050825]
+  `.replace(/\n/g, '\r\n') + '\r\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3657,12 +3653,13 @@ test('deleting a nested inline table inside a multiline inline array (seed 18962
   delete obj.section.a.b.second.middle['quoted'][2].outer.inner;
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "top = '''
+  expect(result).toEqual(dedent`
+    top = '''
     lit text'''
     [section.a.b]
-    first.leaf = { one.two.three = true, four.five = \\"basic one\\", six.seven.eight = -792779, nine.ten.eleven = 0xd45, twelve = false }
-    second.middle.\\"quoted\\" = [ \\"basic two\\", -836768, { outer = {} }, {}, 2004-04-25T17:21:11, -51408.63582, 2006-12-08T20:27:41.624Z, true, nan, 743736 ]"
+    first.leaf = { one.two.three = true, four.five = "basic one", six.seven.eight = -792779, nine.ten.eleven = 0xd45, twelve = false }
+    second.middle."quoted" = ["basic two", -836_768, {  outer = {} }, {
+    }, 2004-04-25T17:21:11, -51408.63582, 2006-12-08T20:27:41.624602Z, true, nan, 743736]
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3690,15 +3687,20 @@ test('deleting a dotted key inside an inline table in a multiline array (seed 21
   delete obj.entries[0].values[5].outer.inner['quoted'];
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "top.name = \\"\\"\\"
-    ml\\"\\"\\"
+  expect(result).toEqual(dedent`
+    top.name = """
+    ml"""
     [[entries]]
     empty = [
     ]
-    values = [ 46674.18719, 48559.13327, 2091-08-20T06:58:11, 2024-05-10, 275068, { outer = { inner = {} }, other = \\"lit two\\" }, 22787.07288, 79051.79185, true ]
-    \\"quoted key\\".middle.leaf = \\"\\"\\"
-    ml two\\"\\"\\""
+    values = [46674.18719, 48559.13327, 2091-08-20T06:58:11, 2024-05-10, 275_068, {
+        outer = {  inner = {} },
+        other = '''
+    lit two''',
+    }, 22787.072880, 79051.79185, true]
+
+    "quoted key".middle.leaf = """
+    ml two"""
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3717,7 +3719,11 @@ test('deleting the only member of an inline table holding a multiline string (se
   delete obj['quoted key'][2].target;
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`"\\"quoted key\\" = [\\" \\", -78860.81892, {}, \\"basic one\\", 36709.83314, [true, \\"basic two\\", 9.45e+87, -30134.83738, {}, \\"ml two\\", \\"basic three\\", 17:57:10, false, false], -31687.66292]"`);
+  expect(result).toEqual(dedent`
+    "quoted key" = [' ', -78860.81892, {}, "basic one", 36709.83314, [true, "basic two", 945e+85, -30134.83738, {
+    }, """
+    ml two""", "basic three", 17:57:10, false, false], -31687.66292]
+  `);
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3749,14 +3755,14 @@ test('replacing an inline table inside a multiline array (seed 2531104)', () => 
     useTabsForIndentation: false,
     minimumDecimals: 1
   });
-  expect(result).toMatchInlineSnapshot(`
-    "﻿top.name = '''
+  expect(result).toEqual('\uFEFF' + dedent`
+    top.name = '''
      lit text'''
-    [outer]
-    inner = {quoted = [true, {alpha = 1640.0, beta = true,}, 745102.0, 96226.2768, 8718.0, false, 802344.0, \\"basic text\\",],}
-    tail = {\\"other q\\" = 00:16:17,}
-    "
-  `);
+    outer = {
+        inner."quoted" = [true, {alpha = 1640.0, beta = true}, 745102, 96226.27680, 0o21016, false, 802344, "basic text"],
+        tail."other q" = 00:16:17,
+    }
+  ` + '\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3786,13 +3792,14 @@ test('removing a date element from a multiline array of multiline strings (seed 
     truncateZeroTimeInDates: true,
     useTabsForIndentation: false
   });
-  expect(result).toMatchInlineSnapshot(`
-    "[[entries]]
+  expect(result).toEqual(dedent`
+    [[entries]]
     empty = {
     }
-    outer.items = [\\"\\", \\"ml one\\", \\"ml two\\"]
-    "
-  `);
+    outer.items = ['', """
+    ml one""", """
+    ml two"""]
+  ` + '\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3827,16 +3834,18 @@ test('replacing an inline-table member with a single-key object (seed 2824408)',
     useTabsForIndentation: false,
     minimumDecimals: 1
   });
-  expect(result).toMatchInlineSnapshot(`
-    "[build.rollout]
-    job.settings = {artifacts = {alpha = -188.0,}, \\"a b\\" = {r = \\"checked against the last recorded release set\\",},}
+  expect(result).toEqual(dedent`
+    [build.rollout]
+    job.settings = {
+        artifacts = {alpha = -188.0},
+        "a b".r = "checked against the last recorded release set",
+    }
+
     report.summaries.artifacts = [
     ]
     note.tag = {
     }
-
-    "
-  `);
+  ` + '\n\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3856,13 +3865,13 @@ test('removing an element from a multiline array before an inline table (seed 28
   obj.outer.values.splice(5, 1);
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "outer.values = [true, 22866.4194, 890412, 399573, \\"one\\", \\"two\\", \\"three\\", \\"\\"\\"
-    ml\\"\\"\\", {
+  expect(result).toEqual(dedent`
+    outer.values = [true, 22866.4194, 890412, 399573, "one", "two", "three", """
+    ml""", {
         inner = 59108.35246,
     }]
     other.name = '''
-    lit'''"
+    lit'''
   `);
   expect(parse(result)).toEqual(obj);
 });
@@ -3893,12 +3902,13 @@ test('replacing an inline-table element inside a multiline array (seed 377453)',
     useTabsForIndentation: false,
     minimumDecimals: 1
   });
-  expect(result).toMatchInlineSnapshot(`
-    "[outer]
-    values = [ false, true, \\"lit with = sign\\", -49687.079945, { alpha = -4472.0, }, \\"basic three\\", 753862.0, \\"z\\", -64864.2541, ]
-    tail = { leaf = 1301129.0, }
-    "
-  `);
+  expect(result).toEqual(dedent`
+    outer = {
+        values = [false, true, '''
+    lit with = sign''', -49_687.079945, { alpha = -4472.0 }, "basic three", 753862, 'z', -64864.2541],
+        tail.leaf = 0o4755211,
+    }
+  ` + '\n');
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3915,7 +3925,10 @@ test('replacing a dotted-key subtable inside a nested inline table (seed 771152)
   obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`"build.artifacts = [1, \\"alpha\\", 28, 2.5, true, [{meta = {notes = {width = 3, label = \\"measured value\\"}}}, 1986-03-02]]"`);
+  expect(result).toEqual(dedent`
+    build.artifacts = [1, '''
+    alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02]]
+  `);
   expect(parse(result)).toEqual(obj);
 });
 
@@ -3937,16 +3950,16 @@ test('replacing a table with a scalar after a multiline AOT array (seed 863664)'
   obj.replaced = 'replacement';
 
   const result = patch(src, obj, undefined);
-  expect(result).toMatchInlineSnapshot(`
-    "replaced = \\"replacement\\"
+  expect(result).toEqual(dedent`
+    replaced = "replacement"
 
-    [report.\\"by target\\".details]
-    summary.\\"run label\\".entries = [
-        { size.bytes = 0xd5c289d, built = 2075-01-15T23:10:01.402080, stats.counts = { lines.total = 597050, words.total = 939925, chars.\\"with space\\" = 785203, files = 465053, dirs = 822110, \\"ratio a\\".value = 412e-33, cached = false, delta.\\"ratio b\\".amount = -282456, mean.load.value = 70302.033641, min.load = -75001.099256, max.load = 54219.46102 }, \\"group a\\".index.\\"sub key\\" = 482015, \\"group b\\".\\"sub b\\".enabled = true, \\"group c\\" = \\"basic one\\", tag = 'lit', \\"\\".marker.\\"\\" = { note.body.text = \\"\\"\\"
-    ml\\"\\"\\" }, flags.\\"opt in\\" = false, mask = 0b111111110111000 },
+    [report."by target".details]
+    summary."run label".entries = [
+        { size.bytes = 0xd5c289d, built = 2075-01-15T23:10:01.402080, stats.counts = { lines.total = 597050, words.total = 939925, chars."with space" = 785203, files = 465053, dirs = 822110, "ratio a".value = 412e-33, cached = false, delta."ratio b".amount = -282456, mean.load.value = 70302.033641, min.load = -75001.099256, max.load = 54219.46102 }, "group a".index."sub key" = 482015, "group b"."sub b".enabled = true, "group c" = "basic one", tag = 'lit', "".marker."" = { note.body.text = """
+    ml""" }, flags."opt in" = false, mask = 0b111111110111000 },
         '''
     ''',
-    ]"
+    ]
   `);
   expect(parse(result)).toEqual(obj);
 });

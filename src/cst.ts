@@ -456,4 +456,8 @@ export function isValue(node: TreeNode): node is Value {
 export interface TreeNode {
   type: NodeType;
   loc: Location;
+  /** Absolute UTF-16 offsets into the source that produced this node. */
+  readonly range?: readonly [number, number];
+  /** Set on generated or mutated nodes and propagated to their ancestors. */
+  dirty?: boolean;
 }
