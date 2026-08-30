@@ -27,32 +27,38 @@ export function createSourceAttacher(source: string): (node: TreeNode) => void {
     if (source.charCodeAt(index) === 0x0a) lineStarts.push(index + 1);
   }
 
-  const attach = (current: TreeNode): void => {
-  const range = [
-      positionToOffset(lineStarts, current.loc.start),
-      positionToOffset(lineStarts, current.loc.end)
-  ] as const;
+  const attach = (root: TreeNode): void => {
+    const stack: TreeNode[] = [root];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      const range = [
+        positionToOffset(lineStarts, current.loc.start),
+        positionToOffset(lineStarts, current.loc.end)
+      ] as const;
 
-    Object.defineProperty(current, 'range', {
-    configurable: true,
-    enumerable: false,
-    value: range
-  });
-    nodeSources.set(current, source);
-    // Snapshot: childrenOf returns node.items by reference for some node types,
-    // so a later in-place splice would also mutate the stored "original" list.
-    originalChildren.set(current, childrenOf(current).slice());
+      Object.defineProperty(current, 'range', {
+        configurable: true,
+        enumerable: false,
+        value: range
+      });
+      nodeSources.set(current, source);
+      // Snapshot: childrenOf returns node.items by reference for some node types,
+      // so a later in-place splice would also mutate the stored "original" list.
+      originalChildren.set(current, childrenOf(current).slice());
 
-    if (isKeyValue(current)) {
-      attach(current.key);
-      attach(current.value);
-    } else if (isInlineItem(current)) {
-      attach(current.item);
-    } else if (isTable(current) || isTableArray(current)) {
-      attach(current.key);
-      for (const item of current.items as TreeNode[]) attach(item);
-    } else if (hasItems(current)) {
-      for (const item of current.items as TreeNode[]) attach(item);
+      if (isKeyValue(current)) {
+        stack.push(current.value);
+        stack.push(current.key);
+      } else if (isInlineItem(current)) {
+        stack.push(current.item);
+      } else if (isTable(current) || isTableArray(current)) {
+        stack.push(current.key);
+        const items = current.items as TreeNode[];
+        for (let index = items.length - 1; index >= 0; index--) stack.push(items[index]);
+      } else if (hasItems(current)) {
+        const items = current.items as TreeNode[];
+        for (let index = items.length - 1; index >= 0; index--) stack.push(items[index]);
+      }
     }
   };
 
@@ -83,19 +89,24 @@ function childrenOf(node: TreeNode): TreeNode[] {
 export function linkParents(root: TreeNode): void {
   if (linkedRoots.has(root)) return;
 
-  const visit = (parent: TreeNode): void => {
+  const stack: TreeNode[] = [root];
+  while (stack.length > 0) {
+    const parent = stack.pop()!;
     for (const child of childrenOf(parent)) {
       nodeParents.set(child, parent);
-      visit(child);
+      stack.push(child);
     }
-  };
-  visit(root);
+  }
   linkedRoots.add(root);
 }
 
 function markSubtreeDirty(node: TreeNode): void {
-  setDirty(node);
-  for (const child of childrenOf(node)) markSubtreeDirty(child);
+  const stack: TreeNode[] = [node];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    setDirty(current);
+    for (const child of childrenOf(current)) stack.push(child);
+  }
 }
 
 export function markTreeDirty(node: TreeNode): void {
