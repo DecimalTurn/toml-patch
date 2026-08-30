@@ -456,7 +456,10 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
         if (source && container.range) {
           const original = source.slice(container.range[0], container.range[1]);
           const lastNewline = Math.max(original.lastIndexOf('\n'), original.lastIndexOf('\r'));
-          if (lastNewline !== -1 && originalFirstChildStartedAfterOpener(container)) {
+          // Only preserve the original multiline closing bracket while the
+          // container still has items. Once emptied, the writer tightens it to
+          // a single line, and the deleted first child must not re-add a line.
+          if (lastNewline !== -1 && container.items.length > 0 && originalFirstChildStartedAfterOpener(container)) {
             const closingIndent = original.slice(lastNewline + 1, -1).match(/^[\t ]*/)?.[0] ?? '';
             append(format.newLine + closingIndent);
           }

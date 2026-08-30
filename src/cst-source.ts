@@ -39,7 +39,9 @@ export function createSourceAttacher(source: string): (node: TreeNode) => void {
     value: range
   });
     nodeSources.set(current, source);
-    originalChildren.set(current, childrenOf(current));
+    // Snapshot: childrenOf returns node.items by reference for some node types,
+    // so a later in-place splice would also mutate the stored "original" list.
+    originalChildren.set(current, childrenOf(current).slice());
 
     if (isKeyValue(current)) {
       attach(current.key);
