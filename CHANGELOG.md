@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-08-30
+
 ### Changed
 
 - Patching: remove extra validation by enforcing validity on the first pass.
