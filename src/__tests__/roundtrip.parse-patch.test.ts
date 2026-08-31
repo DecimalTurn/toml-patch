@@ -1,11 +1,14 @@
 import { parse, patch } from '../';
-import { readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
 
 /**
  * Returns the file paths of all TOML files in a directory
  */
 function getTomlFiles(directoryPath: string): string[] {
+  if (!existsSync(directoryPath)) {
+    return [];
+  }
   const files = readdirSync(directoryPath);
   return files
     .filter(file => file.endsWith('.toml'))
