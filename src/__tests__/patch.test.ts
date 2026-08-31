@@ -7772,7 +7772,7 @@ describe('float exponent notation round-trip', () => {
   });
 
   test('integer-keyed float above MAX_SAFE_INTEGER stays number', () => {
-    const obj = { x: 9007199254740993 }; // > MAX_SAFE_INTEGER, whole number
+    const obj = { x: Number.MAX_SAFE_INTEGER + 2 }; // > MAX_SAFE_INTEGER, whole number
     const toml = stringify(obj);
     // Must contain a decimal point so it's unambiguously a float
     expect(toml).toContain('.');
@@ -9920,7 +9920,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     obj['']['61o;$k'] = -428.2192816026509;
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toEqual('"".nfh = 469650\n"".\"61o;$k\" = -428.2192816026509\n\n[l6n1z.f]\n');
+    expect(result).toEqual('"".nfh = 469650\n""."61o;$k" = -428.2192816026509\n\n[l6n1z.f]\n');
   });
 
   test('replacing a nested object under an AOT entry with a scalar removes the old sub-sections (seed 6409)', () => {

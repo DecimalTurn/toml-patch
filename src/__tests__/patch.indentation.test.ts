@@ -1,6 +1,5 @@
 import patch from '../patch';
 import { parse, TomlFormat } from '../';
-import dedent from 'dedent';
 
 
 describe('indentation at the root level', () => {
