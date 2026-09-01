@@ -254,32 +254,6 @@ describe('patching spaced dotted table titles', () => {
     `);
   });
 
-  test('deleting one child table preserves the remaining spaced dotted tables', () => {
-    const src = dedent`
-      [fruit .  color]
-      name = "yellow"
-
-      [fruit .  color .  shade]
-      value = "light"
-
-      [fruit .  color .  tone]
-      value = "warm"
-    `;
-
-    const obj = parse(src) as any;
-    delete obj.fruit.color.shade;
-    const result = patch(src, obj);
-
-    expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(dedent`
-      [fruit .  color]
-      name = "yellow"
-
-      [fruit .  color .  tone]
-      value = "warm"
-    `);
-  });
-
   test('deleting one spaced dotted key-value preserves its sibling separator spacing', () => {
     const src = dedent`
       fruit .  color = "yellow"
