@@ -358,7 +358,10 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
 
 // ─── Random TomlFormat generator ─────────────────────────────────────────
 
-export function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
+export function randomTomlFormat(
+  rng: SeededRandom,
+  randomizeIndentWidth = false
+): Partial<TomlFormat> | undefined {
   // 50% chance: no format override (use library defaults)
   if (rng.chance(0.5)) return undefined;
 
@@ -385,6 +388,7 @@ export function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undef
   format.leadingBom = rng.chance(0.3);
   format.truncateZeroTimeInDates = rng.chance(0.5);
   format.useTabsForIndentation = rng.chance(0.3);
+  if (randomizeIndentWidth) format.indentWidth = rng.nextRange(1, 4);
 
   // minimumDecimals: mostly 0 (default), sometimes 1 or 2
   const mdRoll = rng.next();
@@ -405,7 +409,7 @@ export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
 
 // ─── Fuzz runner ─────────────────────────────────────────────────────────
 
-interface PatchFuzzResult {
+export interface PatchFuzzResult {
   seed: number;
   mutations: number;
   status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'error';
@@ -420,17 +424,20 @@ interface PatchFuzzResult {
 
 export function fuzzOne(
   seed: number,
-  mutationCount: number
+  mutationCount: number,
+  sourceTransform?: (source: string) => string,
+  randomizeIndentWidth = false
 ): PatchFuzzResult {
   const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
 
   try {
     // 1. Generate random TOML and parse it
     const generated = randomToml({ seed });
+    const source = sourceTransform ? sourceTransform(generated.toml) : generated.toml;
 
     let obj1: any;
     try {
-      obj1 = parse(generated.toml);
+      obj1 = parse(source);
     } catch {
       return { seed, mutations: mutationCount, status: 'ok' }; // skip unparseable
     }
@@ -440,7 +447,7 @@ export function fuzzOne(
 
     // 3. Generate random TomlFormat (deterministic from seed)
     const formatRng = new SeededRandom(seed + 500000);
-    const format = randomTomlFormat(formatRng);
+    const format = randomTomlFormat(formatRng, randomizeIndentWidth);
     const formatDesc = describeFormat(format);
 
     // 4. Apply mutations using a seeded RNG (offset from doc seed
@@ -496,11 +503,11 @@ export function fuzzOne(
     // 5. Apply patch
     let patchedToml: string;
     try {
-      patchedToml = patch(generated.toml, obj2, format);
+      patchedToml = patch(source, obj2, format);
     } catch (e: any) {
       result.status = 'patch-fail';
       result.error = `patch() threw: ${e.message}`;
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
       result.formatDesc = formatDesc;
@@ -514,7 +521,7 @@ export function fuzzOne(
     } catch (e: any) {
       result.status = 'roundtrip-mismatch';
       result.error = `re-parse failed: ${e.message}`;
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.patchedToml = patchedToml;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
@@ -527,7 +534,7 @@ export function fuzzOne(
     if (!deepEqualWithFormat(obj2, reParsed, format)) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.patchedToml = patchedToml;
       result.modifiedObj = obj2;
       result.reParsedObj = reParsed;

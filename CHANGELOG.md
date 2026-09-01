@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: preserve whitespace around dots in dotted-keys and dotted-table titles. ([#297])
+
 ## [3.0.5] - 2026-08-30
 
 ### Changed
@@ -418,5 +422,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#290]: https://github.com/DecimalTurn/toml-patch/pull/290
 [#292]: https://github.com/DecimalTurn/toml-patch/pull/292
 [#293]: https://github.com/DecimalTurn/toml-patch/pull/293
+[#297]: https://github.com/DecimalTurn/toml-patch/pull/297
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
