@@ -6,7 +6,6 @@
 //   npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 100000 --mutations 3
 // Stop at the first failure:
 //   npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 100000 --mutations 3 --fast-fail
-
 import { fuzzOne2 } from '../src/__tests__/fuzz-patch2';
 
 const args = process.argv.slice(2);

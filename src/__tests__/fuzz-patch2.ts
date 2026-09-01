@@ -62,7 +62,7 @@ export function spaceDottedKeySeparators(source: string): string {
 }
 
 export function fuzzOne2(seed: number, mutationCount: number): PatchFuzzResult {
-  return fuzzOne(seed, mutationCount, spaceDottedKeySeparators);
+  return fuzzOne(seed, mutationCount, spaceDottedKeySeparators, true);
 }
 
 function main(): void {
