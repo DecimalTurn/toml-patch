@@ -63,4 +63,39 @@ describe('patching dotted keys with extraneous spacing', () => {
     ].join('\n'));  
   });
 
+  test('editing a value under a spaced dotted table title preserves the title spacing', () => {
+    const src = dedent`
+      [fruit .  color .  shade]
+      name = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.color.shade.name = 'green';
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit .  color .  shade]
+      name = "green"
+    `);
+  });
+
+  test('adding a row under a spaced dotted table title preserves the title spacing', () => {
+    const src = dedent`
+      [fruit .  color]
+      name = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.color.taste = 'sweet';
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit .  color]
+      name = "yellow"
+      taste = "sweet"
+    `);
+  });
+
 });
