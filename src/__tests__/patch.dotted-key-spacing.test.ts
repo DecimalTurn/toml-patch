@@ -63,6 +63,10 @@ describe('patching dotted keys with extraneous spacing', () => {
     ].join('\n'));  
   });
 
+});
+
+describe('patching spaced dotted table titles', () => {
+
   test('editing a value under a spaced dotted table title preserves the title spacing', () => {
     const src = dedent`
       [fruit .  color .  shade]
@@ -95,6 +99,52 @@ describe('patching dotted keys with extraneous spacing', () => {
       [fruit .  color]
       name = "yellow"
       taste = "sweet"
+    `);
+  });
+
+  test('renaming the root segment of a spaced dotted table preserves its title spacing', () => {
+    const src = dedent`
+      # fruit colors
+      [fruit .  color]
+      name = "yellow"
+
+      [keep]
+      value = 1
+    `;
+
+    const obj = parse(src) as any;
+    const renamedTable = obj.fruit;
+    delete obj.fruit;
+    obj.plant = renamedTable;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      # fruit colors
+      [plant .  color]
+      name = "yellow"
+
+      [keep]
+      value = 1
+    `);
+  });
+
+  test('renaming an intermediate segment of a deep spaced dotted table preserves its title spacing', () => {
+    const src = dedent`
+      [fruit .  color .  shade]
+      name = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    const renamedTable = obj.fruit.color;
+    delete obj.fruit.color;
+    obj.fruit.hue = renamedTable;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit .  hue .  shade]
+      name = "yellow"
     `);
   });
 

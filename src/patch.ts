@@ -3406,8 +3406,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           const keyHolder = node.key;
           const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
           const segmentIndex = sourcePath.length - 1;
+          const originalRaw = key.raw;
           key.value[segmentIndex] = change.to;
           key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+          preserveDottedKeySpacing(key, originalRaw);
           key.loc.end.column = key.loc.start.column + key.raw.length;
           return; // skip the rest of rename logic for this change
         }
@@ -3446,8 +3448,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
             isKeyValue(replacement) &&
             arraysEqual(parentKey.value.slice(0, fullSourcePath.length), fullSourcePath)) {
           const segmentIndex = fullSourcePath.length - 1;
+          const originalRaw = parentKey.raw;
           parentKey.value[segmentIndex] = change.to;
           parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          preserveDottedKeySpacing(parentKey, originalRaw);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           return;
         }
@@ -3496,6 +3500,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       // Example: if the original key used "\\u263A", keep that escape form
       // instead of normalizing to the raw character (☺).
       replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value);
+      preserveDottedKeySpacing(replacementKey, parentKey.raw);
       replacementKey.loc.end.column = replacementKey.loc.start.column + replacementKey.raw.length;
 
       // Hand replace() whichever node actually owns the Key. For a section that is the
