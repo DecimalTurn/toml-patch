@@ -1,6 +1,7 @@
 import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
+import { dotted_key_tabs } from '../__fixtures__';
 
 /* The TOML spec allows extraneous spacing between the key and the dot
    for dotted keys. This is not recommended, but it is allowed.
@@ -96,6 +97,27 @@ describe('patching dotted keys with tab spacing', () => {
       fruit\t.\tcolor = "yellow"
       fruit\t.\tflavor = "banana"
     `);
+  });
+
+  test('editing a literal-tab fixture preserves the spacing', () => {
+    const obj = parse(dotted_key_tabs) as any;
+    obj.fruit.color = "green";
+    const result = patch(dotted_key_tabs, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual('fruit\t.\tcolor = "green"');
+  });
+
+  test('adding a dotted key to a literal-tab fixture preserves the spacing', () => {
+    const obj = parse(dotted_key_tabs) as any;
+    obj.fruit.flavor = "banana";
+    const result = patch(dotted_key_tabs, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual([
+      'fruit\t.\tcolor = "yellow"',
+      'fruit\t.\tflavor = "banana"',
+    ].join('\n'));
   });
 
 });
