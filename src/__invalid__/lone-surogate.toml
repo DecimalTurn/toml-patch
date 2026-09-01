@@ -1,0 +1,2 @@
+# Invalid UTF-8: ED A0 80 and ED BF BF represent lone U+D800 and U+DFFF surrogates.
+value = "í €í¿¿"
