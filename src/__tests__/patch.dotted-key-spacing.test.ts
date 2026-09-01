@@ -148,4 +148,165 @@ describe('patching spaced dotted table titles', () => {
     `);
   });
 
+  test('reordering spaced dotted table-array entries keeps each body with its title', () => {
+    const src = dedent`
+      [[fruit .  color]]
+      name = "yellow"
+
+      [[fruit .  color]]
+      name = "red"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.color.reverse();
+    const result = patch(src, obj, { updateOrder: true });
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [[fruit .  color]]
+      name = "red"
+
+      [[fruit .  color]]
+      name = "yellow"
+    `);
+  });
+
+  test('deleting one child table preserves the remaining spaced dotted tables', () => {
+    const src = dedent`
+      [fruit .  color]
+      name = "yellow"
+
+      [fruit .  color .  shade]
+      value = "light"
+
+      [fruit .  color .  tone]
+      value = "warm"
+    `;
+
+    const obj = parse(src) as any;
+    delete obj.fruit.color.shade;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit .  color]
+      name = "yellow"
+
+      [fruit .  color .  tone]
+      value = "warm"
+    `);
+  });
+
+  test('deleting one child table preserves the remaining spaced dotted tables', () => {
+    const src = dedent`
+      [fruit .  color]
+      name = "yellow"
+
+      [fruit .  color .  shade]
+      value = "light"
+
+      [fruit .  color .  tone]
+      value = "warm"
+    `;
+
+    const obj = parse(src) as any;
+    delete obj.fruit.color.shade;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit .  color]
+      name = "yellow"
+
+      [fruit .  color .  tone]
+      value = "warm"
+    `);
+  });
+
+  test('deleting one spaced dotted key-value preserves its sibling separator spacing', () => {
+    const src = dedent`
+      fruit .  color = "yellow"
+      fruit .  flavor = "sweet"
+    `;
+
+    const obj = parse(src) as any;
+    delete obj.fruit.color;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fruit .  flavor = "sweet"
+    `);
+  });
+
+
+  
+  test('converting a spaced dotted key to a table preserves sibling spacing', () => {
+    const src = dedent`
+      fruit .  color = "yellow"
+      fruit .  flavor = "sweet"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.color = { rgb: "ff0000", opacity: 1 };
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fruit .  color = { rgb = "ff0000", opacity = 1 }
+      fruit .  flavor = "sweet"
+    `);
+  });
+
+
+  test('renaming a spaced dotted table while partially deleting a sibling preserves both changes', () => {
+    const src = dedent`
+      # fruit colors
+      [fruit .  color]
+      # keep this row
+      name = "yellow"
+
+      [keep]
+      value = 1
+      remove = true
+    `;
+
+    const obj = parse(src) as any;
+    const renamedTable = obj.fruit;
+    delete obj.fruit;
+    obj.plant = renamedTable;
+    delete obj.keep.remove;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      # fruit colors
+      [plant .  color]
+      # keep this row
+      name = "yellow"
+
+      [keep]
+      value = 1
+    `);
+  });
+
+  test('renaming a segment preserves mixed spacing around each dotted separator', () => {
+    const src = dedent`
+      [fruit . color.  shade]
+      name = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    const renamedTable = obj.fruit.color.shade;
+    delete obj.fruit.color.shade;
+    obj.fruit.color.hue = renamedTable;
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      [fruit . color.  hue]
+      name = "yellow"
+    `);
+  });
+
 });

@@ -405,7 +405,7 @@ export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
 
 // ─── Fuzz runner ─────────────────────────────────────────────────────────
 
-interface PatchFuzzResult {
+export interface PatchFuzzResult {
   seed: number;
   mutations: number;
   status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'error';
@@ -420,17 +420,19 @@ interface PatchFuzzResult {
 
 export function fuzzOne(
   seed: number,
-  mutationCount: number
+  mutationCount: number,
+  sourceTransform?: (source: string) => string
 ): PatchFuzzResult {
   const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
 
   try {
     // 1. Generate random TOML and parse it
     const generated = randomToml({ seed });
+    const source = sourceTransform ? sourceTransform(generated.toml) : generated.toml;
 
     let obj1: any;
     try {
-      obj1 = parse(generated.toml);
+      obj1 = parse(source);
     } catch {
       return { seed, mutations: mutationCount, status: 'ok' }; // skip unparseable
     }
@@ -500,7 +502,7 @@ export function fuzzOne(
     } catch (e: any) {
       result.status = 'patch-fail';
       result.error = `patch() threw: ${e.message}`;
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
       result.formatDesc = formatDesc;
@@ -514,7 +516,7 @@ export function fuzzOne(
     } catch (e: any) {
       result.status = 'roundtrip-mismatch';
       result.error = `re-parse failed: ${e.message}`;
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.patchedToml = patchedToml;
       result.modifiedObj = obj2;
       result.mutationDescs = mutationDescs;
@@ -527,7 +529,7 @@ export function fuzzOne(
     if (!deepEqualWithFormat(obj2, reParsed, format)) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
-      result.originalToml = generated.toml;
+      result.originalToml = source;
       result.patchedToml = patchedToml;
       result.modifiedObj = obj2;
       result.reParsedObj = reParsed;
