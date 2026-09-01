@@ -1153,6 +1153,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
+    const dot = cursor.value!;
     cursor.next();
 
     // Validate each part of a dotted key
@@ -1163,8 +1164,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
       validateBareKeyChars(partRaw, input, cursor.value!.loc.start);
     }
 
+    const before = ' '.repeat(dot.loc.start.column - key.loc.end.column);
+    const after = ' '.repeat(cursor.value!.loc.start.column - dot.loc.end.column);
+
     key.loc.end = cursor.value!.loc.end;
-    key.raw += `.${cursor.value!.raw}`;
+    key.raw += `${before}.${after}${cursor.value!.raw}`;
     key.value.push(parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start));
   }
 

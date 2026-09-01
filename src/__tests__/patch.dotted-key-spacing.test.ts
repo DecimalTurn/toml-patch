@@ -17,7 +17,7 @@ import dedent from 'dedent';
 */
 describe('patching dotted keys with extraneous spacing', () => {
 
-  test.fails('editing a key with spacing preserves the spacing', () => {
+  test('editing a key with spacing preserves the spacing', () => {
     const src = dedent`
       fruit. color = "yellow"
     `;
@@ -32,7 +32,7 @@ describe('patching dotted keys with extraneous spacing', () => {
     `);
   });
 
-  test.fails('adding a new dotted key with spacing to an existing dotted key with spacing', () => {
+  test('adding a new dotted key with spacing to an existing dotted key with spacing', () => {
     const src = dedent`
       fruit. color = "yellow"
     `;
@@ -48,7 +48,7 @@ describe('patching dotted keys with extraneous spacing', () => {
     `);
   });
 
-  test.fails('single key added to indented single key with spacing', () => {
+  test('single key added to indented single key with spacing', () => {
     // fruit. color = "yellow"     # same as fruit.color
     //fruit . flavor = "banana"   # same as fruit.flavor
     const src = [

@@ -9,6 +9,7 @@ import {
   KeyValue,
   isTable,
   TreeNode,
+  Key,
   Document,
   isDocument,
   Block,
@@ -662,6 +663,95 @@ function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[]): string 
   return keyParts
     .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic')}"`))
     .join('.');
+}
+
+function dottedKeySeparators(raw: string): string[] {
+  const separators: string[] = [];
+  let quote: '"' | "'" | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < raw.length; index++) {
+    const character = raw[index];
+    if (quote) {
+      if (quote === '"' && escaped) {
+        escaped = false;
+      } else if (quote === '"' && character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character !== '.') continue;
+
+    let start = index;
+    while (start > 0 && (raw[start - 1] === ' ' || raw[start - 1] === '\t')) start--;
+    let end = index + 1;
+    while (end < raw.length && (raw[end] === ' ' || raw[end] === '\t')) end++;
+    separators.push(raw.slice(start, end));
+  }
+
+  return separators;
+}
+
+function dottedKeyParts(raw: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let quote: '"' | "'" | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < raw.length; index++) {
+    const character = raw[index];
+    if (quote) {
+      if (quote === '"' && escaped) {
+        escaped = false;
+      } else if (quote === '"' && character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '.') {
+      parts.push(raw.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(raw.slice(start));
+  return parts;
+}
+
+function preserveDottedKeySpacing(key: Key, styleRaw: string): void {
+  const separators = dottedKeySeparators(styleRaw);
+  if (separators.length === 0) return;
+
+  const parts = dottedKeyParts(key.raw);
+  key.raw = parts.reduce((raw, part, index) => {
+    if (index === 0) return part;
+    const separator = separators[Math.min(index - 1, separators.length - 1)];
+    return `${raw}${separator}${part}`;
+  }, '');
+  key.loc.end.column = key.loc.start.column + key.raw.length;
+}
+
+function findDottedKeyStyle(root: Document, prefix: string[]): KeyValue | undefined {
+  let style: KeyValue | undefined;
+  traverse(root, {
+    KeyValue: (node) => {
+      if (!style && node.key.value.length > prefix.length
+          && arraysEqual(node.key.value.slice(0, prefix.length), prefix)
+          && dottedKeySeparators(node.key.raw).length > 0) {
+        style = node;
+      }
+    }
+  });
+  return style;
 }
 
 /**
@@ -1493,6 +1583,20 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (resolvedIndex === 0 && (isDocument(parent) || isTable(parent) || isTableArray(parent)) &&
               getPendingEnterOffsets(original).has(parent)) {
             applyWrites(original);
+          }
+          if (isKeyValue(childToInsert) && childToInsert.key.value.length > 1) {
+            const style = findDottedKeyStyle(original, childToInsert.key.value.slice(0, -1));
+            if (style) {
+              const oldEquals = childToInsert.equals;
+              preserveDottedKeySpacing(childToInsert.key, style.key.raw);
+              childToInsert.equals = childToInsert.key.loc.end.column
+                + style.equals - style.key.loc.end.column;
+              const columnDelta = childToInsert.equals - oldEquals;
+              shiftNode(childToInsert.value, { lines: 0, columns: columnDelta }, { first_line_only: true });
+              if (childToInsert.loc.end.line === childToInsert.loc.start.line) {
+                childToInsert.loc.end.column += columnDelta;
+              }
+            }
           }
           insert(original, parent, childToInsert, resolvedIndex, undefined, inlineHostItems);
           if (restoredKeySegments) restoredInsertContainers.add(parent);
