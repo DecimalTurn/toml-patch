@@ -65,6 +65,41 @@ describe('patching dotted keys with extraneous spacing', () => {
 
 });
 
+describe('patching dotted keys with tab spacing', () => {
+
+  test('editing a key with tab spacing preserves the spacing', () => {
+    const src = dedent`
+      fruit\t.\tcolor = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.color = "green";
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fruit\t.\tcolor = "green"
+    `);
+  });
+
+  test('adding a new dotted key with tab spacing preserves the spacing', () => {
+    const src = dedent`
+      fruit\t.\tcolor = "yellow"
+    `;
+
+    const obj = parse(src) as any;
+    obj.fruit.flavor = "banana";
+    const result = patch(src, obj);
+
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      fruit\t.\tcolor = "yellow"
+      fruit\t.\tflavor = "banana"
+    `);
+  });
+
+});
+
 describe('patching spaced dotted table titles', () => {
 
   test('editing a value under a spaced dotted table title preserves the title spacing', () => {
