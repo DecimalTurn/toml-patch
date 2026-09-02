@@ -13,11 +13,11 @@ import {
   generateInlineTable
 } from './generate';
 import { TomlFormat } from './toml-format';
-import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
+import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline, normalizeGeneratedInlineRows } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth } from './writer';
 import { prepareInsertedNestedInlineContainer } from './inline-layout';
-import { resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
+import { getInlineContainerLayout, markInlineContainerPositioned, resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -47,6 +47,11 @@ export default function parseJS(
   // 2. Convert nested inline tables to separate tables based on preferNestedTablesMultiline
   formatTopLevel(document, format);
   formatNestedTablesMultiline(document, format);
+  for (const item of document.items) {
+    if (item.type === 'Table' || item.type === 'TableArray') {
+      normalizeGeneratedInlineRows(item, format.indentWidth);
+    }
+  }
 
   return formatEmptyLines(document);
 }
@@ -116,6 +121,10 @@ function walkInlineArray(
     const item = walkValue(element, format, depth + 1, multiline);
     const inline_array_item = generateInlineItem(item);
 
+    if (!multiline && (item.type === 'InlineArray' || item.type === 'InlineTable') &&
+        getInlineContainerLayout(item) === true) {
+      markInlineContainerPositioned(item);
+    }
     prepareInsertedNestedInlineContainer(inline_array, inline_array_item, format.indentWidth);
     insert(inline_array, inline_array, inline_array_item);
   }

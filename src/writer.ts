@@ -208,7 +208,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param index - The index at which to insert the child (optional)
  * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[], leadingLines?: number) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[], leadingLines?: number, firstLineOnly = false) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -231,7 +231,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     ));
   }
 
-  shiftNode(child, shift);
+  shiftNode(child, shift, { first_line_only: firstLineOnly });
 
   // The child element is placed relative to the previous element,
   // if the previous element has an offset, need to position relative to that
@@ -1275,8 +1275,9 @@ export function shiftNode(
     if (valType === NodeType.String || valType === NodeType.Integer ||
         valType === NodeType.Float || valType === NodeType.Boolean ||
         valType === NodeType.DateTime) {
+      const onFirstLine = !first_line_only || kv.loc.start.line === start_line;
       // Move KeyValue
-      if (!first_line_only || kv.loc.start.line === start_line) {
+      if (onFirstLine) {
         kv.loc.start.column += columns;
         // Same-line guard: a multiline string value puts the KV's end on a
         // different line, whose column must not move with the start.
@@ -1286,7 +1287,7 @@ export function shiftNode(
       }
       kv.loc.start.line += lines;
       kv.loc.end.line += lines;
-      if (!first_line_only || kv.loc.start.line === start_line) {
+      if (onFirstLine) {
         kv.equals += columns;
       }
       // Move Key
@@ -1346,8 +1347,9 @@ export function shiftNode(
     [NodeType.TableArray]: move,
     [NodeType.TableArrayKey]: move,
     [NodeType.KeyValue](node) {
+      const onFirstLine = !first_line_only || node.loc.start.line === start_line;
       move(node);
-      if (!first_line_only || node.loc.start.line === start_line) {
+      if (onFirstLine) {
         node.equals += columns;
       }
     },

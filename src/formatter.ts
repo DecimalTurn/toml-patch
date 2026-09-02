@@ -7,6 +7,8 @@ import {
   isInlineTable,
   isInlineArray,
   isKeyValue,
+  isInlineItem,
+  isTable,
   isTableArray,
   Document,
   TreeNode
@@ -14,6 +16,7 @@ import {
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
 import { TomlFormat } from './toml-format';
+import { getInlineContainerLayout } from './inline-format';
 
 // Helper function to detect if an InlineArray originally had trailing commas
 export function arrayHadTrailingCommas(node: TreeNode): boolean {
@@ -84,10 +87,11 @@ function formatTable(key_value: KeyValue): Table {
   const table = generateTable(key_value.key.value);
 
   for (const item of (key_value.value as InlineTable).items) {
-    insert(table, table, item.item);
+    insert(table, table, item.item, undefined, undefined, undefined, undefined, true);
   }
 
   applyWrites(table);
+  normalizeGeneratedInlineRows(table, 1);
   return table;
 }
 
@@ -99,12 +103,53 @@ function formatTableArray(key_value: KeyValue): TableArray[] {
     insert(root, root, table_array);
 
     for (const inline_table_item of (inline_array_item.item as InlineTable).items) {
-      insert(root, table_array, inline_table_item.item);
+      insert(root, table_array, inline_table_item.item, undefined, undefined, undefined, undefined, true);
     }
   }
 
   applyWrites(root);
+  for (const item of root.items) {
+    if (isTable(item) || isTableArray(item)) normalizeGeneratedInlineRows(item, 1);
+  }
   return root.items as TableArray[];
+}
+
+export function normalizeGeneratedInlineRows(table: Table | TableArray, indentWidth: number): void {
+  const normalize = (container: InlineArray | InlineTable, containerIndent: number): void => {
+    const multiline = getInlineContainerLayout(container) === true;
+    if (multiline) {
+      const rowIndent = containerIndent + indentWidth;
+      for (const item of container.items) {
+        shiftNode(item, { lines: 0, columns: rowIndent - item.loc.start.column });
+        if (isInlineItem(item)) {
+          if (isInlineArray(item.item) || isInlineTable(item.item)) {
+            normalize(item.item, item.item.loc.start.column);
+          } else if (isKeyValue(item.item) &&
+              (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
+            normalize(item.item.value, containerIndent);
+          }
+        }
+      }
+      container.loc.end.column = containerIndent + 1;
+    }
+
+    for (const item of container.items) {
+      if (!isInlineItem(item)) continue;
+      if (isInlineArray(item.item) || isInlineTable(item.item)) {
+        normalize(item.item, multiline ? item.loc.start.column : containerIndent);
+      } else if (isKeyValue(item.item) &&
+          (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
+        normalize(item.item.value, multiline ? item.loc.start.column : containerIndent);
+      }
+    }
+  };
+
+  for (const item of table.items) {
+    if (!isKeyValue(item)) continue;
+    if (isInlineArray(item.value) || isInlineTable(item.value)) {
+      normalize(item.value, item.loc.start.column);
+    }
+  }
 }
 
 /**
