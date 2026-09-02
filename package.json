@@ -57,6 +57,7 @@
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
     "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
+    "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",
     "fuzz3": "npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 9999 --mutations 3",
     "bench:parse": "node benchmark/parse-benchmark.mjs",

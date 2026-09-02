@@ -65,6 +65,22 @@ file.
 Be aware that the script only produces the *scaffold*: the seed's full TOML is
 rarely the minimal repro, so the distillation step below must be applied.
 
+### Generating only a seed's TOML input
+
+To inspect the deterministic TOML document for a seed without generating a test
+scaffold, run this from the repository root:
+
+```powershell
+pnpm run seed-toml -- <N>
+```
+
+For example, seed `16552` is written to `tmp-seed-16552.toml` at the repository
+root:
+
+```powershell
+pnpm run seed-toml -- 16552
+```
+
 ### Distillation of seed tests
 
 Because the TOML input might be too big to be a minimal example of the bug, we
