@@ -1041,13 +1041,16 @@ describe('nested multiline inline tables', () => {
 
   // This is currently marked as failing since we haven't implemented a formatting
   // optins that would allow to indicate that a new table should be written as multiline.
-  // We could introduce a formatting options like `multilineTables` and `multilineArrays` that would 
+  // We could introduce a formatting options like `multilineTable` and `multilineArray` that would 
   // allow to specify that a new inline table (or array) should be written in multiline
   // format.
   
-  // `multilineTables` `multilineArrays` could take the following values:
+  // `multilineTable` and `multilineArray` could take the following values:
   // - true: always write new inline tables (or arrays) in multiline format
   // - false: always write new inline tables (or arrays) in single-line format
+  // - <integer>: behaves line `inlineTableStart`, ie. if the depth level of the table (or
+  //   array) is greater than or equal to this integer, it will be written in multiline
+  //   format
   // - 'auto': decide based on context with preference for single line (default)
   // - 'nested': use multiline format only if the table (or array) is nested
   test.fails('will write table as multiline if already nested', () => {
