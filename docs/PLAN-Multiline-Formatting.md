@@ -26,8 +26,8 @@ inside a multiline array is generated as a single-line `{ ... }` value even when
 parent already has one item per line. The two regression tests in
 `src/__tests__/patch.indentation.test.ts` are marked with `test.fails()` for this reason.
 
-The only case where element inside a table would be inserted as seperate lines is if the
-original was already showing that it was intended to be multiline. eg.:
+The current implementation inserts a table value on separate lines only when the original
+already shows that it was intended to be multiline. For example:
 ```toml
 value = {
 }
@@ -86,11 +86,11 @@ The properties should follow the existing `TomlFormat` conventions. They should 
 
 | Value | Meaning |
 |---|---|
-| `true` | Write every newly generated non-empty container of that kind in multiline form. An empty generated container also uses separate opening and closing lines. |
+| `true` | Write every newly generated container of that kind in multiline form. This includes empty containers, whose opening and closing delimiters must be on separate lines. |
 | `false` | Prefer a single-line container whenever TOML permits it. This is an explicit override, including for nested containers. |
 | `number` | Write the container in multiline form when its structural container depth is greater than or equal to the number. `0` selects every depth. A value larger than the deepest container selects none. |
 | `'auto'` | Currently means that we insert new inline table/array in compact form. This is the default. We want to leave this auto mode in case we implement a `maxPrintWidth` property. The `auto` value would respond to  `maxPrintWidth` unlike `false` |
-| `'nested'` | Write the parent container is itself multiline |
+| `'nested'` | Write the container in multiline form when its immediate parent container is multiline. |
 
 `undefined` or `null` means that the caller did not provide a value and should use the `auto` format.
 
@@ -98,7 +98,7 @@ Add the properties at the end of any positional `TomlFormat` constructor argumen
 
 ## Depth and terminology
 
-The two new options need one depth definition. Use structural value nesting, not the dotted-key depth used by `inlineTableStart`.
+The two new options need one depth definition. Use structural value nesting based on inline containers, not the dotted-key depth used by `inlineTableStart`. This is a separate definition because arrays do not have table-key paths.
 
 - A root-level inline array or inline table has depth `0`.
 - A container used as a value inside another inline container has depth one greater than its parent.
@@ -126,7 +126,7 @@ Use this order:
 For `'auto'`, use the following working rules:
 
 - A newly generated inline table or array is compact, regardless of its structural depth or the layout of its parent.
-- A generated container replacing an existing multiline value keeps the replaced value's multiline layout when its new kind is compatible. The original source layout is evidence that the caller intended a multiline value.
+- A generated container replacing an existing multiline value keeps the replaced value's multiline layout even when its kind changes between an inline array and an inline table. The original source layout is evidence that the caller intended a multiline value.
 - Adding a member to an existing multiline inline table or array preserves that container's multiline layout. This covers an empty source such as `value = {` followed by `}` when a field is added later.
 - A comparable multiline sibling may provide row positions after another mode has selected multiline output, but it does not make a newly generated container multiline under `'auto'`.
 - An empty newly generated container stays `{}` or `[]` under `'auto'`.
@@ -184,7 +184,7 @@ A multiline decision creates rows. For an explicitly selected multiline containe
 
 When `useTabsForIndentation` is true, generated structural indentation uses tabs. When it is false, generated structural indentation uses spaces and `indentWidth` supplies the number of spaces per level. Explicit format values control new structural rows only. They must not rewrite untouched rows or value text inside multiline strings.
 
-Under `'auto'`, a newly generated child does not inherit multiline layout merely because its parent is multiline. Use `'nested'` when that inheritance is wanted. The normal patch rule that preserves an existing multiline container still applies without an explicit mode.
+Under `'auto'`, a newly generated child does not inherit multiline layout merely because its parent is multiline. Use `'nested'` when that inheritance is wanted. `'nested'` examines only the immediate parent inline container. A block table body or another more distant multiline ancestor does not count. The normal patch rule that preserves an existing multiline container still applies without an explicit mode.
 
 The implementation must keep the indentation of a nested generated table relative to its array element. For the selected two-space default, the outer item and its fields should use separate levels:
 
@@ -206,7 +206,7 @@ A multiline container has two independent comma decisions:
 - the comma separating the container from its siblings in the parent;
 - the comma separating rows inside the new container.
 
-Keep these decisions independent. A trailing comma on an outer array item must not force a trailing comma inside a newly generated inline table. Existing sibling style should win when patching an existing container. The explicit format should control a newly generated container when no sibling evidence exists.
+Keep these decisions independent. Multiline layout does not require a trailing comma inside the container. A trailing comma on an outer array item must not force a trailing comma inside a newly generated inline table. Existing sibling style should win when patching an existing container. The explicit `trailingComma` format should control a newly generated container when no sibling evidence exists.
 
 ### `bracketSpacing`
 
@@ -257,17 +257,17 @@ values = [
 ]
 ```
 
-`'auto'` should keep empty generated values compact. Existing empty containers retain their source layout when patching them. An explicit mode such as `true`, `0` or `'nested'` may place an empty generated container on separate lines when its rule selects multiline output.
+`'auto'` should keep empty generated values compact. Existing empty containers retain their source layout when patching them. When `true` selects an empty container, its opening and closing delimiters must be on separate lines. Numeric modes and `'nested'` follow the same multiline decision rule when they select an empty container.
 
 ### Existing containers and replacements
 
-Patching an existing multiline array or table should preserve its physical layout when adding or editing members, regardless of the default mode. The new mode decides the layout of a newly generated or replaced inline container when the source has no compatible multiline layout to preserve. It applies when:
+Patching an existing multiline array or table should preserve its physical layout when adding or editing members, regardless of the default mode. The new mode decides the layout of a newly generated or replaced inline container when the source has no multiline layout to preserve. It applies when:
 
 - the member itself is newly generated and the selected mode requests multiline output;
 - an existing value is replaced by a newly generated container;
 - a removed container is recreated during the same patch and no original multiline layout remains.
 
-A replacement should first preserve a compatible multiline layout from the replaced value. Otherwise it should use the selected mode, then inherit the replaced row's indentation and local delimiter context before falling back to the resolved document format. It should not reformat unrelated siblings.
+A replacement should first preserve multiline layout from the replaced value, including when an inline array changes into an inline table or the reverse. If the replaced value was not multiline, use the selected mode, then inherit the replaced row's indentation and local delimiter context before falling back to the resolved document format. It should not reformat unrelated siblings.
 
 ## Likely implementation points
 
@@ -283,7 +283,7 @@ A replacement should first preserve a compatible multiline layout from the repla
 
 - Pass container depth, parent layout and the resolved format into recursive value generation.
 - Keep generation of scalar values unchanged.
-- Mark generated inline arrays and tables with the requested layout decision before they are inserted. `'auto'` initially marks new containers compact; source-preservation logic in the patch path can override that decision for compatible multiline replacements.
+- Mark generated inline arrays and tables with the requested layout decision before they are inserted. `'auto'` initially marks new containers compact; source-preservation logic in the patch path can override that decision for multiline replacements across either container kind.
 - Ensure the root value starts at depth `0` and recursive values increment depth exactly once per inline container boundary. Pass the immediate parent's multiline state separately from depth for `'nested'`.
 - Keep the existing conversion of eligible root objects and arrays into table sections or table arrays.
 
@@ -299,7 +299,7 @@ A replacement should first preserve a compatible multiline layout from the repla
 
 - Carry the resolved multiline modes through the diffing and generation paths, together with whether the original value or immediate parent was multiline.
 - Pass the original node, replacement row and enclosing container into layout resolution where available.
-- Preserve an existing multiline container or compatible replaced value under `'auto'`. Apply explicit format modes to newly generated or replaced inline containers that have no source layout to preserve.
+- Preserve an existing multiline container or any replaced value with multiline source layout under `'auto'`, even when the replacement changes container kind. Apply explicit format modes to newly generated or replaced inline containers that have no source layout to preserve.
 - Keep the existing comment-host and pending-offset handling intact.
 - Check the path that regenerates a value after an inline-table trailing-comma mismatch. The rebuilt value must receive the same multiline decision as the original generated value.
 
@@ -362,6 +362,7 @@ Add focused regressions for:
 - adding an array to a new empty inline table;
 - replacing a scalar with a multiline array;
 - replacing a scalar with a multiline inline table;
+- replacing a multiline inline array with an inline table and a multiline inline table with an inline array;
 - deleting all members and then adding one back;
 - nested arrays containing nested tables;
 - multiline containers with and without trailing commas;
@@ -425,36 +426,29 @@ Thread the decision through new-member insertion, whole-value replacement, recre
 
 Update `docs/Formatting.md`, remove the selected `test.fails()` markers, add exact-output regressions for indentation, comments and strings then run the full validation suite.
 
-## Open questions
+## Resolved decisions
 
-1. Should `'nested'` consider only an immediate multiline inline parent, or any multiline
-   enclosing container including a block table body? The implementation should choose one
-   rule and test it explicitly. The narrow default is the immediate inline parent.
-A: Let's keep it simple for now and just consider the immediate parent.
+1. `'nested'` considers only the immediate parent inline container. A multiline block table
+   body or a more distant multiline ancestor does not make a new child multiline under this
+   mode.
 
-2. Should a numeric mode use structural value depth as proposed here, or reuse the
-   key-path depth used by `inlineTableStart`? Separate definitions are clearer because
-   arrays do not have table keys, but both need explicit tests.
-A: Use the seperate definition based on inline containers.
+2. Numeric thresholds use a structural depth based on inline container nesting. This depth is
+   deliberately separate from the key-path depth used by `inlineTableStart`.
 
-3. When a replaced value changes from an inline table to an array, should source multiline
-   intent transfer across container kinds? The safer default is to preserve it only for a
-   compatible kind and otherwise apply the selected mode.
-A: Yes, it should transfer accross container kinds.
+3. Multiline intent transfers across container kinds during replacement. Replacing a multiline
+   inline array with an inline table, or an inline table with an inline array, preserves the
+   multiline layout unless the caller explicitly overrides it.
 
-4. Should `true` force empty generated containers onto separate lines? This plan says yes
-   so the option has a complete meaning, but the output needs a compatibility review.
-A: Yes, even if the table is empty, the starting bracket and closing bracket should be on
-different rows.
-5. Should a multiline inline table with one scalar field use a trailing comma when the
-   surrounding array is multiline? The inner comma must remain independent from the parent
-   separator.
-A: No necessarly.
+4. `true` selects multiline layout for empty generated containers too. The opening and closing
+   delimiters must be on different lines.
 
-6. Should callers eventually be able to configure a maximum line width for `'auto'`? That
-   is outside this feature. Do not infer it from viewport width or add an unrequested
-   option.
-A: Yes, but that is outside this feature.
+5. A multiline container does not necessarily have an inner trailing comma. The parent
+   separator and the container's own row separator remain independent. Existing local style
+   and the `trailingComma` option decide whether the inner comma is present.
+
+6. A future `maxPrintWidth` option may make `'auto'` choose multiline output based on rendered
+   width. That is outside this feature. For this plan, `'auto'` remains compact for newly
+   generated containers and does not perform width calculations.
 
 ## Completion criteria
 
@@ -463,7 +457,7 @@ This work is complete when:
 - both selected regression tests pass without `test.fails()` when they request the nested layout mode;
 - `multilineTable` and `multilineArray` accept the documented values and appear in the public format type;
 - `inlineTableStart` still controls sections independently from physical inline layout;
-- default `'auto'` keeps newly generated containers compact while existing multiline source containers retain their layout;
+- default `'auto'` keeps newly generated containers compact while existing multiline source containers retain their layout, including replacements across container kinds;
 - `'nested'` selects multiline output from the immediate parent's actual multiline layout rather than from depth alone;
 - explicit booleans and numeric thresholds produce deterministic layouts at every tested depth;
 - empty containers have documented output for explicit multiline modes;
