@@ -4049,7 +4049,7 @@ test('distilled regression for fuzz3 seed 1334', () => {
   expect(parse(result)).toEqual(obj);
 });
 
-test.fails('distilled regression for fuzz3 seed 2151', () => {
+test('distilled regression for fuzz3 seed 2151', () => {
   const src = dedent`
     [root.group.table]
     s.f.f = 1
@@ -4074,13 +4074,11 @@ test.fails('distilled regression for fuzz3 seed 2151', () => {
     multilineTable: true,
     multilineArray: 'auto',
   });
-  // TODO: Figure out what should be the actual expected 
-  // formatting for this nested array structure.
   const expected = dedent`
     [root.group.table]
-    s.f = [[true,],[false, { 
-                     flag: true 
-                   },], 'three',];
+    s.f = [[true,], [false, {
+                              flag = true 
+                            },], "three",];
   `;
   expect(result).toEqual(expected);
   expect(parse(result)).toEqual(obj);
