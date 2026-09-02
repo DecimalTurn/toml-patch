@@ -4077,8 +4077,8 @@ test('distilled regression for fuzz3 seed 2151', () => {
   const expected = dedent`
     [root.group.table]
     s.f = [[true,], [false, {
-                              flag = true 
-                            },], "three",];
+                              flag = true, 
+                            },], "three",]
   `;
   expect(result).toEqual(expected);
   expect(parse(result)).toEqual(obj);
