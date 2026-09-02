@@ -539,11 +539,19 @@ function calculateInlinePositioning(
     trailing_comma_offset_adjustment = -1;
   }
     
+  let offset_columns = child_span.columns +
+    (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) +
+    (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0);
+
+  // When an appended item moves a shared-line closing delimiter onto its new
+  // row, preserve the delimiter gap instead of shifting it by the whole item.
+  if (useNewLine && isLastElement && previous && parent.loc.end.line === previous.loc.end.line) {
+    offset_columns = child_span.columns - (previous.loc.end.column - previous.loc.start.column);
+  }
+
   const offset = {
     lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + 
-             (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) + 
-             (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0)
+    columns: offset_columns
   };
 
   return { shift, offset };
@@ -608,7 +616,7 @@ function insertInline(
   // realignment / removal re-inserts `next` can start INSIDE the previous
   // item's span (pending offsets not yet applied) — treating that as
   // "same line" corrupts the insert (fuzz seed 203).
-  const use_new_line = perLine(parent) && !(
+  const use_new_line = perLine(parent, child) && !(
     previous && next &&
     next.loc.start.line === previous.loc.end.line &&
     next.loc.start.column >= previous.loc.end.column
@@ -619,6 +627,7 @@ function insertInline(
     // on the last row's line instead; the exit offset then pushes the
     // brace down a line.
     getInlineContainerLayout(parent) !== true &&
+    isInlineTable(parent) &&
     !next && previous &&
     previous.loc.end.line === parent.loc.end.line
   );
@@ -1368,12 +1377,18 @@ export function shiftNode(
   return node;
 }
 
-export function perLine(array: InlineArray | InlineTable): boolean {
-  if (getInlineContainerLayout(array) === true) return true;
+export function perLine(array: InlineArray | InlineTable, excluded?: TreeNode): boolean {
+  const layout = getInlineContainerLayout(array);
+  if (layout === true) return true;
+  if (layout !== undefined) return false;
   if (!array.items.length) return false;
 
-  const span = getSpan(array.loc);
-  return span.lines > array.items.length;
+  const items = excluded ? array.items.filter(item => item !== excluded) : array.items;
+  if (!items.length) return array.loc.end.line > array.loc.start.line;
+  const startsOnSeparateLines = array.loc.end.line > array.loc.start.line && items.every((item, index) =>
+    index === 0 || item.loc.start.line > items[index - 1].loc.start.line
+  );
+  return startsOnSeparateLines;
 }
 
 function addOffset(offset: Span, offsets: Offsets, node: TreeNode, from?: TreeNode) {
