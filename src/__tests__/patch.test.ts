@@ -10241,3 +10241,22 @@ test('multiline empty array accepts an explicit indentation width', () => {
       port = 8080
     ` + '\n');
   });
+
+  test('adding a new inline table to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ { x = 1, y = 2, z = 3 },
+                 { x = 7, y = 8, z = 9 },
+                 { x = 2, y = 4, z = 8 } ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push({ x: 10, y: 11, z: 12 });
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ { x = 1, y = 2, z = 3 },
+                 { x = 7, y = 8, z = 9 },
+                 { x = 2, y = 4, z = 8 },
+                 { x = 10, y = 11, z = 12 } ]
+    ` + '\n');
+  });
