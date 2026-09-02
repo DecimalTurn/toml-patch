@@ -46,6 +46,7 @@
   "scripts": {
     "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "vitest run",
+    "test:output": "node scripts/test-debug.mjs",
     "test:js": "vitest run --config vitest.js.config.ts",
     "test:watch": "vitest",
     "test:go": "./run-toml-test.bash",

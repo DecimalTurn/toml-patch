@@ -72,6 +72,15 @@ To run the JavaScript integration tests, which verify the built output works for
 pnpm run test:js
 ```
 
+To capture the unit-test output in a temporary Markdown file at the repository root:
+
+```bash
+pnpm run test:output
+```
+
+Additional Vitest arguments can be forwarded, for example `pnpm run test:output -- --testNamePattern=16552`.
+The captured output is written to `tmp-test-output.md`, which is ignored by Git.
+
 #### Running All Tests Together
 
 ```bash

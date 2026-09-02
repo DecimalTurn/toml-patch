@@ -37,7 +37,7 @@ test('should stringify simple example', () => {
     }
   );
 
-  let ouput = toTOML(toml.items, TomlFormat.default());
+  let output = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`
     bar = "baz"
@@ -48,7 +48,7 @@ test('should stringify simple example', () => {
 
   void [...parseTOML(expectedOutput)];
 
-  expect(ouput).toEqual(expectedOutput);
+  expect(output).toEqual(expectedOutput);
 
 });
 
@@ -67,7 +67,7 @@ test('should stringify simple example with simple value at the end', () => {
     }
   );
 
-  let ouput = toTOML(toml.items, TomlFormat.default());
+  let output = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`
     bar = "baz"
@@ -78,7 +78,7 @@ test('should stringify simple example with simple value at the end', () => {
 
   void [...parseTOML(expectedOutput)];
 
-  expect(ouput).toEqual(expectedOutput);
+  expect(output).toEqual(expectedOutput);
 
 });
 
@@ -99,7 +99,7 @@ test('should stringify simple example with empty object', () => {
     }
   );
 
-  let ouput = toTOML(toml.items, TomlFormat.default());
+  let output = toTOML(toml.items, TomlFormat.default());
 
   let expectedOutput = dedent`
     bar = "baz"
@@ -110,7 +110,7 @@ test('should stringify simple example with empty object', () => {
   //Ensure that parsing the expected output doesn't throw
   void [...parseTOML(expectedOutput)];
 
-  expect(ouput).toEqual(expectedOutput);
+  expect(output).toEqual(expectedOutput);
 
 });
 
