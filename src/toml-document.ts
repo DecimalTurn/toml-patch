@@ -95,10 +95,16 @@ export class TomlDocument {
       updatedObject = restoreDateRepresentations(updatedObject, originalObject);
     }
 
+    const indentWidthExplicit = format instanceof TomlFormat ||
+      (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
+    const trailingCommaExplicit = format instanceof TomlFormat ||
+      (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
     const result = patchCst(
       this._cst,
       updatedObject,
-      fmt
+      fmt,
+      indentWidthExplicit,
+      trailingCommaExplicit
     );
     this._cst = Array.from(parseTOML(result.tomlString));
     this._format = fmt;

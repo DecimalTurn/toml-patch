@@ -9,6 +9,7 @@ import {
 } from './cst';
 import { clonePosition } from './location';
 import { shiftNode } from './writer';
+import { markInlineContainerPositioned } from './inline-format';
 
 function hasOneItemPerLine(container: InlineArray | InlineTable): boolean {
   return container.items.length > 0
@@ -60,5 +61,6 @@ export function prepareInsertedNestedInlineContainer(
     line: nextLine - 1 + closingRows,
     column: templateContainer.loc.end.column
   };
+  markInlineContainerPositioned(childContainer);
   child.loc = { start: clonePosition(childContainer.loc.start), end: clonePosition(childContainer.loc.end) };
 }

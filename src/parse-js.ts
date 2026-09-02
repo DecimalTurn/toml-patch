@@ -17,6 +17,7 @@ import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from '.
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth } from './writer';
 import { prepareInsertedNestedInlineContainer } from './inline-layout';
+import { resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -24,14 +25,19 @@ import { prepareInsertedNestedInlineContainer } from './inline-layout';
  * @param format - The formatting options to apply.
  * @returns The resulting CST Document.
  */
-export default function parseJS(value: any, format: TomlFormat = TomlFormat.default()): Document {
+export default function parseJS(
+  value: any,
+  format: TomlFormat = TomlFormat.default(),
+  depth = 0,
+  parentIsMultiline = false
+): Document {
   value = toJSON(value);
 
   const document = generateDocument();
   // Enable stringify fast paths in the writer — no comments, no removals.
   markStringifyRoot(document);
   setRootIndentWidth(document, format.indentWidth);
-  for (const item of walkObject(value, format)) {
+  for (const item of walkObject(value, format, depth, parentIsMultiline)) {
     insert(document, document, item);
   }
   applyWrites(document);
@@ -42,21 +48,30 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
   formatTopLevel(document, format);
   formatNestedTablesMultiline(document, format);
 
-  // Apply formatEmptyLines only once at the end
   return formatEmptyLines(document);
 }
 
-function* walkObject(object: any, format: TomlFormat): IterableIterator<KeyValue> {
+function* walkObject(
+  object: any,
+  format: TomlFormat,
+  depth = 0,
+  parentIsMultiline = false
+): IterableIterator<KeyValue> {
   for (const key of Object.keys(object)) {
     const rawValue = object[key];
     if (rawValue === undefined) continue;
     const value = toJSON(rawValue);
     if (value === undefined) continue;
-    yield generateKeyValue([key], walkValue(value, format));
+    yield generateKeyValue([key], walkValue(value, format, depth, parentIsMultiline));
   }
 }
 
-function walkValue(value: any, format: TomlFormat): Value {
+function walkValue(
+  value: any,
+  format: TomlFormat,
+  depth: number,
+  parentIsMultiline: boolean
+): Value {
   const minimumDecimals = format.minimumDecimals ?? 0;
 
   if (value === null) {
@@ -81,17 +96,24 @@ function walkValue(value: any, format: TomlFormat): Value {
   } else if (isDate(value)) {
     return generateDateTime(value, format.truncateZeroTimeInDates);
   } else if (Array.isArray(value)) {
-    return walkInlineArray(value, format);
+    return walkInlineArray(value, format, depth, parentIsMultiline);
   } else {
-    return walkInlineTable(value, format);
+    return walkInlineTable(value, format, depth, parentIsMultiline);
   }
 }
 
-function walkInlineArray(value: Array<any>, format: TomlFormat): InlineArray {
+function walkInlineArray(
+  value: Array<any>,
+  format: TomlFormat,
+  depth: number,
+  parentIsMultiline: boolean
+): InlineArray {
   const inline_array = generateInlineArray();
+  const multiline = resolveInlineContainerLayout('array', depth, parentIsMultiline, format);
+  setInlineContainerLayout(inline_array, multiline);
   setRootIndentWidth(inline_array, format.indentWidth);
   for (const element of value) {
-    const item = walkValue(element, format);
+    const item = walkValue(element, format, depth + 1, multiline);
     const inline_array_item = generateInlineItem(item);
 
     prepareInsertedNestedInlineContainer(inline_array, inline_array_item, format.indentWidth);
@@ -104,13 +126,20 @@ function walkInlineArray(value: Array<any>, format: TomlFormat): InlineArray {
   return inline_array;
 }
 
-function walkInlineTable(value: object, format: TomlFormat): InlineTable | Value {
+function walkInlineTable(
+  value: object,
+  format: TomlFormat,
+  depth: number,
+  parentIsMultiline: boolean
+): InlineTable | Value {
   value = toJSON(value);
-  if (!isObject(value)) return walkValue(value, format);
+  if (!isObject(value)) return walkValue(value, format, depth, parentIsMultiline);
 
   const inline_table = generateInlineTable();
+  const multiline = resolveInlineContainerLayout('table', depth, parentIsMultiline, format);
+  setInlineContainerLayout(inline_table, multiline);
   setRootIndentWidth(inline_table, format.indentWidth);
-  for (const item of walkObject(value, format)) {
+  for (const item of walkObject(value, format, depth + 1, multiline)) {
     const inline_table_item = generateInlineItem(item);
 
     insert(inline_table, inline_table, inline_table_item);

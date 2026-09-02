@@ -15,6 +15,8 @@ class TomlFormat {
   minimumDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
+  multilineTable: boolean | number | 'auto' | 'parent'
+  multilineArray: boolean | number | 'auto' | 'parent'
 
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
@@ -129,6 +131,49 @@ stringify({ database: { host: 'localhost', port: 5432 } }, format);
 // [database]
 // host = "localhost"
 // port = 5432
+```
+
+### `multilineTable` and `multilineArray`
+
+- **Type:** `boolean | number | 'auto' | 'parent'`
+- **Default:** `'auto'`
+- **Description:** Controls the physical layout of newly generated inline tables and inline arrays. This is separate from `inlineTableStart`, which decides whether an object is written as an inline table or a table section.
+
+`true` writes every generated container of that kind with one structural row per line. `false` and `'auto'` keep new containers compact. A non-negative number selects multiline layout at that structural container depth or deeper. A root-level inline container has depth `0`. `'parent'` follows the immediate inline parent only.
+
+The options apply independently and use inline-container nesting for depth. Existing multiline source containers keep their layout when patching. Use `indentWidth` and `useTabsForIndentation` to control generated structural indentation.
+
+```js
+stringify({
+  values: [{ name: 'new', tags: ['one', 'two'] }]
+}, {
+  inlineTableStart: 0,
+  multilineArray: true,
+  multilineTable: 'parent'
+});
+// values = [
+//   {
+//     name = "new",
+//     tags = [
+//       "one",
+//       "two"
+//     ]
+//   }
+// ]
+```
+
+Empty containers also use separate delimiter rows when multiline layout is selected:
+
+```js
+stringify({ config: {}, values: [] }, {
+  inlineTableStart: 0,
+  multilineTable: true,
+  multilineArray: true
+});
+// config = {
+// }
+// values = [
+// ]
 ```
 
 ### `truncateZeroTimeInDates`

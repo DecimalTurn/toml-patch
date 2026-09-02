@@ -51,6 +51,29 @@ describe('multiline container formatting', () => {
     ` + '\n');
   });
 
+  test('keeps trailing commas at the end of multiline rows', () => {
+    const value = { values: [{ name: 'new', items: [1, 2] }] };
+    const result = stringify(value, {
+      inlineTableStart: 0,
+      multilineArray: true,
+      multilineTable: true,
+      trailingComma: true,
+    });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      values = [
+        {
+          name = "new",
+          items = [
+            1,
+            2,
+          ],
+        },
+      ]
+    ` + '\n');
+  });
+
   test('uses parent layout for a child container', () => {
     const value = { values: [{ name: 'new', enabled: false }] };
     const result = stringify(value, {
@@ -67,6 +90,61 @@ describe('multiline container formatting', () => {
           enabled = false
         }
       ]
+    ` + '\n');
+  });
+
+  test('keeps a newly generated child compact under auto mode', () => {
+    const source = dedent`
+      values = [
+        1,
+      ]
+    ` + '\n';
+    const value = { values: [1, { name: 'new' }] };
+    const result = patch(source, value);
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      values = [
+        1,
+        { name = "new" },
+      ]
+    ` + '\n');
+  });
+
+  test('keeps inner and outer trailing comma decisions independent', () => {
+    const value = { values: [{ name: 'new' }] };
+    const result = stringify(value, {
+      inlineTableStart: 0,
+      multilineArray: true,
+      multilineTable: true,
+      trailingComma: false,
+    });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      values = [
+        {
+          name = "new"
+        }
+      ]
+    ` + '\n');
+  });
+
+  test('preserves multiline intent when replacing an inline array with a table', () => {
+    const source = dedent`
+      value = [
+        1,
+        { name = "new" },
+      ]
+    ` + '\n';
+    const value = { value: { enabled: true } };
+    const result = patch(source, value, { inlineTableStart: 0 });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      value = {
+        enabled = true
+      }
     ` + '\n');
   });
 
@@ -128,6 +206,27 @@ describe('multiline container formatting', () => {
     expect(result).toBe(dedent`
       value = {
         enabled = true
+      }
+    ` + '\n');
+  });
+
+  test('writes a new nested table as multiline inside an existing multiline table', () => {
+    const source = dedent`
+      config = {
+      }
+    ` + '\n';
+    const value = { config: { inner: { enabled: true } } };
+    const result = patch(source, value, {
+      inlineTableStart: 0,
+      multilineTable: 'parent',
+    });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      config = {
+        inner = {
+          enabled = true
+        }
       }
     ` + '\n');
   });

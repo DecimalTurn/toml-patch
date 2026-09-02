@@ -35,6 +35,7 @@ import traverse from './traverse';
 import { getCommaSpace } from './inline-comma-space';
 import { DEFAULT_INDENT_WIDTH } from './toml-format';
 import { markMutation, markTreeDirty } from './cst-source';
+import { getInlineContainerLayout, isInlineContainerPositioned } from './inline-format';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -617,6 +618,7 @@ function insertInline(
     // the new row outside the table (`}  k = 1` — fuzz seed 3632).  Stay
     // on the last row's line instead; the exit offset then pushes the
     // brace down a line.
+    getInlineContainerLayout(parent) !== true &&
     !next && previous &&
     previous.loc.end.line === parent.loc.end.line
   );
@@ -1316,7 +1318,21 @@ export function shiftNode(
       // Only shift end.column when start and end are on the same line:
       // for a multi-line node the end is on a completely different line and
       // its column is an absolute position independent of the start line.
-      if (node.loc.end.line === node.loc.start.line) {
+      const generatedMultilineEnd = !first_line_only &&
+        node.loc.end.line !== node.loc.start.line &&
+        (((isInlineArray(node) || isInlineTable(node)) &&
+          getInlineContainerLayout(node) === true &&
+          !isInlineContainerPositioned(node)) ||
+          isInlineItem(node) &&
+          ((isInlineArray(node.item) || isInlineTable(node.item)) &&
+            getInlineContainerLayout(node.item) === true ||
+            isKeyValue(node.item) &&
+            (isInlineArray(node.item.value) || isInlineTable(node.item.value)) &&
+            getInlineContainerLayout(node.item.value) === true) ||
+          isKeyValue(node) &&
+          (isInlineArray(node.value) || isInlineTable(node.value)) &&
+          getInlineContainerLayout(node.value) === true);
+      if (node.loc.end.line === node.loc.start.line || generatedMultilineEnd) {
         node.loc.end.column += columns;
       }
     }
@@ -1331,7 +1347,9 @@ export function shiftNode(
     [NodeType.TableArrayKey]: move,
     [NodeType.KeyValue](node) {
       move(node);
-      node.equals += columns;
+      if (!first_line_only || node.loc.start.line === start_line) {
+        node.equals += columns;
+      }
     },
     [NodeType.Key]: move,
     [NodeType.String]: move,
@@ -1349,6 +1367,7 @@ export function shiftNode(
 }
 
 export function perLine(array: InlineArray | InlineTable): boolean {
+  if (getInlineContainerLayout(array) === true) return true;
   if (!array.items.length) return false;
 
   const span = getSpan(array.loc);
