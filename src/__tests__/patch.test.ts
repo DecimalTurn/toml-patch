@@ -10172,7 +10172,6 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
 
 });
 
-
 test('multiline empty array', () => {
   const src = dedent`
     [metadata]
@@ -10276,5 +10275,89 @@ test('multiline empty array accepts an explicit indentation width', () => {
                  { x = 7, y = 8, z = 9 },
                  { x = 2, y = 4, z = 8 },
                  { x = 10, y = 11, z = 12 } ]
+    ` + '\n');
+  });
+
+  test('adding a new integer to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 1,
+                 2,
+                 3 ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push(4);
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 1,
+                 2,
+                 3,
+                 4 ]
+    ` + '\n');
+  });
+
+  test('adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+                 "1",
+                   "2",
+                 "3", # Comment
+               ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+                 "1",
+                   "2",
+                 "3", # Comment
+                 "4",
+               ]
+    ` + '\n');
+  });
+
+    test('Abruptly closing array: adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+                 "1",
+                 "2",
+                 "3",]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+                 "1",
+                 "2",
+                 "3",
+                 "4",]
+    ` + '\n');
+  });
+
+  test('Abruptly closing array + small indent: adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+        "1",
+        "2",
+        "3",]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+        "1",
+        "2",
+        "3",
+        "4",]
     ` + '\n');
   });
