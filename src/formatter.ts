@@ -16,7 +16,7 @@ import {
 import { generateTable, generateDocument, generateTableArray } from './generate';
 import { insert, remove, applyWrites, shiftNode } from './writer';
 import { TomlFormat } from './toml-format';
-import { getInlineContainerLayout } from './inline-format';
+import { getInlineContainerLayout, hasStructuralMultilineRows } from './inline-format';
 
 // Helper function to detect if an InlineArray originally had trailing commas
 export function arrayHadTrailingCommas(node: TreeNode): boolean {
@@ -136,7 +136,7 @@ export function normalizeGeneratedInlineRows(table: Table | TableArray, indentWi
     for (const item of container.items) {
       if (!isInlineItem(item)) continue;
       if (isInlineArray(item.item) || isInlineTable(item.item)) {
-        normalize(item.item, multiline ? item.loc.start.column : containerIndent);
+        normalize(item.item, item.loc.start.column);
       } else if (isKeyValue(item.item) &&
           (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
         normalize(item.item.value, multiline ? item.loc.start.column : containerIndent);
@@ -150,6 +150,41 @@ export function normalizeGeneratedInlineRows(table: Table | TableArray, indentWi
       normalize(item.value, item.loc.start.column);
     }
   }
+}
+
+export function normalizeGeneratedInlineContainerRows(
+  container: InlineArray | InlineTable,
+  indentWidth: number
+): void {
+  const normalize = (
+    current: InlineArray | InlineTable,
+    normalizeCurrent: boolean
+  ): void => {
+    if (normalizeCurrent) {
+      delete (current as { range?: [number, number] }).range;
+      const multiline = getInlineContainerLayout(current) === true ||
+        hasStructuralMultilineRows(current);
+      if (multiline) {
+        const rowIndent = current.loc.start.column + indentWidth;
+        for (const item of current.items) {
+          shiftNode(item, { lines: 0, columns: rowIndent - item.loc.start.column });
+        }
+        current.loc.end.column = current.loc.start.column + 1;
+      }
+    }
+
+    for (const item of current.items) {
+      if (!isInlineItem(item)) continue;
+      if (isInlineArray(item.item) || isInlineTable(item.item)) {
+        normalize(item.item, isInlineArray(current) && isInlineTable(item.item));
+      } else if (isKeyValue(item.item) &&
+          (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
+        normalize(item.item.value, false);
+      }
+    }
+  };
+
+  normalize(container, false);
 }
 
 /**

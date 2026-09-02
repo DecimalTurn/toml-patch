@@ -43,7 +43,7 @@ import { generateInlineItem, generateTable, generateTableArray, generateString, 
 import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth, normalizeGeneratedInlineContainerRows } from './formatter';
 import { DateFormatHelper } from './date-format';
 import {
   getInlineInsertColumnDelta,
@@ -2643,6 +2643,10 @@ function applyChanges(
       replacement = regenerateInlineReplacement(existing, replacement, change.path);
 
       replace(original, parent, existing, replacement);
+      if (isInlineArray(replacement) || isInlineTable(replacement)) {
+        applyWrites(original);
+        normalizeGeneratedInlineContainerRows(replacement, format.indentWidth);
+      }
 
       // A section header captures every key-value that follows it, so an
       // edit that turns a root-level KV into a Table must not leave root
