@@ -55,24 +55,25 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug Current Test File",
-      "program": "${workspaceFolder}/node_modules/jest/bin/jest",
+      "name": "Debug Current Vitest File",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
       "args": [
-        "${fileBasename}",
+        "run",
+        "${relativeFile}",
         "--config",
-        "${workspaceFolder}/jest.config.json"
+        "${workspaceFolder}/vitest.config.ts"
       ],
-      "cwd": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug All Jest Tests",
-      "program": "${workspaceFolder}/node_modules/jest/bin/jest",
+      "name": "Debug All Vitest Tests",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
       "args": [
-        "--runInBand"
+        "run"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -82,10 +83,11 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Specs",
-      "program": "${workspaceFolder}/node_modules/jest/bin/jest",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
       "args": [
+        "run",
         "--config",
-        "specs.config.js"
+        "${workspaceFolder}/vitest.specs.config.ts"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
