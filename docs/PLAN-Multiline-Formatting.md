@@ -106,7 +106,9 @@ The two new options need one depth definition. Use structural value nesting, not
 - An array used as a property of an inline table has depth `1`.
 - Each further inline array or table boundary adds one level.
 
-For example, with `multilineTable: 1`, the outer table remains compact while its nested table values become multiline. With `multilineTable: 0`, all generated inline tables become multiline. The same rule applies independently to `multilineArray`.
+For example, with `multilineTable: 1`, a generated inline table at depth 1 or deeper becomes multiline while a generated root-level table remains compact. With `multilineTable: 0`, all generated inline tables become multiline. The same numeric rule applies independently to `multilineArray`.
+
+`'nested'` is different from a numeric threshold. It does not mean "depth greater than zero". It selects multiline output only when the immediate enclosing container is itself multiline. A child of a compact inline table remains compact under `'nested'`, even though the child has a non-zero structural depth. A child of a multiline inline array or inline table becomes multiline under `'nested'`.
 
 `inlineTableStart` keeps its current table-key depth semantics. A table converted to `[section]` or `[[array]]` is no longer an inline table, so `multilineTable` has no role in that block conversion.
 
@@ -117,19 +119,21 @@ Resolve a mode at the point where a generated container is created. The resolver
 Use this order:
 
 1. An explicit boolean or numeric mode decides directly.
-2. `'nested'` checks whether the structural depth is greater than zero.
-3. `'auto'` examines the nearest applicable layout evidence.
-4. If no local evidence applies, `'auto'` chooses a single-line representation.
+2. `'nested'` checks whether the immediate parent container is multiline.
+3. `'auto'` currently chooses a compact representation for a newly generated container.
+4. Existing multiline source containers retain their layout when patch adds or replaces members inside them.
 
 For `'auto'`, use the following working rules:
 
-- A generated container inside a multiline parent inherits multiline layout when it has structural rows to emit.
-- A generated container with a comparable multiline sibling copies that sibling's multiline decision and row shape.
-- A generated container replacing a multiline value keeps the replaced value's multiline layout when its new kind is compatible.
-- A generated root-level container with no multiline sibling or parent remains compact.
-- An empty generated container stays `{}` or `[]` under `'auto'` unless a multiline parent or a comparable template requires multiline layout.
+- A newly generated inline table or array is compact, regardless of its structural depth or the layout of its parent.
+- A generated container replacing an existing multiline value keeps the replaced value's multiline layout when its new kind is compatible. The original source layout is evidence that the caller intended a multiline value.
+- Adding a member to an existing multiline inline table or array preserves that container's multiline layout. This covers an empty source such as `value = {` followed by `}` when a field is added later.
+- A comparable multiline sibling may provide row positions after another mode has selected multiline output, but it does not make a newly generated container multiline under `'auto'`.
+- An empty newly generated container stays `{}` or `[]` under `'auto'`.
 
-These rules produce the selected output because `values` is already a multiline array and the new object is a nested container with multiple fields. They also avoid changing ordinary compact `stringify()` output merely because the new option exists.
+These rules keep current compact generation stable. The selected multiline-array regression therefore needs an explicit mode such as `multilineTable: 'nested'` or `multilineTable: true`. The existing multiline source-container behavior remains automatic because the source already records the formatting intent.
+
+Reserve `'auto'` for a future `maxPrintWidth` option. That future policy may choose multiline output when a compact value exceeds the configured width. `false` must remain an explicit compact override that does not consult `maxPrintWidth`.
 
 The resolver should return a concrete layout decision rather than making the writer interpret the public union repeatedly. A small internal result can carry:
 
@@ -137,6 +141,7 @@ The resolver should return a concrete layout decision rather than making the wri
 interface InlineLayoutDecision {
   multiline: boolean;
   depth: number;
+  parentIsMultiline: boolean;
   rowIndent?: string;
   parentIndent?: string;
 }
@@ -171,13 +176,15 @@ This still writes eligible root objects as `[section]` blocks. The option affect
 
 ### `indentWidth` and `useTabsForIndentation`
 
-A multiline decision creates rows. Existing local row evidence should choose their absolute columns using the current precedence:
+A multiline decision creates rows. For an explicitly selected multiline container, or for a source container whose multiline layout is being preserved, existing local row evidence should choose absolute columns using the current precedence:
 
 1. a comparable surviving sibling row;
 2. the enclosing container's established local row style;
 3. the closing delimiter and `indentWidth` fallback.
 
 When `useTabsForIndentation` is true, generated structural indentation uses tabs. When it is false, generated structural indentation uses spaces and `indentWidth` supplies the number of spaces per level. Explicit format values control new structural rows only. They must not rewrite untouched rows or value text inside multiline strings.
+
+Under `'auto'`, a newly generated child does not inherit multiline layout merely because its parent is multiline. Use `'nested'` when that inheritance is wanted. The normal patch rule that preserves an existing multiline container still applies without an explicit mode.
 
 The implementation must keep the indentation of a nested generated table relative to its array element. For the selected two-space default, the outer item and its fields should use separate levels:
 
@@ -250,17 +257,17 @@ values = [
 ]
 ```
 
-`'auto'` should keep empty generated values compact unless their parent or a comparable template is multiline. Existing empty containers retain their source layout when patching them.
+`'auto'` should keep empty generated values compact. Existing empty containers retain their source layout when patching them. An explicit mode such as `true`, `0` or `'nested'` may place an empty generated container on separate lines when its rule selects multiline output.
 
 ### Existing containers and replacements
 
-Patching an existing multiline array or table should preserve its physical layout when adding or editing members, regardless of the default mode. The new mode applies when:
+Patching an existing multiline array or table should preserve its physical layout when adding or editing members, regardless of the default mode. The new mode decides the layout of a newly generated or replaced inline container when the source has no compatible multiline layout to preserve. It applies when:
 
-- the member itself is newly generated;
+- the member itself is newly generated and the selected mode requests multiline output;
 - an existing value is replaced by a newly generated container;
-- a removed container is recreated during the same patch.
+- a removed container is recreated during the same patch and no original multiline layout remains.
 
-A replacement should inherit the replaced row's indentation and local delimiter context before falling back to the resolved document format. It should not reformat unrelated siblings.
+A replacement should first preserve a compatible multiline layout from the replaced value. Otherwise it should use the selected mode, then inherit the replaced row's indentation and local delimiter context before falling back to the resolved document format. It should not reformat unrelated siblings.
 
 ## Likely implementation points
 
@@ -274,25 +281,25 @@ A replacement should inherit the replaced row's indentation and local delimiter 
 
 ### `src/parse-js.ts` and `src/generate.ts`
 
-- Pass container depth and the resolved format into recursive value generation.
+- Pass container depth, parent layout and the resolved format into recursive value generation.
 - Keep generation of scalar values unchanged.
-- Mark generated inline arrays and tables with the requested layout decision before they are inserted.
-- Ensure the root value starts at depth `0` and recursive values increment depth exactly once per inline container boundary.
+- Mark generated inline arrays and tables with the requested layout decision before they are inserted. `'auto'` initially marks new containers compact; source-preservation logic in the patch path can override that decision for compatible multiline replacements.
+- Ensure the root value starts at depth `0` and recursive values increment depth exactly once per inline container boundary. Pass the immediate parent's multiline state separately from depth for `'nested'`.
 - Keep the existing conversion of eligible root objects and arrays into table sections or table arrays.
 
 ### `src/inline-layout.ts`
 
 - Extend the current nested-container preparation code with a shared mode resolver.
-- Reuse comparable sibling templates when the mode is `'auto'`.
+- Reuse comparable sibling templates after a mode has selected multiline output. A sibling template must not turn a new compact `'auto'` value into a multiline value.
 - Calculate direct-row indentation from local evidence before using `indentWidth`.
 - Lay out empty generated containers when an explicit mode selects multiline output.
 - Preserve a container's own row columns when a parent has a different indentation style.
 
 ### `src/patch.ts`
 
-- Carry the resolved multiline modes through the diffing and generation paths.
+- Carry the resolved multiline modes through the diffing and generation paths, together with whether the original value or immediate parent was multiline.
 - Pass the original node, replacement row and enclosing container into layout resolution where available.
-- Apply explicit format modes only to newly generated or replaced inline containers.
+- Preserve an existing multiline container or compatible replaced value under `'auto'`. Apply explicit format modes to newly generated or replaced inline containers that have no source layout to preserve.
 - Keep the existing comment-host and pending-offset handling intact.
 - Check the path that regenerates a value after an inline-table trailing-comma mismatch. The rebuilt value must receive the same multiline decision as the original generated value.
 
@@ -336,14 +343,16 @@ Add exact-output tests for each mode:
 - `multilineTable: 0`, `1` and a value above the maximum depth;
 - `multilineArray: 0`, `1` and a value above the maximum depth;
 - `'nested'` compared with numeric threshold `1`;
-- `'auto'` with no multiline context and with an existing multiline parent;
+- `'auto'` for a new child in a multiline parent, which remains compact;
+- `'auto'` when adding a member to an existing multiline container, which preserves the container layout;
+- `'nested'` with a compact parent and with a multiline parent;
 - interaction with `inlineTableStart: 0`, `1` and a larger threshold.
 
 Every test should assert the complete string and then assert that `parse(result)` equals the original JavaScript value.
 
 ### Patch tests
 
-Remove `test.fails()` from the two selected tests only after the implementation produces their exact expected output. Keep the full-output assertions and parse round trips.
+Update the two selected tests to pass an explicit nested-layout mode, for example `{ multilineTable: 'nested' }`. In the second test, merge that option with its existing `{ indentWidth: 2 }` override. Remove `test.fails()` only after the implementation produces their exact expected output. Keep the full-output assertions and parse round trips. Add a separate regression proving that the same new object remains compact under the default `'auto'` mode.
 
 Add focused regressions for:
 
@@ -372,7 +381,7 @@ Use `dedent` for readable fixtures where that matches neighboring tests. Keep ex
 
 Add at least one fuzz seed for each transition below:
 
-- compact parent to multiline child;
+- compact parent to explicitly requested multiline child;
 - multiline parent to generated nested array;
 - removal followed by reinsertion of a multiline child;
 - replacement after a comment was hoisted from an inline container;
@@ -402,7 +411,7 @@ Add the shared mode type, defaults, validation and format resolution. Add unit t
 
 ### Phase 2: resolve mode from structural context
 
-Add one internal resolver that receives container kind, depth, parent layout, sibling templates and replacement context. Keep `'auto'` conservative and encode the selected regression as a failing test until the resolver can explain why the nested table is multiline.
+Add one internal resolver that receives container kind, depth, parent layout, sibling templates and replacement context. Keep `'auto'` compact for new containers, make `'nested'` depend on the immediate parent's multiline state and keep source-preservation rules separate. Encode the selected regression with an explicit nested-layout mode before removing its expected-failure marker.
 
 ### Phase 3: lay out generated values
 
@@ -418,9 +427,9 @@ Update `docs/Formatting.md`, remove the selected `test.fails()` markers, add exa
 
 ## Open questions
 
-1. Should `'auto'` make a nested child multiline solely because its parent is multiline, or only when the child has more than one structural row? The selected regression requires at least the latter rule.
+1. Should `'nested'` consider only an immediate multiline inline parent, or any multiline enclosing container including a block table body? The implementation should choose one rule and test it explicitly. The narrow default is the immediate inline parent.
 2. Should a numeric mode use structural value depth as proposed here, or reuse the key-path depth used by `inlineTableStart`? Separate definitions are clearer because arrays do not have table keys, but both need explicit tests.
-3. When a new container has no sibling template but its parent mixes compact and multiline children, should `'auto'` use the nearest same-kind sibling or the parent-wide majority? The nearest same-kind sibling is the safer choice.
+3. When a replaced value changes from an inline table to an array, should source multiline intent transfer across container kinds? The safer default is to preserve it only for a compatible kind and otherwise apply the selected mode.
 4. Should `true` force empty generated containers onto separate lines? This plan says yes so the option has a complete meaning, but the output needs a compatibility review.
 5. Should a multiline inline table with one scalar field use a trailing comma when the surrounding array is multiline? The inner comma must remain independent from the parent separator.
 6. Should callers eventually be able to configure a maximum line width for `'auto'`? That is outside this feature. Do not infer it from viewport width or add an unrequested option.
@@ -429,10 +438,11 @@ Update `docs/Formatting.md`, remove the selected `test.fails()` markers, add exa
 
 This work is complete when:
 
-- both selected regression tests pass without `test.fails()`;
+- both selected regression tests pass without `test.fails()` when they request the nested layout mode;
 - `multilineTable` and `multilineArray` accept the documented values and appear in the public format type;
 - `inlineTableStart` still controls sections independently from physical inline layout;
-- default `'auto'` keeps ordinary compact output while inheriting a clearly multiline local context;
+- default `'auto'` keeps newly generated containers compact while existing multiline source containers retain their layout;
+- `'nested'` selects multiline output from the immediate parent's actual multiline layout rather than from depth alone;
 - explicit booleans and numeric thresholds produce deterministic layouts at every tested depth;
 - empty containers have documented output for explicit multiline modes;
 - generated rows preserve local spaces, tabs, comments, commas and delimiter positions;
