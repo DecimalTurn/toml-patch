@@ -427,12 +427,34 @@ Update `docs/Formatting.md`, remove the selected `test.fails()` markers, add exa
 
 ## Open questions
 
-1. Should `'nested'` consider only an immediate multiline inline parent, or any multiline enclosing container including a block table body? The implementation should choose one rule and test it explicitly. The narrow default is the immediate inline parent.
-2. Should a numeric mode use structural value depth as proposed here, or reuse the key-path depth used by `inlineTableStart`? Separate definitions are clearer because arrays do not have table keys, but both need explicit tests.
-3. When a replaced value changes from an inline table to an array, should source multiline intent transfer across container kinds? The safer default is to preserve it only for a compatible kind and otherwise apply the selected mode.
-4. Should `true` force empty generated containers onto separate lines? This plan says yes so the option has a complete meaning, but the output needs a compatibility review.
-5. Should a multiline inline table with one scalar field use a trailing comma when the surrounding array is multiline? The inner comma must remain independent from the parent separator.
-6. Should callers eventually be able to configure a maximum line width for `'auto'`? That is outside this feature. Do not infer it from viewport width or add an unrequested option.
+1. Should `'nested'` consider only an immediate multiline inline parent, or any multiline
+   enclosing container including a block table body? The implementation should choose one
+   rule and test it explicitly. The narrow default is the immediate inline parent.
+A: Let's keep it simple for now and just consider the immediate parent.
+
+2. Should a numeric mode use structural value depth as proposed here, or reuse the
+   key-path depth used by `inlineTableStart`? Separate definitions are clearer because
+   arrays do not have table keys, but both need explicit tests.
+A: Use the seperate definition based on inline containers.
+
+3. When a replaced value changes from an inline table to an array, should source multiline
+   intent transfer across container kinds? The safer default is to preserve it only for a
+   compatible kind and otherwise apply the selected mode.
+A: Yes, it should transfer accross container kinds.
+
+4. Should `true` force empty generated containers onto separate lines? This plan says yes
+   so the option has a complete meaning, but the output needs a compatibility review.
+A: Yes, even if the table is empty, the starting bracket and closing bracket should be on
+different rows.
+5. Should a multiline inline table with one scalar field use a trailing comma when the
+   surrounding array is multiline? The inner comma must remain independent from the parent
+   separator.
+A: No necessarly.
+
+6. Should callers eventually be able to configure a maximum line width for `'auto'`? That
+   is outside this feature. Do not infer it from viewport width or add an unrequested
+   option.
+A: Yes, but that is outside this feature.
 
 ## Completion criteria
 
