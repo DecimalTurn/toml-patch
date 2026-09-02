@@ -61,6 +61,8 @@ export function spaceDottedKeySeparators(source: string): string {
   return result;
 }
 
+// Uses the same generated TOML as fuzzOne, but adds spaces around syntactic dotted-key
+// separators before parsing and patching.
 export function fuzzOne2(seed: number, mutationCount: number): PatchFuzzResult {
   return fuzzOne(seed, mutationCount, spaceDottedKeySeparators, true, true);
 }

@@ -17,8 +17,9 @@ const seed = Number(arg('--seed'));
 const target = resolve(arg('--target', process.cwd())!);
 const output = arg('--out');
 const maxPasses = Number(arg('--passes', '4'));
+const variant = Number(arg('--variant', '1'));
 if (!Number.isInteger(seed) || !output) {
-  throw new Error('Usage: npx -y tsx scripts/distill-seed.ts --seed N --out path [--target path]');
+  throw new Error('Usage: npx -y tsx scripts/distill-seed.ts --seed N --out path [--target path] [--variant 2|3]');
 }
 
 const importFromTarget = async (relativePath: string) => {
@@ -28,16 +29,19 @@ const importFromTarget = async (relativePath: string) => {
 const randomizer = await importFromTarget('src/__tests__/randomizer.ts');
 const fuzz = await importFromTarget('src/__tests__/fuzz-patch.ts');
 const api = await importFromTarget('src/index.ts');
+const fuzz2 = variant === 2 ? await importFromTarget('src/__tests__/fuzz-patch2.ts') : undefined;
+const fuzz3 = variant === 3 ? await importFromTarget('src/__tests__/fuzz-patch3.ts') : undefined;
 const { randomToml, SeededRandom } = randomizer;
 const { parse, patch } = api;
 const { generateMutation, applyMutation, deepClone, randomTomlFormat } = fuzz;
 
 const generated = randomToml({ seed });
-const originalObject = deepClone(parse(generated.toml));
+const generatedSource = variant === 2 ? fuzz2!.spaceDottedKeySeparators(generated.toml) : generated.toml;
+const sourceObject = deepClone(parse(generatedSource));
 const mutationCount = 3;
 const mutationRng = new SeededRandom(seed + mutationCount * 1_000_000);
 const mutations: Mutation[] = [];
-const mutationObject = deepClone(originalObject) as any;
+const mutationObject = sourceObject as any;
 const aotKeyPaths = new Set<string>();
 const collectAotKeys = (node: any) => {
   if (!node || typeof node !== 'object') return;
@@ -65,7 +69,18 @@ while (mutations.length < mutationCount && attempts < mutationCount * 5) {
   applyMutation(mutationObject, mutation);
   mutations.push(mutation);
 }
-const format = randomTomlFormat(new SeededRandom(seed + 500_000));
+const format = randomTomlFormat(
+  new SeededRandom(seed + 500_000),
+  variant === 2 || variant === 3,
+  variant === 2 || variant === 3
+);
+const targetStatus = (
+  variant === 2
+    ? fuzz2!.fuzzOne2(seed, mutationCount)
+    : variant === 3
+      ? fuzz3!.fuzzOne3(seed, mutationCount)
+      : fuzz.fuzzOne(seed, mutationCount)
+).status;
 
 function normalize(value: unknown): unknown {
   if (typeof value === 'bigint') return `${value}n`;
@@ -107,34 +122,40 @@ function canReplay(object: any, mutation: Mutation): boolean {
   return getAt(object, mutation.path) !== undefined;
 }
 
-function isFailure(source: string, testMutations: Mutation[] = mutations): boolean {
+function failureStatus(source: string, testMutations: Mutation[] = mutations): string {
   let object: any;
   try {
     object = deepClone(parse(source));
   } catch {
-    return false;
+    return 'invalid-source';
   }
   try {
     for (const mutation of testMutations) {
-      if (!canReplay(object, mutation)) return false;
+      if (!canReplay(object, mutation)) return 'invalid-mutations';
       applyMutation(object, mutation);
     }
     const result = patch(source, object, format);
     const reparsed = parse(result);
-    return JSON.stringify(normalize(object)) !== JSON.stringify(normalize(reparsed));
+    return JSON.stringify(normalize(object)) === JSON.stringify(normalize(reparsed))
+      ? 'ok'
+      : 'roundtrip-mismatch';
   } catch {
-    return true;
+    return 'patch-fail';
   }
+}
+
+function isFailure(source: string, testMutations: Mutation[] = mutations): boolean {
+  return failureStatus(source, testMutations) === targetStatus;
 }
 
 function removeRange(lines: string[], start: number, end: number): string {
   return lines.slice(0, start).concat(lines.slice(end)).join('\n');
 }
 
-let lines = generated.toml.split(/\r?\n/);
+let lines = generatedSource.split(/\r?\n/);
 if (lines.at(-1) === '') lines.pop();
 if (!isFailure(lines.join('\n'))) {
-  throw new Error(`Seed ${seed} is not a failure under target ${target}`);
+  throw new Error(`Seed ${seed} is not a ${targetStatus} failure under target ${target}`);
 }
 
 for (let pass = 0; pass < maxPasses; pass++) {
@@ -235,7 +256,12 @@ function formatSource(value: unknown): string {
 const source = lines.join('\n');
 const postFixObject: any = deepClone(parse(source));
 for (const mutation of mutations) applyMutation(postFixObject, mutation);
-const expected = patch(source, postFixObject, format);
+let expected: string | undefined;
+try {
+  expected = patch(source, postFixObject, format);
+} catch {
+  // Failing seeds often fail before a patched document can be rendered.
+}
 const body = [
   `test.fails('distilled regression for fuzz seed ${seed}', () => {`,
   '  const src = dedent`',
@@ -247,8 +273,9 @@ const body = [
   '',
   `  const result = patch(src, obj, ${formatSource(format)});`,
   '  expect(parse(result)).toEqual(obj);',
-  '  // TODO: assert exact output after the implementation fix.',
-  `  // expect(result).toEqual(${JSON.stringify(expected)});`,
+  expected === undefined
+    ? '  // TODO: assert exact output after the implementation fix.'
+    : `  // expect(result).toEqual(${JSON.stringify(expected)});`,
   '});',
   ''
 ].join('\n');
