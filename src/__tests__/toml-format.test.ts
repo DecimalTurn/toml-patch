@@ -47,6 +47,29 @@ describe('TomlFormat comprehensive tests', () => {
       expect(format.trailingComma).toBe(false);
       expect(format.bracketSpacing).toBe(true);
       expect(format.indentWidth).toBe(2);
+      expect(format.multilineTable).toBe('auto');
+      expect(format.multilineArray).toBe('auto');
+    });
+
+    test('should preserve existing constructor argument positions', () => {
+      const format = new TomlFormat('\r\n', 0, true, false, 2, true, true, 3, true, true, 4, false, 'parent');
+
+      expect(format.inlineTableStart).toBe(2);
+      expect(format.truncateZeroTimeInDates).toBe(true);
+      expect(format.useTabsForIndentation).toBe(true);
+      expect(format.minimumDecimals).toBe(3);
+      expect(format.leadingBom).toBe(true);
+      expect(format.updateOrder).toBe(true);
+      expect(format.indentWidth).toBe(1);
+      expect(format.multilineTable).toBe(false);
+      expect(format.multilineArray).toBe('parent');
+    });
+
+    test('should use defaults for null and undefined multiline modes', () => {
+      const format = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, null, undefined);
+
+      expect(format.multilineTable).toBe('auto');
+      expect(format.multilineArray).toBe('auto');
     });
 
     test('should use default when newLine is undefined', () => {
@@ -615,6 +638,20 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
     });
 
+    test.each([true, false, 0, 2, 'auto', 'parent'])('accepts multiline container mode %p', (mode) => {
+      expect(validateFormatObject({ multilineTable: mode, multilineArray: mode })).toEqual({
+        multilineTable: mode,
+        multilineArray: mode,
+      });
+    });
+
+    test('accepts null and undefined multiline container modes', () => {
+      expect(validateFormatObject({ multilineTable: null, multilineArray: undefined })).toEqual({
+        multilineTable: null,
+        multilineArray: undefined,
+      });
+    });
+
     test('accepts all valid properties together', () => {
       const input = {
         newLine: '\n',
@@ -688,6 +725,11 @@ describe('validateFormatObject', () => {
       expect(() => validateFormatObject({ updateOrder: 'yes' })).toThrow(/updateOrder/);
     });
 
+    test.each([-1, 1.5, NaN, Infinity, 'always', {}, []])('rejects invalid multiline container mode %p', (mode) => {
+      expect(() => validateFormatObject({ multilineTable: mode })).toThrow(TypeError);
+      expect(() => validateFormatObject({ multilineArray: mode })).toThrow(TypeError);
+    });
+
     test('reports multiple invalid properties in one error', () => {
       expect(() => validateFormatObject({ newLine: 42, trailingComma: 'yes' })).toThrow(
         /newLine.*trailingComma|trailingComma.*newLine/
@@ -746,6 +788,15 @@ describe('updateOrder option wiring (docs/PLAN-Update-Order.md)', () => {
     const fallback = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true);
     expect(fallback.updateOrder).toBe(true);
     expect(resolveTomlFormat({ inlineTableStart: 2 }, fallback).updateOrder).toBe(true);
+  });
+
+  test('resolveTomlFormat merges multiline modes independently', () => {
+    const fallback = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true, 2);
+
+    const resolved = resolveTomlFormat({ multilineArray: 'parent' }, fallback);
+
+    expect(resolved.multilineTable).toBe(true);
+    expect(resolved.multilineArray).toBe('parent');
   });
 
   test('an already-constructed TomlFormat instance passes through resolveTomlFormat unchanged', () => {

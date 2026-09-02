@@ -95,7 +95,7 @@ export { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './parse-tom
  * const result = patch(existingToml, updatedData, format);
  * ```
  */
-export { TomlFormat } from './toml-format';
+export { TomlFormat, type MultilineContainerMode } from './toml-format';
 
 /**
  * TomlDocument encapsulates a TOML CST and provides methods to interact with it.
