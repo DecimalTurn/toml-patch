@@ -1039,12 +1039,7 @@ describe('nested multiline inline tables', () => {
     ].join('\n'));
   });
 
-  // This is currently marked as failing since we haven't implemented a formatting
-  // optins that would allow to indicate that a new table should be written as multiline.
-  // We could introduce a formatting options like `multilineTable` and `multilineArray` that would 
-  // allow to specify that a new inline table (or array) should be written in multiline
-  // format.
-  test.fails('will write table as multiline if already nested', () => {
+  test('will write table as multiline if already nested', () => {
     const src = [
       'values = [',
       ']'
@@ -1055,7 +1050,7 @@ describe('nested multiline inline tables', () => {
     obj.values[0].enabled = false;
 
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineTable: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -1067,7 +1062,7 @@ describe('nested multiline inline tables', () => {
     ].join('\n'));
   });
 
-  test.fails('will use indentWidth for new multiline nested inline table?', () => {
+  test('will use indentWidth for new multiline nested inline table?', () => {
     const src = [
       'values = [',
       ']'
@@ -1077,7 +1072,7 @@ describe('nested multiline inline tables', () => {
     obj.values[0].name = 'new';
     obj.values[0].enabled = false;
 
-    const fmt = { indentWidth: 2 };
+    const fmt = { indentWidth: 2, multilineTable: 'parent' };
 
     const result = patch(src, obj, fmt);
     expect(parse(result)).toEqual(obj);
