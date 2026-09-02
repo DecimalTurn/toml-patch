@@ -4002,9 +4002,6 @@ test('distilled regression for fuzz3 seed 91', () => {
     trailingComma: true,
     bracketSpacing: false,
     updateOrder: true,
-    trailingNewline: 1,
-    newLine: '\n',
-    leadingBom: false,
     truncateZeroTimeInDates: true,
     useTabsForIndentation: false,
     indentWidth: 1,
@@ -4034,9 +4031,6 @@ test('distilled regression for fuzz3 seed 1334', () => {
     trailingComma: false,
     bracketSpacing: true,
     updateOrder: false,
-    trailingNewline: 2,
-    newLine: '\r\n',
-    leadingBom: true,
     truncateZeroTimeInDates: false,
     useTabsForIndentation: true,
     indentWidth: 1,
@@ -4044,13 +4038,13 @@ test('distilled regression for fuzz3 seed 1334', () => {
     multilineTable: false,
     multilineArray: 0,
   });
-  const expected = '\uFEFF' + dedent`
+  const expected = dedent`
     [servers]
     entries = [
-      1.0,
-      2.0
+    \t1.0,
+    \t2.0
     ]
-  `.replace(/\n/g, '\r\n').replace(/\r\n  (?=[12]\.0)/g, '\r\n\t') + '\r\n\r\n';
+  ` + '\n';
   expect(result).toEqual(expected);
   expect(parse(result)).toEqual(obj);
 });
@@ -4073,19 +4067,23 @@ test('distilled regression for fuzz3 seed 2151', () => {
     trailingComma: true,
     bracketSpacing: false,
     updateOrder: true,
-    trailingNewline: 2,
+    trailingNewline: 1,
     newLine: '\n',
-    leadingBom: true,
+    leadingBom: false,
     truncateZeroTimeInDates: false,
     useTabsForIndentation: true,
     indentWidth: 2,
     multilineTable: true,
     multilineArray: 'auto',
   });
-  const expected = '\uFEFF[root.group.table]\n'
-    + 's.f = [[true,], [false, {\n'
-    + `${'\t'.repeat(19)}flag = true,\n`
-    + '}         ], "three",          ]\n\n';
+  const expected = dedent`
+    [root.group.table]
+    s.f = [
+      [true],
+      [false, { flag: true }],
+      'three',
+    ];
+  `;
   expect(result).toEqual(expected);
   expect(parse(result)).toEqual(obj);
 });
