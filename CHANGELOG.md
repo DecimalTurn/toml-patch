@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Build: Ship a separate unbundled, unminified development build with source maps, published under the `dev` npm dist-tag for debugging and downstream tree-shaking. 
+- Formatting: add `indentWidth` for controlling generated structural indentation. ([#291])
+- Formatting: add `multilineTable` and `multilineArray` for controlling generated inline container layout. ([#298])
 
 ### Fixed
 
@@ -424,8 +426,10 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#288]: https://github.com/DecimalTurn/toml-patch/pull/288
 [#289]: https://github.com/DecimalTurn/toml-patch/pull/289
 [#290]: https://github.com/DecimalTurn/toml-patch/pull/290
+[#291] https://github.com/DecimalTurn/toml-patch/pull/291
 [#292]: https://github.com/DecimalTurn/toml-patch/pull/292
 [#293]: https://github.com/DecimalTurn/toml-patch/pull/293
 [#297]: https://github.com/DecimalTurn/toml-patch/pull/297
+[#298]: https://github.com/DecimalTurn/toml-patch/issues/298
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
