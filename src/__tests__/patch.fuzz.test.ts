@@ -3964,3 +3964,108 @@ test('replacing a table with a scalar after a multiline AOT array (seed 863664)'
   `);
   expect(parse(result)).toEqual(obj);
 });
+
+test.fails('distilled regression for fuzz3 seed 91', () => {
+  const src = dedent`
+    [project."child]".details]
+  `;
+
+  const obj = parse(src) as any;
+  obj.project = {
+    name: 'demo',
+    settings: { enabled: true },
+  };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 1,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    indentWidth: 1,
+    multilineTable: 1,
+    multilineArray: 'auto',
+  });
+  expect(result).toEqual(dedent`
+    [project]
+    name = "demo"
+    settings = {
+     enabled = true,
+    }
+  ` + '\n');
+  expect(parse(result)).toEqual(obj);
+});
+
+test.fails('distilled regression for fuzz3 seed 1334', () => {
+  const src = dedent`
+    [[servers.entries]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.servers.entries = [1, 2];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 2,
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 2,
+    newLine: '\r\n',
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true,
+    indentWidth: 1,
+    minimumDecimals: 1,
+    multilineTable: false,
+    multilineArray: 0,
+  });
+  const expected = '\uFEFF' + dedent`
+    [servers]
+    entries = [
+      1.0,
+      2.0
+    ]
+  `.replace(/\n  (?=[12]\.0)/g, '\n\t') + '\r\n\r\n';
+  expect(result).toEqual(expected);
+  expect(parse(result)).toEqual(obj);
+});
+
+test.fails('distilled regression for fuzz3 seed 2151', () => {
+  const src = dedent`
+    [root.group.table]
+    s.f.f = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.group.table.s.f = [
+    [true],
+    [false, { flag: true }],
+    'three',
+  ];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 2,
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    trailingNewline: 2,
+    newLine: '\n',
+    leadingBom: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true,
+    indentWidth: 2,
+    multilineTable: true,
+    multilineArray: 'auto',
+  });
+  const expected = '\uFEFF' + dedent`
+    [root.group.table]
+    s.f.f = [[true],[false,{
+      flag = true,
+    }],"three",]
+  `.replace('\n    flag = true,', '\n\tflag = true,') + '\n\n';
+  expect(result).toEqual(expected);
+  expect(parse(result)).toEqual(obj);
+});
