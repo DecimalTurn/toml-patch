@@ -1335,10 +1335,12 @@ export function shiftNode(
           !isInlineContainerPositioned(node)) ||
           isInlineItem(node) &&
           ((isInlineArray(node.item) || isInlineTable(node.item)) &&
-            getInlineContainerLayout(node.item) === true ||
+            getInlineContainerLayout(node.item) === true &&
+            !isInlineContainerPositioned(node.item) ||
             isKeyValue(node.item) &&
             (isInlineArray(node.item.value) || isInlineTable(node.item.value)) &&
-            getInlineContainerLayout(node.item.value) === true) ||
+            getInlineContainerLayout(node.item.value) === true &&
+            !isInlineContainerPositioned(node.item.value)) ||
           isKeyValue(node) &&
           (isInlineArray(node.value) || isInlineTable(node.value)) &&
           getInlineContainerLayout(node.value) === true);
