@@ -118,7 +118,8 @@ function walkInlineArray(
   parentIsMultiline: boolean
 ): InlineArray {
   const inline_array = generateInlineArray();
-  const multiline = resolveInlineContainerLayout('array', depth, parentIsMultiline, format);
+  const multiline = !(value.length === 0 && depth > 0) &&
+    resolveInlineContainerLayout('array', depth, parentIsMultiline, format);
   setInlineContainerLayout(inline_array, multiline);
   setRootIndentWidth(inline_array, format.indentWidth);
   for (const element of value) {

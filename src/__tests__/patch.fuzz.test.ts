@@ -4162,7 +4162,7 @@ test('distilled regression for fuzz seed 7997', () => {
     x = """
     ^ #"""
     [cdf]
-    xg = [ [ "4o0SPONABJgx3", false, "vk-X9lxxkT", ], [ [], 1705], ]
+    xg = [ [ "4o0SPONABJgx3", false, "vk-X9lxxkT", ], [ [], 1705, ], ]
     "".c8a6o-3-u4.xnhbb = '''
     '''
   `);
