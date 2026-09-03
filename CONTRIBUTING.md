@@ -95,6 +95,12 @@ To generate a distilled test for that `fuzz3` seed, use the variant 3 option:
 npx -y tsx scripts/distill-seed.ts --seed 2151 --variant 3 --out ./seed-2151.fuzz3.test.ts
 ```
 
+To distill and append the test directly to `src/__tests__/patch.fuzz.test.ts`:
+
+```powershell
+npx -y tsx scripts/distill-and-append-seed.ts --seed 2151 --variant 3
+```
+
 The generic seed scaffold can also be previewed or appended to
 `src/__tests__/patch.fuzz.test.ts`:
 
