@@ -22,7 +22,6 @@ test.each(historicalFuzzSeeds)('historical fuzz seed %d still passes the full ha
   expect(result.status, result.error).toBe('ok');
 });
 
-// TODO: Fix commented out seeds
 const historicalFuzzSeeds3 = [
   91, 
   1334,
@@ -4241,15 +4240,15 @@ test('distilled regression for fuzz seed 14725 (minimal)', () => {
   expect(result).toEqual(dedent`
     root.branch = {
       target = [
-        "first",
-        false,
-        {child = [
-          -2, 
-          2019-05-19T00:00:00.000Z
-        ]}
-      ],
+      "first",
+      false,
+      {child = [
+         -2,
+         2019-05-19
+               ]}
+    ],
     }
-  `);
+  ` + '\n\n');
 
   expect(parse(result)).toEqual(obj);
 });

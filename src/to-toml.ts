@@ -63,6 +63,20 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
 
   // Inline traversal for monomorphic property access (avoids generic traverse
   // visitor dispatch which causes megamorphic inline cache misses in V8)
+  const closingPosition = (container: InlineArray | InlineTable): { line: number; column: number } => {
+    const position = {
+      line: container.loc.end.line,
+      column: container.loc.end.column - 1
+    };
+    const last = container.items[container.items.length - 1];
+    if (last && (last.loc.end.line > position.line ||
+        (last.loc.end.line === position.line && last.loc.end.column > position.column))) {
+      position.line = last.loc.end.line;
+      position.column = last.loc.end.column + (last.comma ? 1 : 0);
+    }
+    return position;
+  };
+
   function emitNode(node: TreeNode) {
     switch (node.type) {
       case NodeType.Document:
@@ -127,17 +141,19 @@ export default function toTOML(cst: CST, format: TomlFormat): string {
 
       case NodeType.InlineArray: {
         const ia = node as InlineArray;
-        const { start, end } = ia.loc;
+        const { start } = ia.loc;
+        const closing = closingPosition(ia);
         writeSingle(lines, start.line, start.column, '[');
-        writeSingle(lines, end.line, end.column - 1, ']');
+        writeSingle(lines, closing.line, closing.column, ']');
         for (let i = 0; i < ia.items.length; i++) emitNode(ia.items[i]);
         break;
       }
       case NodeType.InlineTable: {
         const it = node as InlineTable;
-        const { start, end } = it.loc;
+        const { start } = it.loc;
+        const closing = closingPosition(it);
         writeSingle(lines, start.line, start.column, '{');
-        writeSingle(lines, end.line, end.column - 1, '}');
+        writeSingle(lines, closing.line, closing.column, '}');
         for (let i = 0; i < it.items.length; i++) emitNode(it.items[i]);
         break;
       }
