@@ -26,7 +26,7 @@ test.each(historicalFuzzSeeds)('historical fuzz seed %d still passes the full ha
 const historicalFuzzSeeds3 = [
   91, 
   1334,
-  // 2151,
+  2151,
   // 3456, 
   // 3819,
   // 6045,
