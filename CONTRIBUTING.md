@@ -92,7 +92,7 @@ npx -y tsx scripts/fuzz-run3.ts --seed 2151 --to 2151 --mutations 3
 To generate a distilled test for that `fuzz3` seed, use the variant 3 option:
 
 ```powershell
-npx -y tsx scripts/distill-seed.ts --seed 2151 --variant 3 --out local/seed-2151.fuzz3.test.ts
+npx -y tsx scripts/distill-seed.ts --seed 2151 --variant 3 --out ./seed-2151.fuzz3.test.ts
 ```
 
 The generic seed scaffold can also be previewed or appended to
