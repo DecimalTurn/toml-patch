@@ -27,12 +27,12 @@ const historicalFuzzSeeds3 = [
   91, 
   1334,
   2151,
-  // 3456, 
-  // 3819,
-  // 6045,
-  // 7262,
-  // 7490,
-  // 7962,
+  3456, 
+  3819,
+  6045,
+  7262,
+  7490,
+  7962,
   // 7997,
   // 8832,
   // 9322
@@ -4082,4 +4082,43 @@ test('distilled regression for fuzz3 seed 2151', () => {
   `;
   expect(result).toEqual(expected);
   expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 7490', () => {
+  const src = dedent`
+    s1v = '''
+    YdoF!'''
+    a9 = [
+    ]
+    [ke.rzdb.llgh72pd]
+  `;
+
+  const obj = parse(src) as any;
+  obj.ke.rzdb = [{ "k68": [new Date(Date.UTC(2019, 7, 13))] }, 4204];
+
+  const result = patch(src, obj, {
+  inlineTableStart: 2,
+  trailingComma: false,
+  bracketSpacing: true,
+  updateOrder: false,
+  truncateZeroTimeInDates: false,
+  useTabsForIndentation: false,
+  indentWidth: 4,
+  minimumDecimals: 2,
+  multilineTable: "auto",
+  multilineArray: 0
+  });
+
+  expect(result).toEqual(dedent`
+    s1v = '''
+    YdoF!'''
+    a9 = [
+    ]
+    ke.rzdb = [
+        { "k68": [2019-08-13T00:00:00.000Z] }
+    ]
+  `);
+
+  expect(parse(result)).toEqual(obj);
+  // TODO: assert exact output after the implementation fix.
 });
