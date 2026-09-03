@@ -4114,11 +4114,15 @@ test('distilled regression for fuzz seed 7490', () => {
     YdoF!'''
     a9 = [
     ]
-    ke.rzdb = [
-        { "k68": [2019-08-13T00:00:00.000Z] }
+
+    [ke]
+    rzdb = [
+        { k68 = [
+            2019-08-13T00:00:00.000Z
+          ] },
+        4204.00
     ]
   `);
 
   expect(parse(result)).toEqual(obj);
-  // TODO: assert exact output after the implementation fix.
 });
