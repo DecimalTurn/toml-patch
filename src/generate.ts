@@ -108,7 +108,11 @@ export function generateTableArrayKey(key: string[]): TableArrayKey {
   };
 }
 
-export function generateKeyValue(key: string[], value: Value): KeyValue {
+export function generateKeyValue(
+  key: string[],
+  value: Value,
+  shiftGeneratedMultilineEnd = false
+): KeyValue {
   const key_node = generateKey(key);
   const { column } = key_node.loc.end;
 
@@ -121,7 +125,10 @@ export function generateKeyValue(key: string[], value: Value): KeyValue {
   shiftNode(
     value,
     { lines: 1 - value.loc.start.line, columns: column + 3 - value.loc.start.column },
-    { first_line_only: true }
+    {
+      first_line_only: true,
+      shift_generated_multiline_end: shiftGeneratedMultilineEnd
+    }
   );
 
   return {

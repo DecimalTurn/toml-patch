@@ -1246,14 +1246,17 @@ export function applyWrites(root: TreeNode) {
 export function shiftNode(
   node: TreeNode,
   span: Span,
-  options: { first_line_only?: boolean } = {}
+  options: { first_line_only?: boolean; shift_generated_multiline_end?: boolean } = {}
 ): TreeNode {
   const { lines, columns } = span;
 
   // Early return for no-op shifts
   if (lines === 0 && columns === 0) return node;
 
-  const { first_line_only = false } = options;
+  const {
+    first_line_only = false,
+    shift_generated_multiline_end = false
+  } = options;
   const start_line = node.loc.start.line;
 
   // Fast path for leaf nodes (no children to traverse)
@@ -1328,7 +1331,7 @@ export function shiftNode(
       // Only shift end.column when start and end are on the same line:
       // for a multi-line node the end is on a completely different line and
       // its column is an absolute position independent of the start line.
-      const generatedMultilineEnd = !first_line_only &&
+      const generatedMultilineEnd = (!first_line_only || shift_generated_multiline_end) &&
         node.loc.end.line !== node.loc.start.line &&
         (((isInlineArray(node) || isInlineTable(node)) &&
           getInlineContainerLayout(node) === true &&

@@ -67,7 +67,11 @@ function* walkObject(
     if (rawValue === undefined) continue;
     const value = toJSON(rawValue);
     if (value === undefined) continue;
-    yield generateKeyValue([key], walkValue(value, format, depth, parentIsMultiline));
+    yield generateKeyValue(
+      [key],
+      walkValue(value, format, depth, parentIsMultiline),
+      depth > 0 && !parentIsMultiline
+    );
   }
 }
 
