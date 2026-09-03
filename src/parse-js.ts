@@ -49,7 +49,7 @@ export default function parseJS(
   formatNestedTablesMultiline(document, format);
   for (const item of document.items) {
     if (item.type === 'Table' || item.type === 'TableArray') {
-      normalizeGeneratedInlineRows(item, format.indentWidth);
+      normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
     }
   }
 

@@ -70,10 +70,10 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
       if ((node.value as InlineTable).items.length === 0) {
         insert(document, document, generateTable(node.key.value));
       } else {
-        insert(document, document, formatTable(node));
+        insert(document, document, formatTable(node, format.bracketSpacing));
       }
     } else {
-      formatTableArray(node).forEach(table_array => {
+      formatTableArray(node, format.bracketSpacing).forEach(table_array => {
         insert(document, document, table_array);
       });
     }
@@ -83,7 +83,7 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
   return document;
 }
 
-function formatTable(key_value: KeyValue): Table {
+function formatTable(key_value: KeyValue, bracketSpacing: boolean): Table {
   const table = generateTable(key_value.key.value);
 
   for (const item of (key_value.value as InlineTable).items) {
@@ -91,11 +91,11 @@ function formatTable(key_value: KeyValue): Table {
   }
 
   applyWrites(table);
-  normalizeGeneratedInlineRows(table, 1);
+  normalizeGeneratedInlineRows(table, 1, bracketSpacing);
   return table;
 }
 
-function formatTableArray(key_value: KeyValue): TableArray[] {
+function formatTableArray(key_value: KeyValue, bracketSpacing: boolean): TableArray[] {
   const root = generateDocument();
 
   for (const inline_array_item of (key_value.value as InlineArray).items) {
@@ -109,24 +109,36 @@ function formatTableArray(key_value: KeyValue): TableArray[] {
 
   applyWrites(root);
   for (const item of root.items) {
-    if (isTable(item) || isTableArray(item)) normalizeGeneratedInlineRows(item, 1);
+    if (isTable(item) || isTableArray(item)) normalizeGeneratedInlineRows(item, 1, bracketSpacing);
   }
   return root.items as TableArray[];
 }
 
-export function normalizeGeneratedInlineRows(table: Table | TableArray, indentWidth: number): void {
-  const normalize = (container: InlineArray | InlineTable, containerIndent: number): void => {
+export function normalizeGeneratedInlineRows(
+  table: Table | TableArray,
+  indentWidth: number,
+  bracketSpacing = true
+): void {
+  const normalize = (container: InlineArray | InlineTable, containerIndent: number): boolean => {
     const multiline = getInlineContainerLayout(container) === true;
+    let nestedEndChanged = false;
     if (multiline) {
       const rowIndent = containerIndent + indentWidth;
       for (const item of container.items) {
         shiftNode(item, { lines: 0, columns: rowIndent - item.loc.start.column });
         if (isInlineItem(item)) {
           if (isInlineArray(item.item) || isInlineTable(item.item)) {
-            normalize(item.item, item.item.loc.start.column);
+            if (normalize(item.item, item.item.loc.start.column)) {
+              item.loc.end = { ...item.item.loc.end };
+              nestedEndChanged = true;
+            }
           } else if (isKeyValue(item.item) &&
               (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
-            normalize(item.item.value, containerIndent);
+            if (normalize(item.item.value, containerIndent)) {
+              item.item.loc.end = { ...item.item.value.loc.end };
+              item.loc.end = { ...item.item.loc.end };
+              nestedEndChanged = true;
+            }
           }
         }
       }
@@ -136,12 +148,31 @@ export function normalizeGeneratedInlineRows(table: Table | TableArray, indentWi
     for (const item of container.items) {
       if (!isInlineItem(item)) continue;
       if (isInlineArray(item.item) || isInlineTable(item.item)) {
-        normalize(item.item, item.loc.start.column);
+        if (normalize(item.item, item.loc.start.column)) {
+          item.loc.end = { ...item.item.loc.end };
+          nestedEndChanged = true;
+        }
       } else if (isKeyValue(item.item) &&
           (isInlineArray(item.item.value) || isInlineTable(item.item.value))) {
-        normalize(item.item.value, multiline ? item.loc.start.column : containerIndent);
+        const value = item.item.value;
+        const valueWasMultiline = getInlineContainerLayout(value) === true;
+        if (normalize(value, containerIndent) || valueWasMultiline) {
+          // A nested multiline value closes at the row's key indentation.
+          value.loc.end.column = item.loc.start.column + 1;
+          item.item.loc.end = { ...value.loc.end };
+          item.loc.end = { ...item.item.loc.end };
+          nestedEndChanged = true;
+        }
       }
     }
+    if (nestedEndChanged && !multiline && container.items.length > 0) {
+      const lastItem = container.items[container.items.length - 1];
+      container.loc.end = {
+        line: lastItem.loc.end.line,
+        column: lastItem.loc.end.column + (lastItem.comma ? 1 : 0) + (bracketSpacing ? 2 : 1)
+      };
+    }
+    return nestedEndChanged;
   };
 
   for (const item of table.items) {
@@ -239,7 +270,7 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
       const depth = calculateTableDepth(item.key.value);
       if (depth < format.inlineTableStart) {
         // Convert to a separate table
-        const table = formatTable(item);
+        const table = formatTable(item, format.bracketSpacing);
         remove(document, document, item);
         insert(document, document, table);
         
