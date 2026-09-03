@@ -35,7 +35,8 @@ const historicalFuzzSeeds3 = [
   7962,
   7997,
   8832,
-  9322
+  9322,
+  14725
 ];
 
 test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
@@ -4212,4 +4213,46 @@ test('distilled regression for fuzz seed 7997 alt1', () => {
   `);
 
   expect(parse(result)).toEqual(obj);
+});
+test.fails('distilled regression for fuzz seed 14725', () => {
+  const src = dedent`
+    peq03l6 = """
+    m1f-
+    aS,7
+    QF4M1Q/Z
+    Njjn-aPpXsb"""
+    "/\`jD>! $t".loxendcns9 = false
+    upd.a9s5n-zo7.d2evhz_b = {
+        r8qu6f."4$6!B-uw" = -9765.08927,
+        iw = 174197,
+        c5.am.sd2rftuyda = ">uRz,z]a8qwle/b]/~DZp-^4nUh!jDdC",
+        "q-nU@7Gb_j".f-nv47zo9.ahls1uhc8 = -421993,
+        p9eugek.e_0q6 = """
+    H
+    a9+
+    """,
+        "zK[~PQt".a0j11.wx3g00ocv = "D9;%/|i:~~rq{RRQ*xgjt.ilc~ZDhkxQkJVr\`A<L5G0Bs",
+        "rm#vyb-".d5d = true,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.upd["a9s5n-zo7"].d2evhz_b["q-nU@7Gb_j"] = ["0Ka569lqkBv-7Hqnk", false, { "k11": [-1563, new Date(Date.UTC(2019, 4, 19))] }];
+
+  const result = patch(src, obj, {
+  inlineTableStart: 0,
+  trailingComma: false,
+  bracketSpacing: false,
+  updateOrder: false,
+  trailingNewline: 2,
+  newLine: '\r\n',
+  leadingBom: true,
+  truncateZeroTimeInDates: true,
+  useTabsForIndentation: false,
+  indentWidth: 2,
+  multilineTable: "auto",
+  multilineArray: true
+});
+  expect(parse(result)).toEqual(obj);
+  // TODO: assert exact output after the implementation fix.
 });
