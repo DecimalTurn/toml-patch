@@ -4256,3 +4256,31 @@ test.fails('distilled regression for fuzz seed 14725', () => {
   expect(parse(result)).toEqual(obj);
   // TODO: assert exact output after the implementation fix.
 });
+
+test.fails('distilled regression for fuzz seed 14725 (minimal)', () => {
+  const src = dedent`
+    root.branch = {
+      target.nested = -1,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.branch.target = ["first", false, { child: [-2, new Date(Date.UTC(2019, 4, 19))] }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 0,
+    trailingComma: false,
+    bracketSpacing: false,
+    updateOrder: false,
+    trailingNewline: 2,
+    newLine: '\r\n',
+    leadingBom: true,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    indentWidth: 2,
+    multilineTable: "auto",
+    multilineArray: true
+  });
+  expect(parse(result)).toEqual(obj);
+  // TODO: assert exact output after the implementation fix.
+});
