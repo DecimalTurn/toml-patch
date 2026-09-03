@@ -33,9 +33,9 @@ const historicalFuzzSeeds3 = [
   7262,
   7490,
   7962,
-  // 7997,
-  // 8832,
-  // 9322
+  7997,
+  8832,
+  9322
 ];
 
 test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
@@ -4122,6 +4122,49 @@ test('distilled regression for fuzz seed 7490', () => {
           ] },
         4204.00
     ]
+  `);
+
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 7997', () => {
+  const src = dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg.abcw8xtgc1 = '%F=i\`f~Z<mc8v.0[B\`4i<p=qv!_'
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
+  `;
+
+  const obj = parse(src) as any;
+  obj["cdf"].xg = [["4o0SPONABJgx3", false, "vk-X9lxxkT"], [[], 1705]];
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 0,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: true,
+    indentWidth: 2,
+    multilineTable: false,
+    multilineArray: 2
+  });
+
+  expect(result).toEqual(dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg = [ [ "4o0SPONABJgx3", false, "vk-X9lxxkT", ], [ [], 1705], ]
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
   `);
 
   expect(parse(result)).toEqual(obj);
