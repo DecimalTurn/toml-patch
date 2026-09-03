@@ -14,6 +14,8 @@ export type InlineContainerKind = 'array' | 'table';
 
 const multilineDecisions = new WeakMap<InlineArray | InlineTable, boolean>();
 const positionedContainers = new WeakSet<InlineArray | InlineTable>();
+const generatedNestedTables = new WeakSet<InlineTable>();
+const generatedNestedTableHosts = new WeakSet<InlineArray>();
 
 export function resolveInlineContainerLayout(
   kind: InlineContainerKind,
@@ -51,6 +53,22 @@ export function markInlineContainerPositioned(container: InlineArray | InlineTab
 
 export function isInlineContainerPositioned(container: InlineArray | InlineTable): boolean {
   return positionedContainers.has(container);
+}
+
+export function markGeneratedNestedTable(table: InlineTable): void {
+  generatedNestedTables.add(table);
+}
+
+export function isGeneratedNestedTable(table: InlineTable): boolean {
+  return generatedNestedTables.has(table);
+}
+
+export function markGeneratedNestedTableHost(array: InlineArray): void {
+  generatedNestedTableHosts.add(array);
+}
+
+export function isGeneratedNestedTableHost(array: InlineArray): boolean {
+  return generatedNestedTableHosts.has(array);
 }
 
 export function hasStructuralMultilineRows(container: InlineArray | InlineTable): boolean {

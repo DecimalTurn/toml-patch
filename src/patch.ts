@@ -55,7 +55,7 @@ import {
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import traverse from './traverse';
-import { prepareInsertedNestedInlineContainer } from './inline-layout';
+import { prepareInsertedNestedInlineContainer, positionGeneratedNestedInlineTables } from './inline-layout';
 import {
   findInlineContainerDepth,
   findInlineContainerParent,
@@ -1251,6 +1251,7 @@ function applyChanges(
   // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
   // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
   const objectMoves: Move[] = [];
+  const replacedInlineArrays = new Set<InlineArray>();
 
   function regenerateInlineChildForParent(parent: TreeNode, changePath: Path, child: TreeNode): TreeNode {
     if ((!isInlineArray(parent) && !isInlineTable(parent)) || !isInlineItem(child)) return child;
@@ -2643,6 +2644,7 @@ function applyChanges(
       replacement = regenerateInlineReplacement(existing, replacement, change.path);
 
       replace(original, parent, existing, replacement);
+      if (isInlineArray(replacement)) replacedInlineArrays.add(replacement);
       if (isInlineArray(replacement) || isInlineTable(replacement)) {
         applyWrites(original);
         normalizeGeneratedInlineContainerRows(replacement, format.indentWidth);
@@ -3823,7 +3825,12 @@ function applyChanges(
   // patched object's key order. Must run last — see the comment on objectMoves above.
   applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
   if (objectMoves.length > 0) markDirty(original);
-
+  if (replacedInlineArrays.size > 0) {
+    applyWrites(original);
+    for (const array of replacedInlineArrays) {
+      positionGeneratedNestedInlineTables(array, format.indentWidth);
+    }
+  }
   return original;
 }
 

@@ -37,6 +37,7 @@ import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';
 import { isIterable } from './utils';
 import { getCommaSpace } from './inline-comma-space';
+import { isGeneratedNestedTable, isGeneratedNestedTableHost } from './inline-format';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -344,11 +345,12 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
 
   const appendRelativeGap = (
     from: { line: number; column: number },
-    to: { line: number; column: number }
+    to: { line: number; column: number },
+    absoluteIndent = false
   ): void => {
     if (to.line > from.line) {
       append(format.newLine.repeat(to.line - from.line));
-      if (to.column > 0) append(indentation(to.column));
+      if (to.column > 0) append(absoluteIndent ? SPACE.repeat(to.column) : indentation(to.column));
     } else if (to.line === from.line && to.column > from.column) {
       append(SPACE.repeat(to.column - from.column));
     }
@@ -361,6 +363,8 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
   ): string | undefined => {
     const source = getNodeSource(container);
     if (!source || !container.range) return undefined;
+    if (isInlineArray(container) && isGeneratedNestedTableHost(container) &&
+      (!current || (previous && !previous.range) || (current && !current.range))) return undefined;
     if (previous && getNodeSource(previous) !== source) return undefined;
     if (current && getNodeSource(current) !== source) return undefined;
     const start = previous?.range?.[1] ?? container.range[0] + 1;
@@ -369,7 +373,8 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
 
     let gap = source.slice(start, end);
     if (previous?.comma && gap.startsWith(',')) gap = gap.slice(1);
-    return /^[\t \r\n]*$/.test(gap) ? gap : undefined;
+    if (!/^[\t \r\n]*$/.test(gap)) return undefined;
+    return gap;
   };
 
   const commentBelongsTo = (comment: Comment, container: InlineArray | InlineTable): boolean => {
@@ -383,6 +388,7 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
   };
 
   const emitInlineItems = (container: InlineArray | InlineTable): void => {
+    const generatedMultilineTable = isInlineTable(container) && isGeneratedNestedTable(container);
     let previous: InlineItem | undefined;
     for (const current of container.items as InlineItem[]) {
       let from = previous
@@ -425,7 +431,7 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
           const wantedSpaces = Math.max(0, commaGap - 1);
           if (wantedSpaces > 0) append(SPACE.repeat(wantedSpaces));
         } else {
-          appendRelativeGap(from, current.loc.start);
+          appendRelativeGap(from, current.loc.start, generatedMultilineTable);
         }
         }
       }
@@ -474,10 +480,13 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
     } else {
       const trailingGap = sourceGap(container, previous, undefined);
       if (trailingGap !== undefined) append(trailingGap);
-      else if (previous) appendRelativeGap(trailingFrom, {
-        line: container.loc.end.line,
-        column: container.loc.end.column - 1
-      });
+      else if (previous) {
+        if (generatedMultilineTable && previous.comma) append(SPACE);
+        appendRelativeGap(trailingFrom, {
+          line: container.loc.end.line,
+          column: container.loc.end.column - 1
+        }, generatedMultilineTable);
+      }
       else {
         const source = getNodeSource(container);
         if (source && container.range) {
