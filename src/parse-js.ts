@@ -150,7 +150,8 @@ function walkInlineTable(
   if (!isObject(value)) return walkValue(value, format, depth, parentIsMultiline);
 
   const inline_table = generateInlineTable();
-  const multiline = resolveInlineContainerLayout('table', depth, parentIsMultiline, format);
+  const multiline = !(Object.keys(value).length === 0 && depth > 0) &&
+    resolveInlineContainerLayout('table', depth, parentIsMultiline, format);
   setInlineContainerLayout(inline_table, multiline);
   setRootIndentWidth(inline_table, format.indentWidth);
   for (const item of walkObject(value, format, depth + 1, multiline)) {
