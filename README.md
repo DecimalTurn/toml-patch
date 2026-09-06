@@ -21,6 +21,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
 - [Formatting](#formatting)
 - [Changelog](https://github.com/DecimalTurn/toml-patch/blob/v3.0.5/CHANGELOG.md)
 - [Contributing](https://github.com/DecimalTurn/toml-patch/blob/v3.0.5/CONTRIBUTING.md)
+- [MIT License](https://github.com/DecimalTurn/toml-patch/blob/v3.0.5/LICENSE)
 
 ## Installation
 
