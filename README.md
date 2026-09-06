@@ -36,7 +36,7 @@ For browser usage, you can use unpkg:
 
 ```html
 <script type="module">
-  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch@browser/dist/browser/toml-patch.js';
+  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch@latest/dist/toml-patch.js';
 </script>
 ```
 

@@ -9,9 +9,8 @@ const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${
 export default defineConfig([
   {
     // Main build: consumed by bundlers (webpack/rollup/esbuild/vite) and Node.
-    // Left unminified so downstream bundlers get real names/structure for
-    // tree-shaking and dead-code elimination, and readable stack traces —
-    // they'll apply their own minification at the end of their own build anyway.
+    // Keep the published package compact. Downstream bundlers can still
+    // tree-shake the ESM output and apply their own minification.
     entry: {
       'toml-patch': 'src/index.ts',
     },
@@ -19,24 +18,23 @@ export default defineConfig([
     outDir: 'dist',
     clean: false,
     dts: true,
-    minify: false,
+    minify: true,
     fixedExtension: false,
     banner: {
       js: banner,
     },
   },
   {
-    // Browser build: a single minified ESM file for direct
-    // <script type="module"> usage via a CDN (unpkg/jsdelivr), where users
-    // pay for every byte on every page load and have no bundler of their own.
+    // Development build: readable ESM with source maps for debugging.
     entry: {
       'toml-patch': 'src/index.ts',
     },
     format: 'esm',
-    outDir: 'dist/browser',
+    outDir: 'dist/dev',
     clean: false,
     dts: false,
-    minify: true,
+    minify: false,
+    sourcemap: true,
     fixedExtension: false,
     banner: {
       js: banner,

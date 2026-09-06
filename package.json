@@ -61,7 +61,7 @@
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && tsdown",
     "build:demo": "node scripts/build-demo.mjs",
-    "prepare:browser-package": "node scripts/prepare-browser-package.mjs",
+    "prepare:dev-package": "node scripts/prepare-dev-package.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

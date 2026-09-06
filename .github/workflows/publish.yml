@@ -50,13 +50,20 @@ jobs:
         run: pnpm publish --provenance --no-git-checks
         continue-on-error: true
 
-      - name: Prepare browser package
-        if: steps.pnpm-publish.outcome == 'success'
-        run: pnpm run prepare:browser-package
+      - name: Check stable package
+        id: stable-package
+        if: always()
+        # A rerun may report publish failure because this exact version already exists.
+        run: npm view @decimalturn/toml-patch@$(node -p "require('./package.json').version") version
+        continue-on-error: true
 
-      - name: Publish browser package
-        if: steps.pnpm-publish.outcome == 'success'
-        run: npm publish ./dist/browser-package --tag browser --provenance --ignore-scripts
+      - name: Prepare dev package
+        if: steps.pnpm-publish.outcome == 'success' || steps.stable-package.outcome == 'success'
+        run: pnpm run prepare:dev-package
+
+      - name: Publish dev package
+        if: steps.pnpm-publish.outcome == 'success' || steps.stable-package.outcome == 'success'
+        run: npm publish ./dist/dev-package --tag dev --provenance --ignore-scripts
 
       - name: Check git status
         run: git status && git diff
