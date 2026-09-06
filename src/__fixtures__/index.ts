@@ -13,3 +13,4 @@ export const kitchen_sink = read('kitchen-sink.toml');
 export const nested_tables = read('nested-tables.toml');
 export const spec_01_example = read('0A-spec-01-example-v0.4.0.toml');
 export const emoji = read('emoji.toml');
+export const dotted_key_tabs = read('dotted-key-tabs.toml');

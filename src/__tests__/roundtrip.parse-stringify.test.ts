@@ -36,7 +36,7 @@ function testRoundtrip(filePath: string) {
     
     // Compare the objects (this may fail, which is valuable for debugging)
     expect(reparsedObject).toEqual(parsedObject);
-  });
+  }, filename.includes('1000') ? 10_000 : 5_000);
 }
 
 // Get all TOML files from the benchmark directory

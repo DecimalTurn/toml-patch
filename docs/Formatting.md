@@ -314,11 +314,13 @@ console.log(stringify(data, windows));
 Anonymous objects are still supported for backward compatibility:
 
 ```js
+// This approach still works
 const result = stringify(data, {
   trailingComma: true,
   bracketSpacing: false
 });
 
+// But this equivalent approach is the new recommended type safe way to use the library.
 const format = TomlFormat.default();
 format.trailingComma = true;
 format.bracketSpacing = false;

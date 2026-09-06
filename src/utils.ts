@@ -171,36 +171,70 @@ export function datesEqual(a: any, b: any): boolean {
 }
 
 export function stableStringify(object: any): string {
-  if (isObject(object)) {
-    const key_values = Object.keys(object)
-      .sort()
-      .map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`);
+  const output: string[] = [];
+  const active = new WeakSet<object>();
+  const pending: Array<{ value: any } | { text: string } | { leave: object; text: string }> = [{ value: object }];
 
-    return `{${key_values.join(',')}}`;
-  } else if (Array.isArray(object)) {
-    return `[${object.map(stableStringify).join(',')}]`;
-  } else if (isTemporal(object)) {
+  while (pending.length > 0) {
+    const token = pending.pop()!;
+    if ('text' in token) {
+      output.push(token.text);
+      if ('leave' in token) active.delete(token.leave);
+      continue;
+    }
+
+    const value = token.value;
+    if (isObject(value)) {
+      if (active.has(value)) {
+        throw new TypeError('Cannot stableStringify a circular structure');
+      }
+      active.add(value);
+      const keys = Object.keys(value).sort();
+      output.push('{');
+      pending.push({ leave: value, text: '}' });
+      for (let index = keys.length - 1; index >= 0; index--) {
+        const key = keys[index];
+        if (index < keys.length - 1) pending.push({ text: ',' });
+        pending.push({ value: value[key] });
+        pending.push({ text: ':' });
+        pending.push({ text: JSON.stringify(key) });
+      }
+    } else if (Array.isArray(value)) {
+      if (active.has(value)) {
+        throw new TypeError('Cannot stableStringify a circular structure');
+      }
+      active.add(value);
+      output.push('[');
+      pending.push({ leave: value, text: ']' });
+      for (let index = value.length - 1; index >= 0; index--) {
+        if (index < value.length - 1) pending.push({ text: ',' });
+        pending.push({ value: value[index] });
+      }
+    } else if (isTemporal(value)) {
     // Temporal objects use toString() for a stable ISO representation
-    return JSON.stringify(object.toString());
-  } else if (isDate(object)) {
+      output.push(JSON.stringify(value.toString()));
+    } else if (isDate(value)) {
     // Custom Date subclasses use toISOString()
-    return JSON.stringify(object.toISOString());
-  } else if (typeof object === 'bigint') {
-    return object.toString() + 'n';
-  } else if (typeof object === 'number' && !Number.isFinite(object)) {
+      output.push(JSON.stringify(value.toISOString()));
+    } else if (typeof value === 'bigint') {
+      output.push(value.toString() + 'n');
+    } else if (typeof value === 'number' && !Number.isFinite(value)) {
     // NaN, Infinity and -Infinity all round-trip through JSON.stringify as
     // "null", so they collapse into one another (and into a literal `null`
     // value) in the diff's stable form — an array like `[1, inf, 2, nan]`
     // then diffs `inf` and `nan` as the same element and removes the wrong
     // one (fuzz seed 22629).  Tag them by their IEEE 754 sign bit so every
     // distinct non-finite number (including -NaN vs +NaN) stays unique.
-    const buf = new Float64Array([object]);
+      const buf = new Float64Array([value]);
     const view = new DataView(buf.buffer);
     const sign = view.getUint32(4, true) & 0x80000000 ? '-' : '+';
-    return `${sign}${String(object)}`;
-  } else {
-    return JSON.stringify(object);
+      output.push(`${sign}${String(value)}`);
+    } else {
+      output.push(JSON.stringify(value));
+    }
   }
+
+  return output.join('');
 }
 
 export function merge<TValue>(target: TValue[], values: TValue[]) {

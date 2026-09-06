@@ -1,0 +1,2 @@
+# The escaped lone surrogate U+D800.
+value = "\uD800"

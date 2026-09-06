@@ -15,7 +15,8 @@ import {
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
-import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot } from './writer';
+import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth } from './writer';
+import { prepareInsertedNestedInlineContainer } from './inline-layout';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -29,6 +30,7 @@ export default function parseJS(value: any, format: TomlFormat = TomlFormat.defa
   const document = generateDocument();
   // Enable stringify fast paths in the writer — no comments, no removals.
   markStringifyRoot(document);
+  setRootIndentWidth(document, format.indentWidth);
   for (const item of walkObject(value, format)) {
     insert(document, document, item);
   }
@@ -87,10 +89,12 @@ function walkValue(value: any, format: TomlFormat): Value {
 
 function walkInlineArray(value: Array<any>, format: TomlFormat): InlineArray {
   const inline_array = generateInlineArray();
+  setRootIndentWidth(inline_array, format.indentWidth);
   for (const element of value) {
     const item = walkValue(element, format);
     const inline_array_item = generateInlineItem(item);
 
+    prepareInsertedNestedInlineContainer(inline_array, inline_array_item, format.indentWidth);
     insert(inline_array, inline_array, inline_array_item);
   }
   applyBracketSpacing(inline_array, inline_array, format.bracketSpacing);
@@ -105,6 +109,7 @@ function walkInlineTable(value: object, format: TomlFormat): InlineTable | Value
   if (!isObject(value)) return walkValue(value, format);
 
   const inline_table = generateInlineTable();
+  setRootIndentWidth(inline_table, format.indentWidth);
   for (const item of walkObject(value, format)) {
     const inline_table_item = generateInlineItem(item);
 

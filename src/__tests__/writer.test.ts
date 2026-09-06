@@ -1,4 +1,4 @@
-import { insert, applyWrites } from '../writer';
+import { insert, applyWrites, replace } from '../writer';
 import toTOML from '../to-toml';
 import {
   generateInlineArray,
@@ -8,7 +8,8 @@ import {
   generateDocument
 } from '../generate';
 import { TomlFormat } from '../toml-format';
-import { String as StringNode, NodeType } from '../cst';
+import { Document, KeyValue, String as StringNode, NodeType } from '../cst';
+import parseTOML from '../parse-toml';
 
 test('it should insert elements into empty inline array', () => {
   const inline_array = generateInlineArray();
@@ -39,6 +40,25 @@ test('it should insert first item on first line in document', () => {
   insert(document, document, item);
 
   expect(toTOML(document.items, format)).toEqual(`a = "b"\n`);
+});
+
+test('writer mutations mark changed nodes and ancestors dirty', () => {
+  const items = [...parseTOML('a = "old"\nb = "untouched"')];
+  const document: Document = {
+    type: NodeType.Document,
+    loc: { start: { line: 1, column: 0 }, end: { line: 2, column: 15 } },
+    items
+  };
+  const changed = items[0] as KeyValue;
+  const untouched = items[1] as KeyValue;
+  const replacement = generateString('new');
+
+  replace(document, changed, changed.value, replacement);
+
+  expect(replacement.dirty).toBe(true);
+  expect(changed.dirty).toBe(true);
+  expect(document.dirty).toBe(true);
+  expect(untouched.dirty).toBeUndefined();
 });
 
 describe('formatMultilineStringReplacement', () => {

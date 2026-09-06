@@ -1,8 +1,9 @@
-import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat } from '../toml-format';
+import { TomlFormat, detectNewline, countTrailingNewlines, validateFormatObject, resolveTomlFormat, detectTabsForIndentation } from '../toml-format';
 import { patch, stringify } from '../index';
 import parseTOML from '../parse-toml';
 import toTOML from '../to-toml';
 import { stripLeadingBom } from '../decode-utf8';
+import dedent from 'dedent';
 
 function autoDetectFormat(toml: string) {
   return TomlFormat.autoDetectFormatWithCst(toml, parseTOML(stripLeadingBom(toml)));
@@ -45,6 +46,7 @@ describe('TomlFormat comprehensive tests', () => {
       expect(format.trailingNewline).toBe(1);
       expect(format.trailingComma).toBe(false);
       expect(format.bracketSpacing).toBe(true);
+      expect(format.indentWidth).toBe(2);
     });
 
     test('should use default when newLine is undefined', () => {
@@ -453,6 +455,39 @@ data = "test"`;
       expect(format.trailingComma).toBe(true); // Should detect from multiple trailing commas
     });
 
+
+    test('should detect four-space indentation from single key', () => {
+      const toml = '    singleKey = 1\n';
+      expect(autoDetectFormat(toml).indentWidth).toBe(4);
+    });
+
+    test('should detect four-space indentation from multiline rows', () => {
+      const toml = dedent`
+        table = {
+            key1 = 1,
+            key2 = 2,
+        }
+      `;
+
+      expect(autoDetectFormat(toml).indentWidth).toBe(4);
+    });
+
+    test('should detect one-column indentation for tabs', () => {
+      const toml = 'table = {\n\tkey = 1,\n}\n';
+      const format = autoDetectFormat(toml);
+
+      expect(format.useTabsForIndentation).toBe(true);
+      expect(format.indentWidth).toBe(1);
+    });
+
+    test('should prefer tabs when tab and space evidence is equal', () => {
+      const toml = '[server]\n\tport = 8080\n  host = "localhost"\n';
+
+      expect(detectTabsForIndentation(toml)).toBe(true);
+      expect(autoDetectFormat(toml).useTabsForIndentation).toBe(true);
+      expect(autoDetectFormat(toml).indentWidth).toBe(1);
+    });
+
     test('should reuse an existing parse tree when auto-detecting format', () => {
       const toml = 'title = "Cached"\narray = ["a", "b", ]\n';
       const cst = Array.from(parseTOML(toml));
@@ -567,6 +602,15 @@ describe('validateFormatObject', () => {
       expect(validateFormatObject({ useTabsForIndentation: true })).toEqual({ useTabsForIndentation: true });
     });
 
+    test('accepts unset indentWidth values', () => {
+      expect(validateFormatObject({ indentWidth: undefined })).toEqual({ indentWidth: undefined });
+      expect(validateFormatObject({ indentWidth: null })).toEqual({ indentWidth: null });
+    });
+
+    test('accepts positive integer indentWidth', () => {
+      expect(validateFormatObject({ indentWidth: 4 })).toEqual({ indentWidth: 4 });
+    });
+
     test('accepts boolean updateOrder', () => {
       expect(validateFormatObject({ updateOrder: true })).toEqual({ updateOrder: true });
     });
@@ -632,6 +676,11 @@ describe('validateFormatObject', () => {
 
     test('rejects non-boolean useTabsForIndentation', () => {
       expect(() => validateFormatObject({ useTabsForIndentation: 'yes' })).toThrow(TypeError);
+    });
+
+    test.each([0, -1, 1.5, '4'])('rejects invalid indentWidth value %p', (indentWidth) => {
+      expect(() => validateFormatObject({ indentWidth })).toThrow(TypeError);
+      expect(() => validateFormatObject({ indentWidth })).toThrow(/indentWidth/);
     });
 
     test('rejects non-boolean updateOrder', () => {

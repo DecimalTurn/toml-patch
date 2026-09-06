@@ -21,9 +21,10 @@ import {
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation, Location } from './location';
+import { clonePosition, cloneLocation, getLine, Location } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
+import { createSourceAttacher } from './cst-source';
 
 import {
   DateFormatHelper,
@@ -254,10 +255,12 @@ export {
 export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
   const cursor = new Cursor(tokenize(input, newlineState));
+  const attachSource = createSourceAttacher(input);
   
   while (!cursor.next().done) {
     const blocks = walkBlock(cursor, input);
     for (const block of blocks) {
+      attachSource(block);
       yield block;
     }
   }
@@ -1150,6 +1153,7 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
 
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
+    const dot = cursor.value!;
     cursor.next();
 
     // Validate each part of a dotted key
@@ -1160,8 +1164,13 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
       validateBareKeyChars(partRaw, input, cursor.value!.loc.start);
     }
 
+    const keyLine = getLine(input, key.loc.end);
+    const dotLine = getLine(input, dot.loc.end);
+    const before = keyLine.slice(key.loc.end.column, dot.loc.start.column);
+    const after = dotLine.slice(dot.loc.end.column, cursor.value!.loc.start.column);
+
     key.loc.end = cursor.value!.loc.end;
-    key.raw += `.${cursor.value!.raw}`;
+    key.raw += `${before}.${after}${cursor.value!.raw}`;
     key.value.push(parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start));
   }
 

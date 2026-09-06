@@ -1910,29 +1910,25 @@ describe('TomlDocument', () => {
     });
   });
 
-  describe('patch result verification', () => {
-    // Structurally distilled from fuzz seed 771152. The fine-grained writer
-    // leaves the enclosing array's delimiter offsets stale here and produces
-    // TOML that does not parse; the internal retry is what saves it.
+  describe('derived CST positions', () => {
+    // Structurally distilled from fuzz seed 771152. The enclosing array must
+    // be emitted from its current structure without rewriting untouched values.
     const trickyToml = dedent`
       build.artifacts = [1, '''
       alpha''', 0o34, 2.5, true, [{ meta.notes.summary = """
       detail""" }, 1986-03-02]]
     ` + '\n';
 
-    it('produces valid TOML where the fine-grained writer would not', () => {
+    it('preserves formatting while updating a nested multiline container', () => {
       const doc = new TomlDocument(trickyToml);
       const obj = doc.toJsObject;
       obj.build.artifacts[5][0].meta.notes = { width: 3, label: 'measured value' };
       doc.patch(obj);
 
-      // The retry rewrites the whole multiline container, losing the multiline
-      // literal string and the octal base, but the result is valid TOML and the
-      // untouched local date keeps its original spelling.
-      expect(doc.toTomlString).toBe(
-        'build.artifacts = [1, "alpha", 28, 2.5, true, ' +
-        '[{meta = {notes = {width = 3, label = "measured value"}}}, 1986-03-02]]\n'
-      );
+      expect(doc.toTomlString).toBe(dedent`
+        build.artifacts = [1, '''
+        alpha''', 0o34, 2.5, true, [{meta.notes.width = 3, meta.notes.label = "measured value"}, 1986-03-02]]
+      ` + '\n');
       expect(() => new TomlDocument(doc.toTomlString).toJsObject).not.toThrow();
     });
 
