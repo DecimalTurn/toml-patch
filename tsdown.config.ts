@@ -19,6 +19,7 @@ export default defineConfig([
     clean: false,
     dts: true,
     minify: true,
+    treeshake: true,
     fixedExtension: false,
     banner: {
       js: banner,
@@ -35,6 +36,8 @@ export default defineConfig([
     dts: false,
     minify: false,
     sourcemap: true,
+    treeshake: true,
+    unbundle: true,
     fixedExtension: false,
     banner: {
       js: banner,

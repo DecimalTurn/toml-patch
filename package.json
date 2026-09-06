@@ -34,6 +34,7 @@
     "node": ">=16"
   },
   "type": "module",
+  "sideEffects": false,
   "types": "./dist/toml-patch.d.ts",
   "exports": {
     ".": {

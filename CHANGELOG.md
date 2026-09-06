@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Build: Ship a separate unminified development build (`dist/dev/toml-patch.js`) with source maps, published under the `dev` npm dist-tag for debugging. The main `dist/toml-patch.js` build is minified to keep the regular package compact.
+- Build: Ship a separate unbundled, unminified development build with source maps, published under the `dev` npm dist-tag for debugging and downstream tree-shaking. 
 
 ### Fixed
 

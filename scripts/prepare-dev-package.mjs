@@ -11,13 +11,11 @@ const root = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const devPackageDir = join(root, 'dist', 'dev-package');
 const devFile = 'dist/dev/toml-patch.js';
-const devMapFile = 'dist/dev/toml-patch.js.map';
 const declarationFile = 'dist/toml-patch.d.ts';
 
 rmSync(devPackageDir, { force: true, recursive: true });
-mkdirSync(join(devPackageDir, 'dist', 'dev'), { recursive: true });
-cpSync(join(root, devFile), join(devPackageDir, devFile));
-cpSync(join(root, devMapFile), join(devPackageDir, devMapFile));
+mkdirSync(join(devPackageDir, 'dist'), { recursive: true });
+cpSync(join(root, 'dist', 'dev'), join(devPackageDir, 'dist', 'dev'), { recursive: true });
 cpSync(join(root, declarationFile), join(devPackageDir, declarationFile));
 
 const devPackageJson = {
@@ -28,6 +26,7 @@ const devPackageJson = {
   repository: packageJson.repository,
   license: packageJson.license,
   type: 'module',
+  sideEffects: false,
   types: `./${declarationFile}`,
   files: ['dist/'],
   exports: {
