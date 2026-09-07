@@ -42,8 +42,27 @@ jobs:
         run: pnpm run typecheck
 
       - name: Build
+        id: build
         run: pnpm run build
         continue-on-error: true
+
+      - name: Check dev package
+        id: dev-package-exists
+        if: always()
+        # A rerun may reach this workflow after the dev version was published.
+        # The following command will return an error if the dev version does not exist.
+        # A successful run indicates that the dev version exists.
+        run: npm view @decimalturn/toml-patch@$(node -p "require('./package.json').version")-dev version
+        continue-on-error: true
+
+      - name: Prepare dev package
+        if: steps.build.outcome == 'success' && steps.dev-package-exists.outcome != 'success'
+        run: pnpm run build:dev
+
+      - name: Publish dev package
+        if: steps.build.outcome == 'success' && steps.dev-package-exists.outcome != 'success'
+        id: dev-publish
+        run: npm publish ./dist/dev-package --tag dev --provenance --ignore-scripts
 
       - name: Publish to npm
         id: pnpm-publish

@@ -10,8 +10,9 @@ import { Session } from 'node:inspector/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Import individual pipeline stages from dist
-const tomlPatch = await import('../dist/toml-patch.js');
+// Profile the readable, source-mapped development build.
+// Must run `pnpm run build:dev` after `pnpm run build` to make it available.
+const tomlPatch = await import('../dist/dev/toml-patch.js');
 const smolTomlPath = join(__dirname, '../node_modules/smol-toml/dist/index.js');
 const smolToml = await import(pathToFileURL(smolTomlPath).href);
 
