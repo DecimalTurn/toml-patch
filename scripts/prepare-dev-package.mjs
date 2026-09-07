@@ -26,6 +26,7 @@ const devPackageJson = {
   repository: packageJson.repository,
   license: packageJson.license,
   type: 'module',
+  engines: packageJson.engines,
   sideEffects: false,
   types: `./${declarationFile}`,
   files: ['dist/'],
