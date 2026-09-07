@@ -64,6 +64,7 @@
     "build": "rimraf dist && tsdown",
     "build:demo": "node scripts/build-demo.mjs",
     "prepare:dev-package": "node scripts/prepare-dev-package.mjs",
+    "test:dev-package": "pnpm run prepare:dev-package && node scripts/test-dev-package.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
