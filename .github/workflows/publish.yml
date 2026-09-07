@@ -57,7 +57,7 @@ jobs:
 
       - name: Prepare dev package
         if: steps.build.outcome == 'success' && steps.dev-package-exists.outcome != 'success'
-        run: pnpm run prepare:dev-package
+        run: pnpm run build:dev
 
       - name: Publish dev package
         if: steps.build.outcome == 'success' && steps.dev-package-exists.outcome != 'success'

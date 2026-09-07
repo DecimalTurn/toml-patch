@@ -59,7 +59,7 @@ jobs:
       run: pnpm run build
 
     - name: Test dev package
-      run: pnpm run test:dev-package
+      run: pnpm run test:dev
 
     - name: Install Playwright browsers
       run: pnpm run playwright:install
