@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Formatting: align generated multiline inline tables and arrays with the key that owns them, so their rows and closing brackets stay in the key's column. ([#298])
 - Patching: preserve indentation for inline and nested elements, including nested multiline inline tables and arrays and mixed tab and space indentation. ([#291])
+- Patching: preserve comment associations on surviving groups and entries when inserting or removing nested inline elements, including trailing comments after closing delimiters.
 - Patching: preserve whitespace around dots in dotted-keys and dotted-table titles. ([#297])
 
 ## [3.0.5] - 2026-08-30

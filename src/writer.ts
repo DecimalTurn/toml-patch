@@ -254,19 +254,17 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   // Pre-compensate comments that appear before the insertion line so the bleedthrough
   // leaves them at their original position.
   //
-  // Bounded to comments physically within `parent`'s own line span: `hostItems` (be it
-  // root.items or a nested host container's items) can hold many OTHER comments with no
-  // relation to this inline container at all (prose between sibling keys, another key's own
-  // trailing comment) — blindly shifting every comment in that array by line number alone
-  // corrupts unrelated ones the moment a document has more than the hoisted comments in it.
+  // Include comments on surviving inline ancestors in the same key's value. Host items
+  // also contain comments belonging to other keys, which must remain outside this span.
   if ((isInlineTable(parent) || isInlineArray(parent)) && offset.lines !== 0 && (hostItems || hasItems(root)) && root !== parent) {
     const insertionLine = child.loc.start.line;
     const commentHostItems = hostItems ?? (root as WithItems).items;
+    const commentContainer = enclosingInlineValue(parent, commentHostItems);
     for (let i = 0; i < commentHostItems.length; i++) {
       const item = commentHostItems[i];
       if (!isComment(item)) continue;
       const commentLine = (item as Comment).loc.start.line;
-      if (commentLine < parent.loc.start.line || commentLine > parent.loc.end.line) continue;
+      if (commentLine < commentContainer.loc.start.line || commentLine > commentContainer.loc.end.line) continue;
       if (commentLine < insertionLine) {
         (item as Comment).loc.start.line -= offset.lines;
         (item as Comment).loc.end.line -= offset.lines;
@@ -278,6 +276,21 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
   offsets.set(child, offset);
   markMutation(root, parent, child);
   dirty_roots.add(root);
+}
+
+// Hoisted comments on surviving ancestors share the edited value's exit offset.
+// Limit compensation to that value, excluding comments belonging to sibling keys.
+function enclosingInlineValue(parent: TreeNode, hostItems: TreeNode[]): TreeNode {
+  for (const hostItem of hostItems) {
+    if (!isKeyValue(hostItem)) continue;
+    const value = hostItem.value;
+    if (!isInlineArray(value) && !isInlineTable(value)) continue;
+    let containsParent = false;
+    const findParent = (node: TreeNode) => { if (node === parent) containsParent = true; };
+    traverse(value, { InlineArray: findParent, InlineTable: findParent });
+    if (containsParent) return value;
+  }
+  return parent;
 }
 
 function insertOnNewLine(
@@ -984,21 +997,22 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   // host-level item but is NOT associated with the inline table's items, so the
   // `commentLine === removedLine` drop would incorrectly delete it.
   //
-  // Bounded to comments physically within `parent`'s own line span — see the identical note
-  // on the insert() side above; `hostItems` can hold many comments with no relation to this
-  // specific inline container at all.
+  // Compensate through the enclosing inline value, as in insert(), excluding
+  // comments belonging to other keys in the host.
   if (isMultilineInlineContainer && (hostItems || hasItems(root)) && root !== parent) {
     const removedLine = node.loc.start.line;
     const commentHostItems = hostItems ?? (root as WithItems).items;
+    const commentContainer = enclosingInlineValue(parent, commentHostItems);
     const toRemove: number[] = [];
 
     for (let i = 0; i < commentHostItems.length; i++) {
       const item = commentHostItems[i];
       if (!isComment(item)) continue;
       const commentLine = (item as Comment).loc.start.line;
-      if (commentLine < parent.loc.start.line || commentLine > parent.loc.end.line) continue;
-      if (commentLine === removedLine) {
-        // Comment was on the same line as the removed item — drop it.
+      if (commentLine < commentContainer.loc.start.line || commentLine > commentContainer.loc.end.line) continue;
+      if (commentLine === removedLine &&
+        (commentLine < parent.loc.end.line || item.loc.start.column < parent.loc.end.column)) {
+        // Only a same-line comment before the closing delimiter can belong to the removed item.
         toRemove.push(i);
       } else if (offset.lines !== 0 && commentLine < removedLine) {
         // Comment is before the removed line: pre-compensate so the bleedthrough
