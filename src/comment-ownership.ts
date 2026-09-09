@@ -304,8 +304,10 @@ export function resolveInlineElementSlots(
   const interiorComments = hostItems.filter(
     (item): item is Comment =>
       isComment(item) &&
-      item.loc.start.line >= container.loc.start.line &&
-      item.loc.start.line <= container.loc.end.line
+      (item.loc.start.line > container.loc.start.line ||
+        (item.loc.start.line === container.loc.start.line && item.loc.start.column >= container.loc.start.column)) &&
+      (item.loc.end.line < container.loc.end.line ||
+        (item.loc.end.line === container.loc.end.line && item.loc.end.column <= container.loc.end.column))
   );
 
   const merged: TreeNode[] = [...(container.items as TreeNode[]), ...interiorComments].sort(

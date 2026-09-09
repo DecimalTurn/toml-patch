@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Patching: preserve comment associations on surviving groups and entries when inserting or removing nested inline elements, including trailing comments after closing delimiters.
 - Patching: preserve whitespace around dots in dotted-keys and dotted-table titles. ([#297])
 
 ## [3.0.5] - 2026-08-30
