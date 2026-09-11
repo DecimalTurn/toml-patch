@@ -28,11 +28,84 @@ command = "other" # other note
 describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) => {
   const sourceText = (body: string) => (prefix + body).replaceAll('\n', eol);
   const edits = [
-    { name: 'remove first', apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(0, 1) },
-    { name: 'remove middle', apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(1, 1) },
-    { name: 'remove last', apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(2, 1) },
-    { name: 'append', apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.push({ command: 'new' }) },
-    { name: 'repair', apply: (data: ReturnType<typeof parse>) => { data.hooks.session_start[0].hooks[0].command = 'new'; } },
+    {
+      name: 'remove first',
+      apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(0, 1),
+      expected: `[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    { command = "middle" },
+    { command = "last" },
+  ] },
+]
+after = "keep" # after note
+`,
+    },
+    {
+      name: 'remove middle',
+      apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(1, 1),
+      expected: `[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    { command = "first" },
+    { command = "last" },
+  ] },
+]
+after = "keep" # after note
+`,
+    },
+    {
+      name: 'remove last',
+      apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.splice(2, 1),
+      expected: `[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    { command = "first" },
+    { command = "middle" },
+  ] },
+]
+after = "keep" # after note
+`,
+    },
+    {
+      name: 'append',
+      apply: (data: ReturnType<typeof parse>) => data.hooks.session_start[0].hooks.push({ command: 'new' }),
+      expected: `[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    { command = "first" },
+    { command = "middle" },
+    { command = "last" },
+    { command = "new" },
+  ] },
+]
+after = "keep" # after note
+`,
+    },
+    {
+      name: 'repair',
+      apply: (data: ReturnType<typeof parse>) => { data.hooks.session_start[0].hooks[0].command = 'new'; },
+      expected: `[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    { command = "new" },
+    { command = "middle" },
+    { command = "last" },
+  ] },
+]
+after = "keep" # after note
+`,
+    },
   ];
   for (const api of ['patch', 'document'] as const) {
     for (const edit of edits) {
@@ -44,11 +117,7 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
         if (api === 'document') document.patch(data);
         const output = api === 'patch' ? patch(source, data) : document.toTomlString;
         expect(parse(output)).toEqual(data);
-        expect(output).toBe(patch(source, data));
-        expect(output).toMatch(/# shared group\s*\{ hooks/);
-        expect(output).toContain('before = "keep" # before note');
-        expect(output).toContain('after = "keep" # after note');
-        expect(output.startsWith(prefix.replaceAll('\n', eol))).toBe(true);
+        expect(output).toBe(sourceText(edit.expected));
         expect(patch(output, parse(output))).toBe(output);
       });
     }
@@ -60,8 +129,15 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     data.hooks.session_start[0].hooks.splice(0, 1);
     const output = patch(source, data);
     expect(parse(output)).toEqual(data);
-    expect(output).toMatch(/# shared group\s*\{ hooks/);
-    expect(output).toContain('after = "keep" # after note');
+    expect(output).toBe(sourceText(`[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [] },
+]
+
+after = "keep" # after note
+`));
   });
 
   test('removal keeps surviving command comments associated', () => {
@@ -70,8 +146,18 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     data.hooks.session_start[0].hooks.splice(0, 1);
     const output = patch(source, data);
     expect(parse(output)).toEqual(data);
-    expect(output).toMatch(/# shared group\s*\{ hooks/);
-    expect(output).toMatch(/# surviving command\s*\{ command = "middle" \}, # middle note/);
+    expect(output).toBe(sourceText(`[hooks]
+before = "keep" # before note
+session_start = [
+  # shared group
+  { hooks = [
+    # surviving command
+    { command = "middle" }, # middle note
+    { command = "last" },
+  ] },
+]
+after = "keep" # after note
+`));
   });
 
   test.each([false, true])('removing a closing-line command preserves the group tail, other command %s', (withOther) => {
@@ -82,9 +168,19 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     const document = new TomlDocument(source);
     document.patch(data);
     const output = patch(source, data);
-    expect(document.toTomlString).toBe(output);
+    const expected = sourceText(withOther ? `[hooks]
+session_start = [
+  { hooks = [
+    { command = "other" }] }, # group tail
+]
+` : `[hooks]
+session_start = [
+  { hooks = [] }, # group tail
+]
+`);
+    expect(document.toTomlString).toBe(expected);
     expect(parse(output)).toEqual(data);
-    expect(output).toMatch(/\]\s*\}, # group tail/);
+    expect(output).toBe(expected);
   });
 
   test('nested edits preserve comments on sibling groups and surrounding keys', () => {
@@ -94,10 +190,19 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     data.hooks.session_start[1].hooks.splice(1, 1);
     const output = patch(source, data);
     expect(parse(output)).toEqual(data);
-    expect(output).toMatch(/# sibling group\s*\{ hooks = \[\{ command = "sibling" \}\] \}/);
-    expect(output).toMatch(/# shared group\s*\{ hooks/);
-    expect(output).toContain('before = "keep" # before note');
-    expect(output).toContain('after = "keep" # after note');
+    expect(output).toBe(sourceText(`[hooks]
+before = "keep" # before note
+session_start = [
+  # sibling group
+  { hooks = [{ command = "sibling" }] },
+  # shared group
+  { hooks = [
+    { command = "first" },
+    { command = "last" },
+  ] },
+]
+after = "keep" # after note
+`));
   });
 
   test('remove a noncontiguous command subtree without removing an unrelated table', () => {
@@ -106,10 +211,13 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     data.hooks.session_start[0].hooks.splice(0, 1);
     const output = patch(source, data);
     expect(parse(output)).toEqual(data);
-    expect(output).toContain('[[hooks.session_start]] # shared group');
-    expect(output).toContain('[[hooks.session_start.hooks]] # surviving command');
-    expect(output).toContain('command = "other" # other note');
-    expect(output).toContain('keep = "yes" # unrelated note');
+    expect(output).toBe(sourceText(`[[hooks.session_start]] # shared group
+matcher = "startup"
+[unrelated]
+keep = "yes" # unrelated note
+[[hooks.session_start.hooks]] # surviving command
+command = "other" # other note
+`));
   });
 
   test('create missing hook containers while retaining the original prefix', () => {
@@ -118,7 +226,10 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     data.hooks = { session_start: [{ hooks: [{ command: 'new' }] }] };
     const output = patch(source, data);
     expect(parse(output)).toEqual(data);
-    expect(output.startsWith(source)).toBe(true);
+    expect(output).toBe(sourceText(`
+[hooks]
+session_start = [ { hooks = [ { command = "new" } ] } ]
+`));
   });
 
   test('quoted dotted keys support insertion and removal without moving their group comment', () => {
@@ -126,11 +237,30 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
     const data = parse(source);
     data.hooks.session_start[0].hooks.push({ command: 'new' });
     const inserted = patch(source, data);
-    expect(inserted).toMatch(/# shared group\s*\{ hooks/);
+    expect(parse(inserted)).toEqual(data);
+    expect(inserted).toBe(sourceText(`"hooks"."session_start" = [
+  # shared group
+  { hooks = [
+    { command = "first" },
+    { command = "middle" },
+    { command = "last" },
+    { command = "new" },
+  ] },
+]
+after = "keep" # after note
+`));
     data.hooks.session_start[0].hooks.splice(0, 1);
     const removed = patch(inserted, data);
     expect(parse(removed)).toEqual(data);
-    expect(removed).toMatch(/# shared group\s*\{ hooks/);
-    expect(removed).toContain('after = "keep" # after note');
+    expect(removed).toBe(sourceText(`"hooks"."session_start" = [
+  # shared group
+  { hooks = [
+    { command = "middle" },
+    { command = "last" },
+    { command = "new" },
+  ] },
+]
+after = "keep" # after note
+`));
   });
 });
