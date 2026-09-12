@@ -4252,7 +4252,7 @@ test('distilled regression for fuzz seed 14725 (minimal)', () => {
 
   expect(parse(result)).toEqual(obj);
 });
-test.fails('distilled regression for fuzz seed 17339 (newline before the next table is lost)', () => {
+test('distilled regression for fuzz seed 17339 (newline before the next table is lost)', () => {
   const src = dedent`
     [a]
     x = 1

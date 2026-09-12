@@ -397,7 +397,15 @@ function insertOnNewLine(
       : getEnterOffsets(root).get(parent);
     compensation_lines = staleOffset ? -staleOffset.lines : 1;
   }
-  const offset_leading = (wasSingleRemoval || needsCompensation) ? -child_span.lines : (leading_lines - 1);
+  // When a single item was removed from this container, the inserted child reuses
+  // the row the removal vacated, so only its EXTRA lines advance the following
+  // content. Cancelling the whole span (`-child_span.lines`) is only correct for a
+  // single-line child; a generated multiline inline table spans several lines and
+  // its trailing lines would otherwise overlap the next sibling (seed 17339:
+  // the following `[b]` header landed on the closing `}` row).
+  const offset_leading = wasSingleRemoval
+    ? leading_lines - 2
+    : needsCompensation ? -child_span.lines : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
     : child_span.lines + offset_leading;
