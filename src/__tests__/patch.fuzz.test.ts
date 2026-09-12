@@ -35,7 +35,8 @@ const historicalFuzzSeeds3 = [
   7997,
   8832,
   9322,
-  14725
+  14725,
+  17339
 ];
 
 test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
@@ -4276,7 +4277,7 @@ test('distilled regression for fuzz seed 17339 (newline before the next table is
   expect(parse(result)).toEqual(obj);
 });
 
-test.fails('distilled regression for fuzz seed 17339 (multiline value overlaps the next table after two removals)', () => {
+test('distilled regression for fuzz seed 17339 (multiline value overlaps the next table after two removals)', () => {
   const src = dedent`
     [a]
     x = 1
