@@ -135,7 +135,16 @@ function failureStatus(source: string, testMutations: Mutation[] = mutations): s
       applyMutation(object, mutation);
     }
     const result = patch(source, object, format);
-    const reparsed = parse(result);
+    // The harness classifies an unparseable patch output as a round-trip
+    // mismatch (fuzz-patch.ts step 6), so mirror that here. Letting the parse
+    // throw reach the outer catch would report `patch-fail` and the distiller
+    // would refuse a seed the harness just flagged.
+    let reparsed: any;
+    try {
+      reparsed = parse(result);
+    } catch {
+      return 'roundtrip-mismatch';
+    }
     return JSON.stringify(normalize(object)) === JSON.stringify(normalize(reparsed))
       ? 'ok'
       : 'roundtrip-mismatch';
