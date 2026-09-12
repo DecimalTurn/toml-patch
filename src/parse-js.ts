@@ -1,4 +1,4 @@
-import { Value, KeyValue, Document, InlineArray, InlineTable } from './cst';
+import { Value, KeyValue, Document, InlineArray, InlineTable, isKeyValue, isInlineArray, isInlineTable } from './cst';
 import {
   generateDocument,
   generateKeyValue,
@@ -49,6 +49,12 @@ export default function parseJS(
   formatNestedTablesMultiline(document, format);
   for (const item of document.items) {
     if (item.type === 'Table' || item.type === 'TableArray') {
+      normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
+    } else if (isKeyValue(item) && (isInlineArray(item.value) || isInlineTable(item.value))) {
+      // Root key-values stay key-values when `inlineTableStart` is 0, so they
+      // never reach formatTopLevel/formatNestedTablesMultiline. Their nested
+      // multiline containers still need the same row/key alignment as the rows
+      // of a converted table (fuzz3 seed 18515).
       normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
     }
   }

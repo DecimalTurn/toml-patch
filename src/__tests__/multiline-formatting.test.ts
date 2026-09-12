@@ -188,13 +188,13 @@ describe('multiline container formatting', () => {
 
     const dottedMultiline = patch(dottedSource, value, { multilineArray: 1 });
     expect(parse(dottedMultiline)).toEqual(value);
-    // The dotted form places the generated rows at a different column than the
-    // section form. Captured verbatim from the current output.
+    // The dotted form lays the generated rows out exactly like the section
+    // form: rows one indent past the key, closing bracket on the key column.
     expect(dottedMultiline).toBe(dedent`
       a.list = [
-          1,
-          2
-        ]
+        1,
+        2
+      ]
     ` + '\n');
 
     // Depth 1 is below a threshold of 2, so the generated array stays compact.

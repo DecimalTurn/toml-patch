@@ -4120,7 +4120,7 @@ test('distilled regression for fuzz seed 7490', () => {
     [ke]
     rzdb = [
         { k68 = [
-            2019-08-13T00:00:00.000Z
+              2019-08-13T00:00:00.000Z
           ] },
         4204.00
     ]
@@ -4242,13 +4242,13 @@ test('distilled regression for fuzz seed 14725 (minimal)', () => {
   expect(result).toEqual(dedent`
     root.branch = {
       target = [
-      "first",
-      false,
-      {child = [
-         -2,
-         2019-05-19
-               ]}
-    ],
+        "first",
+        false,
+        {child = [
+           -2,
+           2019-05-19
+         ]}
+      ],
     }
   ` + '\n\n');
 

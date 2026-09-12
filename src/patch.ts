@@ -43,7 +43,7 @@ import { generateInlineItem, generateTable, generateTableArray, generateString, 
 import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth, normalizeGeneratedInlineContainerRows } from './formatter';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth, normalizeGeneratedInlineContainerRows, normalizeInlineContainerRows } from './formatter';
 import { DateFormatHelper } from './date-format';
 import {
   getInlineInsertColumnDelta,
@@ -1252,6 +1252,11 @@ function applyChanges(
   // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
   const objectMoves: Move[] = [];
   const replacedInlineArrays = new Set<InlineArray>();
+  // Inline containers spliced in as a replacement, together with the node that
+  // owns them (the key-value or inline item whose row they sit on). Their
+  // nested multiline rows are realigned in final coordinates once every other
+  // pass has moved them (fuzz3 seed 18515).
+  const replacedInlineContainers: { owner: TreeNode; container: InlineArray | InlineTable }[] = [];
 
   function regenerateInlineChildForParent(parent: TreeNode, changePath: Path, child: TreeNode): TreeNode {
     if ((!isInlineArray(parent) && !isInlineTable(parent)) || !isInlineItem(child)) return child;
@@ -2648,6 +2653,7 @@ function applyChanges(
       if (isInlineArray(replacement) || isInlineTable(replacement)) {
         applyWrites(original);
         normalizeGeneratedInlineContainerRows(replacement, format.indentWidth);
+        replacedInlineContainers.push({ owner: parent, container: replacement });
       }
 
       // A section header captures every key-value that follows it, so an
@@ -3831,7 +3837,38 @@ function applyChanges(
       positionGeneratedNestedInlineTables(array, format.indentWidth);
     }
   }
+  // Realign the multiline rows of replaced inline containers last: the passes
+  // above move their contents, and the rows are anchored to the owning key's
+  // column, so laying them out earlier would leave them offset.
+  if (replacedInlineContainers.length > 0) {
+    applyWrites(original);
+    for (const { owner, container } of replacedInlineContainers) {
+      deleteSubtreeRanges(container);
+      normalizeInlineContainerRows(container, owner.loc.start.column, format.indentWidth, format.bracketSpacing);
+    }
+  }
   return original;
+}
+
+/**
+ * Drops the `range` of a node and every descendant, so the renderer rebuilds
+ * the text from the node locations instead of copying the original slice.
+ *
+ * Regenerated values are parsed from a standalone TOML snippet, so their ranges
+ * point into that snippet. Relocating the subtree shifts the locations but not
+ * the snippet's interior text: a copied slice would keep the snippet's absolute
+ * indentation and ignore the new row positions (fuzz3 seed 18515).
+ */
+function deleteSubtreeRanges(node: TreeNode): void {
+  delete (node as { range?: [number, number] }).range;
+  if (hasItems(node)) {
+    for (const child of (node as WithItems).items as TreeNode[]) deleteSubtreeRanges(child);
+  }
+  if (hasItem(node)) deleteSubtreeRanges((node as { item: TreeNode }).item);
+  if (isKeyValue(node)) {
+    deleteSubtreeRanges(node.key);
+    deleteSubtreeRanges(node.value);
+  }
 }
 
 /**
