@@ -179,7 +179,7 @@ stringify({ database: { host: 'localhost', port: 5432 } }, format);
 
 `true` writes every generated container of that kind with one structural row per line. `false` and `'auto'` keep new containers compact. A non-negative number selects multiline layout at that structural container depth or deeper. A root-level inline container has depth `0`. `'parent'` follows the immediate inline parent only.
 
-The options apply independently and use inline-container nesting for depth. Existing multiline source containers keep their layout when patching. Use `indentWidth` and `useTabsForIndentation` to control generated structural indentation.
+The options apply independently and use container nesting for depth. Existing multiline source containers keep their layout when patching. Use `indentWidth` and `useTabsForIndentation` to control generated structural indentation.
 
 ```js
 stringify({
@@ -212,6 +212,127 @@ stringify({ config: {}, values: [] }, {
 // }
 // values = [
 // ]
+```
+
+#### Numeric depth
+
+A number is a threshold compared against the container's structural depth. A container is written multiline when its depth is greater than or equal to that number. The same rule applies to `multilineArray` and `multilineTable`, so `0` selects every container of that kind, `1` selects everything except the root-level containers and a number larger than the deepest container selects nothing.
+
+Depth counts levels of container nesting. A container that is the direct value of a top-level key has depth `0` and each level you descend adds one:
+
+| TOML | Container | Depth |
+| --- | --- | --- |
+| `list = [1, 2]` | `list` | 0 |
+| `matrix = [[1, 2]]` | `matrix` | 0 |
+| `matrix = [[1, 2]]` | `matrix[0]` | 1 |
+| `a.list = [1, 2]` | `a.list` | 1 |
+| `holder = { list = [1, 2] }` | `holder.list` | 1 |
+| `points = [{ tags = [1] }]` | `points[0]` | 1 |
+| `points = [{ tags = [1] }]` | `points[0].tags` | 2 |
+
+A dotted key such as `a.list` counts the same as the body of an `[a]` section. Depth follows that nesting and not the rendered layout, so a table that `inlineTableStart` promotes to a `[section]` block still adds one level to its children.
+
+```js
+const data = {
+  list: [1, 2],
+  a: { list: [3, 4] }
+};
+
+stringify(data, { multilineArray: 0 });
+// list = [
+//   1,
+//   2
+// ]
+//
+// [a]
+// list = [
+//   3,
+//   4
+// ]
+
+stringify(data, { multilineArray: 1 });
+// list = [ 1, 2 ]
+//
+// [a]
+// list = [
+//   3,
+//   4
+// ]
+
+stringify(data, { multilineArray: 2 });
+// list = [ 1, 2 ]
+//
+// [a]
+// list = [ 3, 4 ]
+```
+
+The same applies to tables. In the next example `b` has depth `1` even though it renders inside a section:
+
+```js
+const data = { a: { b: { c: 1 } } };
+
+stringify(data, { multilineTable: 1 });
+// [a]
+// b = {
+//   c = 1
+// }
+
+stringify(data, { multilineTable: 2 });
+// [a]
+// b = { c = 1 }
+```
+
+When patching, depth comes from where the new or replaced value lands. A top-level value has depth `0`, and the same nesting rules apply to the rest. Existing source containers keep their layout, so a numeric mode only decides the layout of the values the patch generates.
+
+```toml
+value = 0
+```
+
+```js
+patch(existing, { value: [1, 2] }, { multilineArray: 0 });
+```
+
+```toml
+value = [
+  1,
+  2
+]
+```
+
+```js
+patch(existing, { value: [1, 2] }, { multilineArray: 1 });
+```
+
+```toml
+value = [ 1, 2 ]
+```
+
+The value in the next document sits inside a section, so its depth is `1`:
+
+```toml
+[a]
+list = 0
+```
+
+```js
+patch(existing, { a: { list: [1, 2] } }, { multilineArray: 1 });
+```
+
+```toml
+[a]
+list = [
+  1,
+  2
+]
+```
+
+```js
+patch(existing, { a: { list: [1, 2] } }, { multilineArray: 2 });
+```
+
+```toml
+[a]
+list = [ 1, 2 ]
 ```
 
 ### `truncateZeroTimeInDates`
