@@ -4252,6 +4252,30 @@ test('distilled regression for fuzz seed 14725 (minimal)', () => {
 
   expect(parse(result)).toEqual(obj);
 });
+test.fails('distilled regression for fuzz seed 17339 (newline before the next table is lost)', () => {
+  const src = dedent`
+    [a]
+    x = 1
+
+    [b]
+  `;
+
+  const obj = parse(src) as any;
+  obj.a = { c: { d: '2' } };
+
+  const result = patch(src, obj, { multilineTable: true });
+
+  expect(result).toEqual(dedent`
+    [a]
+    c = {
+      d = "2"
+    }
+
+    [b]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
 test('distilled regression for fuzz seed 17339', () => {
   const src = dedent`
     g9suq18.pxa.f6xnljk = ' RO|*sL|<0Cue-QeSXY6M0*i~qTG'
