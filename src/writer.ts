@@ -1341,22 +1341,29 @@ export function shiftNode(
       // Only shift end.column when start and end are on the same line:
       // for a multi-line node the end is on a completely different line and
       // its column is an absolute position independent of the start line.
+      //
+      // Exception: containers built by parseJS carry coordinates relative to
+      // the origin (line 1, column 0), so their end column must follow the
+      // node even when the span is multi-line.  That covers compact containers
+      // whose span is stretched by a MULTILINE descendant (`{b = {c = {…}}}`)
+      // as well as the multiline containers themselves, hence the
+      // `!== undefined` (generated) rather than `=== true` (multiline) test.
       const generatedMultilineEnd = (!first_line_only || shift_generated_multiline_end) &&
         node.loc.end.line !== node.loc.start.line &&
         (((isInlineArray(node) || isInlineTable(node)) &&
-          getInlineContainerLayout(node) === true &&
+          getInlineContainerLayout(node) !== undefined &&
           !isInlineContainerPositioned(node)) ||
           isInlineItem(node) &&
           ((isInlineArray(node.item) || isInlineTable(node.item)) &&
-            getInlineContainerLayout(node.item) === true &&
+            getInlineContainerLayout(node.item) !== undefined &&
             !isInlineContainerPositioned(node.item) ||
             isKeyValue(node.item) &&
             (isInlineArray(node.item.value) || isInlineTable(node.item.value)) &&
-            getInlineContainerLayout(node.item.value) === true &&
+            getInlineContainerLayout(node.item.value) !== undefined &&
             !isInlineContainerPositioned(node.item.value)) ||
           isKeyValue(node) &&
           (isInlineArray(node.value) || isInlineTable(node.value)) &&
-          getInlineContainerLayout(node.value) === true);
+          getInlineContainerLayout(node.value) !== undefined);
       if (node.loc.end.line === node.loc.start.line || generatedMultilineEnd) {
         node.loc.end.column += columns;
       }

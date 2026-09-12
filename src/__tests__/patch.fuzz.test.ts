@@ -36,7 +36,8 @@ const historicalFuzzSeeds3 = [
   8832,
   9322,
   14725,
-  17339
+  17339,
+  18515
 ];
 
 test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
@@ -4302,7 +4303,7 @@ test('distilled regression for fuzz seed 17339 (multiline value overlaps the nex
   expect(parse(result)).toEqual(obj);
 });
 
-test.fails('distilled regression for fuzz seed 18515 (compact value holding a multiline child)', () => {
+test('distilled regression for fuzz seed 18515 (compact value holding a multiline child)', () => {
   const src = dedent`
     b.c = 1
   `;
