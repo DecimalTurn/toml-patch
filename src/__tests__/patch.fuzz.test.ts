@@ -38,7 +38,8 @@ const historicalFuzzSeeds3 = [
   14725,
   14739,
   17339,
-  18515
+  18515,
+  18868
 ];
 
 test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
