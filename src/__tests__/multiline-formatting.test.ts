@@ -166,6 +166,52 @@ describe('multiline container formatting', () => {
     ` + '\n');
   });
 
+  test('counts a dotted key body at the same depth as a section body', () => {
+    const value = { a: { list: [1, 2] } };
+    const sectionSource = dedent`
+      [a]
+      list = 0
+    ` + '\n';
+    const dottedSource = 'a.list = 0\n';
+
+    // Both sources map to `{ a: { list: [...] } }`, so `list` has depth 1 and a
+    // threshold of 1 selects multiline layout.
+    const sectionMultiline = patch(sectionSource, value, { multilineArray: 1 });
+    expect(parse(sectionMultiline)).toEqual(value);
+    expect(sectionMultiline).toBe(dedent`
+      [a]
+      list = [
+        1,
+        2
+      ]
+    ` + '\n');
+
+    const dottedMultiline = patch(dottedSource, value, { multilineArray: 1 });
+    expect(parse(dottedMultiline)).toEqual(value);
+    // The dotted form places the generated rows at a different column than the
+    // section form. Captured verbatim from the current output.
+    expect(dottedMultiline).toBe(dedent`
+      a.list = [
+          1,
+          2
+        ]
+    ` + '\n');
+
+    // Depth 1 is below a threshold of 2, so the generated array stays compact.
+    const sectionCompact = patch(sectionSource, value, { multilineArray: 2 });
+    expect(parse(sectionCompact)).toEqual(value);
+    expect(sectionCompact).toBe(dedent`
+      [a]
+      list = [ 1, 2 ]
+    ` + '\n');
+
+    const dottedCompact = patch(dottedSource, value, { multilineArray: 2 });
+    expect(parse(dottedCompact)).toEqual(value);
+    expect(dottedCompact).toBe(dedent`
+      a.list = [ 1, 2 ]
+    ` + '\n');
+  });
+
   test('writes empty containers on separate delimiter rows when requested', () => {
     const value = { config: {}, values: [] };
     const result = stringify(value, {
