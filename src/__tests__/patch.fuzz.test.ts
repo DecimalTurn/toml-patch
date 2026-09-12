@@ -4302,6 +4302,31 @@ test('distilled regression for fuzz seed 17339 (multiline value overlaps the nex
   expect(parse(result)).toEqual(obj);
 });
 
+test.fails('distilled regression for fuzz seed 18515 (compact value holding a multiline child)', () => {
+  const src = dedent`
+    b.c = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.b = [1, { d: { e: { f: 1 } } }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    multilineTable: 2,
+    multilineArray: 1,
+  });
+
+  expect(result).toEqual(dedent`
+    b = [ 1, { d = {
+           e = {
+             f = 1,
+           },
+             }, }, ]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
 test('distilled regression for fuzz seed 17339', () => {
   const src = dedent`
     g9suq18.pxa.f6xnljk = ' RO|*sL|<0Cue-QeSXY6M0*i~qTG'
