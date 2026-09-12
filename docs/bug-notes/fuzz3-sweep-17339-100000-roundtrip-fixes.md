@@ -1,4 +1,4 @@
-# Fuzz3-hardening fixes: generated containers take the column of their key (17339 to 100000)
+# Fuzz3 sweep fixes: generated containers take the column of their key (17339 to 100000)
 
 **Status: fixed.** Second window of the format-aware `fuzz3` harness (`fuzzOne3` in
 `src/__tests__/fuzz-patch3.ts`, 3 random mutations per seed, randomized indentation and multiline

@@ -1,4 +1,4 @@
-# Fuzz3-hardening fixes: the newline before the next table header (14725–17339)
+# Fuzz3 sweep fixes: the newline before the next table header (14725 to 17339)
 
 **Status: fixed.** First window of the format-aware `fuzz3` harness
 (`scripts/fuzz-run3.ts`, `fuzzOne3` in `src/__tests__/fuzz-patch3.ts`, 3 random mutations per
