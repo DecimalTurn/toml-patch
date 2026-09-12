@@ -4320,10 +4320,10 @@ test('distilled regression for fuzz seed 18515 (compact value holding a multilin
 
   expect(result).toEqual(dedent`
     b = [ 1, { d = {
-           e = {
-             f = 1,
-           },
-             }, }, ]
+                 e = {
+                   f = 1,
+                 },
+               }, }, ]
   `);
   expect(parse(result)).toEqual(obj);
 });
