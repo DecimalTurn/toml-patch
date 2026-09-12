@@ -100,7 +100,7 @@ format.bracketSpacing = false;  // [1, 2, 3] and {x = 1, y = 2}
 
 - **Type:** `number`
 - **Default:** `2`
-- **Description:** The number of spaces used for one generated structural indentation level. This affects generated multiline arrays, inline tables and table rows, not the contents of multiline strings. The value must be a positive integer. When `useTabsForIndentation` is enabled, generated structural indentation uses tabs and the logical width is one level. Note that when using tabs for indentation (`useTabsForIndentation = true`), `indentWidth` is automatically set to `1`.
+- **Description:** The number of spaces used for one generated structural indentation level. This affects generated multiline arrays, inline tables and table rows, not the contents of multiline strings. The value must be a positive integer. During patching, this value will be used only if the indentation can't be inferred from siblings or other neighboring multiline structures. Note that when using tabs for indentation (`useTabsForIndentation = true`), `indentWidth` is automatically set to `1`.
 
 ```js
 stringify({ values: [[1, 2]] }, {
