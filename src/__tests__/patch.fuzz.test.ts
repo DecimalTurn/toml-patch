@@ -36,6 +36,7 @@ const historicalFuzzSeeds3 = [
   8832,
   9322,
   14725,
+  14739,
   17339,
   18515
 ];
@@ -4324,6 +4325,38 @@ test('distilled regression for fuzz seed 18515 (compact value holding a multilin
                    f = 1,
                  },
                }, }, ]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz3 seed 14739 (compact array inside a multiline table)', () => {
+  // The inner array `d = [ 2, {...}, ]` stays compact even though its element
+  // table is multiline, so its `]` belongs on the row the element's `}` closes
+  // — snapping it to the key column instead puts it before that `}` and the
+  // element's comma collides with it ("Consecutive commas in inline table").
+  const src = dedent`
+    b.c = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.b = [1, { d: [2, { e: { f: 1 } }] }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    indentWidth: 2,
+    multilineTable: 0,
+    multilineArray: false,
+  });
+
+  expect(result).toEqual(dedent`
+    b = [ 1, {
+               d = [ 2, {
+                          e = {
+                            f = 1,
+                          },
+                        }, ], 
+             }, ]
   `);
   expect(parse(result)).toEqual(obj);
 });
