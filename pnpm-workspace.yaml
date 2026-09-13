@@ -11,8 +11,8 @@ overrides:
   brace-expansion: "^5.0.7"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/42
   picomatch: "^4.0.4"
-  # https://github.com/DecimalTurn/toml-patch/security/dependabot/72
-  js-yaml: "^4.3.1"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/77
+  js-yaml: "^4.3.2"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/58
   sigstore: "^5.0.0"
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/66
