@@ -1,11 +1,9 @@
 # Comment Ownership
 
-When `patch()` removes or reorders an entry, any comment that describes it travels along with it instead of being left behind to describe whatever ends up in that spot.
+When `patch()` removes or reorders an entry, any comment that describes it travels along with it instead of being left behind and losing the context of what it's describing or talking about.
 
 ## Terms
 
-- A **member** is an orderable logical child: a root key-value, a `[table]` / `[[array-of-tables]]`
-  block at document level, or a key-value row inside a table body.
 - A **comment run** is a maximal sequence of own-line comments on strictly consecutive lines. A
   `#`-only line is a comment like any other and continues the run.
 - A **group** is a member plus every comment it owns, or an independent (pinned) comment run.
@@ -16,16 +14,50 @@ Rules are evaluated in precedence order.
 
 | | Rule |
 |---|---|
-| **R1** | **Right-side ownership wins.** A comment whose start line is at or before the member's end line, where the member is the nearest preceding one, is owned by that member. |
+| **R1** | **Trailing ownership.** A comment on the same line as the element that just ended is owned by that element. |
 | **R2** | **Adjacency ownership.** A comment run whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the run transfers to the materialised parent header. |
 | **R3** | **A blank line severs ownership.** A run separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
 | **R4** | **Independent otherwise.** A run with no member below it in the same container is pinned. |
 | **R5** | **Cross-container ownership.** A trailing run inside a `[table]` / `[[array]]` that R2 assigns to the following document block is owned by that block. |
 | **R6** | **A dead-entry run is independent.** A run in which every line is a commented-out entry is pinned, overriding R2. |
 
-R1 uses "at or before" rather than "same line" on purpose. It is what keeps a header comment
-(`[a] # note`) attached to the table rather than to the first row below it, and what keeps an
-in-brace comment attached to its key-value even though the comment's line falls inside the braces.
+## R1 - **Trailing ownership.**
+
+Trailing ownership covers four placements:
+
+- A note after a key-value:
+
+  ```toml
+  x = 1 # note
+  ```
+
+- A note after a header (which belongs to the table rather than the first row below it):
+
+  ```toml
+  [a] # note
+  b = 1
+  ```
+
+- A note after an entry inside an inline container (table or array):
+
+  ```toml
+  { 
+    a = 1, # note
+    b = 2
+  }
+  ```
+
+- A note after the closing brace or bracket of a multi-line inline table or array:
+
+  ```toml
+  [hooks]
+  session_start = [
+    { hooks = [
+      { command = "only" }] }, # group tail
+  ]
+  ```
+
+`# group tail` trails the inner inline table `{ hooks = [...] }`, so it is owned by that table.
 
 ## Default behavior
 
@@ -179,8 +211,12 @@ port = 80
 
 All three lines travel together, because the prose line anchors the run to `port`.
 
-One known limitation: prose of the exact shape `word = word`, such as `# note = important`, is
-treated as a dead entry and pinned.
+One known limitation: prose of the exact shape `word = word` is treated as a dead entry and
+pinned. For example:
+
+```toml
+# note = important
+```
 
 ## Comments above the next section
 
@@ -248,7 +284,11 @@ It does not yet apply to:
 
 - Reordering a `[table]` / `[[array-of-tables]]` block itself. This still uses a plain
   remove-then-insert and does not carry its comments along.
-- An array nested inside a multiline inline table (e.g. `t = { xs = [...] }`).
+- An array nested inside a multiline inline table:
+
+  ```toml
+  t = { xs = [...] }
+  ```
 
 ## Implementation
 

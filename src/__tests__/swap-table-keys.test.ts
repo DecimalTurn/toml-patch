@@ -59,7 +59,7 @@ test('should swap keys with comments preserved', () => {
 
   // A "swap" is Remove(B) + Add(D) as far as the diff is concerned, and both
   // comments are OWNED by B: `# comment for B` by adjacency (R2) and
-  // `# inline B` by right-side ownership (R1). Deleting B therefore deletes
+  // `# inline B` by trailing ownership (R1). Deleting B therefore deletes
   // them, rather than stranding `# comment for B` above the unrelated D.
   // See docs/Comment-Ownership.md.
   // TODO: When updateOrder is implemented and we have a move operation for keys,

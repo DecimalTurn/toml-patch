@@ -6,7 +6,7 @@ import { parse, patch } from '../index';
 // When a member (a root key-value, a [table]/[[array]] block, or a row inside a
 // table body) is removed, the comments it OWNS are removed with it. Ownership:
 //
-//   R1  Right-side wins. A comment with start.line <= member.loc.end.line is
+//   R1  Trailing ownership. A comment with start.line <= member.loc.end.line is
 //       owned by that member (same-line trailing, `[a] # hdr`, and comments the
 //       parser hoists out of multiline inline containers).
 //   R2  Adjacency. A comment run whose last line is member.loc.start.line - 1
@@ -20,7 +20,7 @@ import { parse, patch } from '../index';
 // A "comment run" is maximal over *consecutive lines*. A `#`-only line is an
 // ordinary comment node and keeps a run contiguous -- it is not a blank line.
 
-describe('R1 - right-side ownership', () => {
+describe('R1 - trailing ownership', () => {
   test('removes the same-line trailing comment with its key', () => {
     const input = dedent`
       [database]

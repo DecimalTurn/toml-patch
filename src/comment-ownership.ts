@@ -176,7 +176,7 @@ function scanGroups(
   for (const item of items) {
     if (isComment(item)) {
       if (item.loc.start.line <= lastMemberEndLine) {
-        // R1: right-side ownership wins.
+        // R1: trailing ownership.
         if (currentMemberGroup) {
           currentMemberGroup.items.push(item);
           currentMemberGroup.endLine = Math.max(currentMemberGroup.endLine, item.loc.end.line);
@@ -440,7 +440,7 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
 
 /**
  * Removes `member` from `parent.items` along with every comment it owns
- * (leading run and right-side/trailing comments — see resolveGroups), plus,
+ * (leading run and trailing comments — see resolveGroups), plus,
  * when `member` is a [table]/[[array]] block, any trailing comment run the
  * parser filed under the PRECEDING sibling table but which R5 assigns to
  * `member` instead. Falls back to a plain removal when `parent` isn't a
@@ -478,7 +478,7 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
         remove(root, parent, item);
       }
 
-      // Trailing (right-side, R1) comments: by definition their start line
+      // Trailing (R1) comments: by definition their start line
       // is <= the member's own end line, so they sit *within* the span the
       // member's removal above already accounted for (a same-line trailing
       // comment, or one hoisted out of a multiline inline value). remove()'s
