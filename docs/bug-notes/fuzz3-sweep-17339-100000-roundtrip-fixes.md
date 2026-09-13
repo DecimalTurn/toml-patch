@@ -109,8 +109,16 @@ commit was needed. The seed is registered in `historicalFuzzSeeds3` (`980ab95`) 
 
 - `npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 60000 --mutations 3 --fast-fail` → 0 failures.
 - `npx -y tsx scripts/fuzz-run3.ts --seed 60001 --to 100000 --mutations 3 --fast-fail` → 0 failures (40000 seeds).
-- `pnpm run test` (2533 passed, 1 skipped), `pnpm run typecheck`, `pnpm run lint` → clean.
+- `pnpm run test` (2533 passed, 1 skipped), `pnpm run test:js` (131 passed), `pnpm run specs`
+  (896 passed, 1 skipped), `pnpm run typecheck`, `pnpm run lint`, `pnpm run build` → clean.
 - `historicalFuzzSeeds3` gained 14739 and 18868; the 7490 and 14725 expectations were re-anchored to
   their keys (`31c8821`).
 
-The continued sweep starts at **100001**.
+## The continuation to 1000000 was clean
+
+The sweep resumed at 100001 and reported 0 failures over every following window:
+`100001..150000`, `150001..200000`, `200001..250000`, `250001..300000`, `300001..350000`,
+`350001..400000`, `400001..450000`, `450001..500000`, `500001..550000`, `550001..600000`,
+`600001..700000` and `700001..1000000` (300000 seeds). The format-aware range `0..1000000` is therefore
+clean with `fe59f4a` in place, and no further fix was needed. Clean windows get no notes file of their
+own, so the result is recorded here.
