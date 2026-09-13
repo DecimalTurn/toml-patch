@@ -9,7 +9,7 @@ import { parse, patch } from '../index';
 //   R1  Trailing ownership. A comment with start.line <= member.loc.end.line is
 //       owned by that member (same-line trailing, `[a] # hdr`, and comments the
 //       parser hoists out of multiline inline containers).
-//   R2  Adjacency. A comment run whose last line is member.loc.start.line - 1
+//   R2  Leading ownership. A comment run whose last line is member.loc.start.line - 1
 //       is owned by the member below it.
 //   R3  A blank line severs ownership; the run is pinned and never travels.
 //   R4  A run with no member below it is pinned.
@@ -106,7 +106,7 @@ describe('R1 - trailing ownership', () => {
   });
 });
 
-describe('R2 - adjacency ownership', () => {
+describe('R2 - leading ownership', () => {
   test('removes the leading comment of a deleted root key-value', () => {
     const input = dedent`
       # doc for a

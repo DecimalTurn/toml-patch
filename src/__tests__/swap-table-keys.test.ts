@@ -58,7 +58,7 @@ test('should swap keys with comments preserved', () => {
   const result = patch(input, value);
 
   // A "swap" is Remove(B) + Add(D) as far as the diff is concerned, and both
-  // comments are OWNED by B: `# comment for B` by adjacency (R2) and
+  // comments are OWNED by B: `# comment for B` by leading ownership (R2) and
   // `# inline B` by trailing ownership (R1). Deleting B therefore deletes
   // them, rather than stranding `# comment for B` above the unrelated D.
   // See docs/Comment-Ownership.md.

@@ -10,7 +10,7 @@ Rules are evaluated in precedence order.
 | | Rule |
 |---|---|
 | **R1** | **Trailing ownership.** A comment on the same line as the element that just ended is owned by that element. |
-| **R2** | **Adjacency ownership.** A comment run whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the run transfers to the materialised parent header. |
+| **R2** | **Leading ownership.** A comment run whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the run transfers to the materialised parent header. |
 | **R3** | **A blank line severs ownership.** A run separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
 | **R4** | **Independent otherwise.** A run with no member below it in the same container is pinned. |
 | **R5** | **Cross-container ownership.** A trailing run inside a `[table]` / `[[array]]` that R2 assigns to the following document block is owned by that block. |

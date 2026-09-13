@@ -5738,7 +5738,7 @@ describe('table to scalar replacement', () => {
   // BUG (reported via GitHub Copilot PR review on #260): a structural table->scalar edit
   // regenerates a fresh KV/Table node via writer.ts's replace(), in-place at the original's
   // position. When that same patch also reorders root entries (updateOrder: true),
-  // applyContainerMoves's isEligibleForLeading check (src/update-order.ts) keys R2 adjacency
+  // applyContainerMoves's isEligibleForLeading check (src/update-order.ts) keys R2 leading
   // ownership off prePatchNodes identity -- so the fresh replacement node is wrongly treated
   // as ineligible, same as a genuinely new (Added) entry. The leading comment above it gets
   // left pinned at its old physical position instead of travelling with the entry to its new
