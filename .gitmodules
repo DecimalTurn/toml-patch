@@ -4,6 +4,7 @@
 [submodule "submodules/toml-test"]
 	path = submodules/toml-test
 	url = https://DecimalTurn@github.com/DecimalTurn/toml-test.git
+	branch = odd-quotes
 [submodule "submodules/iarna-toml"]
 	path = submodules/iarna-toml
 	url = https://github.com/iarna/iarna-toml.git
