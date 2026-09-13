@@ -112,7 +112,7 @@ describe('inline table item removal', () => {
       ` + '\n');
     });
 
-    test('a multi-line leading run is dropped in full with its key', () => {
+    test('a multi-line leading block is dropped in full with its key', () => {
       const input = dedent`
         t = {
           # one
@@ -281,7 +281,7 @@ describe('inline array item removal', () => {
       ` + '\n');
     });
 
-    test('a multi-line leading run is dropped in full with its element', () => {
+    test('a multi-line leading block is dropped in full with its element', () => {
       const input = dedent`
         xs = [
           1,

@@ -124,9 +124,9 @@ function isMultilineInlineContainer(node: TreeNode): node is InlineTable | Inlin
 
 export interface Group {
   kind: 'member' | 'pinned';
-  /** The orderable child: KeyValue | Table | TableArray. Absent for pinned runs. */
+  /** The orderable child: KeyValue | Table | TableArray. Absent for pinned blocks. */
   member?: TreeNode;
-  /** First key segment — `key.value[0]` / `key.item.value[0]`. Absent for pinned runs. */
+  /** First key segment — `key.value[0]` / `key.item.value[0]`. Absent for pinned blocks. */
   key?: string;
   /** Every node in the group, in items-array order. */
   items: TreeNode[];
@@ -208,9 +208,9 @@ function scanGroups(
         // R2, subject to R6.  A commented-out KV whose key differs from
         // the following KV's key acts as a barrier: only comments after
         // the LAST such barrier belong to the KV.  Dead entries whose
-        // key matches the KV's key stay in the run (they are "related").
-        // This applies to all-dead runs too — when every dead entry's
-        // key matches the KV, R6 does not apply and the run is owned.
+        // key matches the KV's key stay in the block (they are "related").
+        // This applies to all-dead blocks too — when every dead entry's
+        // key matches the KV, R6 does not apply and the block is owned.
         const key = memberKey(item);
         if (key !== undefined) {
           let lastBarrierIdx = -1;
@@ -237,7 +237,7 @@ function scanGroups(
         leading = pendingRun;
         pendingRun = [];
       } else {
-        // R3 (severed by a blank line) or R6 (dead-entry run) — pin it.
+        // R3 (severed by a blank line) or R6 (dead-entry block) — pin it.
         flushPendingAsPinned();
       }
     }
@@ -256,7 +256,7 @@ function scanGroups(
     lastMemberEndLine = item.loc.end.line;
   }
 
-  flushPendingAsPinned(); // R4: a trailing run with no member below it.
+  flushPendingAsPinned(); // R4: a trailing block with no member below it.
 
   return groups;
 }
@@ -267,7 +267,7 @@ function scanGroups(
  *
  * @param isEligibleForLeading - optional predicate; members that fail it cannot
  *   acquire leading comments via R2. Used by callers that have just inserted
- *   nodes which must not adopt a preceding run.
+ *   nodes which must not adopt a preceding block.
  */
 export function resolveGroups(
   container: Document | Table | TableArray,
@@ -386,7 +386,7 @@ export function findHostContainer(root: Document, target: TreeNode): Document | 
  * comment that visually introduces the next [table]/[[array]] block is
  * physically stored as a trailing item of the PREVIOUS block, because the
  * parser consumes everything up to the next `[` into the current table
- * (src/parse-toml.ts:517-524). This re-parents such runs into Document.items,
+ * (src/parse-toml.ts:517-524). This re-parents such blocks into Document.items,
  * immediately before the block they visually belong to.
  *
  * Mutates the tree; loc-preserving, so serialized output is unchanged. NOTE:
@@ -421,7 +421,7 @@ export function normalizeSectionComments(document: Document): void {
 }
 
 /**
- * R5, computed lazily: if `container`'s trailing comment run is R2-adjacent
+ * R5, computed lazily: if `container`'s trailing comment block is R2-adjacent
  * to `nextBlock` (and not R6-dead), returns it — these are the comments a
  * removal of `nextBlock` must take along, even though they physically live
  * in `container.items`. Returns undefined otherwise.
@@ -440,8 +440,8 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
 
 /**
  * Removes `member` from `parent.items` along with every comment it owns
- * (leading run and trailing comments — see resolveGroups), plus,
- * when `member` is a [table]/[[array]] block, any trailing comment run the
+ * (leading block and trailing comments — see resolveGroups), plus,
+ * when `member` is a [table]/[[array]] block, any trailing comment block the
  * parser filed under the PRECEDING sibling table but which R5 assigns to
  * `member` instead. Falls back to a plain removal when `parent` isn't a
  * container the ownership model applies to (e.g. InlineTable/InlineArray).

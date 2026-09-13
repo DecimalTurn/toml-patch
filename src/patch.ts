@@ -328,7 +328,7 @@ export function patchCst(
 
   // Snapshot every node that exists BEFORE any change is applied. Passed through to
   // applyKeyOrderMoves, which feeds it to resolveGroups' isEligibleForLeading predicate so a
-  // key that was just Added by this same patch can't adopt a preceding comment run via R2 —
+  // key that was just Added by this same patch can't adopt a preceding comment block via R2 —
   // node identity is stable across remove()/insert() (they splice the same objects), so this
   // has to be captured now, before applyChanges runs. applyChanges also adds to this set as it
   // runs: a structural edit (e.g. table→scalar) regenerates a fresh node in place of an existing
@@ -2436,7 +2436,7 @@ function applyChanges(
                   insert(original, newTable, freshKV, 0);
                   replace(original, tableParent, existing, newTable);
                   // newTable stands in for the pre-existing `existing` table, so it should stay
-                  // eligible for the leading comment run `existing` would have owned via R2.
+                  // eligible for the leading comment block `existing` would have owned via R2.
                   commentEligibleNodes.add(newTable);
                 }
               }
@@ -2584,7 +2584,7 @@ function applyChanges(
                 insert(original, newTable, freshKV, 0);
                 replace(original, tableParent, existing, newTable);
                 // newTable stands in for the pre-existing `existing` AOT, so it should stay
-                // eligible for the leading comment run `existing` would have owned via R2.
+                // eligible for the leading comment block `existing` would have owned via R2.
                 commentEligibleNodes.add(newTable);
               }
             }

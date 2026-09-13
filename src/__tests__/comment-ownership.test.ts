@@ -9,16 +9,16 @@ import { parse, patch } from '../index';
 //   R1  Trailing ownership. A comment with start.line <= member.loc.end.line is
 //       owned by that member (same-line trailing, `[a] # hdr`, and comments the
 //       parser hoists out of multiline inline containers).
-//   R2  Leading ownership. A comment run whose last line is member.loc.start.line - 1
+//   R2  Leading ownership. A comment block whose last line is member.loc.start.line - 1
 //       is owned by the member below it.
-//   R3  A blank line severs ownership; the run is pinned and never travels.
-//   R4  A run with no member below it is pinned.
-//   R5  A run the parser filed under the PREVIOUS table but which R2 assigns to
+//   R3  A blank line severs ownership; the block is pinned and never travels.
+//   R4  A block with no member below it is pinned.
+//   R5  A block the parser filed under the PREVIOUS table but which R2 assigns to
 //       the following block is still owned by that following block.
-//   R6  A run in which EVERY line is a commented-out entry is pinned.
+//   R6  A block in which EVERY line is a commented-out entry is pinned.
 //
-// A "comment run" is maximal over *consecutive lines*. A `#`-only line is an
-// ordinary comment node and keeps a run contiguous -- it is not a blank line.
+// A "comment block" is maximal over *consecutive lines*. A `#`-only line is an
+// ordinary comment node and keeps a block contiguous -- it is not a blank line.
 
 describe('R1 - trailing ownership', () => {
   test('removes the same-line trailing comment with its key', () => {
@@ -175,7 +175,7 @@ describe('R2 - leading ownership', () => {
     ` + '\n');
   });
 
-  test('removes a multi-line leading run in full', () => {
+  test('removes a multi-line leading block in full', () => {
     const input = dedent`
       a = 1
       # one
@@ -192,7 +192,7 @@ describe('R2 - leading ownership', () => {
     ` + '\n');
   });
 
-  test('treats a #-only line as part of the run, not as a blank line', () => {
+  test('treats a #-only line as part of the block, not as a blank line', () => {
     const input = dedent`
       a = 1
       # here is some information
@@ -217,7 +217,7 @@ describe('R2 - leading ownership', () => {
     ` + '\n');
   });
 
-  test('removes both a leading run and a same-line trailing comment', () => {
+  test('removes both a leading block and a same-line trailing comment', () => {
     const input = dedent`
       a = 1
       # doc for b
@@ -235,7 +235,7 @@ describe('R2 - leading ownership', () => {
   });
 
   test('does not sweep up the previous member\'s trailing comment', () => {
-    // `# trailing a` is owned by `a` (R1), so it is not part of b's leading run.
+    // `# trailing a` is owned by `a` (R1), so it is not part of b's leading block.
     const input = dedent`
       a = 1 # trailing a
       # doc for b
@@ -250,7 +250,7 @@ describe('R2 - leading ownership', () => {
     ` + '\n');
   });
 
-  test('removes the leading run of a deleted section', () => {
+  test('removes the leading block of a deleted section', () => {
     const input = dedent`
       [a]
       x = 1
@@ -314,7 +314,7 @@ describe('R3 - a blank line severs ownership', () => {
     ` + '\n');
   });
 
-  test('splits a comment block at the blank line and removes only the adjacent run', () => {
+  test('splits a comment block at the blank line and removes only the adjacent block', () => {
     const input = dedent`
       # one
 
@@ -334,8 +334,8 @@ describe('R3 - a blank line severs ownership', () => {
   });
 });
 
-describe('R4 - trailing runs are pinned', () => {
-  test('keeps a trailing comment run when the last row is deleted', () => {
+describe('R4 - trailing blocks are pinned', () => {
+  test('keeps a trailing comment block when the last row is deleted', () => {
     const input = dedent`
       [t]
       a = 1
@@ -353,7 +353,7 @@ describe('R4 - trailing runs are pinned', () => {
     ` + '\n');
   });
 
-  test('keeps a multi-line trailing run at the end of the document', () => {
+  test('keeps a multi-line trailing block at the end of the document', () => {
     const input = dedent`
       a = 1
       b = 2
@@ -462,7 +462,7 @@ describe('R6 - commented-out entries are not owned', () => {
     ` + '\n');
   });
 
-  test('keeps a run in which every line is a commented-out entry', () => {
+  test('keeps a block in which every line is a commented-out entry', () => {
     const input = dedent`
       a = 1
       # retries = 3
@@ -519,7 +519,7 @@ describe('R6 - commented-out entries are not owned', () => {
     ` + '\n');
   });
 
-  test('removes a mixed run - one prose line defeats R6', () => {
+  test('removes a mixed block - one prose line defeats R6', () => {
     const input = dedent`
       a = 1
       # Legacy, kept for reference:
@@ -705,7 +705,7 @@ describe('renaming', () => {
     ` + '\n');
   });
 
-  test('carries both a leading run and a trailing comment', () => {
+  test('carries both a leading block and a trailing comment', () => {
     const input = dedent`
       # one
       # two

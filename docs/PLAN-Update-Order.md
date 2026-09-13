@@ -437,7 +437,7 @@ the same with the option off — output byte-identical to the input.
 | 1 | **Hoisted in-brace comments orphaned** and written onto a line another node owns — silent corruption, since `to-toml.ts` merges rather than throws | Ownership R1 uses `start.line <= member.loc.end.line`, which absorbs them. Test 5.2 "hoisted in-brace comment". |
 | 2 | **Phase placed after line 720 instead of 749** — `cleanupOrphanedComments` and `replaceEmptiedTableArrays` still mutate `items` afterwards | §3.1. Zero cost to get right. |
 | 3 | **Invalid TOML from a scalar landing after a section** (reachable via `inlineTableStart: 0`) | The validity partition, §Scope. ~10 lines, and it also neutralises the emission imprecision. |
-| 4 | **An Add steals an existing comment group** — a newly-appended key sits right below a trailing comment run and R2 hands it over | `prePatchNodes` → `isEligibleForLeading`. §3.3. |
+| 4 | **An Add steals an existing comment group** — a newly-appended key sits right below a trailing comment block and R2 hands it over | `prePatchNodes` → `isEligibleForLeading`. §3.3. |
 | 5 | **`console.warn` on every `patch()` call** if the schema entry is missed | §1 #2 + the spy test. |
 | 6 | **Container-path Moves resolving to nothing or the wrong node type** — `findByPath` throws | `tryFindByPath` + type guard + skip. §3.3 Step 2. |
 | 7 | **`isMove` branch order** — document-level Moves have `path === []` and fall into the legacy handler | Check `change.key !== undefined` first. §3.1. |

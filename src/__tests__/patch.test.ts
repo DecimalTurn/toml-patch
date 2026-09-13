@@ -7676,8 +7676,8 @@ describe('identity round-trip normalizations', () => {
     ` + '\n');
   });
 
-  test('treats commented-out KV with matching key + inline comment as part of the run', () => {
-    // key matches → no barrier, entire run (including prose) is owned by z and removed
+  test('treats commented-out KV with matching key + inline comment as part of the block', () => {
+    // key matches → no barrier, entire block (including prose) is owned by z and removed
     const input = dedent`
       # doc for t
       [t]

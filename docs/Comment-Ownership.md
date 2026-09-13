@@ -2,6 +2,11 @@
 
 When `patch()` removes or reorders an entry, any comment that describes it travels along with it instead of being left behind and losing the context of what it's describing or talking about.
 
+## Terms
+
+- A **line-comment** is a comment that occupies an entire line on its own. It only has whitespace before it on that line.
+- A **trailing-comment** is a comment that appears at the end of a line, after some non-whitespace TOML element or syntax.
+- A **comment-block** (aka. comment-run) is a sequence of uninterrupted line-comments. Note that a blank line ends a block even if it is followed by more line comments, a line containing only `#` is still a line-comment like any other and continues the block.
 
 ## The rules
 
@@ -10,11 +15,11 @@ Rules are evaluated in precedence order.
 | | Rule |
 |---|---|
 | **R1** | **Trailing ownership.** A comment on the same line as the element that just ended is owned by that element. |
-| **R2** | **Leading ownership.** A comment run whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the run transfers to the materialised parent header. |
-| **R3** | **A blank line severs ownership.** A run separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
-| **R4** | **Independent otherwise.** A run with no member below it in the same container is pinned. |
-| **R5** | **Cross-container ownership.** A trailing run inside a `[table]` / `[[array]]` that R2 assigns to the following document block is owned by that block. |
-| **R6** | **A dead-entry run is independent.** A run in which every line is a commented-out entry is pinned, overriding R2. |
+| **R2** | **Leading ownership.** A comment block whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the block transfers to the materialised parent header. |
+| **R3** | **A blank line severs ownership.** A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
+| **R4** | **Independent otherwise.** A block with no member below it in the same container is pinned. |
+| **R5** | **Cross-container ownership.** A trailing comment block inside a `[table]` / `[[array]]` that R2 assigns to the following document block is owned by that block. |
+| **R6** | **A dead-entry block is independent.** A block in which every line is a commented-out entry is pinned, overriding R2. |
 
 ## R1 - **Trailing ownership.**
 
@@ -104,7 +109,7 @@ Removing `y` here leaves the note behind.
 
 A blank line means a line with no comment node on it, a gap in line numbers between two consecutive
 comments. It is not a judgement about how the line looks. A `#` on its own is a perfectly good
-comment, so it does not break a run:
+comment, so it does not break a block:
 
 ```toml
 # here is some information
@@ -113,7 +118,7 @@ comment, so it does not break a run:
 Key = "value2"
 ```
 
-All three comments form one run, so the whole block, separator line included, is owned by `Key` and
+All three comments form one block, so the whole block, separator line included, is owned by `Key` and
 travels with it.
 
 Compare, with a genuinely empty line:
@@ -125,13 +130,13 @@ Compare, with a genuinely empty line:
 Key = "value2"
 ```
 
-Now there are two runs. `# here is some information` is pinned by R3, and only the second run
+Now there are two blocks. `# here is some information` is pinned by R3, and only the second block
 travels.
 
-## Multi-line runs are all-or-nothing
+## Multi-line blocks are all-or-nothing
 
-A run is maximal over consecutive lines, so a blank line both severs ownership (R3) and splits one
-visual comment block into two independent runs, which can get different verdicts:
+A block is maximal over consecutive lines, so a blank line both severs ownership (R3) and splits it
+into two independent blocks, which can get different verdicts:
 
 ```toml
 # ==========================
@@ -155,18 +160,18 @@ enabled = true
 | Group | Contents |
 |---|---|
 | pinned | the 3-line banner above `host` |
-| `host` | the 2-line run above it, plus `host = "127.0.0.1"` |
-| `port` | the 3-line run above it, plus `port = 80` |
-| pinned | the 2-line `# retries` / `# timeout` run |
+| `host` | the 2-line block above it, plus `host = "127.0.0.1"` |
+| `port` | the 3-line block above it, plus `port = 80` |
+| pinned | the 2-line `# retries` / `# timeout` block |
 | `enabled` | `enabled = true` |
 
 Three things this pins down:
 
-- **Runs are all-or-nothing.** The run above `host` moves with `host` in full. There is no notion
+- **Blocks are all-or-nothing.** The block above `host` moves with `host` in full. There is no notion
   of "the last comment belongs to the key and the rest are a banner". A blank line is how an author
   expresses that split.
-- **A mixed run is not R6.** The run above `port` holds two dead entries but one prose line, so the
-  whole run stays owned by `port`. The uniformly dead `# retries` / `# timeout` run is pinned.
+- **A mixed block is not R6.** The block above `port` holds two dead entries but one prose line, so the
+  whole block stays owned by `port`. The uniformly dead `# retries` / `# timeout` block is pinned.
 - **A banner survives a reorder.** The 3-line banner is pinned by R3, not by content, and stays in
   place.
 
@@ -196,7 +201,7 @@ valid TOML key (bare, quoted, or dotted) immediately followed by `=`, or a `[tab
 | `# use x = 1 for this` | prose, owned |
 | `# see https://a.b?x=1` | prose, owned |
 
-R6 requires every line in the run to be a dead entry. A mixed run stays owned:
+R6 requires every line in the block to be a dead entry. A mixed block stays owned:
 
 ```toml
 # Port to bind to
@@ -204,7 +209,7 @@ R6 requires every line in the run to be a dead entry. A mixed run stays owned:
 port = 80
 ```
 
-All three lines travel together, because the prose line anchors the run to `port`.
+All three lines travel together, because the prose line anchors the block to `port`.
 
 One known limitation: prose of the exact shape `word = word` is treated as a dead entry and
 pinned. For example:
@@ -216,8 +221,8 @@ pinned. For example:
 ## Comments above the next section
 
 A table consumes every token until the next header, so a comment that visually introduces the next
-section is stored in the previous table. Ownership is still assigned correctly: a run adjacent to
-the next block is owned by that block (R5), not by the table above it.
+section is stored in the previous table. Ownership is still assigned correctly: a comment block
+adjacent to the next section is owned by that section (R5), not by the table above it.
 
 ```toml
 [a]

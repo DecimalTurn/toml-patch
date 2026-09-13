@@ -12,7 +12,7 @@ A pre-existing issue found while probing these, unrelated to both, is recorded u
 Found while verifying a GitHub Copilot review comment on PR #260, which flagged the root cause
 precisely: [`resolveGroups`](../../src/comment-ownership.ts)'s `isEligibleForLeading` predicate
 (used by [`applyContainerMoves`](../../src/update-order.ts)) decides whether a member may adopt an
-adjacent leading comment run via **R2** (leading ownership, see
+adjacent leading comment block via **R2** (leading ownership, see
 [`Comment-Ownership.md`](../Comment-Ownership.md)). It keyed eligibility off node
 identity in a `WeakSet` snapshotted before the patch ran (`prePatchNodes`), so any node created
 *during* the patch — whether genuinely new or a structural replacement — was treated as ineligible.
