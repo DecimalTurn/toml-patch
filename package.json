@@ -63,7 +63,8 @@
     "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",
     "fuzz3": "npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 9999 --mutations 3",
-
+    "bench:bundle-size": "node benchmark/bundle-size.mjs",
+    "bench:tree-shake": "node benchmark/tree-shake-size.mjs",
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && tsdown",
     "build:demo": "node scripts/build-demo.mjs",
