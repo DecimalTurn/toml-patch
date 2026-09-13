@@ -2,11 +2,6 @@
 
 When `patch()` removes or reorders an entry, any comment that describes it travels along with it instead of being left behind and losing the context of what it's describing or talking about.
 
-## Terms
-
-- A **comment run** is a maximal sequence of own-line comments on strictly consecutive lines. A
-  `#`-only line is a comment like any other and continues the run.
-- A **group** is a member plus every comment it owns, or an independent (pinned) comment run.
 
 ## The rules
 
