@@ -1399,6 +1399,17 @@ export function shiftNode(
   return node;
 }
 
+/**
+ * Answers "is this container laid out with one item per row?" for insertion
+ * decisions. Rows are inferred from the items' START lines, so a container
+ * whose next item continues on a MULTILINE item's end line still counts as
+ * per-row here. Callers must handle that shape themselves: `insert` suppresses
+ * the new line when `next` starts on `previous`'s end line (fuzz seed 620).
+ *
+ * Structural layout decisions (`'parent'`, multiline formatting) must not use
+ * this loose answer. They use `hasStructuralMultilineRows`, which compares each
+ * item's start line against the previous item's END line.
+ */
 export function perLine(array: InlineArray | InlineTable, excluded?: TreeNode): boolean {
   const layout = getInlineContainerLayout(array);
   if (layout === true) return true;
