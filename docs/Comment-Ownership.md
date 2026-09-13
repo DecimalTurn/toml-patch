@@ -18,8 +18,8 @@ Rules are evaluated in precedence order.
 | **R2** | **Leading ownership.** A comment block whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the block transfers to the materialised parent header. |
 | **R3** | **A blank line severs ownership.** A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
 | **R4** | **Independent otherwise.** A block with no member below it in the same container is pinned. |
-| **R5** | **Cross-container ownership.** A trailing comment block inside a `[table]` / `[[array]]` that R2 assigns to the following document block is owned by that block. |
-| **R6** | **A dead-entry block is independent.** A block in which every line is a commented-out entry is pinned, overriding R2. |
+| **R5** | **Cross-container ownership.** A trailing comment-block inside a `[table]` / `[[array]]` that R2 assigns to the following document-block is owned by that document-block. |
+| **R6** | **A dead-entry block is independent.** A comment-block in which every line is a commented-out entry is pinned, overriding R2. |
 
 ## R1 - **Trailing ownership.**
 
