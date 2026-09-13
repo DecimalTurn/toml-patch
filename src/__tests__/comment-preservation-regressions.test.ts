@@ -142,9 +142,9 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
       before = "keep" # before note
       session_start = [
         # shared group
-        { hooks = [] },
+        { hooks = [
+        ] },
       ]
-
       after = "keep" # after note
       ` + '\n'));
   });
@@ -169,10 +169,7 @@ describe.each(['\n', '\r\n'])('Comment preservation regressions, EOL %j', (eol) 
       after = "keep" # after note
       ` + '\n'));
   });
-
-  // Unskip when we are able to preserve the multiline nature of an array even when all 
-  // elements are removed.
-  test.skip.each([false, true])('removing a closing-line command preserves the group tail, other command %s', (withOther) => {
+  test.each([false, true])('removing a closing-line command preserves the group tail, other command %s', (withOther) => {
     const source = sourceText(withOther ? dedent`
       [hooks]
       session_start = [

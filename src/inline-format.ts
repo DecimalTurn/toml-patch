@@ -16,6 +16,7 @@ const multilineDecisions = new WeakMap<InlineArray | InlineTable, boolean>();
 const positionedContainers = new WeakSet<InlineArray | InlineTable>();
 const generatedNestedTables = new WeakSet<InlineTable>();
 const generatedNestedTableHosts = new WeakSet<InlineArray>();
+const preservedMultilineEmptyContainers = new WeakSet<InlineArray | InlineTable>();
 
 export function resolveInlineContainerLayout(
   kind: InlineContainerKind,
@@ -69,6 +70,21 @@ export function markGeneratedNestedTableHost(array: InlineArray): void {
 
 export function isGeneratedNestedTableHost(array: InlineArray): boolean {
   return generatedNestedTableHosts.has(array);
+}
+
+/**
+ * Records that `container` held its only item on an interior row and that row
+ * was removed. The opening and closing delimiters stay on separate rows so the
+ * source layout survives the removal, mirroring the behavior already used for
+ * block-level containers. Nested containers are otherwise tightened to a single
+ * line because their closing bracket has no source row of its own to keep.
+ */
+export function markPreservedMultilineEmpty(container: InlineArray | InlineTable): void {
+  preservedMultilineEmptyContainers.add(container);
+}
+
+export function isPreservedMultilineEmpty(container: InlineArray | InlineTable): boolean {
+  return preservedMultilineEmptyContainers.has(container);
 }
 
 export function hasStructuralMultilineRows(container: InlineArray | InlineTable): boolean {

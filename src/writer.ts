@@ -35,7 +35,7 @@ import traverse from './traverse';
 import { getCommaSpace } from './inline-comma-space';
 import { DEFAULT_INDENT_WIDTH } from './toml-format';
 import { markMutation, markTreeDirty } from './cst-source';
-import { getInlineContainerLayout, isInlineContainerPositioned } from './inline-format';
+import { getInlineContainerLayout, isInlineContainerPositioned, markPreservedMultilineEmpty } from './inline-format';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -846,6 +846,22 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
   const emptiedFromContainerLine =
     isMultilineInlineContainer &&
     node.loc.start.line === parent.loc.start.line;
+
+  // A multiline inline container whose only item sat on its own interior row
+  // and whose closing delimiter had a row of its own: keep those two rows so
+  // the source layout survives the removal. The removal offset below is left
+  // intact (the container is not marked for tightening), and the renderer
+  // emits the closing row for the marked container.
+  const preservesMultilineLayout =
+    isMultilineInlineContainer &&
+    !emptiedFromContainerLine &&
+    previous === undefined &&
+    next === undefined &&
+    node.loc.start.line > parent.loc.start.line &&
+    parent.loc.end.line > node.loc.end.line;
+  if (preservesMultilineLayout) {
+    markPreservedMultilineEmpty(parent as InlineArray | InlineTable);
+  }
 
   if (
     previous === undefined &&
