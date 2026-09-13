@@ -4,9 +4,10 @@ import { parse } from '../';
 import diff from '../diff';
 import dedent from 'dedent';
 import { fuzzOne } from './fuzz-patch';
+import { fuzzOne3 } from './fuzz-patch3';
 
 const historicalFuzzSeeds = [
-  19506, 21525, 30330, 31662, 32801, 35943, 37465, 39363, 40181, 41613,
+  16552, 19506, 21525, 30330, 31662, 32801, 35943, 37465, 39363, 40181, 41613,
   43159, 43199, 46522, 54607, 61827, 62163, 62263, 65785, 67221, 68244,
   68861, 78079, 79938, 80004, 82825, 86547, 86724, 121096, 129645, 136292,
   136865, 175924, 179377, 186384, 208822, 224081, 272851, 299772, 358055,
@@ -18,6 +19,31 @@ const historicalFuzzSeeds = [
 
 test.each(historicalFuzzSeeds)('historical fuzz seed %d still passes the full harness', (seed) => {
   const result = fuzzOne(seed, 3);
+  expect(result.status, result.error).toBe('ok');
+});
+
+const historicalFuzzSeeds3 = [
+  91, 
+  1334,
+  2151,
+  3456, 
+  3819,
+  6045,
+  7262,
+  7490,
+  7962,
+  7997,
+  8832,
+  9322,
+  14725,
+  14739,
+  17339,
+  18515,
+  18868
+];
+
+test.each(historicalFuzzSeeds3)('historical fuzz3 seed %d passes the full harness', (seed) => {
+  const result = fuzzOne3(seed, 3);
   expect(result.status, result.error).toBe('ok');
 });
 
@@ -3963,4 +3989,526 @@ test('replacing a table with a scalar after a multiline AOT array (seed 863664)'
     ]
   `);
   expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz3 seed 91', () => {
+  const src = dedent`
+    [project."child]".details]
+  `;
+
+  const obj = parse(src) as any;
+  obj.project = {
+    name: 'demo',
+    settings: { enabled: true },
+  };
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    indentWidth: 1,
+    multilineTable: 1,
+    multilineArray: 'auto',
+  });
+  expect(result).toEqual(dedent`
+    [project]
+    name = "demo"
+    settings = {
+     enabled = true,
+    }
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz3 seed 1334', () => {
+  const src = dedent`
+    [[servers.entries]]
+  `;
+
+  const obj = parse(src) as any;
+  obj.servers.entries = [1, 2];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 2,
+    trailingComma: false,
+    bracketSpacing: true,
+    updateOrder: false,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true,
+    indentWidth: 1,
+    minimumDecimals: 1,
+    multilineTable: false,
+    multilineArray: 0,
+  });
+  const expected = dedent`
+    [servers]
+    entries = [
+    \t1.0,
+    \t2.0
+    ]
+  `;
+  expect(result).toEqual(expected);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz3 seed 2151', () => {
+  const src = dedent`
+    [root.group.table]
+    s.f.f = 1
+  `;
+
+  const obj = parse(src) as any;
+  // Transform the original s.f.f property into a nested array structure for testing.
+  obj.root.group.table.s.f = [
+    [true],
+    [false, { flag: true }],
+    'three',
+  ];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 2,
+    trailingComma: true,
+    bracketSpacing: false,
+    updateOrder: true,
+    truncateZeroTimeInDates: false,
+    useTabsForIndentation: true,
+    indentWidth: 2,
+    multilineTable: true,
+    multilineArray: 'auto',
+  });
+  const expected = dedent`
+    [root.group.table]
+    s.f = [[true,], [false, {
+                              flag = true, 
+                            },], "three",]
+  `;
+  expect(result).toEqual(expected);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 7490', () => {
+  const src = dedent`
+    s1v = '''
+    YdoF!'''
+    a9 = [
+    ]
+    [ke.rzdb.llgh72pd]
+  `;
+
+  const obj = parse(src) as any;
+  obj.ke.rzdb = [{ "k68": [new Date(Date.UTC(2019, 7, 13))] }, 4204];
+
+  const result = patch(src, obj, {
+  inlineTableStart: 2,
+  trailingComma: false,
+  bracketSpacing: true,
+  updateOrder: false,
+  truncateZeroTimeInDates: false,
+  useTabsForIndentation: false,
+  indentWidth: 4,
+  minimumDecimals: 2,
+  multilineTable: "auto",
+  multilineArray: 0
+  });
+
+  expect(result).toEqual(dedent`
+    s1v = '''
+    YdoF!'''
+    a9 = [
+    ]
+
+    [ke]
+    rzdb = [
+        { k68 = [
+              2019-08-13T00:00:00.000Z
+          ] },
+        4204.00
+    ]
+  `);
+
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 7997', () => {
+  const src = dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg.abcw8xtgc1 = '%F=i\`f~Z<mc8v.0[B\`4i<p=qv!_'
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
+  `;
+
+  const obj = parse(src) as any;
+  obj["cdf"].xg = [["4o0SPONABJgx3", false, "vk-X9lxxkT"], [[], 1705]];
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 0,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: true,
+    indentWidth: 2,
+    multilineTable: false,
+    multilineArray: 2
+  });
+
+  expect(result).toEqual(dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg = [ [ "4o0SPONABJgx3", false, "vk-X9lxxkT", ], [ [], 1705, ], ]
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
+  `);
+
+  expect(parse(result)).toEqual(obj);
+});
+
+
+test('distilled regression for fuzz seed 7997 alt1', () => {
+  const src = dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg.abcw8xtgc1 = '%F=i\`f~Z<mc8v.0[B\`4i<p=qv!_'
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
+  `;
+
+  const obj = parse(src) as any;
+  obj["cdf"].xg = [["4o0SPONABJgx3", false, "vk-X9lxxkT"], [{}, 1705]];
+
+  const result = patch(src, obj, {
+    trailingComma: true,
+    bracketSpacing: true,
+    updateOrder: false,
+    trailingNewline: 0,
+    newLine: '\n',
+    leadingBom: false,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: true,
+    indentWidth: 2,
+    multilineTable: 2,
+    multilineArray: 2
+  });
+
+  expect(result).toEqual(dedent`
+    d2."abc".e9fd2 = {
+    }
+    x = """
+    ^ #"""
+    [cdf]
+    xg = [ [ "4o0SPONABJgx3", false, "vk-X9lxxkT", ], [ {}, 1705, ], ]
+    "".c8a6o-3-u4.xnhbb = '''
+    '''
+  `);
+
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 14725 (minimal)', () => {
+  const src = dedent`
+    root.branch = {
+      target.nested = -1,
+    }
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.branch.target = ["first", false, { child: [-2, new Date(Date.UTC(2019, 4, 19))] }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 0,
+    trailingComma: false,
+    bracketSpacing: false,
+    updateOrder: false,
+    trailingNewline: 2,
+    truncateZeroTimeInDates: true,
+    useTabsForIndentation: false,
+    indentWidth: 2,
+    multilineTable: "auto",
+    multilineArray: true
+  });
+
+  expect(result).toEqual(dedent`
+    root.branch = {
+      target = [
+        "first",
+        false,
+        {child = [
+           -2,
+           2019-05-19
+         ]}
+      ],
+    }
+  ` + '\n\n');
+
+  expect(parse(result)).toEqual(obj);
+});
+test('distilled regression for fuzz seed 17339 (newline before the next table is lost)', () => {
+  const src = dedent`
+    [a]
+    x = 1
+
+    [b]
+  `;
+
+  const obj = parse(src) as any;
+  obj.a = { c: { d: '2' } };
+
+  const result = patch(src, obj, { multilineTable: true });
+
+  expect(result).toEqual(dedent`
+    [a]
+    c = {
+      d = "2"
+    }
+
+    [b]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 17339 (multiline value overlaps the next table after two removals)', () => {
+  const src = dedent`
+    [a]
+    x = 1
+    y = 2
+
+    [b]
+  `;
+
+  const obj = parse(src) as any;
+  obj.a = { c: { d: '2' } };
+
+  const result = patch(src, obj, { multilineTable: true });
+
+  expect(result).toEqual(dedent`
+    [a]
+    c = {
+      d = "2"
+    }
+
+    [b]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 18515 (compact value holding a multiline child)', () => {
+  const src = dedent`
+    b.c = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.b = [1, { d: { e: { f: 1 } } }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    multilineTable: 2,
+    multilineArray: 1,
+  });
+
+  expect(result).toEqual(dedent`
+    b = [ 1, { d = {
+                 e = {
+                   f = 1,
+                 },
+               }, }, ]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz3 seed 14739 (compact array inside a multiline table)', () => {
+  // The inner array `d = [ 2, {...}, ]` stays compact even though its element
+  // table is multiline, so its `]` belongs on the row the element's `}` closes
+  // — snapping it to the key column instead puts it before that `}` and the
+  // element's comma collides with it ("Consecutive commas in inline table").
+  const src = dedent`
+    b.c = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.b = [1, { d: [2, { e: { f: 1 } }] }];
+
+  const result = patch(src, obj, {
+    inlineTableStart: 1,
+    trailingComma: true,
+    indentWidth: 2,
+    multilineTable: 0,
+    multilineArray: false,
+  });
+
+  expect(result).toEqual(dedent`
+    b = [ 1, {
+               d = [ 2, {
+                          e = {
+                            f = 1,
+                          },
+                        }, ], 
+             }, ]
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
+test('distilled regression for fuzz seed 17339', () => {
+  const src = dedent`
+    g9suq18.pxa.f6xnljk = ' RO|*sL|<0Cue-QeSXY6M0*i~qTG'
+    eo3l4.o.vlu69 = -928814
+    tj0f8b43c = "C1IkIr 31dg!&o=L@Jg)$zg\`[E0|E7\`|7*o w|"
+    giut = false
+    # D&Y+Jj6$02P/v$Y,bIc%U}p6%Gf*4T.mOlnk\`_S7
+    "".xjqvmdb.a9ftleq82 = "Kc:7xPLEt#<p@SVCd}ryS,F)dq="
+    yt9v = 2039-04-17T15:13:24.036340Z
+    # eB&[/o=\`K1bV9Pj\`o3BwUiW
+    ["".e_h]
+    # W1meln>OOb(D!N0
+    uvyt5kjl = 661531
+    
+    [")"."?bc\`;?9?".xfogq3ww6u]
+    sn4 = 2065-12-18
+    r6jlue-9z4.u569tm.tv4k = [55173.56153, 84031.85882, "4> !KyoWHg mKs", "oT0G$kn))\`b@Y_D0", true, 0x9, "TTPUag%![)8Nii&]5@Je7I7:Ik;zZ-", 0b0, true, 2037-10-01T15:44:16.086721Z]
+    p1o9yoz."fD9UR=W" = 2047-07-24T00:43:15
+    
+    [r_t5mzwo.w.q06]
+    
+    ["qD:+V/".lo4hhl30q.k35i]
+    egsxgd."j$,=(Uqh" = 782733
+    nprc7jz = -96331.19755
+    "".vdmppsz-e = 0o47136317
+    f5.ehxng66 = 658041
+    # -h1oKHXA8,&7;S:A[>zv|iDL3L_<VRP-4O4z
+    gpru72iky."9y@_7:AD:" = false
+    
+    [e]
+    qyk.cvz = 493247
+    tu.yspdb1 = ".0C+dkrcH@9cs nP)(GYa\`Ccn%_0diX^~gLo*"
+    # PJH$GY+u}EkaSa<^1AdXR?}ZpFb>
+    d = true
+    jrcsv.w-xh1fu5j = 24159.9024
+    # *xH-PR
+    yic = ":Ip#FD"
+    "" = 393480
+    "XrD#}-rqK" = '''
+    ju
+    *M9'''
+    "792/)U0,".kwnp_vdhn = 'JM6)]r.ao'
+    t0tfh5xih = '''
+    1X2gB
+    Qt\`
+    
+    ^O<g
+    IPjU
+    |
+    D/T(7J
+    
+    B:S{n?3'''
+    # s 5=lVd]APf[I+^
+    
+    [wvdgw-."2OP/M\`l@1"]
+    yaf.m = 971322
+    # ]kvnop5GL{@YR*_\`u*q?4ko&t[PQ5JXA/$
+    fzv7y."eza>Kpk" = [422282, true, nan, false, 'zD3B{![.lv&Fcs(|O3WC', 37_578.97025, "N=]/sHL%PZxFZ%Gm*M;j", 'Y[a#/j^F)bWwH0tA!b|i;8y]rIN>%>F0A_^rr4|>W>am4*', 604518]
+    d1h28gbyzp.f.uowaw = 00:53:22.190521
+    iLVWr_h17 = "3q$dp_;V2!R}t=?@2wmD(OnH{,"
+    # PiaTw+{14D g69kIp9hkuN_hqw
+    [dqj_cxo."ar;n2.LtHb"]
+    t-tdfew.lr3unvsx.betw6o = '0v9k:rw{(0)(j{z!sV]n^ &|l0<Ck>4iQJo3?qF;P$bLpl#5)'
+    # ;budX-M
+    "MU6E[-iY".w-sot1f.c5qwc9ny = 'l]8S2p2?.wVm)}c9y(H@,[aD=cuH2:r92NgWv^1b2t$HI-NN'
+    bjyyv.f = """
+    Q<sW294CG9A@;"""
+    j1.o.c0um0 = "C?6;bh!z\`jLc@YrOy\`my"
+    vcxzw.wf9tg7.dx = 'VjS|Gu:mx1'
+    "+!"."{p<8>ed".a = "#PHWOey_&d MJ54TTw/(kqja]%\`+fg;uyrD"
+    c3gs8.mvblbhg = false
+    "!W$-".k4 = '#6TXz'
+    ny5onhkg29.yr.v_5tcq2bto = "J\`<=QY@]|i7bf&<#G~|o;*n/fW_U/v{I_DptK|Tm~BMkxnwNA"
+    # e9 pEg:3Yl~4\`1^%,T)?7]89-i+3yS|cn,=
+    
+    [vxmsd7u.j0v.rg96-tbxaz]
+    "S{+%z" = """
+    OA
+    y1qKr%_Qx,;[.v"""
+    vcfq_f9m9."Vdh@1b~XOh" = 0x4f8bb
+    o.ffbp.vt177 = [
+        817426,
+        'fp\`Qt8#@G:{9^b3lps|Kd,a$89+!EYsC[wAo9<(#&TY q8',
+        343755,
+        'L/lvdK-uq<rVMQWD{=4Qoy%8;rAxqQ!z$\`',
+        """
+    $(^-""",
+        250887,
+        2013-07-23,
+        false,
+        "t<WWtA",
+        -819_532,
+    ]
+    # e}>.u
+    # =,0s@z*V@>g$y[L]9>dAjAn0mRiV{
+    # 4}b.sJgxM3XQt.sMXwQ{G/3.d.Y
+    "u\`7oSX/".ie1.p0j7p = 550303
+    "t;}" = 28322.58702
+    3.j = 71026.4942
+    hyx2tvv_u = 466407
+    hj."W(l"."l(5c<?I" = "kp~|V?^(:;VN#F8p|$(*&)E&?)F6{}r#n_]q_~AlW>]_WW|"
+    dco.d4f84jq1k = 90_668.033775
+    nhwnc6s-5r.jcpq4a9s1 = true
+    
+    [uuh7]
+    uc-pw.wo4fo36-6l = 0x2a09182e
+    "b!\`Uvu-6I}".T.q9_2cq = "7O;0sokx"
+    0.y2mhhcrk9- = 05:36:40
+    
+    [dm2wzqxtp9.rh3y.gl47l-4]
+    q4y2n6p."K+:/^(".uylg-mnej = "Ca%L6p(tp~$Uk,+/~y@o\`}<ZA& ?_M.BC9&)[urnEmzNYr5"
+    4.pm7k_zt3j."=H]aGZ" = 783e-30
+    # vIJenp%
+    tsf."/_bg]#"."fsR1X*" = 977545
+    "|_To+9loQ".imh2x4zt1q.rjauqvm- = 0b10001001
+    l.v6 = 0b10011110
+    w9sxpe.o = 0o51
+    w = """
+    Hd
+    D
+    kxY<nKB,S1
+    fS"""
+    tjejny.r3p = false
+    s.gy48-sxn = 502e-79
+    r1nese = -92e+51
+    u43_8yea7f.fmxldjro = 624_078
+    z3azy = -148_356
+    # }woSP&O0+{bG7:e1]{-G~bxj[b31sZjfy
+  `;
+
+  const obj = parse(src) as any;
+  obj[""].e_h = { "k39": { "k12": "2" }, "k67": [3589] };
+
+  const result = patch(src, obj, {
+  trailingComma: false,
+  bracketSpacing: true,
+  updateOrder: true,
+  trailingNewline: 2,
+  newLine: '\n',
+  leadingBom: false,
+  truncateZeroTimeInDates: true,
+  useTabsForIndentation: false,
+  indentWidth: 2,
+  minimumDecimals: 2,
+  multilineTable: 2,
+  multilineArray: "parent"
+});
+  expect(parse(result)).toEqual(obj);
+  // expect(result).toEqual("g9suq18.pxa.f6xnljk = ' RO|*sL|<0Cue-QeSXY6M0*i~qTG'\neo3l4.o.vlu69 = -928814\ntj0f8b43c = \"C1IkIr 31dg!&o=L@Jg)$zg`[E0|E7`|7*o w|\"\ngiut = false\n# D&Y+Jj6$02P/v$Y,bIc%U}p6%Gf*4T.mOlnk`_S7\n\"\".xjqvmdb.a9ftleq82 = \"Kc:7xPLEt#<p@SVCd}ryS,F)dq=\"\nyt9v = 2039-04-17T15:13:24.036340Z\n# eB&[/o=`K1bV9Pj`o3BwUiW\n[\"\".e_h]\nk39 = {\nk12 = \"2\"\n}\nk67 = [ 3589.00 ] [\")\".\"?bc`;?9?\".xfogq3ww6u]\nsn4 = 2065-12-18\nr6jlue-9z4.u569tm.tv4k = [55173.56153, 84031.85882, \"4> !KyoWHg mKs\", \"oT0G$kn))`b@Y_D0\", true, 0x9, \"TTPUag%![)8Nii&]5@Je7I7:Ik;zZ-\", 0b0, true, 2037-10-01T15:44:16.086721Z]\np1o9yoz.\"fD9UR=W\" = 2047-07-24T00:43:15\n\n[r_t5mzwo.w.q06]\n\n[\"qD:+V/\".lo4hhl30q.k35i]\negsxgd.\"j$,=(Uqh\" = 782733\nnprc7jz = -96331.19755\n\"\".vdmppsz-e = 0o47136317\nf5.ehxng66 = 658041\n# -h1oKHXA8,&7;S:A[>zv|iDL3L_<VRP-4O4z\ngpru72iky.\"9y@_7:AD:\" = false\n\n[e]\nqyk.cvz = 493247\ntu.yspdb1 = \".0C+dkrcH@9cs nP)(GYa`Ccn%_0diX^~gLo*\"\n# PJH$GY+u}EkaSa<^1AdXR?}ZpFb>\nd = true\njrcsv.w-xh1fu5j = 24159.9024\n# *xH-PR\nyic = \":Ip#FD\"\n\"\" = 393480\n\"XrD#}-rqK\" = '''\nju\n*M9'''\n\"792/)U0,\".kwnp_vdhn = 'JM6)]r.ao'\nt0tfh5xih = '''\n1X2gB\nQt`\n\n^O<g\nIPjU\n|\nD/T(7J\n\nB:S{n?3'''\n# s 5=lVd]APf[I+^\n\n[wvdgw-.\"2OP/M`l@1\"]\nyaf.m = 971322\n# ]kvnop5GL{@YR*_`u*q?4ko&t[PQ5JXA/$\nfzv7y.\"eza>Kpk\" = [422282, true, nan, false, 'zD3B{![.lv&Fcs(|O3WC', 37_578.97025, \"N=]/sHL%PZxFZ%Gm*M;j\", 'Y[a#/j^F)bWwH0tA!b|i;8y]rIN>%>F0A_^rr4|>W>am4*', 604518]\nd1h28gbyzp.f.uowaw = 00:53:22.19\niLVWr_h17 = \"3q$dp_;V2!R}t=?@2wmD(OnH{,\"\n# PiaTw+{14D g69kIp9hkuN_hqw\n[dqj_cxo.\"ar;n2.LtHb\"]\nt-tdfew.lr3unvsx.betw6o = '0v9k:rw{(0)(j{z!sV]n^ &|l0<Ck>4iQJo3?qF;P$bLpl#5)'\n# ;budX-M\n\"MU6E[-iY\".w-sot1f.c5qwc9ny = 'l]8S2p2?.wVm)}c9y(H@,[aD=cuH2:r92NgWv^1b2t$HI-NN'\nbjyyv.f = \"\"\"\nQ<sW294CG9A@;\"\"\"\nj1.o.c0um0 = \"C?6;bh!z`jLc@YrOy`my\"\nvcxzw.wf9tg7.dx = 'VjS|Gu:mx1'\n\"+!\".\"{p<8>ed\".a = \"#PHWOey_&d MJ54TTw/(kqja]%`+fg;uyrD\"\nc3gs8.mvblbhg = false\n\"!W$-\".k4 = '#6TXz'\nny5onhkg29.yr.v_5tcq2bto = \"J`<=QY@]|i7bf&<#G~|o;*n/fW_U/v{I_DptK|Tm~BMkxnwNA\"\n# e9 pEg:3Yl~4`1^%,T)?7]89-i+3yS|cn,=\n\n[vxmsd7u.j0v.rg96-tbxaz]\n\"S{+%z\" = \"\"\"\nOA\ny1qKr%_Qx,;[.v\"\"\"\nvcfq_f9m9.\"Vdh@1b~XOh\" = 0x4f8bb\no.ffbp.vt177 = [\n    817426,\n    'fp`Qt8#@G:{9^b3lps|Kd,a$89+!EYsC[wAo9<(#&TY q8',\n    343755,\n    'L/lvdK-uq<rVMQWD{=4Qoy%8;rAxqQ!z$`',\n    \"\"\"\n$(^-\"\"\",\n    250887,\n    2013-07-23,\n    false,\n    \"t<WWtA\",\n    -819_532,\n]\n# e}>.u\n# =,0s@z*V@>g$y[L]9>dAjAn0mRiV{\n# 4}b.sJgxM3XQt.sMXwQ{G/3.d.Y\n\"u`7oSX/\".ie1.p0j7p = 550303\n\"t;}\" = 28322.58702\n3.j = 71026.4942\nhyx2tvv_u = 466407\nhj.\"W(l\".\"l(5c<?I\" = \"kp~|V?^(:;VN#F8p|$(*&)E&?)F6{}r#n_]q_~AlW>]_WW|\"\ndco.d4f84jq1k = 90_668.033775\nnhwnc6s-5r.jcpq4a9s1 = true\n\n[uuh7]\nuc-pw.wo4fo36-6l = 0x2a09182e\n\"b!`Uvu-6I}\".T.q9_2cq = \"7O;0sokx\"\n0.y2mhhcrk9- = 05:36:40\n\n[dm2wzqxtp9.rh3y.gl47l-4]\nq4y2n6p.\"K+:/^(\".uylg-mnej = \"Ca%L6p(tp~$Uk,+/~y@o`}<ZA& ?_M.BC9&)[urnEmzNYr5\"\n4.pm7k_zt3j.\"=H]aGZ\" = 783e-30\n# vIJenp%\ntsf.\"/_bg]#\".\"fsR1X*\" = 977545\n\"|_To+9loQ\".imh2x4zt1q.rjauqvm- = 0b10001001\nl.v6 = 0b10011110\nw9sxpe.o = 0o51\nw = \"\"\"\nHd\nD\nkxY<nKB,S1\nfS\"\"\"\ntjejny.r3p = false\ns.gy48-sxn = 502e-79\nr1nese = -92e+51\nu43_8yea7f.fmxldjro = 624_078\nz3azy = -148_356\n# }woSP&O0+{bG7:e1]{-G~bxj[b31sZjfy\n\n");
 });

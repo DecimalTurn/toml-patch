@@ -360,7 +360,8 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
 
 export function randomTomlFormat(
   rng: SeededRandom,
-  randomizeIndentWidth = false
+  randomizeIndentWidth = false,
+  randomizeMultiline = false
 ): Partial<TomlFormat> | undefined {
   // 50% chance: no format override (use library defaults)
   if (rng.chance(0.5)) return undefined;
@@ -395,6 +396,12 @@ export function randomTomlFormat(
   if (mdRoll >= 0.7 && mdRoll < 0.85) format.minimumDecimals = 1;
   else if (mdRoll >= 0.85) format.minimumDecimals = 2;
 
+  if (randomizeMultiline) {
+    const multilineModes = [false, true, 0, 1, 2, 'auto', 'parent'] as const;
+    format.multilineTable = rng.pick(multilineModes);
+    format.multilineArray = rng.pick(multilineModes);
+  }
+
   return format;
 }
 
@@ -426,7 +433,8 @@ export function fuzzOne(
   seed: number,
   mutationCount: number,
   sourceTransform?: (source: string) => string,
-  randomizeIndentWidth = false
+  randomizeIndentWidth = false,
+  randomizeMultiline = false
 ): PatchFuzzResult {
   const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
 
@@ -447,7 +455,7 @@ export function fuzzOne(
 
     // 3. Generate random TomlFormat (deterministic from seed)
     const formatRng = new SeededRandom(seed + 500000);
-    const format = randomTomlFormat(formatRng, randomizeIndentWidth);
+    const format = randomTomlFormat(formatRng, randomizeIndentWidth, randomizeMultiline);
     const formatDesc = describeFormat(format);
 
     // 4. Apply mutations using a seeded RNG (offset from doc seed

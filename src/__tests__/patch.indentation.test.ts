@@ -105,7 +105,7 @@ describe('tab indentation', () => {
     const obj = parse(src) as any;
     obj.values.push([3, 4]);
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineArray: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -672,7 +672,7 @@ describe('nested multiline arrays', () => {
     const obj = parse(src) as any;
     obj.values.push([3, 4]);
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineArray: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -700,7 +700,7 @@ describe('nested multiline arrays', () => {
     const obj = parse(src) as any;
     obj.values.push([3, 4]);
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineArray: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -730,7 +730,7 @@ describe('nested multiline arrays', () => {
     const obj = parse(src) as any;
     obj.values.push(['new value']);
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineArray: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -970,7 +970,35 @@ describe('nested multiline inline tables', () => {
     const obj = parse(src) as any;
     obj.values.push({ name: 'second', enabled: false });
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineTable: 'parent' });
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe([
+      'values = [',
+      '  {',
+      '    name = "first",',
+      '    enabled = true,',
+      '  },',
+      '  {',
+      '    name = "second",',
+      '    enabled = false,',
+      '  },',
+      ']'
+    ].join('\n'));
+  });
+
+  test('preserves each nesting level when adding an outer array element (even with override)', () => {
+    const src = [
+      'values = [',
+      '  {',
+      '    name = "first",',
+      '    enabled = true,',
+      '  },',
+      ']'
+    ].join('\n');
+    const obj = parse(src) as any;
+    obj.values.push({ name: 'second', enabled: false });
+
+    const result = patch(src, obj, { multilineTable: 'parent', indentWidth: 4 });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -998,7 +1026,7 @@ describe('nested multiline inline tables', () => {
     const obj = parse(src) as any;
     obj.values.push({ name: 'second', enabled: false });
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineTable: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -1039,18 +1067,7 @@ describe('nested multiline inline tables', () => {
     ].join('\n'));
   });
 
-  // This is currently marked as failing since we haven't implemented a formatting
-  // optins that would allow to indicate that a new table should be written as multiline.
-  // We could introduce a formatting options like `multilineTables` and `multilineArrays` that would 
-  // allow to specify that a new inline table (or array) should be written in multiline
-  // format.
-  
-  // `multilineTables` `multilineArrays` could take the following values:
-  // - true: always write new inline tables (or arrays) in multiline format
-  // - false: always write new inline tables (or arrays) in single-line format
-  // - 'auto': decide based on context with preference for single line (default)
-  // - 'nested': use multiline format only if the table (or array) is nested
-  test.fails('will write table as multiline if already nested', () => {
+  test('will write table as multiline if already nested', () => {
     const src = [
       'values = [',
       ']'
@@ -1061,7 +1078,7 @@ describe('nested multiline inline tables', () => {
     obj.values[0].enabled = false;
 
 
-    const result = patch(src, obj);
+    const result = patch(src, obj, { multilineTable: 'parent' });
     expect(parse(result)).toEqual(obj);
     expect(result).toBe([
       'values = [',
@@ -1073,7 +1090,7 @@ describe('nested multiline inline tables', () => {
     ].join('\n'));
   });
 
-  test.fails('will use indentWidth for new multiline nested inline table?', () => {
+  test('will use indentWidth for new multiline nested inline table?', () => {
     const src = [
       'values = [',
       ']'
@@ -1083,7 +1100,7 @@ describe('nested multiline inline tables', () => {
     obj.values[0].name = 'new';
     obj.values[0].enabled = false;
 
-    const fmt = { indentWidth: 2 };
+    const fmt: Partial<TomlFormat> = { indentWidth: 2, multilineTable: 'parent' };
 
     const result = patch(src, obj, fmt);
     expect(parse(result)).toEqual(obj);

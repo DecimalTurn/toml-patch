@@ -13,6 +13,10 @@ export const DEFAULT_INDENT_WIDTH = 2;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
 export const DEFAULT_UPDATE_ORDER = false;
+export const DEFAULT_MULTILINE_TABLE = 'auto';
+export const DEFAULT_MULTILINE_ARRAY = 'auto';
+
+export type MultilineContainerMode = boolean | number | 'auto' | 'parent';
 
 // Detects if trailing commas are used in the existing TOML by examining the CST
 // Returns true if trailing commas are used, false if not or comma-separated structures found (ie. default to false)
@@ -351,6 +355,14 @@ export function validateFormatObject(format: any): any {
   // Schema-driven validation: each key maps to a validator returning an error string or null
   const isBool = (v: any): string | null =>
     typeof v === 'boolean' ? null : `expected boolean, got ${typeof v}`;
+  const isMultilineContainerMode = (v: any): string | null =>
+    v == null ||
+    typeof v === 'boolean' ||
+    v === 'auto' ||
+    v === 'parent' ||
+    (typeof v === 'number' && Number.isInteger(v) && v >= 0)
+      ? null
+      : `expected boolean, non-negative integer, "auto" or "parent", got ${typeof v}`;
   const schema: Record<string, (v: any) => string | null> = {
     newLine: v => typeof v === 'string' ? null : `expected string, got ${typeof v}`,
     trailingNewline: v => typeof v === 'boolean' || typeof v === 'number' ? null : `expected boolean or number, got ${typeof v}`,
@@ -366,6 +378,8 @@ export function validateFormatObject(format: any): any {
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     updateOrder: isBool,
+    multilineTable: isMultilineContainerMode,
+    multilineArray: isMultilineContainerMode,
   };
 
   const validatedFormat: any = {};
@@ -433,6 +447,8 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.leadingBom ?? fallbackFormat.leadingBom,
         validatedFormat.updateOrder ?? fallbackFormat.updateOrder,
         validatedFormat.indentWidth ?? fallbackFormat.indentWidth,
+        validatedFormat.multilineTable ?? fallbackFormat.multilineTable,
+        validatedFormat.multilineArray ?? fallbackFormat.multilineArray,
       );
     }
   } else {
@@ -560,6 +576,24 @@ export class TomlFormat {
    */
   updateOrder?: boolean;
 
+  /**
+   * Whether newly generated inline tables should use multiline layout.
+   *
+   * `true` and `false` select a layout directly. A non-negative integer selects
+   * multiline layout at that structural container depth or deeper. `'auto'`
+   * keeps new containers compact and `'parent'` follows the immediate parent.
+   */
+  multilineTable: MultilineContainerMode;
+
+  /**
+   * Whether newly generated inline arrays should use multiline layout.
+   *
+   * `true` and `false` select a layout directly. A non-negative integer selects
+   * multiline layout at that structural container depth or deeper. `'auto'`
+   * keeps new containers compact and `'parent'` follows the immediate parent.
+   */
+  multilineArray: MultilineContainerMode;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
@@ -575,7 +609,9 @@ export class TomlFormat {
     minimumDecimals?: number,
     leadingBom?: boolean,
       updateOrder?: boolean,
-    indentWidth?: number
+    indentWidth?: number,
+    multilineTable?: MultilineContainerMode | null,
+    multilineArray?: MultilineContainerMode | null
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine == null ? DEFAULT_NEWLINE : normalizeNewLine(newLine);
@@ -589,6 +625,8 @@ export class TomlFormat {
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
     this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
     this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;
+    this.multilineTable = multilineTable ?? DEFAULT_MULTILINE_TABLE;
+    this.multilineArray = multilineArray ?? DEFAULT_MULTILINE_ARRAY;
   }
 
   /**
@@ -618,7 +656,9 @@ export class TomlFormat {
       DEFAULT_MINIMUM_DECIMALS,
       DEFAULT_LEADING_BOM,
       DEFAULT_UPDATE_ORDER,
-      DEFAULT_INDENT_WIDTH
+      DEFAULT_INDENT_WIDTH,
+      DEFAULT_MULTILINE_TABLE,
+      DEFAULT_MULTILINE_ARRAY
     );
   }
 
@@ -710,6 +750,10 @@ export class TomlFormat {
     // updateOrder uses default value (false) as well — the existing document's order says
     // nothing about the caller's intent, so this is never auto-detected.
     format.updateOrder = DEFAULT_UPDATE_ORDER;
+
+    // Multiline container layout is caller intent, so it is never auto-detected.
+    format.multilineTable = DEFAULT_MULTILINE_TABLE;
+    format.multilineArray = DEFAULT_MULTILINE_ARRAY;
 
     return format;
   }

@@ -10117,18 +10117,36 @@ def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
     // remaining items; the moved inline table's interior rows that follow a
     // multiline string are anchored to the string's END, so a rigid shift
     // closed the gap and the separator comma was overwritten (`'''jfj...`).
-    const src = `d."" = ['''
-K(2[v
-:o;''', -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
-O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
-`;
+    const src = dedent`
+      d."" = ['''
+      K(2[v
+      :o;''', -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
+      O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
+    `;
     const obj = parse(src) as any;
     obj.d[''][0] = false;
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(`d."" = [false, -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
-O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
-`);
+    expect(result).toEqual(dedent`
+      d."" = [false, -487_873, ']R\`j,o;qI~>5!HnX8xYE|%', { "du/8%Cd~"."OlehR*nt6_" = false, yd5aerzd."{<LXX&f" = '''
+      O%aLL0*A[Ko%ReCQ.T''', jfj2b2o.a-gh97f.w0dh65-h = 01:14:53.091975, "" = '<je5/||NY=Og&Hh1.b<QOl3@ko&o8|u:_M9>A[', mv-pvnk0px = "V3G-XoD-" }, false, 393_346, true]
+    `);
+  });
+
+  test('replacing a multiline array element keeps moved inline-table row separators (seed 16552) - distilled', () => {
+    const src = dedent`
+      values = ['''
+      a''', 0, "x", { body = '''
+      b''', after = 2 }, false]
+    `;
+    const obj = parse(src) as any;
+    obj.values[0] = false;
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      values = [false, 0, "x", { body = '''
+      b''', after = 2 }, false]
+    `);
   });
 
   test('removing the first element of a shared-line array with nested arrays realigns the tail (seed 16034)', () => {
@@ -10153,7 +10171,6 @@ dKk''', 903e-66, '+R1B~LG;', true, ['xp %D', 'z'], 0b101, 162759]
   });
 
 });
-
 
 test('multiline empty array', () => {
   const src = dedent`
@@ -10239,5 +10256,108 @@ test('multiline empty array accepts an explicit indentation width', () => {
       # managed by the platform
       
       port = 8080
+    ` + '\n');
+  });
+
+  test('adding a new inline table to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ { x = 1, y = 2, z = 3 },
+                 { x = 7, y = 8, z = 9 },
+                 { x = 2, y = 4, z = 8 } ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push({ x: 10, y: 11, z: 12 });
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ { x = 1, y = 2, z = 3 },
+                 { x = 7, y = 8, z = 9 },
+                 { x = 2, y = 4, z = 8 },
+                 { x = 10, y = 11, z = 12 } ]
+    ` + '\n');
+  });
+
+  test('adding a new integer to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 1,
+                 2,
+                 3 ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push(4);
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 1,
+                 2,
+                 3,
+                 4 ]
+    ` + '\n');
+  });
+
+  test('adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+                 "1",
+                   "2",
+                 "3", # Comment
+               ]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+                 "1",
+                   "2",
+                 "3", # Comment
+                 "4",
+               ]
+    ` + '\n');
+  });
+
+    test('Abruptly closing array: adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+                 "1",
+                 "2",
+                 "3",]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+                 "1",
+                 "2",
+                 "3",
+                 "4",]
+    ` + '\n');
+  });
+
+  test('Abruptly closing array + small indent: adding a new string to multiline array preserves indentation', () => {
+    const src = dedent`
+      points = [ 
+        "1",
+        "2",
+        "3",]
+    ` + '\n';
+    const obj = parse(src) as any;
+    obj.points.push("4");
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      points = [ 
+        "1",
+        "2",
+        "3",
+        "4",]
     ` + '\n');
   });

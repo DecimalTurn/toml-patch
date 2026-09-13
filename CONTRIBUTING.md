@@ -72,6 +72,44 @@ To run the JavaScript integration tests, which verify the built output works for
 pnpm run test:js
 ```
 
+To capture the unit-test output in a temporary Markdown file at the repository root:
+
+```bash
+pnpm run test:output
+```
+
+Additional Vitest arguments can be forwarded, for example `pnpm run test:output -- --testNamePattern=16552`.
+The captured output is written to `tmp-test-output.md`, which is ignored by Git.
+
+#### Reproducing fuzz seeds
+
+To check a single seed in the format-aware `fuzz3` harness, run:
+
+```powershell
+npx -y tsx scripts/fuzz-run3.ts --seed 2151 --to 2151 --mutations 3
+```
+
+To generate a distilled test for that `fuzz3` seed, use the variant 3 option:
+
+```powershell
+npx -y tsx scripts/distill-seed.ts --seed 2151 --variant 3 --out ./seed-2151.fuzz3.test.ts
+```
+
+To distill and append the test directly to `src/__tests__/patch.fuzz.test.ts`:
+
+```powershell
+npx -y tsx scripts/distill-and-append-seed.ts --seed 2151 --variant 3
+```
+
+The generic seed scaffold can also be previewed or appended to
+`src/__tests__/patch.fuzz.test.ts`:
+
+```powershell
+npx -y tsx scripts/generate-seed-test.ts --seed 2151 --mutations 3 --dry-run
+```
+
+That scaffold replays the base `fuzzOne` harness. It does not include the randomized format options used by `fuzz3`, so use `distill-seed.ts --variant 3` when the format options are part of the reproduction.
+
 #### Running All Tests Together
 
 ```bash

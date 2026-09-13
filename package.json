@@ -46,6 +46,7 @@
   "scripts": {
     "dev": "pnpm run typecheck && pnpm run build && npm-run-all2 --parallel test:all specs",
     "test": "vitest run",
+    "test:output": "node scripts/test-debug.mjs",
     "test:js": "vitest run --config vitest.js.config.ts",
     "test:watch": "vitest",
     "test:go": "./run-toml-test.bash",
@@ -57,7 +58,9 @@
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
     "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
+    "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",
+    "fuzz3": "npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 9999 --mutations 3",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "profile": "node benchmark/profile.mjs",

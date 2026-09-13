@@ -36,14 +36,14 @@ import {
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
-import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn } from './writer';
+import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn, perLine } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
-import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth } from './formatter';
+import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth, normalizeGeneratedInlineContainerRows, normalizeInlineContainerRows } from './formatter';
 import { DateFormatHelper } from './date-format';
 import {
   getInlineInsertColumnDelta,
@@ -55,7 +55,13 @@ import {
 import { getSpan } from './location';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import traverse from './traverse';
-import { prepareInsertedNestedInlineContainer } from './inline-layout';
+import { prepareInsertedNestedInlineContainer, positionGeneratedNestedInlineTables } from './inline-layout';
+import {
+  findInlineContainerDepth,
+  findInlineContainerParent,
+  hasStructuralMultilineRows,
+  resolveInlineContainerLayout
+} from './inline-format';
 
 /**
  * Applies modifications to a TOML document by comparing an existing TOML string with updated JavaScript data.
@@ -88,7 +94,11 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     );
   }
 
-  const patchedToml = patchCst(existing_cst, updated, fmt).tomlString;
+  const indentWidthExplicit = format instanceof TomlFormat ||
+    (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
+  const trailingCommaExplicit = format instanceof TomlFormat ||
+    (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
+  const patchedToml = patchCst(existing_cst, updated, fmt, indentWidthExplicit, trailingCommaExplicit).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
   return withBom(patchedToml);
 }
@@ -241,7 +251,13 @@ function normalizeAotEntryComments(doc: Document): void {
   }
 }
 
-export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): { tomlString: string; document: Document } {
+export function patchCst(
+  existing_cst: CST,
+  updated: any,
+  format: TomlFormat,
+  indentWidthExplicit = false,
+  trailingCommaExplicit = true
+): { tomlString: string; document: Document } {
   const items = [...existing_cst];
   updated = compactSparseArrays(updated);
 
@@ -320,7 +336,17 @@ export function patchCst(existing_cst: CST, updated: any, format: TomlFormat): {
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
   const commentEligibleNodes = collectPrePatchNodes(existing_document);
 
-  const patched_document = applyChanges(existing_document, updated_document, changes, format, useTemporal, commentEligibleNodes, updated);
+  const patched_document = applyChanges(
+    existing_document,
+    updated_document,
+    changes,
+    format,
+    useTemporal,
+    commentEligibleNodes,
+    updated,
+    indentWidthExplicit,
+    trailingCommaExplicit
+  );
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
     toTOMLCursor(patched_document.items, format),
@@ -884,7 +910,17 @@ function preserveFormatting(existing: Value, replacement: Value): void {
  * const result = applyChanges(originalDoc, updatedDoc, changes, format);
  * ```
  */
-function applyChanges(original: Document, updated: Document, changes: Change[], format: TomlFormat, temporal: boolean = false, commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(), rawUpdated: any = undefined): Document {
+function applyChanges(
+  original: Document,
+  updated: Document,
+  changes: Change[],
+  format: TomlFormat,
+  temporal: boolean = false,
+  commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(),
+  rawUpdated: any = undefined,
+  indentWidthExplicit = false,
+  trailingCommaExplicit = true
+): Document {
   // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
   // the dotted name for de-duplication, but carrying the path segments — a nested key like
   // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
@@ -1215,6 +1251,172 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // already been applied (see docs/PLAN-Update-Order.md §3.1 on why: the reorder phase must
   // never call insert()/remove(), which would re-dirty offsets nothing downstream flushes).
   const objectMoves: Move[] = [];
+  const replacedInlineArrays = new Set<InlineArray>();
+  // Inline containers spliced in as a replacement, together with the node that
+  // owns them (the key-value or inline item whose row they sit on). Their
+  // nested multiline rows are realigned in final coordinates once every other
+  // pass has moved them (fuzz3 seed 18515).
+  const replacedInlineContainers: { owner: TreeNode; container: InlineArray | InlineTable }[] = [];
+
+  function regenerateInlineChildForParent(parent: TreeNode, changePath: Path, child: TreeNode): TreeNode {
+    if ((!isInlineArray(parent) && !isInlineTable(parent)) || !isInlineItem(child)) return child;
+    if (isInlineTable(parent) && !isKeyValue(child.item)) return child;
+
+    let jsValue: any = rawUpdated;
+    for (const key of changePath) jsValue = jsValue?.[key];
+    if (!Array.isArray(jsValue) && !isObject(jsValue)) return child;
+
+    const parentDepth = findInlineContainerDepth(original, parent) ?? 0;
+    const parentIsMultiline = perLine(parent) ||
+      (parent.items.length === 0 && parent.loc.end.line > parent.loc.start.line);
+    const generatedIndentWidth = indentWidthExplicit
+      ? format.indentWidth
+      : isInlineArray(parent) && parent.items.length === 0
+        ? Math.max(format.indentWidth, 4)
+        : format.indentWidth;
+    if (isInlineArray(parent) && parent.items.length === 0 && !format.useTabsForIndentation) {
+      setInlineIndentColumn(parent, Math.max(generatedIndentWidth, 4));
+    }
+    const kind = Array.isArray(jsValue) ? 'array' : 'table';
+    const sibling = (parent.items as InlineItem[])
+      .map(item => isInlineTable(parent) && isKeyValue(item.item) ? item.item.value : item.item)
+      .find(item => kind === 'array' ? isInlineArray(item) : isInlineTable(item));
+    const siblingTrailingComma = sibling && kind === 'array'
+      ? arrayHadTrailingCommas(sibling)
+      : sibling && kind === 'table'
+        ? tableHadTrailingCommas(sibling)
+        : false;
+    const siblingContainer = sibling as InlineArray | InlineTable | undefined;
+    const siblingBracketSpacing = siblingContainer && (siblingContainer.items.length > 0)
+      ? siblingContainer.items[0].loc.start.column - siblingContainer.loc.start.column > 1
+      : undefined;
+    const multiline = resolveInlineContainerLayout(
+      kind,
+      parentDepth + 1,
+      parentIsMultiline,
+      format
+    );
+    const modeProperty = kind === 'array' ? 'multilineArray' : 'multilineTable';
+    const contextualFormat = resolveTomlFormat({
+      ...format,
+      inlineTableStart: 0,
+      [modeProperty]: multiline,
+      trailingComma: trailingCommaExplicit ? format.trailingComma : siblingTrailingComma,
+      bracketSpacing: siblingBracketSpacing ?? format.bracketSpacing,
+      indentWidth: generatedIndentWidth
+    }, format);
+    const valueDocument = parseJS(
+      { tmp: jsValue },
+      contextualFormat,
+      parentDepth + 1,
+      parentIsMultiline
+    );
+    const wrapper = valueDocument.items[0];
+    if (!wrapper || !isKeyValue(wrapper)) return child;
+
+    const value = wrapper.value;
+    if (multiline && (isInlineArray(value) || isInlineTable(value))) {
+      const startColumn = value.loc.start.column;
+      value.loc.start.column = 0;
+      if (value.loc.end.line === value.loc.start.line) {
+        value.loc.end.column -= startColumn;
+      } else if (resolveInlineContainerLayout(
+        isInlineArray(value) ? 'array' : 'table',
+        parentDepth + 1,
+        parentIsMultiline,
+        contextualFormat
+      )) {
+        value.loc.end.column = 1;
+      }
+    }
+    if (isInlineTable(parent)) {
+      const keyValue = generateKeyValue((child.item as KeyValue).key.value, value);
+      const regenerated = generateInlineItem(keyValue);
+      regenerated.comma = child.comma;
+      return regenerated;
+    }
+
+    const regenerated = generateInlineItem(value);
+    if (parent.items.length === 0 && isInlineArray(parent) && isInlineTable(value)) {
+      regenerated.comma = true;
+    }
+    return regenerated;
+  }
+
+  function regenerateInlineReplacement(existing: TreeNode, replacement: TreeNode, changePath: Path): TreeNode {
+    const replacementValue = isInlineItem(replacement) ? replacement.item : replacement;
+    if (!isInlineArray(replacementValue) && !isInlineTable(replacementValue)) return replacement;
+
+    let jsValue: any = rawUpdated;
+    for (const key of changePath) jsValue = jsValue?.[key];
+    if (!Array.isArray(jsValue) && !isObject(jsValue)) return replacement;
+
+    const parent = findInlineContainerParent(original, existing);
+    const parentDepth = parent ? findInlineContainerDepth(original, parent) ?? 0 : -1;
+    const parentIsMultiline = parent
+      ? perLine(parent) || (parent.items.length === 0 && parent.loc.end.line > parent.loc.start.line)
+      : false;
+    const kind = Array.isArray(jsValue) ? 'array' : 'table';
+    const mode = kind === 'array' ? format.multilineArray : format.multilineTable;
+    const selected = resolveInlineContainerLayout(
+      kind,
+      parentDepth + 1,
+      parentIsMultiline,
+      format
+    );
+    const existingValue = isInlineItem(existing) ? existing.item : existing;
+    const existingInlineValue = isInlineArray(existingValue) || isInlineTable(existingValue)
+      ? existingValue
+      : undefined;
+    const existingKind = isInlineArray(existingValue)
+      ? 'array'
+      : isInlineTable(existingValue)
+        ? 'table'
+        : undefined;
+    const preserveSourceLayout =
+      existingInlineValue !== undefined &&
+      existingKind !== kind &&
+      hasStructuralMultilineRows(existingInlineValue) &&
+      mode === 'auto';
+    const multiline = selected || preserveSourceLayout;
+    if (!multiline) return replacement;
+
+    const modeProperty = kind === 'array' ? 'multilineArray' : 'multilineTable';
+    const contextualFormat = resolveTomlFormat({
+      ...format,
+      inlineTableStart: 0,
+      [modeProperty]: true,
+      trailingComma: trailingCommaExplicit ? format.trailingComma : false
+    }, format);
+    const valueDocument = parseJS(
+      { tmp: jsValue },
+      contextualFormat,
+      parentDepth + 1,
+      parentIsMultiline
+    );
+    const wrapper = valueDocument.items[0];
+    if (!wrapper || !isKeyValue(wrapper)) return replacement;
+
+    const value = wrapper.value;
+    if (isInlineArray(value) || isInlineTable(value)) {
+      const targetColumn = isInlineItem(existing)
+        ? existing.item.loc.start.column
+        : existing.loc.start.column;
+      if (value.loc.end.line === value.loc.start.line) {
+        value.loc.end.column += targetColumn - value.loc.start.column;
+      } else {
+        value.loc.end.column = 1;
+      }
+      value.loc.start.column = targetColumn;
+    }
+
+    if (isInlineItem(replacement)) {
+      const regenerated = generateInlineItem(value);
+      regenerated.comma = replacement.comma;
+      return regenerated;
+    }
+    return value;
+  }
 
   // Potential Changes:
   //
@@ -1416,6 +1618,7 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
       }
 
       if (isInlineArray(parent) || isInlineTable(parent)) {
+        child = regenerateInlineChildForParent(parent, change.path, child);
         prepareInsertedNestedInlineContainer(parent, child, format.indentWidth);
       }
 
@@ -1461,7 +1664,10 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
           if (isInlineItem(child)) {
             // The child comes from the updated document with global format applied
             // Override with the original array's format
-            child.comma = originalHadTrailingCommas;
+            const generatedMultilineTable = parent.items.length === 0 &&
+              isInlineTable(child.item) &&
+              perLine(child.item);
+            child.comma = generatedMultilineTable || originalHadTrailingCommas;
 
             // `format.trailingComma` is a single flag, but it is read off whichever
             // separator the detector happened to see. An array written `[ { a = 1 }, ]`
@@ -2440,7 +2646,15 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
         }
       }
 
+      replacement = regenerateInlineReplacement(existing, replacement, change.path);
+
       replace(original, parent, existing, replacement);
+      if (isInlineArray(replacement)) replacedInlineArrays.add(replacement);
+      if (isInlineArray(replacement) || isInlineTable(replacement)) {
+        applyWrites(original);
+        normalizeGeneratedInlineContainerRows(replacement, format.indentWidth);
+        replacedInlineContainers.push({ owner: parent, container: replacement });
+      }
 
       // A section header captures every key-value that follows it, so an
       // edit that turns a root-level KV into a Table must not leave root
@@ -3617,8 +3831,44 @@ function applyChanges(original: Document, updated: Document, changes: Change[], 
   // patched object's key order. Must run last — see the comment on objectMoves above.
   applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
   if (objectMoves.length > 0) markDirty(original);
-
+  if (replacedInlineArrays.size > 0) {
+    applyWrites(original);
+    for (const array of replacedInlineArrays) {
+      positionGeneratedNestedInlineTables(array, format.indentWidth);
+    }
+  }
+  // Realign the multiline rows of replaced inline containers last: the passes
+  // above move their contents, and the rows are anchored to the owning key's
+  // column, so laying them out earlier would leave them offset.
+  if (replacedInlineContainers.length > 0) {
+    applyWrites(original);
+    for (const { owner, container } of replacedInlineContainers) {
+      deleteSubtreeRanges(container);
+      normalizeInlineContainerRows(container, owner.loc.start.column, format.indentWidth, format.bracketSpacing);
+    }
+  }
   return original;
+}
+
+/**
+ * Drops the `range` of a node and every descendant, so the renderer rebuilds
+ * the text from the node locations instead of copying the original slice.
+ *
+ * Regenerated values are parsed from a standalone TOML snippet, so their ranges
+ * point into that snippet. Relocating the subtree shifts the locations but not
+ * the snippet's interior text: a copied slice would keep the snippet's absolute
+ * indentation and ignore the new row positions (fuzz3 seed 18515).
+ */
+function deleteSubtreeRanges(node: TreeNode): void {
+  delete (node as { range?: [number, number] }).range;
+  if (hasItems(node)) {
+    for (const child of (node as WithItems).items as TreeNode[]) deleteSubtreeRanges(child);
+  }
+  if (hasItem(node)) deleteSubtreeRanges((node as { item: TreeNode }).item);
+  if (isKeyValue(node)) {
+    deleteSubtreeRanges(node.key);
+    deleteSubtreeRanges(node.value);
+  }
 }
 
 /**

@@ -138,13 +138,15 @@ class TomlFormat {
   minimumDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
+  multilineTable: boolean | number | 'auto' | 'parent'
+  multilineArray: boolean | number | 'auto' | 'parent'
 
   static default(): TomlFormat
   static autoDetectFormat(tomlString: string): TomlFormat
 }
 ```
 
-Start with `TomlFormat.default()` and override the options you need:
+Start with `TomlFormat.default()` and override the options you need. e.g.:
 
 ```js
 import { stringify, TomlFormat } from '@decimalturn/toml-patch';
@@ -154,6 +156,8 @@ format.newLine = '\r\n';
 format.trailingNewline = 0;
 format.trailingComma = true;
 format.bracketSpacing = false;
+format.indentWidth = 4;
+format.multilineTable = 'parent';
 
 const toml = stringify({
   title: 'My App',
@@ -162,5 +166,4 @@ const toml = stringify({
 }, format);
 
 ```
-
 See the [formatting reference](https://github.com/DecimalTurn/toml-patch/blob/v3.0.5/docs/Formatting.md) for the complete list of options, auto-detection behavior, `updateOrder` and more examples.

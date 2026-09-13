@@ -35,6 +35,7 @@ import traverse from './traverse';
 import { getCommaSpace } from './inline-comma-space';
 import { DEFAULT_INDENT_WIDTH } from './toml-format';
 import { markMutation, markTreeDirty } from './cst-source';
+import { getInlineContainerLayout, isInlineContainerPositioned } from './inline-format';
 
 ////////////////////////////////////////
 // The purpose of this file is to provide a way to modify the CST
@@ -207,7 +208,7 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
  * @param index - The index at which to insert the child (optional)
  * @param forceInline - Whether to force inline positioning even for document-level insertions (optional)
  */
-export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[], leadingLines?: number) {
+export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: number, forceInline?: boolean, hostItems?: TreeNode[], leadingLines?: number, firstLineOnly = false) {
   if (!hasItems(parent)) {
     throw new Error(`Unsupported parent type "${(parent as TreeNode).type}" for insert`);
   }
@@ -230,7 +231,7 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
     ));
   }
 
-  shiftNode(child, shift);
+  shiftNode(child, shift, { first_line_only: firstLineOnly });
 
   // The child element is placed relative to the previous element,
   // if the previous element has an offset, need to position relative to that
@@ -396,7 +397,17 @@ function insertOnNewLine(
       : getEnterOffsets(root).get(parent);
     compensation_lines = staleOffset ? -staleOffset.lines : 1;
   }
-  const offset_leading = (wasSingleRemoval || needsCompensation) ? -child_span.lines : (leading_lines - 1);
+  // When the container was emptied by remove(), the inserted child reuses the rows
+  // the removals vacated, so only its EXTRA lines advance the following content.
+  // Cancelling the whole span (`-child_span.lines`) is only correct for a
+  // single-line child; a generated multiline inline table spans several lines and
+  // its trailing lines would otherwise overlap the next sibling (seed 17339: the
+  // following `[b]` header landed on the closing `}` row). This holds for both the
+  // single-removal case and the compensated multi-removal case, where the
+  // accumulated removal offset is already cancelled out through `shift`.
+  const offset_leading = (wasSingleRemoval || needsCompensation)
+    ? leading_lines - 2
+    : (leading_lines - 1);
   const offset_lines = prepend_to_document
     ? child_span.lines + 1
     : child_span.lines + offset_leading;
@@ -538,11 +549,19 @@ function calculateInlinePositioning(
     trailing_comma_offset_adjustment = -1;
   }
     
+  let offset_columns = child_span.columns +
+    (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) +
+    (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0);
+
+  // When an appended item moves a shared-line closing delimiter onto its new
+  // row, preserve the delimiter gap instead of shifting it by the whole item.
+  if (useNewLine && isLastElement && previous && parent.loc.end.line === previous.loc.end.line) {
+    offset_columns = child_span.columns - (previous.loc.end.column - previous.loc.start.column);
+  }
+
   const offset = {
     lines: child_span.lines + (leading_lines - 1),
-    columns: child_span.columns + 
-             (hasSeparatingCommaBefore || hasSeparatingCommaAfter ? skipCommaSpace : 0) + 
-             (hasTrailingComma ? 1 + trailing_comma_offset_adjustment : 0)
+    columns: offset_columns
   };
 
   return { shift, offset };
@@ -607,7 +626,7 @@ function insertInline(
   // realignment / removal re-inserts `next` can start INSIDE the previous
   // item's span (pending offsets not yet applied) — treating that as
   // "same line" corrupts the insert (fuzz seed 203).
-  const use_new_line = perLine(parent) && !(
+  const use_new_line = perLine(parent, child) && !(
     previous && next &&
     next.loc.start.line === previous.loc.end.line &&
     next.loc.start.column >= previous.loc.end.column
@@ -617,6 +636,8 @@ function insertInline(
     // the new row outside the table (`}  k = 1` — fuzz seed 3632).  Stay
     // on the last row's line instead; the exit offset then pushes the
     // brace down a line.
+    getInlineContainerLayout(parent) !== true &&
+    isInlineTable(parent) &&
     !next && previous &&
     previous.loc.end.line === parent.loc.end.line
   );
@@ -1235,14 +1256,17 @@ export function applyWrites(root: TreeNode) {
 export function shiftNode(
   node: TreeNode,
   span: Span,
-  options: { first_line_only?: boolean } = {}
+  options: { first_line_only?: boolean; shift_generated_multiline_end?: boolean } = {}
 ): TreeNode {
   const { lines, columns } = span;
 
   // Early return for no-op shifts
   if (lines === 0 && columns === 0) return node;
 
-  const { first_line_only = false } = options;
+  const {
+    first_line_only = false,
+    shift_generated_multiline_end = false
+  } = options;
   const start_line = node.loc.start.line;
 
   // Fast path for leaf nodes (no children to traverse)
@@ -1273,8 +1297,9 @@ export function shiftNode(
     if (valType === NodeType.String || valType === NodeType.Integer ||
         valType === NodeType.Float || valType === NodeType.Boolean ||
         valType === NodeType.DateTime) {
+      const onFirstLine = !first_line_only || kv.loc.start.line === start_line;
       // Move KeyValue
-      if (!first_line_only || kv.loc.start.line === start_line) {
+      if (onFirstLine) {
         kv.loc.start.column += columns;
         // Same-line guard: a multiline string value puts the KV's end on a
         // different line, whose column must not move with the start.
@@ -1284,7 +1309,7 @@ export function shiftNode(
       }
       kv.loc.start.line += lines;
       kv.loc.end.line += lines;
-      if (!first_line_only || kv.loc.start.line === start_line) {
+      if (onFirstLine) {
         kv.equals += columns;
       }
       // Move Key
@@ -1316,7 +1341,30 @@ export function shiftNode(
       // Only shift end.column when start and end are on the same line:
       // for a multi-line node the end is on a completely different line and
       // its column is an absolute position independent of the start line.
-      if (node.loc.end.line === node.loc.start.line) {
+      //
+      // Exception: containers built by parseJS carry coordinates relative to
+      // the origin (line 1, column 0), so their end column must follow the
+      // node even when the span is multi-line.  That covers compact containers
+      // whose span is stretched by a MULTILINE descendant (`{b = {c = {…}}}`)
+      // as well as the multiline containers themselves, hence the
+      // `!== undefined` (generated) rather than `=== true` (multiline) test.
+      const generatedMultilineEnd = (!first_line_only || shift_generated_multiline_end) &&
+        node.loc.end.line !== node.loc.start.line &&
+        (((isInlineArray(node) || isInlineTable(node)) &&
+          getInlineContainerLayout(node) !== undefined &&
+          !isInlineContainerPositioned(node)) ||
+          isInlineItem(node) &&
+          ((isInlineArray(node.item) || isInlineTable(node.item)) &&
+            getInlineContainerLayout(node.item) !== undefined &&
+            !isInlineContainerPositioned(node.item) ||
+            isKeyValue(node.item) &&
+            (isInlineArray(node.item.value) || isInlineTable(node.item.value)) &&
+            getInlineContainerLayout(node.item.value) !== undefined &&
+            !isInlineContainerPositioned(node.item.value)) ||
+          isKeyValue(node) &&
+          (isInlineArray(node.value) || isInlineTable(node.value)) &&
+          getInlineContainerLayout(node.value) !== undefined);
+      if (node.loc.end.line === node.loc.start.line || generatedMultilineEnd) {
         node.loc.end.column += columns;
       }
     }
@@ -1330,8 +1378,11 @@ export function shiftNode(
     [NodeType.TableArray]: move,
     [NodeType.TableArrayKey]: move,
     [NodeType.KeyValue](node) {
+      const onFirstLine = !first_line_only || node.loc.start.line === start_line;
       move(node);
-      node.equals += columns;
+      if (onFirstLine) {
+        node.equals += columns;
+      }
     },
     [NodeType.Key]: move,
     [NodeType.String]: move,
@@ -1348,11 +1399,29 @@ export function shiftNode(
   return node;
 }
 
-export function perLine(array: InlineArray | InlineTable): boolean {
+/**
+ * Answers "is this container laid out with one item per row?" for insertion
+ * decisions. Rows are inferred from the items' START lines, so a container
+ * whose next item continues on a MULTILINE item's end line still counts as
+ * per-row here. Callers must handle that shape themselves: `insert` suppresses
+ * the new line when `next` starts on `previous`'s end line (fuzz seed 620).
+ *
+ * Structural layout decisions (`'parent'`, multiline formatting) must not use
+ * this loose answer. They use `hasStructuralMultilineRows`, which compares each
+ * item's start line against the previous item's END line.
+ */
+export function perLine(array: InlineArray | InlineTable, excluded?: TreeNode): boolean {
+  const layout = getInlineContainerLayout(array);
+  if (layout === true) return true;
+  if (layout !== undefined) return false;
   if (!array.items.length) return false;
 
-  const span = getSpan(array.loc);
-  return span.lines > array.items.length;
+  const items = excluded ? array.items.filter(item => item !== excluded) : array.items;
+  if (!items.length) return array.loc.end.line > array.loc.start.line;
+  const startsOnSeparateLines = array.loc.end.line > array.loc.start.line && items.every((item, index) =>
+    index === 0 || item.loc.start.line > items[index - 1].loc.start.line
+  );
+  return startsOnSeparateLines;
 }
 
 function addOffset(offset: Span, offsets: Offsets, node: TreeNode, from?: TreeNode) {
