@@ -29,7 +29,7 @@ which pre-`ed99db0` only ever ran against `root.items` (literally `Document.item
    `applyWrites` runs. `moveInlineElement` already flushed `applyWrites` right after itself for exactly
    this reason (see its docstring), but `removeMember` didn't. When two `removeMember` calls landed
    back-to-back in one patch (removing 2+ non-trailing array elements), the second call's
-   `resolveInlineElementSlots` read the first call's *unresolved* pre-compensated positions as if they
+   `resolveInlineElementGroups` read the first call's *unresolved* pre-compensated positions as if they
    were final, misattributing comment ownership and eventually colliding two comments onto the same
    line — which the stringifier can't represent, dropping content.
 

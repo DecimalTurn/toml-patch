@@ -37,7 +37,7 @@ import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRena
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
 import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn, perLine } from './writer';
-import { removeMember, moveInlineElement, findHostContainer, resolveSlots } from './comment-ownership';
+import { removeMember, moveInlineElement, findHostContainer, resolveGroups } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
 import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
 import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
@@ -211,7 +211,7 @@ function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: 
  * The parser's table-body loop consumes comments between consecutive [[x]] entries
  * as trailing children of the first entry (it sees `# comment` before the next
  * `[[x]]` header). This function promotes those trailing comments to Document-level
- * siblings so that resolveSlots can assign them to the correct entry.
+ * siblings so that resolveGroups can assign them to the correct entry.
  */
 function normalizeAotEntryComments(doc: Document): void {
   const items = doc.items as TreeNode[];
@@ -327,7 +327,7 @@ export function patchCst(
   }
 
   // Snapshot every node that exists BEFORE any change is applied. Passed through to
-  // applyKeyOrderMoves, which feeds it to resolveSlots' isEligibleForLeading predicate so a
+  // applyKeyOrderMoves, which feeds it to resolveGroups' isEligibleForLeading predicate so a
   // key that was just Added by this same patch can't adopt a preceding comment run via R2 —
   // node identity is stable across remove()/insert() (they splice the same objects), so this
   // has to be captured now, before applyChanges runs. applyChanges also adds to this set as it
@@ -3466,72 +3466,72 @@ function applyChanges(
         // First, normalize: the parser's table-body loop consumes comments
         // between consecutive [[x]] entries as trailing children of the first
         // entry. Promote those to Document-level siblings and fix up loc.end
-        // so resolveSlots assigns them to the correct entry.
+        // so resolveGroups assigns them to the correct entry.
         normalizeAotEntryComments(original);
 
         // Find source entry.
         const fromNode = findByPath(original, change.path.concat(change.from));
 
-        // Move the entire slot (entry + its comments) as a single unit.
-        const docSlots = resolveSlots(original);
-        const fromSlot = docSlots.find(s => s.member === fromNode);
-        const slotItems = fromSlot ? [...fromSlot.items] : [fromNode];
+        // Move the entire group (entry + its comments) as a single unit.
+        const docGroups = resolveGroups(original);
+        const fromGroup = docGroups.find(s => s.member === fromNode);
+        const groupItems = fromGroup ? [...fromGroup.items] : [fromNode];
 
         // Save original positions before removal so we can restore spacing.
-        const slotOriginalPos = slotItems.map(item => ({
+        const groupOriginalPos = groupItems.map(item => ({
           startLine: item.loc.start.line,
           endLine: item.loc.end.line
         }));
 
-        // Record original position of the document item just after the slot,
+        // Record original position of the document item just after the group,
         // for exit-offset compensation after insertion.
-        const slotFirstIdx = original.items.indexOf((fromSlot ? fromSlot.items[0] : fromNode) as any);
+        const groupFirstIdx = original.items.indexOf((fromGroup ? fromGroup.items[0] : fromNode) as any);
 
-        // Also compute the original gap between the last slot item and
+        // Also compute the original gap between the last group item and
         // whatever comes after it in line order, for exit-offset compensation.
-        const lastSlotEnd = slotOriginalPos[slotOriginalPos.length - 1].endLine;
+        const lastGroupEnd = groupOriginalPos[groupOriginalPos.length - 1].endLine;
         let originalAfterGap: number | undefined;
         for (let k = 0; k < original.items.length; k++) {
           const item = original.items[k];
-          if (item.loc.start.line > lastSlotEnd) {
-            originalAfterGap = item.loc.start.line - lastSlotEnd;
+          if (item.loc.start.line > lastGroupEnd) {
+            originalAfterGap = item.loc.start.line - lastGroupEnd;
             break;
           }
         }
-        // If no item follows in line order (slot was at document end),
-        // use the gap from the item just before the slot to the first
-        // slot item — this is the spacing between the two entries that
+        // If no item follows in line order (group was at document end),
+        // use the gap from the item just before the group to the first
+        // group item — this is the spacing between the two entries that
         // should be preserved between the moved entry and what follows.
-        if (originalAfterGap === undefined && slotFirstIdx > 0) {
-          const beforeSlot = original.items[slotFirstIdx - 1];
-          originalAfterGap = slotOriginalPos[0].startLine - beforeSlot.loc.end.line;
+        if (originalAfterGap === undefined && groupFirstIdx > 0) {
+          const beforeGroup = original.items[groupFirstIdx - 1];
+          originalAfterGap = groupOriginalPos[0].startLine - beforeGroup.loc.end.line;
         }
 
-        // Remove each slot item from the Document (same discipline as removeMember).
-        const memberIdx = fromSlot ? fromSlot.items.indexOf(fromNode) : 0;
+        // Remove each group item from the Document (same discipline as removeMember).
+        const memberIdx = fromGroup ? fromGroup.items.indexOf(fromNode) : 0;
         for (let i = 0; i <= memberIdx; i++) {
-          if (!(original.items as TreeNode[]).includes(slotItems[i])) continue;
-          remove(original, original, slotItems[i]);
+          if (!(original.items as TreeNode[]).includes(groupItems[i])) continue;
+          remove(original, original, groupItems[i]);
         }
-        for (let i = memberIdx + 1; i < slotItems.length; i++) {
-          const idx = (original.items as TreeNode[]).indexOf(slotItems[i]);
+        for (let i = memberIdx + 1; i < groupItems.length; i++) {
+          const idx = (original.items as TreeNode[]).indexOf(groupItems[i]);
           if (idx >= 0) (original.items as TreeNode[]).splice(idx, 1);
         }
 
         // Find insertion point. Use tryFindByPath to locate the target member.
-        // If BOTH source and target slots have leading comments, insert before
-        // the target slot's first item so the comments stay with their members
+        // If BOTH source and target groups have leading comments, insert before
+        // the target group's first item so the comments stay with their members
         // after the swap. Otherwise use the member's own index.
         const toEntry = tryFindByPath(original, change.path.concat(change.to));
         let toIndex: number;
         let targetHasLeadingComment = false;
-        const sourceHadLeadingComment = fromSlot && fromSlot.items[0] !== fromNode && isComment(fromSlot.items[0]);
+        const sourceHadLeadingComment = fromGroup && fromGroup.items[0] !== fromNode && isComment(fromGroup.items[0]);
         if (toEntry) {
-          const postSlots = resolveSlots(original);
-          const targetSlot = postSlots.find(s => s.member === toEntry);
-          targetHasLeadingComment = !!(targetSlot && targetSlot.items[0] !== toEntry && isComment(targetSlot.items[0]));
+          const postGroups = resolveGroups(original);
+          const targetGroup = postGroups.find(s => s.member === toEntry);
+          targetHasLeadingComment = !!(targetGroup && targetGroup.items[0] !== toEntry && isComment(targetGroup.items[0]));
           if (targetHasLeadingComment && sourceHadLeadingComment) {
-            toIndex = original.items.indexOf(targetSlot!.items[0] as any);
+            toIndex = original.items.indexOf(targetGroup!.items[0] as any);
           } else {
             toIndex = original.items.indexOf(toEntry as any);
           }
@@ -3540,7 +3540,7 @@ function applyChanges(
         }
 
         // Capture the original gap at the target position so we can
-        // reproduce it for the first slot item.
+        // reproduce it for the first group item.
         const targetPrevEnd = toIndex > 0
           ? original.items[toIndex - 1].loc.end.line
           : 0;
@@ -3548,28 +3548,28 @@ function applyChanges(
           ? original.items[toIndex].loc.start.line
           : undefined;
 
-        // Insert slot items in forward order at incrementing indices.
+        // Insert group items in forward order at incrementing indices.
         // Compute leadingLines from the original spacing so blank lines
         // are preserved exactly as they were in the source document.
-        // Only override when both slots have leading comments (a true swap
+        // Only override when both groups have leading comments (a true swap
         // of commented entries); otherwise let insertOnNewLine decide.
         const isCommentedSwap = targetHasLeadingComment && sourceHadLeadingComment;
         let insertIdx = toIndex;
-        for (let i = 0; i < slotItems.length; i++) {
-          const item = slotItems[i];
+        for (let i = 0; i < groupItems.length; i++) {
+          const item = groupItems[i];
 
           let itemLeadingLines: number | undefined;
           // Override leadingLines when the original spacing differs from
           // insert()'s defaults. This applies when:
-          // a) Both slots have leading comments (a commented swap), or
+          // a) Both groups have leading comments (a commented swap), or
           // b) The source has comments and a pinned comment sits right
           //    before the insertion point (mixed blank lines case).
           const shouldOverride = isCommentedSwap || (sourceHadLeadingComment && toIndex > 0 && toIndex < original.items.length);
           if (shouldOverride && insertIdx > 0) {
-            const prevEnd = i === 0 ? targetPrevEnd : slotOriginalPos[i - 1].endLine;
+            const prevEnd = i === 0 ? targetPrevEnd : groupOriginalPos[i - 1].endLine;
             const origLeading = (i === 0 && targetFirstLine !== undefined)
               ? targetFirstLine - targetPrevEnd
-              : slotOriginalPos[i].startLine - prevEnd;
+              : groupOriginalPos[i].startLine - prevEnd;
             const isSquare = isTable(item) || isTableArray(item);
             const defaultLeading = isSquare ? 2 : 1;
             if (origLeading !== defaultLeading) {
@@ -3581,12 +3581,12 @@ function applyChanges(
           insertIdx++;
         }
 
-        // Restore the original gap between the last slot item and the
+        // Restore the original gap between the last group item and the
         // next document item, since overriding leadingLines changes the
         // exit offset and may misposition subsequent items.
         if (originalAfterGap !== undefined) {
           applyWrites(original);
-          const lastItem = slotItems[slotItems.length - 1];
+          const lastItem = groupItems[groupItems.length - 1];
           const afterStart = original.items.indexOf(lastItem as any) + 1;
           if (afterStart < original.items.length) {
             const nextItem = original.items[afterStart];

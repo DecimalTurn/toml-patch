@@ -142,7 +142,7 @@ inflated to cover a comment it does not own.
 - A **comment run** is a maximal sequence of own-line `Comment` nodes on *strictly consecutive* lines. A
   `#`-only line is a `Comment` node like any other and continues the run — see
   [What counts as a blank line](#what-counts-as-a-blank-line-r3).
-- A **slot** is a member plus every comment it owns, or an unowned (pinned) comment run.
+- A **slot** is a member plus every comment it owns, or an independent (pinned) comment run.
 
 Rules are evaluated in precedence order.
 
@@ -150,10 +150,10 @@ Rules are evaluated in precedence order.
 |---|---|
 | **R1** | **Right-side ownership wins.** A `Comment` with `start.line <= M.loc.end.line`, where `M` is the nearest preceding member, is owned by `M`. |
 | **R2** | **Adjacency ownership.** A comment run whose last line is exactly `M.loc.start.line - 1` is owned by the member `M` directly below it. When `M` is the last child of an implicit parent and `M`'s removal materialises the parent, the run transfers to the materialised parent header. |
-| **R3** | **A blank line severs ownership.** A run separated from the member below by one or more blank lines is *unowned* — pinned to its position, never travels. |
+| **R3** | **A blank line severs ownership.** A run separated from the member below by one or more blank lines is *independent* — pinned to its position, never travels. |
 | **R4** | **Unowned otherwise.** A run with no member below it in the same container is pinned. |
 | **R5** | **Cross-container normalisation.** A trailing run inside a `Table`/`TableArray` that R2 assigns to the *following* document block is re-parented to `Document.items`. |
-| **R6** | **A dead-entry run is unowned.** A run in which *every* line is a commented-out entry is pinned, overriding R2. |
+| **R6** | **A dead-entry run is independent.** A run in which *every* line is a commented-out entry is pinned, overriding R2. |
 
 ### What counts as a blank line (R3)
 
@@ -284,7 +284,7 @@ Given the `[a]` / `# about b` / `[b]` case above, `normalizeSectionComments(docu
 3. recomputes the donor's `loc.end` as `max(key.loc.end, max over remaining items)`.
 
 It **moves no lines**, so `toTOML` output is byte-identical — it only makes the tree agree with visual
-ownership. If a blank line separates the run from `[b]` (R3), it is unowned and stays inside `[a]`,
+ownership. If a blank line separates the run from `[b]` (R3), it is independent and stays inside `[a]`,
 travelling with that block, which is the correct reading.
 
 R5 mutates the CST, so it is invoked **only by callers that need it** (the reorder pass). The default patch

@@ -61,7 +61,7 @@ test('should swap keys with comments preserved', () => {
   // comments are OWNED by B: `# comment for B` by adjacency (R2) and
   // `# inline B` by right-side ownership (R1). Deleting B therefore deletes
   // them, rather than stranding `# comment for B` above the unrelated D.
-  // See docs/PLAN-Comment-Ownership.md.
+  // See docs/Comment-Ownership.md.
   // TODO: When updateOrder is implemented and we have a move operation for keys,
   // we can preserve comments on moved keys.
   expect(result).toEqual(dedent`

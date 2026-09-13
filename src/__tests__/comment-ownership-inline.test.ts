@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { parse, patch } from '../index';
 
 // Comment ownership for ELEMENTS inside multi-line inline tables and arrays.
-// See "Extending to elements inside multi-line arrays" in docs/PLAN-Comment-Ownership.md.
+// See "Elements inside multi-line arrays and inline tables" in docs/Comment-Ownership.md.
 //
 // This is a different axis from comment-ownership.test.ts's R1-R6 model, which governs
 // root key-values, [table]/[[array]] blocks, and table-body rows. Here the question is
@@ -10,7 +10,7 @@ import { parse, patch } from '../index';
 // correctly takes its own comment along, where that comment was hoisted by the parser out
 // of the inline container into the enclosing Document/Table (Background, case 4).
 //
-// Implemented: resolveInlineElementSlots() (the element-level analogue of resolveSlots(),
+// Implemented: resolveInlineElementGroups() (the element-level analogue of resolveGroups(),
 // correlating comments hoisted into the enclosing container back to the specific InlineItem
 // they belong to), removeMember()'s InlineTable/InlineArray branch, and moveInlineElement()
 // (which additionally carries a moved/displaced element's own comments through a Move --
@@ -376,12 +376,13 @@ describe('inline array item removal', () => {
 
   describe('non-trailing removal (Move)', () => {
     // Removing anything but the trailing element requires compareArrays to emit
-    // one or more Move changes (to re-slot surviving elements by value).
+    // one or more Move changes (to re-group surviving elements by value).
     // moveInlineElement() carries each affected element's own comment(s) through
     // the relocation and flushes after each move, so a later Move/Remove on the
-    // same container never sees stale, pre-offset positions -- see the plan doc
-    // ("Extending to elements inside multi-line arrays") for why an ownership-
-    // unaware remove()+insert() pair corrupts rather than merely misplaces here.
+    // same container never sees stale, pre-offset positions -- see the docs
+    // ("Elements inside multi-line arrays and inline tables" in
+    // Comment-Ownership.md) for why an ownership-unaware remove()+insert()
+    // pair corrupts rather than merely misplaces here.
 
     test('drops only the removed element\'s own comment when removing the FIRST element', () => {
       const input = dedent`
@@ -431,7 +432,7 @@ describe('inline array item removal', () => {
 
 // Everything above operates on a ROOT-level `xs = [...]`/`t = {...}`, where the moved/removed
 // element's own comments live directly in Document.items. moveInlineElement()'s and
-// removeMember()'s host-container resolution (findHostContainer/resolveInlineElementSlots) was
+// removeMember()'s host-container resolution (findHostContainer/resolveInlineElementGroups) was
 // only ever validated against that root case. See docs/bug-notes/
 // inline-array-nested-container-regression.md for the full investigation: once the array lives
 // inside a [table] or [[array-of-tables]] -- i.e. hostContainer !== root -- the same Move path

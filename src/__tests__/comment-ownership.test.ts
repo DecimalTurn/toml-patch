@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { parse, patch } from '../index';
 
-// Comment ownership on deletion. See docs/PLAN-Comment-Ownership.md.
+// Comment ownership on deletion. See docs/Comment-Ownership.md.
 //
 // When a member (a root key-value, a [table]/[[array]] block, or a row inside a
 // table body) is removed, the comments it OWNS are removed with it. Ownership:

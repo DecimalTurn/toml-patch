@@ -10,10 +10,10 @@
 A pre-existing issue found while probing these, unrelated to both, is recorded under "Still open".
 
 Found while verifying a GitHub Copilot review comment on PR #260, which flagged the root cause
-precisely: [`resolveSlots`](../../src/comment-ownership.ts)'s `isEligibleForLeading` predicate
+precisely: [`resolveGroups`](../../src/comment-ownership.ts)'s `isEligibleForLeading` predicate
 (used by [`applyContainerMoves`](../../src/update-order.ts)) decides whether a member may adopt an
 adjacent leading comment run via **R2** (adjacency ownership, see
-[`PLAN-Comment-Ownership.md`](../PLAN-Comment-Ownership.md)). It keyed eligibility off node
+[`Comment-Ownership.md`](../Comment-Ownership.md)). It keyed eligibility off node
 identity in a `WeakSet` snapshotted before the patch ran (`prePatchNodes`), so any node created
 *during* the patch — whether genuinely new or a structural replacement — was treated as ineligible.
 
@@ -62,8 +62,8 @@ Two other node-replacement sites were checked and ruled out as unaffected:
 
 - The generic `replace()` fallback at `patch.ts`'s `isEdit` handling (~line 694) — every branch
   above it reassigns `existing`/`replacement` to a sub-field (typically `.value`) before falling
-  through, so by the time this line runs it never swaps a full top-level slot member. Marking it
-  would be a no-op (`isEligibleForLeading` only ever checks slot members), so no fix needed.
+  through, so by the time this line runs it never swaps a full top-level group member. Marking it
+  would be a no-op (`isEligibleForLeading` only ever checks group members), so no fix needed.
 - The `isRename` branch's `replace(original, parent, parent.key, replacement.key)` — swaps only the
   `KeyValue`'s `.key` sub-field, not the whole `KeyValue`. The outer node stays untouched and
   remains correctly present in the original snapshot.

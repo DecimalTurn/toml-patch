@@ -1,8 +1,8 @@
 # Plan: `updateOrder` — Reorder Entries to Match JS Object Key Order
 
-> **Prerequisite:** [`PLAN-Comment-Ownership.md`](./PLAN-Comment-Ownership.md). Reordering entries means
+> **Prerequisite:** [`Comment-Ownership.md`](./Comment-Ownership.md). Reordering entries means
 > moving their comments with them, and the library has no model for that today. That document is Phase 1;
-> everything here builds on its `resolveSlots()` API.
+> everything here builds on its `resolveGroups()` API.
 
 > **Line references** are against `dev-bug-fixes`@34e7fde. On `latest` (the intended implementation base),
 > `src/patch.ts` anchors at line 180 and beyond shift by **+1**; no other source file differs.
@@ -76,7 +76,7 @@ mode; "reordered half of it" is not.
 A root key-value cannot appear after a section header — it would bind to that section. So for
 `{ section: {...}, new_root: 42 }` the literal JS order is unrepresentable.
 
-**Rule: partition `Document.items` slots into key-value slots and section slots, and permute within each
+**Rule: partition `Document.items` groups into key-value groups and section groups, and permute within each
 partition only.** Sections can never be pulled ahead of root keys, and root keys can never be pushed behind
 sections. This keeps `src/__tests__/patch.test.ts:4399` ("new key hoisted above the section even though it
 came after in the object") green *even with the option on*, and makes the feature structurally incapable of
@@ -182,7 +182,7 @@ Three things this rests on:
   self-heals. A mis-predicted `to` is contained by the validity partition (§Scope) — which is exactly the
   situation in which the prediction can be wrong.
 - **Renames use the after-side name.** `applyChanges` replaces only the key node (`src/patch.ts:716`); the
-  `KeyValue` never moves, so its slot is stable, and the apply-time lookup reads the *post-rename* key off
+  `KeyValue` never moves, so its group is stable, and the apply-time lookup reads the *post-rename* key off
   the CST. Also guard the pre-existing spurious-rename case — `{a:1,b:1}` → `{b:1,x:1}` emits
   `Rename a→b` where `b` already exists — by not pushing a duplicate into `sim`.
 
@@ -248,7 +248,7 @@ export function applyKeyOrderMoves(
 ```
 
 `prePatchNodes` is captured in `patchCst` before `applyChanges` runs — node identity is stable, since
-`remove`/`insert` splice the same objects. It feeds `resolveSlots`' `isEligibleForLeading` predicate so a
+`remove`/`insert` splice the same objects. It feeds `resolveGroups`' `isEligibleForLeading` predicate so a
 key that was *just added* cannot adopt the preceding block's trailing comment. See the ownership doc.
 
 **Step 1 — Normalise.** `normalizeSectionComments(document)` once up front (ownership R5), so a comment
@@ -256,7 +256,7 @@ introducing `[b]` is no longer physically parked inside `Table a`.
 
 **Step 2 — Resolve the container.** `path.length === 0` → the Document; otherwise `tryFindByPath`,
 unwrapping `hasItem` / `KeyValue.value`. Then **skip unless the result is a `Document`, `Table`, or
-`TableArray`**, and skip if no slot matches `change.key`. **Never throw.**
+`TableArray`**, and skip if no group matches `change.key`. **Never throw.**
 
 This guard is load-bearing, because `compareObjects` recurses into every nested object — including several
 with no matching CST container:
@@ -269,32 +269,32 @@ with no matching CST container:
 - **AOT-entry sub-tables.** For `[[aot]]` + `[aot.sub]`, `sub` is a *Document sibling* reached via
   `findByPathInAotScope`, not an item of the entry.
 
-**Step 3 — Slots.** `resolveSlots(container, node => prePatchNodes.has(node))`.
+**Step 3 — Groups.** `resolveGroups(container, node => prePatchNodes.has(node))`.
 
-**Step 4 — Guards.** At document level, bail out entirely if any slot's items are non-contiguous. Partition
-into key-value and section slots (§Scope). Preserve the relative order of `[[aot]]` entries within their
-slot, or `toJS` array order silently changes.
+**Step 4 — Guards.** At document level, bail out entirely if any group's items are non-contiguous. Partition
+into key-value and section groups (§Scope). Preserve the relative order of `[[aot]]` entries within their
+group, or `toJS` array order silently changes.
 
-**Step 5 — Permute.** For each move in order: find the member slot whose `key` matches `change.key`; no-op
+**Step 5 — Permute.** For each move in order: find the member group whose `key` matches `change.key`; no-op
 if it is already at logical position `to` within its partition; otherwise splice it into place.
 
-**Step 6 — Relayout.** **Gaps belong to the slot, not the group.** Precompute, *before* permuting:
+**Step 6 — Relayout.** **Gaps belong to the group, not the unit.** Precompute, *before* permuting:
 
 ```
-gap[i] = slotStart[i] - slotEnd[i-1] - 1
-gap[0] = slotStart[0] - containerFirstLine      # or table.key.loc.end.line for a body
+gap[i] = groupStart[i] - groupEnd[i-1] - 1
+gap[0] = groupStart[0] - containerFirstLine      # or table.key.loc.end.line for a body
 ```
 
-After permuting, the slot now at position `i` gets `gap[i]`. Walk the new order accumulating a line cursor
-and call `shiftNode(item, { lines: delta, columns: 0 })` on every item in every slot.
+After permuting, the group now at position `i` gets `gap[i]`. Walk the new order accumulating a line cursor
+and call `shiftNode(item, { lines: delta, columns: 0 })` on every item in every group.
 
-Slot-gaps rather than group-gaps buys three properties:
+Group-gaps rather than unit-gaps buys three properties:
 
-1. **Total height is permutation-invariant** — the multiset of slot heights and the multiset of gaps are
+1. **Total height is permutation-invariant** — the multiset of group heights and the multiset of gaps are
    both unchanged, so `toTOML`'s line array can't grow or shrink and no trailing blank line can leak.
 2. **No blank line can appear at the top of the file** — `gap[0]` stays whatever it was.
 3. **The codebase's own conventions fall out for free** — 0 within the root-KV run, 1 between sections,
-   matching `insertOnNewLine`'s `leading_lines` of 1 and 2. A slot that originally had 2+ blank lines keeps
+   matching `insertOnNewLine`'s `leading_lines` of 1 and 2. A group that originally had 2+ blank lines keeps
    them at that *position*, which is the minimal-diff outcome.
 
 Both models satisfy the property that matters most: **an identity permutation produces byte-identical
@@ -303,7 +303,7 @@ output.** That gets an explicit test.
 > **`columns` must always be `0`.** `shiftNode`'s generic path does `end.column += columns`
 > unconditionally (`src/writer.ts:985-991`), which would corrupt multiline strings and hoisted in-brace
 > comments. With `columns: 0` every column path is a no-op — the same idiom `formatEmptyLines` uses.
-> `shiftNode` also early-returns on a zero delta (`src/writer.ts:922`), so unmoved slots cost nothing, and
+> `shiftNode` also early-returns on a zero delta (`src/writer.ts:922`), so unmoved groups cost nothing, and
 > its traverse covers every node type including `TableKey`, `KeyValue.equals`, and nested
 > `InlineTable`/`InlineArray` (`src/writer.ts:984-1012`).
 
@@ -325,7 +325,7 @@ traverse already moves `Table.key`.
 - **No two sibling items may share a line range.** `to-toml.ts` composes each line as
   `before + raw + after` (`src/to-toml.ts:206-217`) and merges colliding writes **silently**; the only
   canary is the multi-line `write` path, which throws on `raw_lines.length !== expected_lines`. This has to
-  be guaranteed structurally, but a debug assertion that slot line ranges are disjoint and strictly
+  be guaranteed structurally, but a debug assertion that group line ranges are disjoint and strictly
   ascending after relayout is cheap insurance.
 
 ---
@@ -338,7 +338,7 @@ traverse already moves `Table.key`.
 | 2 | `src/diff.ts` | `DiffOptions`, `Move.key`, order emission in `compareObjects` (§2) |
 | 3 | `src/patch.ts` | Pass `{ updateOrder }` into `diff`; capture `prePatchNodes`; collect object Moves in the `isMove` branch; call `applyKeyOrderMoves` before `return original` |
 | 4 | `src/update-order.ts` | **New.** `applyKeyOrderMoves` (§3.3) |
-| 5 | `src/comment-ownership.ts` | **New** — see [`PLAN-Comment-Ownership.md`](./PLAN-Comment-Ownership.md) |
+| 5 | `src/comment-ownership.ts` | **New** — see [`Comment-Ownership.md`](./Comment-Ownership.md) |
 | 6 | `src/writer.ts` | Export the lifted `recalcContainerEnd` (shared with Phase 1) |
 | 7 | `src/__tests__/update-order.test.ts` | **New.** Behaviour matrix |
 | 8 | `src/__tests__/patch.test.ts` | Split the skipped test at line 4379 |
@@ -407,7 +407,7 @@ permutation ⇒ byte-identical output**.
   a `console.warn` spy around a plain `patch(x, y)` stays clean (guards §1 #2).
 - **`validate-cst.test.ts`:** `getOverlaps` / `getInverted` hardcode `new TomlFormat()` (lines 180, 193) —
   thread an optional `format` through them and `expectConsistent`. Run every 5.2 row through it, and add
-  two feature-specific checks: member slots in ascending line order, and no two sibling items sharing a
+  two feature-specific checks: member groups in ascending line order, and no two sibling items sharing a
   line range (§3.4).
 - **`roundtrip.patch-parse.test.ts`:** reorder, re-`parse()` the output, assert the resulting JS key order
   equals the requested order — the end-to-end proof that the feature did what was asked.

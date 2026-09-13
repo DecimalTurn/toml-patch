@@ -4205,7 +4205,7 @@ describe('undefined handling in patch', () => {
       ` + '\n');
     });
 
-    // R3: a blank line severs ownership.  The comment is unowned and pinned,
+    // R3: a blank line severs ownership.  The comment is independent and pinned,
     // so it does not transfer to the materialised parent.
     test('with comments: blank line severs ownership, comment does not transfer', () => {
       const src = dedent`
@@ -4255,7 +4255,7 @@ describe('undefined handling in patch', () => {
     // In this context, we are ok with a blank line before the materialised parent, 
     // because the comment could be about the entire AOT section, so we don't necessarly want 
     // it deleted, but we also don't want to make it owned by the other AOT entry, 
-    // so we leave it unowned and pinned.  The blank line is the only way to do that.
+    // so we leave it independent and pinned.  The blank line is the only way to do that.
     test('with comments: materialises implicit parent from multiple AOT entries for single deletion', () => {
       const src = dedent`
         # top comment

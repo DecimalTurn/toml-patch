@@ -1,6 +1,6 @@
 /**
  * Behaviour matrix for the `updateOrder` option. See docs/PLAN-Update-Order.md for the full
- * design and docs/CommentOwnership.md / docs/PLAN-Comment-Ownership.md for how comments
+ * design and docs/Comment-Ownership.md for how comments
  * travel with a moved entry.
  *
  * The "default off" tests are the API-compat guarantee (§2): with the option unset (or
@@ -116,7 +116,7 @@ describe('updateOrder: true', () => {
     // between them) that both resolve to member key "hello" (getMemberKey only reads the
     // first segment). This is the dotted-key analogue of the descoped "[a], [b], [a.c]"
     // non-contiguous-group hazard (docs/PLAN-Update-Order.md, Scope): reordering must detect
-    // that "hello" doesn't form one contiguous slot and bail out on that move rather than
+    // that "hello" doesn't form one contiguous group and bail out on that move rather than
     // coalescing the two into an adjacent pair or corrupting either one. "Did nothing" is the
     // required safe failure mode here.
     const input = dedent`
@@ -349,7 +349,7 @@ describe('updateOrder: true', () => {
     const result = patch(input, { c: { z: 3 }, a: { x: 1 }, b: { y: 2 } }, { updateOrder: true });
 
     // Gaps belong to the POSITION, not to whichever key ends up there (docs/PLAN-Update-Order.md
-    // §3.3 Step 6: "the slot now at position i gets gap[i]" — precomputed from the ORIGINAL
+    // §3.3 Step 6: "the group now at position i gets gap[i]" — precomputed from the ORIGINAL
     // occupant of position i). Position 1 (originally the a -> b transition) had zero blank
     // lines, so whichever section lands there post-reorder (now [a]) keeps that zero-gap;
     // position 2 (originally the b -> c transition) had one blank line, so [b] gets it.

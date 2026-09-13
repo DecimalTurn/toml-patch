@@ -23,7 +23,7 @@ import { last } from './utils';
 import { clonePosition } from './location';
 import { remove, insert, shiftNode, applyWrites, recalcContainerEnd, perLine, getExitOffsets, addExitOffset, Root } from './writer';
 
-// See docs/PLAN-Comment-Ownership.md for the full model (rules R1-R6).
+// See docs/Comment-Ownership.md for the full model (rules R1-R6).
 
 // R6 — commented-out entries are not owned.
 // Segment charset matches IS_BARE_KEY (/^[\w-]+$/, src/tokenizer.ts:22).
@@ -74,7 +74,7 @@ function hasInlineCommentAfterValue(comment: Comment): boolean {
 
 /**
  * True when the comment looks enough like a KV to act as a barrier in
- * scanSlots.  Broader than `isCommentedOutEntry`: also matches lines with
+ * scanGroups.  Broader than `isCommentedOutEntry`: also matches lines with
  * an inline trailing comment (`# key = val # note`) and lines whose value
  * part is short enough not to be obvious prose (≤3 words after `=`).
  */
@@ -114,7 +114,7 @@ function commentedOutFirstKey(comment: Comment): string | undefined {
  * OUTER key-value (e.g. `data = [x, y] # note`) would otherwise appear to
  * fall "inside" a nested single-line array's own line range too, wrongly
  * treating an unrelated comment as hoisted from inside it. The element-level
- * ownership machinery below (resolveInlineElementSlots / removeMember's and
+ * ownership machinery below (resolveInlineElementGroups / removeMember's and
  * moveInlineElement's InlineTable/InlineArray branches) must only engage
  * here, matching writer.ts's own `isMultilineInlineContainer` convention.
  */
@@ -122,13 +122,13 @@ function isMultilineInlineContainer(node: TreeNode): node is InlineTable | Inlin
   return (isInlineTable(node) || isInlineArray(node)) && node.loc.end.line > node.loc.start.line;
 }
 
-export interface Slot {
+export interface Group {
   kind: 'member' | 'pinned';
   /** The orderable child: KeyValue | Table | TableArray. Absent for pinned runs. */
   member?: TreeNode;
   /** First key segment — `key.value[0]` / `key.item.value[0]`. Absent for pinned runs. */
   key?: string;
-  /** Every node in the slot, in items-array order. */
+  /** Every node in the group, in items-array order. */
   items: TreeNode[];
   /** min over items. */
   startLine: number;
@@ -144,27 +144,27 @@ function getMemberKey(member: TreeNode): string | undefined {
 }
 
 /**
- * The rule scan shared by resolveSlots (Document/Table/TableArray, where members
+ * The rule scan shared by resolveGroups (Document/Table/TableArray, where members
  * and comments are already interleaved in one items array) and
- * resolveInlineElementSlots (InlineTable/InlineArray, where they are merged from
+ * resolveInlineElementGroups (InlineTable/InlineArray, where they are merged from
  * two different arrays first — see that function). `items` must already be in
  * ascending line order; a `Comment` node is a comment, anything else is a member.
  */
-function scanSlots(
+function scanGroups(
   items: TreeNode[],
   initialLastMemberEndLine: number,
   isEligibleForLeading: (member: TreeNode) => boolean,
   memberKey = getMemberKey
-): Slot[] {
-  const slots: Slot[] = [];
+): Group[] {
+  const groups: Group[] = [];
 
   let lastMemberEndLine = initialLastMemberEndLine;
-  let currentMemberSlot: Slot | undefined;
+  let currentMemberGroup: Group | undefined;
   let pendingRun: Comment[] = [];
 
   const flushPendingAsPinned = () => {
     if (!pendingRun.length) return;
-    slots.push({
+    groups.push({
       kind: 'pinned',
       items: pendingRun,
       startLine: pendingRun[0].loc.start.line,
@@ -177,14 +177,14 @@ function scanSlots(
     if (isComment(item)) {
       if (item.loc.start.line <= lastMemberEndLine) {
         // R1: right-side ownership wins.
-        if (currentMemberSlot) {
-          currentMemberSlot.items.push(item);
-          currentMemberSlot.endLine = Math.max(currentMemberSlot.endLine, item.loc.end.line);
+        if (currentMemberGroup) {
+          currentMemberGroup.items.push(item);
+          currentMemberGroup.endLine = Math.max(currentMemberGroup.endLine, item.loc.end.line);
         } else {
           // Owned by the container's own header (e.g. `[a] # hdr`), which
           // isn't itself a member of `items` — nothing to attach to, and it
           // never travels with any row.
-          slots.push({ kind: 'pinned', items: [item], startLine: item.loc.start.line, endLine: item.loc.end.line });
+          groups.push({ kind: 'pinned', items: [item], startLine: item.loc.start.line, endLine: item.loc.end.line });
         }
         continue;
       }
@@ -226,7 +226,7 @@ function scanSlots(
           }
           if (lastBarrierIdx >= 0) {
             const pinned = pendingRun.splice(0, lastBarrierIdx + 1);
-            slots.push({
+            groups.push({
               kind: 'pinned',
               items: pinned,
               startLine: pinned[0].loc.start.line,
@@ -242,47 +242,47 @@ function scanSlots(
       }
     }
 
-    const slotItems: TreeNode[] = [...leading, item];
-    const slot: Slot = {
+    const groupItems: TreeNode[] = [...leading, item];
+    const group: Group = {
       kind: 'member',
       member: item,
       key: memberKey(item),
-      items: slotItems,
-      startLine: slotItems[0].loc.start.line,
+      items: groupItems,
+      startLine: groupItems[0].loc.start.line,
       endLine: item.loc.end.line
     };
-    slots.push(slot);
-    currentMemberSlot = slot;
+    groups.push(group);
+    currentMemberGroup = group;
     lastMemberEndLine = item.loc.end.line;
   }
 
   flushPendingAsPinned(); // R4: a trailing run with no member below it.
 
-  return slots;
+  return groups;
 }
 
 /**
- * Partitions a container's items into ownership slots, in document order.
+ * Partitions a container's items into ownership groups, in document order.
  * Pure: does not mutate the tree.
  *
  * @param isEligibleForLeading - optional predicate; members that fail it cannot
  *   acquire leading comments via R2. Used by callers that have just inserted
  *   nodes which must not adopt a preceding run.
  */
-export function resolveSlots(
+export function resolveGroups(
   container: Document | Table | TableArray,
   isEligibleForLeading: (member: TreeNode) => boolean = () => true,
   memberKey: (member: TreeNode) => string | undefined = getMemberKey
-): Slot[] {
+): Group[] {
   // For a table body, comments on the header's own line (`[a] # hdr`) are
   // owned by the header itself (R1) — initialising to the header's end line
   // makes that fall out of the same check as ownership by a preceding row.
   const initialLastMemberEndLine = isDocument(container) ? 0 : container.key.loc.end.line;
-  return scanSlots(container.items as TreeNode[], initialLastMemberEndLine, isEligibleForLeading, memberKey);
+  return scanGroups(container.items as TreeNode[], initialLastMemberEndLine, isEligibleForLeading, memberKey);
 }
 
 /**
- * The element-level analogue of resolveSlots, for a multi-line InlineTable or
+ * The element-level analogue of resolveGroups, for a multi-line InlineTable or
  * InlineArray. Unlike Document/Table/TableArray, an inline container's own
  * `.items` can never hold a Comment (InlineTableItem/InlineArrayItem are both
  * InlineItem<...>) — the parser hoists interior comments out into the
@@ -290,17 +290,17 @@ export function resolveSlots(
  * plan doc). `hostItems` is that enclosing container's `.items`; this merges
  * the comments physically inside `container`'s line range back in with
  * `container.items` (sorted into true reading order) before running the same
- * scan resolveSlots uses.
+ * scan resolveGroups uses.
  *
  * There is no R6 analogue for bare array elements (they aren't `key = value`
  * shaped), but nothing here suppresses R6 for an InlineArray's own comments —
- * see docs/PLAN-Comment-Ownership.md for why that's an accepted, untested edge
+ * see docs/Comment-Ownership.md for why that's an accepted, untested edge
  * case rather than a deliberate rule.
  */
-export function resolveInlineElementSlots(
+export function resolveInlineElementGroups(
   container: InlineTable | InlineArray,
   hostItems: TreeNode[]
-): Slot[] {
+): Group[] {
   const interiorComments = hostItems.filter(
     (item): item is Comment =>
       isComment(item) &&
@@ -314,7 +314,7 @@ export function resolveInlineElementSlots(
     (a, b) => a.loc.start.line - b.loc.start.line || a.loc.start.column - b.loc.start.column
   );
 
-  return scanSlots(merged, container.loc.start.line, () => true);
+  return scanGroups(merged, container.loc.start.line, () => true);
 }
 
 /**
@@ -427,11 +427,11 @@ export function normalizeSectionComments(document: Document): void {
  * in `container.items`. Returns undefined otherwise.
  */
 function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): Comment[] | undefined {
-  const lastSlot = last(resolveSlots(container));
-  if (!lastSlot || lastSlot.kind !== 'pinned') return undefined;
+  const lastGroup = last(resolveGroups(container));
+  if (!lastGroup || lastGroup.kind !== 'pinned') return undefined;
 
-  const runItems = lastSlot.items as Comment[];
-  const adjacent = lastSlot.endLine + 1 === nextBlock.loc.start.line;
+  const runItems = lastGroup.items as Comment[];
+  const adjacent = lastGroup.endLine + 1 === nextBlock.loc.start.line;
   const allDead = runItems.every(isCommentedOutEntry);
   if (!adjacent || allDead) return undefined;
 
@@ -440,7 +440,7 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
 
 /**
  * Removes `member` from `parent.items` along with every comment it owns
- * (leading run and right-side/trailing comments — see resolveSlots), plus,
+ * (leading run and right-side/trailing comments — see resolveGroups), plus,
  * when `member` is a [table]/[[array]] block, any trailing comment run the
  * parser filed under the PRECEDING sibling table but which R5 assigns to
  * `member` instead. Falls back to a plain removal when `parent` isn't a
@@ -461,16 +461,16 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
   }
 
   if (isDocument(parent) || isTable(parent) || isTableArray(parent)) {
-    const slot = resolveSlots(parent).find(s => s.member === member);
-    if (slot) {
-      const memberIndex = slot.items.indexOf(member);
+    const group = resolveGroups(parent).find(s => s.member === member);
+    if (group) {
+      const memberIndex = group.items.indexOf(member);
 
       // Leading comments and the member itself: every one of these occupies
       // its own line(s) that the member's own span does not otherwise cover,
       // so each is removed via the generic primitive, which computes real
       // line/column offset accounting.
       for (let i = 0; i <= memberIndex; i++) {
-        const item = slot.items[i];
+        const item = group.items[i];
         // A prior remove() call in this loop may already have absorbed a
         // same-line trailing comment via its own single-comment logic —
         // see the trailing-comments loop below for why that's fine.
@@ -486,8 +486,8 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
       // trailing comment as a side effect of removing the member. Anything
       // still present here is spliced out directly, with NO further offset —
       // registering one would double-count a line height already removed.
-      for (let i = memberIndex + 1; i < slot.items.length; i++) {
-        const item = slot.items[i];
+      for (let i = memberIndex + 1; i < group.items.length; i++) {
+        const item = group.items[i];
         const idx = (parent.items as TreeNode[]).indexOf(item);
         if (idx < 0) continue;
         (parent.items as TreeNode[]).splice(idx, 1);
@@ -499,11 +499,11 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
     if (hostContainer) {
-      const slot = resolveInlineElementSlots(parent, hostContainer.items as TreeNode[]).find(s => s.member === member);
-      if (slot) {
-        const comments = slot.items.filter(item => item !== member) as Comment[];
+      const group = resolveInlineElementGroups(parent, hostContainer.items as TreeNode[]).find(s => s.member === member);
+      if (group) {
+        const comments = group.items.filter(item => item !== member) as Comment[];
 
-        // Every comment in this slot is hoisted into hostContainer (the
+        // Every comment in this group is hoisted into hostContainer (the
         // enclosing Document/Table) — a DIFFERENT array from the member's own
         // `parent.items`, and NOT a sibling of it: hostContainer.items holds
         // the KeyValue that owns `parent` as its value, so an offset
@@ -526,8 +526,8 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
         }
 
         if (comments.length) {
-          member.loc.start = slot.items[0].loc.start;
-          member.loc.end = last(slot.items)!.loc.end;
+          member.loc.start = group.items[0].loc.start;
+          member.loc.end = last(group.items)!.loc.end;
         }
 
         remove(root, parent, member, hostContainer.items as TreeNode[]);
@@ -537,7 +537,7 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
         // mutates surviving comments' `.loc` as a PRE-compensation for an offset that
         // only actually resolves once applyWrites runs. If a SECOND removeMember (or
         // moveInlineElement) call on this same container ran before that offset were
-        // resolved, resolveInlineElementSlots would read those pre-compensated,
+        // resolved, resolveInlineElementGroups would read those pre-compensated,
         // not-yet-restored positions as if they were final — misattributing or
         // losing ownership. Flushing here keeps every subsequent call in this patch
         // starting from a fully-resolved, non-stale state.
@@ -553,11 +553,11 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
 /**
  * Relocates `node` (an element of `parent`, an InlineTable/InlineArray) from
  * its current position to `toIndex`, carrying its own owned comments along
- * (see resolveInlineElementSlots) rather than leaving them at their old
+ * (see resolveInlineElementGroups) rather than leaving them at their old
  * absolute position — which is what plain remove()+insert() does, and why a
  * Move on a commented inline array can misplace a comment onto an unrelated
- * line (see "Extending to elements inside multi-line arrays" in
- * docs/PLAN-Comment-Ownership.md).
+ * line (see "Elements inside multi-line arrays and inline tables" in
+ * docs/Comment-Ownership.md).
  *
  * It isn't enough to protect only `node`'s own comments: writer.remove()'s
  * per-container "orphaned comment" cleanup reasons purely by absolute line
@@ -574,7 +574,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
     if (hostContainer) {
-      const slots = resolveInlineElementSlots(parent, hostContainer.items as TreeNode[]);
+      const groups = resolveInlineElementGroups(parent, hostContainer.items as TreeNode[]);
 
       // The container's per-line vs shared-line layout must be judged on
       // the state BEFORE this move: remove()+insert() inflate the tail's
@@ -682,11 +682,11 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       };
 
-      for (const slot of slots) {
-        if (slot.kind !== 'member' || !slot.member) continue;
-        const comments = slot.items.filter(item => item !== slot.member) as Comment[];
+      for (const group of groups) {
+        if (group.kind !== 'member' || !group.member) continue;
+        const comments = group.items.filter(item => item !== group.member) as Comment[];
 
-        if (slot.member === node) {
+        if (group.member === node) {
           nodeOwnStart = clonePosition(node.loc.start);
           nodeOwnEnd = clonePosition(node.loc.end);
           if (isInlineItem(node)) {
@@ -699,13 +699,13 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
             // matters for a leading, separate-line comment; a no-op for a
             // same-line trailing one, since that doesn't change the line
             // count (mirrors removeMember's identical trick).
-            node.loc.start = clonePosition(slot.items[0].loc.start);
-            node.loc.end = clonePosition(last(slot.items)!.loc.end);
+            node.loc.start = clonePosition(group.items[0].loc.start);
+            node.loc.end = clonePosition(last(group.items)!.loc.end);
           }
         }
 
         if (!comments.length) continue;
-        detached.push({ owner: slot.member, ownerOriginalStart: clonePosition(slot.member.loc.start), comments });
+        detached.push({ owner: group.member, ownerOriginalStart: clonePosition(group.member.loc.start), comments });
         for (const comment of comments) {
           const idx = (hostContainer.items as TreeNode[]).indexOf(comment);
           if (idx >= 0) (hostContainer.items as TreeNode[]).splice(idx, 1);

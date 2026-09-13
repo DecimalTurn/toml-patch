@@ -12,14 +12,14 @@ import {
 } from './cst';
 import { Move } from './diff';
 import { Path, tryFindByPath } from './find-by-path';
-import { resolveSlots, normalizeSectionComments, Slot } from './comment-ownership';
+import { resolveGroups, normalizeSectionComments, Group } from './comment-ownership';
 import { shiftNode, recalcContainerEnd } from './writer';
 
 /**
- * A resolved, orderable unit within a container: either one member slot, or — when the same
- * key resolves to more than one CONSECUTIVE member slot (an [[array-of-tables]]'s entries, or
+ * A resolved, orderable unit within a container: either one member group, or — when the same
+ * key resolves to more than one CONSECUTIVE member group (an [[array-of-tables]]'s entries, or
  * a [table] immediately followed by its own [table.sub]) — all of them coalesced into one
- * group that moves as a rigid block, preserving their own relative order. Pinned slots (no
+ * unit that moves as a rigid block, preserving their own relative order. Pinned groups (no
  * key) are never coalesced and never reordered; see `movable` below.
  */
 interface Unit {
@@ -30,54 +30,54 @@ interface Unit {
    *  NON-contiguous group (the dotted-key / non-contiguous-document-group hazard) — both
    *  are treated as fixed anchors: never reordered, always left exactly where they are. */
   movable: boolean;
-  slots: Slot[];
+  groups: Group[];
   startLine: number;
   endLine: number;
   items: TreeNode[];
 }
 
-function buildUnits(slots: Slot[]): Unit[] {
+function buildUnits(groups: Group[]): Unit[] {
   const units: Unit[] = [];
 
-  for (const slot of slots) {
-    if (slot.kind === 'pinned') {
+  for (const group of groups) {
+    if (group.kind === 'pinned') {
       units.push({
         kind: 'pinned',
         isSection: false,
         movable: false,
-        slots: [slot],
-        startLine: slot.startLine,
-        endLine: slot.endLine,
-        items: slot.items
+        groups: [group],
+        startLine: group.startLine,
+        endLine: group.endLine,
+        items: group.items
       });
       continue;
     }
 
-    const isSection = isTable(slot.member!) || isTableArray(slot.member!);
+    const isSection = isTable(group.member!) || isTableArray(group.member!);
     const previous = units[units.length - 1];
-    if (previous && previous.kind === 'member' && slot.key !== undefined && previous.key === slot.key) {
+    if (previous && previous.kind === 'member' && group.key !== undefined && previous.key === group.key) {
       // Contiguous run sharing the same first key segment (AOT entries, or [a] then
       // [a.sub]) — coalesce into one unit that will move together.
-      previous.slots.push(slot);
-      previous.endLine = slot.endLine;
-      previous.items = previous.items.concat(slot.items);
+      previous.groups.push(group);
+      previous.endLine = group.endLine;
+      previous.items = previous.items.concat(group.items);
       continue;
     }
 
     units.push({
       kind: 'member',
-      key: slot.key,
+      key: group.key,
       isSection,
-      movable: slot.key !== undefined, // corrected below once every unit for this container is known
-      slots: [slot],
-      startLine: slot.startLine,
-      endLine: slot.endLine,
-      items: [...slot.items]
+      movable: group.key !== undefined, // corrected below once every unit for this container is known
+      groups: [group],
+      startLine: group.startLine,
+      endLine: group.endLine,
+      items: [...group.items]
     });
   }
 
   // A key that resolves to more than one, NON-contiguous unit (e.g. `hello.world` / `b` /
-  // `hello.moon`) can't be safely reordered: resolveSlots has no way to represent "hello" as
+  // `hello.moon`) can't be safely reordered: resolveGroups has no way to represent "hello" as
   // a single relocatable thing when another key sits between its occurrences. Bail on moving
   // any of them — "did nothing" is the safe failure mode (docs/PLAN-Update-Order.md, Scope).
   const countByKey = new Map<string, number>();
@@ -248,8 +248,8 @@ function applyContainerMoves(
         return key[dottedPrefix.length];
       }
     : undefined;
-  const slots = resolveSlots(container, node => commentEligibleNodes.has(node), memberKey);
-  const units = buildUnits(slots);
+  const groups = resolveGroups(container, node => commentEligibleNodes.has(node), memberKey);
+  const units = buildUnits(groups);
 
   const movableUnitsByKey = new Map<string, Unit>();
   for (const unit of units) {
@@ -280,7 +280,7 @@ function applyContainerMoves(
   // that object contains only the dotted members under `dottedPrefix`, not every row in the
   // AOT entry. Simulating against unrelated rows would therefore interpret `move.to` in the
   // wrong index space. The final placement below still walks every unit, keeping unrelated
-  // rows and pinned slots at their original positions.
+  // rows and pinned groups at their original positions.
   const currentOrder = dottedPrefix
     ? units
         .filter(u => u.kind === 'member' && u.movable)
@@ -376,7 +376,7 @@ export function applyKeyOrderMoves(document: Document, moves: Move[], commentEli
   if (moves.length === 0) return;
 
   // R5: a comment that visually introduces the next section but is physically parked as a
-  // trailing item of the previous one must be re-parented before slots are resolved, or it
+  // trailing item of the previous one must be re-parented before groups are resolved, or it
   // travels with the wrong block.
   normalizeSectionComments(document);
 
