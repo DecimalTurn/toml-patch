@@ -37,7 +37,7 @@ import { SPACE } from './tokenizer';
 import { TomlFormat } from './toml-format';
 import { isIterable } from './utils';
 import { getCommaSpace } from './inline-comma-space';
-import { isGeneratedNestedTable, isGeneratedNestedTableHost } from './inline-format';
+import { isGeneratedNestedTable, isGeneratedNestedTableHost, isPreservedMultilineEmpty } from './inline-format';
 
 const BY_NEW_LINE = /(\r\n|\n)/g;
 
@@ -260,8 +260,10 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
 
   // Inline containers that are direct values of block-level key-values
   // (Document, Table or TableArray). When such a container is emptied, its
-  // multiline closing bracket is preserved. Containers nested inside another
-  // inline container tighten to a single line instead.
+  // multiline closing bracket is preserved. Nested containers keep it too when
+  // writer.remove() marked them as emptied from an interior row
+  // (markPreservedMultilineEmpty); any other emptied container tightens to a
+  // single line.
   const blockLevelInlineContainers = new WeakSet<InlineTable | InlineArray>();
   const markBlockLevelInlineContainers = (items: TreeNode[]): void => {
     for (const item of items) {
@@ -508,7 +510,9 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
         if (source && container.range) {
           const original = source.slice(container.range[0], container.range[1]);
           const lastNewline = Math.max(original.lastIndexOf('\n'), original.lastIndexOf('\r'));
-          if (lastNewline !== -1 && blockLevelInlineContainers.has(container) && originalFirstChildStartedAfterOpener(container)) {
+          const keepClosingRow = blockLevelInlineContainers.has(container) ||
+            isPreservedMultilineEmpty(container);
+          if (lastNewline !== -1 && keepClosingRow && originalFirstChildStartedAfterOpener(container)) {
             const closingIndent = original.slice(lastNewline + 1, -1).match(/^[\t ]*/)?.[0] ?? '';
             append(format.newLine + closingIndent);
           }

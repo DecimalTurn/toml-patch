@@ -3376,7 +3376,8 @@ describe('TOML v1.1 multiline inline tables - edit operations (newline.toml spec
 
     expect(patched).toEqual(dedent`
       tbl-1 = {
-              tbl = {}
+              tbl = {
+              }
       }
       ` + '\n');
   });
