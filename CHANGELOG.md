@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-13
+
 ### Added
 
 - Build: Ship a separate unbundled, unminified development build with source maps, published under the `dev` npm dist-tag for debugging and downstream tree-shaking. 
