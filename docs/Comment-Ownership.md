@@ -14,16 +14,17 @@ Rules are evaluated in precedence order.
 
 | | Rule |
 |---|---|
-| **R1** | **Trailing ownership.** A comment on the same line as the element that just ended is owned by that element. |
-| **R2** | **Leading ownership.** A comment block whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the block transfers to the materialised parent header. |
-| **R3** | **A blank line severs ownership.** A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
-| **R4** | **Independent otherwise.** A block with no member below it in the same container is pinned. |
-| **R5** | **Cross-container ownership.** A trailing comment-block inside a `[table]` / `[[array]]` that R2 assigns to the following document-block is owned by that document-block. |
-| **R6** | **A dead-entry block is independent.** A comment-block in which every line is a commented-out entry is pinned, overriding R2. |
+| **R1** | [**Trailing ownership.**](#r1---trailing-ownership) A comment on the same line as the element that just ended is owned by that element. |
+| **R2** | [**Leading ownership.**](#r2---leading-ownership) A comment block whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the block transfers to the materialised parent header. |
+| **R3** | [**A blank line severs ownership.**](#r3---a-blank-line-severs-ownership) A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
+| **R4** | [**Independent otherwise.**](#r4---independent-otherwise) A block with no member below it in the same container is pinned. |
+| **R5** | [**Cross-container ownership.**](#r5---cross-container-ownership) A trailing comment-block inside a `[table]` / `[[array]]` that R2 assigns to the following document-block is owned by that document-block. |
+| **R6** | [**A dead-entry block is independent.**](#r6---a-dead-entry-block-is-independent) A commented-out entry whose key differs from the member below it is pinned and break the ownership link in the comment-block; a matching key stays with the member. |
 
 ## R1 - **Trailing ownership.**
 
-Trailing ownership covers four placements:
+A comment on the same line as the element that just ended is owned by that element. Trailing
+ownership covers four placements:
 
 - A note after a key-value:
 
@@ -59,43 +60,28 @@ Trailing ownership covers four placements:
 
 `# group tail` trails the inner inline table `{ hooks = [...] }`, so it is owned by that table.
 
-## Default behavior
+## R2 - **Leading ownership.**
 
-A comment is owned by whatever it is attached to: a same-line trailing comment (R1), or an own-line
-comment immediately above with no blank line in between (R2).
+A comment block whose last line is exactly one line above a member is owned by that member:
 
 ```toml
 # Explains x
-x = 1 # trailing note on x
+x = 1
 y = 2
 ```
 
-Removing `x` removes both of its comments along with it:
+Removing `x` removes its leading block along with it:
 
 ```toml
 y = 2
 ```
 
-The same applies to `[table]` / `[[array-of-tables]]` blocks, and to elements inside a multi-line
-array or inline table, both a leading own-line comment and a trailing same-line one:
+A blank line between the block and the member severs the link (R3).
 
-```toml
-fruits = [
-  "apple",
-  # crisp and tart
-  "banana", # slippery
-  "cherry",
-]
-```
+## R3 - **A blank line severs ownership.**
 
-Removing `"banana"` removes both `# crisp and tart` and `# slippery` with it. `"apple"` and
-`"cherry"` are untouched. Reordering array elements carries each moved element's own comment(s)
-along too.
-
-## A blank line opts out
-
-A comment separated from the entry below it by a blank line is independent prose (R3). It stays in place
-rather than traveling with anything:
+A block separated from the member below it by one or more blank lines is independent, pinned to its
+position, never travels:
 
 ```toml
 # General notes about this file, not about y specifically
@@ -104,8 +90,6 @@ y = 2
 ```
 
 Removing `y` here leaves the note behind.
-
-## What counts as a blank line
 
 A blank line means a line with no comment node on it, a gap in line numbers between two consecutive
 comments. It is not a judgement about how the line looks. A `#` on its own is a perfectly good
@@ -132,6 +116,108 @@ Key = "value2"
 
 Now there are two blocks. `# here is some information` is pinned by R3, and only the second block
 travels.
+
+## R4 - **Independent otherwise.**
+
+A block with no member below it in the same container is pinned:
+
+```toml
+a = 1
+# tail note
+```
+
+Removing `a` leaves `# tail note` behind, because no member below it could own it.
+
+## R5 - **Cross-container ownership.**
+
+A table consumes every token until the next header, so a comment that visually introduces the next
+section is stored in the previous table. Ownership is still assigned correctly: a trailing comment
+block inside a `[table]` / `[[array-of-tables]]` that R2 assigns to the following block is owned by
+that block, not by the table above it.
+
+```toml
+[a]
+x = 1
+
+# about b
+[b]
+y = 2
+```
+
+Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
+`[b]` opts out as usual, and the comment then stays with `[a]`:
+
+```toml
+[a]
+x = 1
+
+# about b
+
+[b]
+y = 2
+```
+
+## R6 - **A dead-entry block is independent.**
+
+A commented-out entry is a line whose body is shaped like a TOML entry: a valid key (bare, quoted,
+or dotted) immediately followed by `=`, or a `[table]` / `[[array]]` header:
+
+| Comment | Verdict |
+|---|---|
+| `# old_port = 80` | dead entry |
+| `# a.b.c = 1` | dead entry |
+| `# "my key" = 1` | dead entry |
+| `# [server]` | dead entry |
+| `# TODO: set x = 1` | prose, owned |
+| `# use x = 1 for this` | prose, owned |
+| `# see https://a.b?x=1` | prose, owned |
+
+A commented-out entry sitting directly above a live one is not documentation for it, and should not
+travel with it:
+
+```toml
+# old_port = 80
+port = 8080
+```
+
+Removing `port` leaves `# old_port = 80` behind.
+
+This severs the block only when the keys differ. A dead `key = value` whose key matches the key of
+the member below is related (a superseded value for that same key) and stays with it:
+
+```toml
+# Port to bind to
+# port = 8080
+port = 80
+```
+
+All three lines travel together: the prose line anchors the block, and `# port = 8080` has the same
+key as `port`.
+
+A differing key severs the block at that line: it and everything above it are pinned, and only the
+lines below the last such barrier belong to the member:
+
+```toml
+# here is some information
+#
+# And some more, with a key example:
+# key = "value1"
+Key = "value2"
+```
+
+`# key = "value1"` has key `key`, which differs from `Key`, so it severs the block. Removing `Key`
+leaves the whole block behind.
+
+An all-dead block is therefore pinned when its keys differ from the member's key, but still owned
+when every dead entry's key matches:
+
+```toml
+# port = 8080
+port = 80
+```
+
+Removing `port` removes `# port = 8080` too.
+
 
 ## Multi-line blocks are all-or-nothing
 
@@ -175,82 +261,24 @@ Three things this pins down:
 - **A banner survives a reorder.** The 3-line banner is pinned by R3, not by content, and stays in
   place.
 
-## Commented-out entries
-
-Position alone gets one case wrong. A commented-out entry sitting directly above a live one is not
-documentation for it, and should not travel with it (R6):
-
-```toml
-# old_port = 80
-port = 8080
-```
-
-Removing `port` leaves `# old_port = 80` behind.
-
-Detection is a shape test on the comment body: does it look like a TOML entry? The key must be a
-valid TOML key (bare, quoted, or dotted) immediately followed by `=`, or a `[table]` /
-`[[array]]` header:
-
-| Comment | Verdict |
-|---|---|
-| `# old_port = 80` | dead entry |
-| `# a.b.c = 1` | dead entry |
-| `# "my key" = 1` | dead entry |
-| `# [server]` | dead entry |
-| `# TODO: set x = 1` | prose, owned |
-| `# use x = 1 for this` | prose, owned |
-| `# see https://a.b?x=1` | prose, owned |
-
-R6 requires every line in the block to be a dead entry. A mixed block stays owned:
-
-```toml
-# Port to bind to
-# port = 8080
-port = 80
-```
-
-All three lines travel together, because the prose line anchors the block to `port`.
-
-One known limitation: prose of the exact shape `word = word` is treated as a dead entry and
-pinned. For example:
-
-```toml
-# note = important
-```
-
-## Comments above the next section
-
-A table consumes every token until the next header, so a comment that visually introduces the next
-section is stored in the previous table. Ownership is still assigned correctly: a comment block
-adjacent to the next section is owned by that section (R5), not by the table above it.
-
-```toml
-[a]
-x = 1
-
-# about b
-[b]
-y = 2
-```
-
-Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
-`[b]` opts out as usual, and the comment then stays with `[a]`:
-
-```toml
-[a]
-x = 1
-
-# about b
-
-[b]
-y = 2
-```
-
 ## Elements inside multi-line arrays and inline tables
 
 Ownership also applies to individual elements inside a multi-line array or inline table. Removing
 or reordering one element carries its own leading and trailing comments, leaving the neighbours
 untouched:
+
+```toml
+fruits = [
+  "apple",
+  # crisp and tart
+  "banana", # slippery
+  "cherry",
+]
+```
+
+Removing `"banana"` removes both `# crisp and tart` and `# slippery` with it. `"apple"` and
+`"cherry"` are untouched. Reordering array elements carries each moved element's own comment(s)
+along too.
 
 ```toml
 xs = [
@@ -274,16 +302,16 @@ than `key = value` entries.
 
 ## Scope
 
-Comment ownership currently applies to:
+Comment ownership applies to:
 
 - Removing a root key, a `[table]` / `[[array-of-tables]]` block, or a key-value row inside a table
   body.
 - Removing or reordering an element inside a multi-line array or inline table.
+- Reordering a `[table]` / `[[array-of-tables]]` block or a table-body row with the `updateOrder`
+  option, which carries each entry's comments along.
 
 It does not yet apply to:
 
-- Reordering a `[table]` / `[[array-of-tables]]` block itself. This still uses a plain
-  remove-then-insert and does not carry its comments along.
 - An array nested inside a multiline inline table:
 
   ```toml

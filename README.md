@@ -62,8 +62,8 @@ const updated = patch(existing, {
 
 ## Comment Ownership
 
-When `patch()` removes or reorders an entry, any comment describing it — a same-line trailing
-comment, or an own-line comment directly above with no blank line in between — travels along with
+When `patch()` removes or reorders an entry, any comment describing it (a same-line trailing
+comment, or a line-comment directly above with no blank line in between) travels along with
 it, instead of being left behind to describe whatever ends up in that spot. This applies to root
 keys, `[table]`/`[[array-of-tables]]` blocks, and elements inside multi-line arrays and inline
 tables.
