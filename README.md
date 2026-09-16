@@ -33,6 +33,12 @@ toml-patch is dependency-free and can be installed via your favorite package man
 $ npm install --save @decimalturn/toml-patch
 ```
 
+For the standalone lite distribution, install the `lite` npm dist-tag:
+
+```sh
+$ npm install --save @decimalturn/toml-patch@lite
+```
+
 For browser usage, you can use unpkg:
 
 ```html

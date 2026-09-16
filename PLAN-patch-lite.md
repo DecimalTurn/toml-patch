@@ -18,7 +18,7 @@
  - `src/patch-toml-lite.ts` as the implementation
  - `src/patch-lite-entry.ts` as the `patch-lite` build entry
  - `./patch-lite` as a package export
- - `patchLite(existing, existingJs, updated)` as the current prototype API
+ - `patch(existing, existingJs, updated)` as the current prototype API
  - `patchCstLite()` as an additional exported low-level helper
  - two focused tests in `src/__tests__/patch-lite.test.ts`
  - `pnpm run bench:patch-lite` for bundle comparison
@@ -38,14 +38,14 @@
  Publish the final lite distribution as a separate package subpath:
 
  ```ts
- import patchLite from '@decimalturn/toml-patch/patch-lite';
+ import { patch } from '@decimalturn/toml-patch/patch-lite';
 
- const updated = patchLite(existingToml, updatedObject);
+ const updated = patch(existingToml, updatedObject);
  ```
 
- The target public signature is `(existing, updated)`, matching `patch()`. The current three-argument `(existing, existingJs, updated)` form is an implementation prototype and should not become the published contract unless measuring proves that avoiding the existing-value parse is worth the API cost.
+ The standalone lite package will expose `{ patch }`, matching the name used by the full package. The target public signature is `(existing, updated)`, matching full `patch()`. The current three-argument `(existing, existingJs, updated)` form is an implementation prototype and should not become the published contract unless measuring proves that avoiding the existing-value parse is worth the API cost.
 
- Do not re-export `patchLite` from the root entrypoint. The current root index does so, which pulls lite code into the main package graph and weakens the size separation. Keep the API available through `./patch-lite` only.
+ Do not re-export the lite implementation from the root entrypoint. Keep the API available through `./patch-lite` and the standalone `@decimalturn/toml-patch@lite` package only.
 
  ## Supported behavior
 
@@ -167,6 +167,18 @@
 
  The package currently publishes `dist/toml-patch.*`, `dist/patch.*`, `dist/patch-lite.*`, and `dist/format.*`. Keep the lite entry out of the root export and verify that the root bundle does not pull it in.
 
+ ### Standalone npm distribution
+
+ Publish a second package layout from `dist/lite/`, using the same npm package name and a prerelease version such as `3.1.0-lite`. Publish it with the `lite` dist-tag:
+
+ ```bash
+ npm install @decimalturn/toml-patch@lite
+ ```
+
+ The standalone package root exports `{ patch }`. It must contain only `dist/patch.js`, its referenced runtime chunks, its declaration files, and its generated `package.json`. The full package's `./patch-lite` subpath remains available separately.
+
+ Add `scripts/prepare-lite-package.mjs` and `scripts/test-lite-package.mjs`, mirroring the existing dev-package workflow. The publish workflow should check whether `@decimalturn/toml-patch@<version>-lite` already exists, prepare and test `dist/lite/`, then run `npm publish ./dist/lite --tag lite --provenance --ignore-scripts`.
+
  Add a browser import example using the generated `dist/patch-lite.js` file if the package documents direct browser imports.
 
  ## Tests
@@ -232,15 +244,17 @@
  4. Implement the edit-only comparator without importing `src/diff.ts`.
  5. Implement the small value encoder and its tests.
  6. Replace the prototype's structural application path with direct existing-value replacements.
- 7. Remove `patchLite` from the root export and keep `./patch-lite` as the only public lite entry.
- 8. Build and measure the new entry with `pnpm run bench:patch-lite`.
- 9. If it remains too large, replace full CST-to-JS conversion with a small scanner rather than adding more tree-shaking exceptions.
- 10. Run typecheck, focused tests, full regression tests, lint, and package/export smoke tests.
- 11. Update the README and API documentation with the final signature, restrictions, and measured size.
+ 7. Keep `patch` as the standalone lite package export and prepare it under `dist/lite/`.
+ 8. Add the npm `lite` dist-tag publication and consumer smoke test.
+ 9. Build and measure the new entry with `pnpm run bench:patch-lite`.
+ 10. If it remains too large, replace full CST-to-JS conversion with a small scanner rather than adding more tree-shaking exceptions.
+ 11. Run typecheck, focused tests, full regression tests, lint, and package/export smoke tests.
+ 12. Update the README and API documentation with the final signature, restrictions, and measured size.
 
  ## Acceptance criteria
 
  - `@decimalturn/toml-patch/patch-lite` imports successfully in Node and browser-oriented ESM builds.
+ - `@decimalturn/toml-patch@lite` installs as a standalone package and imports `{ patch }` from its root.
  - The public lite function uses the same two-argument shape as `patch()`.
  - The lite function changes only existing values.
  - Every unsupported structural change throws before output is returned.
