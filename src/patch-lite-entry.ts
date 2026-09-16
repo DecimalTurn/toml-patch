@@ -1,1 +1,1 @@
-export { default as patch, patchCstLite } from './patch-toml-lite';
+export { default as patch } from './patch-toml-lite';

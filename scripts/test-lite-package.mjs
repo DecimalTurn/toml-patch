@@ -53,9 +53,8 @@ try {
       '-e',
       `import { patch } from '@decimalturn/toml-patch';
 const source = 'version = "1.0.0"\\n';
-const existing = { version: '1.0.0' };
 const updated = { version: '1.0.1' };
-const result = patch(source, existing, updated);
+const result = patch(source, updated);
 if (result !== 'version = "1.0.1"\\n') throw new Error('lite patch failed');`,
     ],
     { cwd: consumerDir, stdio: 'inherit' },
