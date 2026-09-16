@@ -1,4 +1,4 @@
-import patch from '../patch-toml';
+import patch from '../patch';
 import { parse } from '../';
 import { stringify } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';

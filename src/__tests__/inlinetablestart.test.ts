@@ -5,7 +5,7 @@
 
 import { stringify, parse } from '../index';
 import dedent from 'dedent';
-import patch from '../patch-toml';
+import patch from '../patch';
 import { calculateTableDepth } from '../formatter';
 
 describe('inlineTableStart option', () => {

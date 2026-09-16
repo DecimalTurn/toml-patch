@@ -1,6 +1,6 @@
 import { describe, test, expect, vi } from 'vitest';
 import { parse, stringify } from '../';
-import patch from '../patch-toml';
+import patch from '../patch';
 
 // A backslash built at runtime, so the escape sequences under test are unambiguous in source.
 const BS = String.fromCharCode(92);

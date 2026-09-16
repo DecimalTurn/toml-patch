@@ -12,7 +12,7 @@
  *   - nested AOT + sub-table + nested AOT (fruit)
  */
 
-import patch from '../patch-toml';
+import patch from '../patch';
 import { parse } from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';

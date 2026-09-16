@@ -1,4 +1,4 @@
-import patch from '../patch-toml';
+import patch from '../patch';
 import { parse } from '../';
 import dedent from 'dedent';
 import { dotted_key_tabs } from '../__fixtures__';

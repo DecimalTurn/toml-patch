@@ -98,7 +98,7 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
   return fmt.leadingBom ? `${UTF8_BOM}${tomlString}` : tomlString;
 }
 
-export { default as patch } from './patch-toml';
+export { default as patch } from './patch';
 export { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './parse-toml';
 
 /**
