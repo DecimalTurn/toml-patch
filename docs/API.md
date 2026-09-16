@@ -85,6 +85,70 @@ owner.name = "Tim"
 );
 ```
 
+### `patch` (lite)
+
+The lite distribution exposes a reduced `patch(existing, updated)` that edits existing values only. Import it from the `patch-lite` subpath:
+
+```ts
+import { patch } from '@decimalturn/toml-patch/patch-lite';
+```
+
+```typescript
+function patch(
+  existing: string,
+  updated: any,
+): string
+```
+
+Parameters:
+
+- `existing: string` - The original TOML document as a string.
+- `updated: any` - The updated JavaScript object. It must contain the same keys and array lengths as the existing document.
+
+Returns a new TOML string with only the edited values replaced. All text outside the edited value spans, including comments, whitespace, line endings and a leading BOM, is preserved byte for byte.
+
+The lite function supports edits to existing scalar values (strings, booleans, numbers and bigints), nested value edits, and edits to existing array elements without changing array length or order. Multiple edits in one call are allowed.
+
+It throws before returning any output for unsupported structural changes:
+
+- added or removed keys, including key renames
+- added or removed array elements
+- array reordering
+- scalar to container or container to scalar changes
+- edits to paths that do not exist in the source
+- unsupported value types, including date and time values
+
+Use the full `patch()` API for additions, removals, moves, renames and advanced formatting.
+
+#### Example
+
+```js
+import { patch } from '@decimalturn/toml-patch/patch-lite';
+import { strict as assert } from 'assert';
+
+const existing = `
+[package]
+name = "toml-patch"
+version = "3.1.0"
+`;
+
+const updated = patch(existing, {
+  package: {
+    name: 'toml-patch',
+    version: '3.1.1'
+  }
+});
+
+assert.strictEqual(
+  updated,
+  `
+[package]
+name = "toml-patch"
+version = "3.1.1"
+`
+);
+```
+
 ### `parse(value, options?)`
 
 ```typescript

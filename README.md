@@ -66,6 +66,26 @@ const updated = patch(existing, {
 });
 ```
 
+## Patch-lite
+
+The `patch-lite` subpath is a smaller, edit-only distribution for applications that only need to update existing TOML values, such as bumping a package version. It exposes the same `patch` name with a two-argument `(existing, updated)` signature:
+
+```js
+import { patch } from '@decimalturn/toml-patch/patch-lite';
+
+const existing = 'version = "1.0.0"\n';
+const updated = patch(existing, { version: '1.0.1' });
+// updated === 'version = "1.0.1"\n'
+```
+
+The lite function edits existing scalar values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, scalar/container type changes and unsupported value types throw before any output is produced. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
+
+The lite distribution is also published as a standalone package under the `lite` npm dist-tag:
+
+```sh
+npm install @decimalturn/toml-patch@lite
+```
+
 ## Comment Ownership
 
 When `patch()` removes or reorders an entry, any comment describing it (a same-line trailing

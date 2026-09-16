@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving surrounding formatting.
+
 ### Changed
 
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
