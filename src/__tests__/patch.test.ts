@@ -7752,6 +7752,49 @@ describe('identity round-trip normalizations', () => {
     ` + '\n');
   });
 
+/**
+ * Callers rarely hand `patch()` the exact object `parse()` returned. It is
+ * normal to copy the parsed document first (for example with
+ * `structuredClone`, or by keeping it in some state holder) and then edit the
+ * copy rather than the object they parsed.
+ *
+ * Copying a TOML date/time value loses the custom Date subclass that records
+ * the original textual format. The copy still holds the same instant, but it
+ * renders differently: `17:13:19.580912` becomes `17:13:19.580`. `patch()`
+ * decides whether a date changed with `datesEqual()`, which compares
+ * `toISOString()`, so the untouched value looks edited, gets rewritten and
+ * quietly loses precision.
+ *
+ * The instant is what identifies a date/time value, so a copy holding the same
+ * instant must be treated as unchanged and the original text must survive
+ * verbatim. Pinned with `test.fails` until the comparison is fixed; drop the
+ * `.fails` to see the loss of precision reported.
+ */
+describe('untouched date/time value in a copied input object', () => {
+  test.fails('an untouched time keeps its microseconds when only the version changes', () => {
+    const original = dedent`
+      build_time = 17:13:19.580912
+      version = "1.0.0"
+    ` + '\n';
+
+    // What the caller works with: a copy of the parsed document.
+    const updated = structuredClone(parse(original));
+    updated.version = '1.0.1';
+
+    // The copy carries the same instant, so `build_time` is not an edit.
+    expect((updated.build_time as Date).getTime()).toBe(
+      (parse(original).build_time as Date).getTime()
+    );
+
+    // Only `version` changed, so every other character must survive.
+    // Today this returns `build_time = 17:13:19.580` (microseconds gone).
+    expect(patch(original, updated)).toBe(dedent`
+      build_time = 17:13:19.580912
+      version = "1.0.1"
+    ` + '\n');
+  });
+});
+
 describe('float exponent notation round-trip', () => {
   // Values that exceed MAX_SAFE_INTEGER must stay as floats through
   // parse → stringify → parse, not be promoted to bigint.  The original
