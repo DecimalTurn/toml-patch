@@ -235,6 +235,46 @@ describe('edits', () => {
     expect(patch(existing, { title: 'TOML example' })).toBe(existing);
   });
 
+  test('leaves date and time text untouched when other values are edited', () => {
+    const existing = dedent`
+      released = 1979-05-27 07:32:00
+      version = "1.0.0"
+    `;
+
+    const updated = parse(existing);
+    updated.version = '1.0.1';
+
+    expect(patch(existing, updated)).toBe(dedent`
+      released = 1979-05-27 07:32:00
+      version = "1.0.1"
+    `);
+  });
+
+  test('re-applying the same edit is stable', () => {
+    const existing = dedent`
+      title = "Before"
+
+      [server]
+      port = 8080
+    `;
+
+    const updated = parse(existing);
+    updated.title = 'After';
+    updated.server.port = 9090;
+
+    const once = patch(existing, updated);
+
+    expect(patch(once, updated)).toBe(once);
+    expect(parse(once)).toEqual(updated);
+  });
+
+  test('applying an edit twice in sequence keeps only the last value', () => {
+    const existing = 'version = "1.0.0"\n';
+    const first = patch(existing, { version: '1.0.1' });
+
+    expect(patch(first, { version: '1.0.2' })).toBe('version = "1.0.2"\n');
+  });
+
   test('accepts the two-argument public signature', () => {
     expect(patch('version = "1.0.0"\n', { version: '1.0.1' })).toBe('version = "1.0.1"\n');
   });
