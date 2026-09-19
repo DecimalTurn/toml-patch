@@ -107,7 +107,7 @@ Parameters:
 
 Returns a new TOML string with only the edited values replaced. All text outside the edited value spans, including comments, whitespace, line endings and a leading BOM, is preserved byte for byte.
 
-The lite function supports edits to existing scalar values (strings, booleans, numbers and bigints), nested value edits, and edits to existing array elements without changing array length or order. Multiple edits in one call are allowed.
+The lite function supports edits to existing scalar values (strings, booleans, numbers, bigints and date/time values), nested value edits, and edits to existing array elements without changing array length or order. Date/time edits keep the source value's kind, separator, offset and fractional-digit precision. Multiple edits in one call are allowed.
 
 It throws before returning any output for unsupported structural changes:
 
@@ -116,7 +116,7 @@ It throws before returning any output for unsupported structural changes:
 - array reordering
 - scalar to container or container to scalar changes
 - edits to paths that do not exist in the source
-- unsupported value types, including date and time values
+- unsupported value types (undefined, symbols, functions and other non-TOML values)
 
 Use the full `patch()` API for additions, removals, moves, renames and advanced formatting.
 

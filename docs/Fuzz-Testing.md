@@ -35,12 +35,12 @@ matters when you change core logic and want a broad regression signal.
 differs from the `patch` one:
 
 1. **Edits, not structural changes.** It mutates scalar leaves in place
-   (strings, booleans, numbers and bigints) and skips date/time values, which
-   `patch-lite` rejects by design. It then re-parses the output and checks it
-   equals the edited object, and re-applies the same edit to confirm the result
-   is unchanged. Replacement values are deliberately hostile: embedded quotes,
-   backslashes, control characters, astral characters, negative zero,
-   non-finite numbers and out-of-safe-range bigints.
+   (strings, booleans, numbers and bigints) and skips date/time values. It then
+   re-parses the output and checks it equals the edited object, and re-applies
+   the same edit to confirm the result is unchanged. Replacement values are
+   deliberately hostile: embedded quotes, backslashes, control characters,
+   astral characters, negative zero, non-finite numbers and out-of-safe-range
+   bigints.
 2. **Rejections.** For the same random document it applies structural mutations
    (added and removed keys, a scalar replaced by a container, added array
    elements, array reordering) and asserts each throws a `PatchLiteError`
