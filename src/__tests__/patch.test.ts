@@ -7755,8 +7755,7 @@ describe('identity round-trip normalizations', () => {
 /**
  * Documents a deliberate limitation, not a supported flow.
  *
- * The intended workflow is: parse the TOML with a parser (we suggest
- * `smol-toml`), edit the returned object in place, and hand that object back
+ * The intended workflow is: parse the TOML, edit the returned object in place, and hand that object back
  * to `patch()`. In that flow date/time values keep their custom classes and
  * their exact source text survives verbatim.
  *
