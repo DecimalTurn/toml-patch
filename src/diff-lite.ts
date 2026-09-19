@@ -57,6 +57,7 @@ function isSupportedLeaf(value: any): boolean {
 function describe(value: any): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
+  if (value instanceof Date) return 'date';
   const type = typeof value;
   return type === 'object' ? 'table' : type;
 }
@@ -152,11 +153,15 @@ export default function diffLite(before: any, after: any, path: Path = []): Edit
     );
   }
 
+  if (before instanceof Date && after instanceof Date) {
+    return [{ type: 'Edit', path }];
+  }
+
   if (before instanceof Date || after instanceof Date) {
     throw new PatchLiteError(
-      'UnsupportedValue',
+      'TypeChange',
       path,
-      `Date and time values are not supported by patch-lite (at ${formatPath(path)})`
+      `Cannot change a ${describe(before)} to a ${describe(after)} at ${formatPath(path)}`
     );
   }
 

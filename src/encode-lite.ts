@@ -1,4 +1,5 @@
 import { isFloat as isFloatNode } from './cst';
+import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 import { PatchLiteError, formatPath, Path } from './diff-lite';
 
 /**
@@ -20,11 +21,7 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
   }
 
   if (value instanceof Date) {
-    throw new PatchLiteError(
-      'UnsupportedValue',
-      path,
-      `Date and time values are not supported by patch-lite (at ${formatPath(path)})`
-    );
+    return encodeDate(value, existingValue);
   }
 
   throw new PatchLiteError(
@@ -32,6 +29,38 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
     path,
     `Unsupported value type ${Object.prototype.toString.call(value)} at ${formatPath(path)}`
   );
+}
+
+/**
+ * Encodes a Date as TOML while keeping the source value's formatting: date vs
+ * time vs datetime kind, fractional-digit count, space separator and offset
+ * style are all taken from the existing value's raw text, exactly as the full
+ * patch() does.
+ */
+function encodeDate(value: Date, existingValue: any): string {
+  const raw = existingValue?.raw;
+  const native = toTomlPatchDate(value);
+  if (typeof raw !== 'string') return native.toISOString();
+  return DateFormatHelper.createDateWithOriginalFormat(native, raw).toISOString();
+}
+
+/**
+ * Converts a smol-toml `TomlDate` to the matching toml-patch class. Duck-typed
+ * (the two packages have distinct class objects) and kept local so the lite
+ * bundle does not import the vendored smol-toml date module. The `.000` suffix
+ * smol-toml always writes for a zero fraction is dropped, so it does not leak
+ * into the output and the result matches the full patch() byte for byte.
+ */
+function toTomlPatchDate(value: Date): Date {
+  const v = value as any;
+  const isSmolTomlDate = typeof v.isDate === 'function' && typeof v.isTime === 'function';
+  if (!isSmolTomlDate) return value;
+
+  const canonical = value.toISOString().replace(/\.000(?=([Zz]|[+-]\d{2}:\d{2})$|$)/, '');
+  if (v.isDate()) return new LocalDate(canonical);
+  if (v.isTime()) return new LocalTime(canonical, canonical);
+  if (v.isLocal()) return new LocalDateTime(canonical, false);
+  return new OffsetDateTime(canonical, false);
 }
 
 function encodeInteger(value: number): string {
