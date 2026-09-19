@@ -4,9 +4,8 @@
  *
  * patch-lite only accepts edits to existing scalar values, so the harness
  * mutates scalar leaves (string, number, bigint, boolean) and skips date/time
- * values, which it rejects by design. A second harness checks that structural
- * mutations always throw PatchLiteError instead of crashing or returning
- * partial output.
+ * values. A second harness checks that structural mutations always throw
+ * PatchLiteError instead of crashing or returning partial output.
  *
  * Usage: npx tsx src/__tests__/fuzz-patch-lite.ts [--count N] [--seed SEED] [--mutations M]
  */
@@ -40,7 +39,8 @@ function isScalarLeaf(value: unknown): boolean {
 
 /**
  * Paths of every scalar leaf patch-lite can edit.
- * Date/time values are skipped: patch-lite rejects them by design.
+ * Date/time values are skipped: the replacement generator only produces
+ * scalar values.
  */
 export function collectEditableLeaves(obj: unknown, prefix: LitePath = []): LitePath[] {
   if (prefix.length > 0 && isScalarLeaf(obj)) return [prefix];

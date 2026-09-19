@@ -39,7 +39,8 @@ function testIdentityRoundtrip(filePath: string) {
 /**
  * Value round-trip: every editable leaf is replaced, then the patched output is
  * re-parsed and must equal the edited object. Date/time values are left alone
- * because patch-lite rejects editing them; their text must survive untouched.
+ * so the replacement generator can stay scalar-only; their text must survive
+ * untouched.
  */
 function testEditedRoundtrip(filePath: string) {
   test(`roundtrip patch-lite edits: ${basename(filePath)}`, () => {

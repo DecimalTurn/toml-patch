@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { parse } from '../';
+import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { patch } from '../patch-lite-entry';
 import { PatchLiteError, PatchLiteErrorCode } from '../diff-lite';
 
@@ -280,6 +281,62 @@ describe('edits', () => {
   });
 });
 
+describe('date edits', () => {
+  test('edits a local date', () => {
+    const existing = 'date = 1979-05-27\n';
+
+    const updated = parse(existing);
+    updated.date = new LocalDate('1984-02-14');
+
+    expect(patch(existing, updated)).toBe('date = 1984-02-14\n');
+  });
+
+  test('edits a local time', () => {
+    const existing = 'time = 07:32:00\n';
+
+    const updated = parse(existing);
+    updated.time = new LocalTime('09:15:30', '09:15:30');
+
+    expect(patch(existing, updated)).toBe('time = 09:15:30\n');
+  });
+
+  test('edits a local datetime', () => {
+    const existing = 'dt = 1979-05-27T07:32:00\n';
+
+    const updated = parse(existing);
+    updated.dt = new LocalDateTime('1984-02-14T09:15:30', false);
+
+    expect(patch(existing, updated)).toBe('dt = 1984-02-14T09:15:30\n');
+  });
+
+  test('edits an offset datetime', () => {
+    const existing = 'ts = 1979-05-27T07:32:00Z\n';
+
+    const updated = parse(existing);
+    updated.ts = new OffsetDateTime('1984-02-14T09:15:30Z', false);
+
+    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30Z\n');
+  });
+
+  test('keeps the source precision when editing an offset datetime with a fraction', () => {
+    const existing = 'ts = 1979-05-27T07:32:00.25-07:00\n';
+
+    const updated = parse(existing);
+    updated.ts = new OffsetDateTime('1984-02-14T09:15:30.5-07:00', false);
+
+    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30.50-07:00\n');
+  });
+
+  test('edits a nested date value', () => {
+    const existing = 'server = { started = 1979-05-27 }\n';
+
+    const updated = parse(existing);
+    updated.server.started = new LocalDate('1984-02-14');
+
+    expect(patch(existing, updated)).toBe('server = { started = 1984-02-14 }\n');
+  });
+});
+
 describe('rejections', () => {
   test('rejects added keys', () => {
     const existing = dedent`
@@ -354,15 +411,15 @@ describe('rejections', () => {
     expectPatchError(() => patch(existing, { value: undefined }), 'UnsupportedValue');
   });
 
-  test('rejects date and time edits', () => {
+  test('rejects changing a date to a non-date value', () => {
     const existing = dedent`
       date = 1979-05-27
     `;
 
     const updated = parse(existing);
-    updated.date = new Date(0);
+    updated.date = 'hello';
 
-    expectPatchError(() => patch(existing, updated), 'UnsupportedValue');
+    expectPatchError(() => patch(existing, updated), 'TypeChange');
   });
 
   test('throws before producing any partial output', () => {

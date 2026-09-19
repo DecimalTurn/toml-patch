@@ -219,33 +219,40 @@ describe('patch-lite with a smol-toml parsed object', () => {
     ` + '\n');
   });
 
-  test('rejects an edited smol-toml date', () => {
-    const existing = dedent`
-      localTime = 07:32:00
-      version = "1.0.0"
-    ` + '\n';
-
-    const updated = smolParse(existing);
-    updated.localTime = new TomlDate('07:32:00.5');
-
-    expectLiteError(() => patchLite(existing, updated), 'UnsupportedValue');
-  });
-
-  test('rejects an edited smol-toml date of every kind', () => {
-    const edits: Array<[string, string]> = [
-      ['localDate', '1984-02-14'],
-      ['localTime', '09:15:30'],
-      ['localDt', '1984-02-14T09:15:30'],
-      ['offsetZ', '1984-02-14T09:15:30Z'],
-      ['offsetPlus', '1984-02-14T09:15:30+07:00'],
-      ['offsetMinus', '1984-02-14T09:15:30.5-07:00']
+  test('edits a smol-toml date of every kind', () => {
+    const edits: Array<[string, string, string]> = [
+      ['localDate = 1979-05-27\n', '1984-02-14', 'localDate = 1984-02-14\n'],
+      ['localTime = 07:32:00\n', '09:15:30', 'localTime = 09:15:30\n'],
+      ['localDt = 1979-05-27T07:32:00\n', '1984-02-14T09:15:30', 'localDt = 1984-02-14T09:15:30\n'],
+      ['offsetZ = 1979-05-27T07:32:00Z\n', '1984-02-14T09:15:30Z', 'offsetZ = 1984-02-14T09:15:30Z\n'],
+      [
+        'offsetPlus = 1979-05-27T07:32:00+07:00\n',
+        '1984-02-14T09:15:30+07:00',
+        'offsetPlus = 1984-02-14T09:15:30+07:00\n'
+      ],
+      [
+        'offsetMinus = 1979-05-27T07:32:00.25-07:00\n',
+        '1984-02-14T09:15:30.5-07:00',
+        'offsetMinus = 1984-02-14T09:15:30.50-07:00\n'
+      ]
     ];
 
-    for (const [key, value] of edits) {
-      const updated = smolParse(allKindsDoc);
-      (updated as Record<string, unknown>)[key] = new TomlDate(value);
-      expectLiteError(() => patchLite(allKindsDoc, updated), 'UnsupportedValue');
+    for (const [doc, newValue, expected] of edits) {
+      const updated = smolParse(doc);
+      const key = Object.keys(updated)[0];
+      (updated as Record<string, unknown>)[key] = new TomlDate(newValue);
+
+      expect(patchLite(doc, updated)).toBe(expected);
     }
+  });
+
+  test('rejects changing a smol-toml date to a non-date value', () => {
+    const existing = 'localDate = 1979-05-27\n';
+
+    const updated = smolParse(existing);
+    (updated as Record<string, unknown>).localDate = 'hello';
+
+    expectLiteError(() => patchLite(existing, updated), 'TypeChange');
   });
 });
 
