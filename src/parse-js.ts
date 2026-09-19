@@ -15,6 +15,7 @@ import {
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline, normalizeGeneratedInlineRows } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
+import { isSmolTomlDate, smolTomlDateToNative } from './smol-toml-date';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth, shiftNode } from './writer';
 import { prepareInsertedNestedInlineContainer } from './inline-layout';
 import { resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
@@ -149,6 +150,12 @@ function walkValue(
     return generateBoolean(value);
   } else if (isTemporal(value)) {
     return generateTemporalDateTime(value, format.truncateZeroTimeInDates);
+  } else if (isSmolTomlDate(value)) {
+    // smol-toml's TomlDate renders zero fractions as `.000`, which would not
+    // compare equal to a value parsed from TOML without a fraction. Convert to
+    // the matching toml-patch class first so stringify and patching emit the
+    // canonical form.
+    return generateDateTime(smolTomlDateToNative(value), format.truncateZeroTimeInDates);
   } else if (isDate(value)) {
     return generateDateTime(value, format.truncateZeroTimeInDates);
   } else if (Array.isArray(value)) {

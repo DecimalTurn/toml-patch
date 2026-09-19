@@ -70,12 +70,32 @@ function sameNanSign(a: number, b: number): boolean {
 }
 
 /**
+ * Dates are equal when they hold the same instant and kind, regardless of how
+ * a zero fraction was written. smol-toml always renders a zero-fraction time
+ * or datetime with a trailing `.000`, while toml-patch omits it, so a value
+ * parsed by smol-toml would otherwise look edited next to the value parsed
+ * from the source document. Duck-typed here to keep the lite bundle free of
+ * the smol-toml date module.
+ */
+function normalizedDateIso(value: Date): string {
+  return value.toISOString().replace(/\.000(?=([Zz]|[+-]\d{2}:\d{2})$|$)/, '');
+}
+
+/**
  * Compares the existing and updated JavaScript values and returns the list of
  * in-place edits. Any structural difference throws a `PatchLiteError` before
  * the source is mutated.
  */
 export default function diffLite(before: any, after: any, path: Path = []): Edit[] {
   if (datesEqual(before, after)) return [];
+
+  if (
+    before instanceof Date &&
+    after instanceof Date &&
+    normalizedDateIso(before) === normalizedDateIso(after)
+  ) {
+    return [];
+  }
 
   if (before === after) return [];
 
