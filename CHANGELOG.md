@@ -159,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Build: Update TypeScript `target` and `lib` to `es2025`.
 - **BREAKING**: Raise minimum supported Node.js version from `>=12` to `>=14`.
+
 ## [1.3.0] - 2026-05-10
 
 ### Added
