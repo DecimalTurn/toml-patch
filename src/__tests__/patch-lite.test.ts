@@ -217,6 +217,24 @@ describe('edits', () => {
     expect(patch('x = 1.0\n', { x: NaN })).toBe('x = nan\n');
   });
 
+  test('classifies unsafe integer-valued numbers as floats', () => {
+    const existing = 'count = 5\n';
+    const updated = { count: 1e21 };
+    const once = patch(existing, updated);
+
+    expect(once).toBe('count = 1e+21\n');
+    expect(parse(once)).toEqual(updated);
+  });
+
+  test('preserves negative zero as a float', () => {
+    const existing = 'x = 1\n';
+    const updated = { x: -0 };
+    const once = patch(existing, updated);
+
+    expect(once).toBe('x = -0.0\n');
+    expect(parse(once)).toEqual(updated);
+  });
+
   test('returns the original string for a no-op update', () => {
     const existing = dedent`
       title = "TOML example"

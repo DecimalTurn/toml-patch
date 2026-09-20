@@ -16,7 +16,9 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
 
   if (type === 'number') {
     if (!Number.isFinite(value)) return encodeNonFinite(value);
-    if (Number.isInteger(value) && !isFloatNode(existingValue)) return encodeInteger(value);
+    if (Number.isSafeInteger(value) && !Object.is(value, -0) && !isFloatNode(existingValue)) {
+      return encodeInteger(value);
+    }
     return encodeFloat(value);
   }
 
@@ -64,10 +66,7 @@ function toTomlPatchDate(value: Date): Date {
 }
 
 function encodeInteger(value: number): string {
-  const raw = String(value);
-  // Large integer-valued numbers stringify in scientific notation (e.g. 1e21),
-  // which is not a valid TOML integer. Recover the exact decimal via BigInt.
-  return /[eE]/.test(raw) ? BigInt(value).toString() : raw;
+  return String(value);
 }
 
 function encodeFloat(value: number): string {
