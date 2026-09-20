@@ -411,6 +411,15 @@ describe('rejections', () => {
     expectPatchError(() => patch(existing, { value: undefined }), 'UnsupportedValue');
   });
 
+  test('rejects a string with an unpaired surrogate', () => {
+    const existing = 'value = "hello"\n';
+
+    const updated = parse(existing);
+    updated.value = 'a\uD800b'; // lone high surrogate
+
+    expect(() => patch(existing, updated)).toThrow(/lone surrogate/);
+  });
+
   test('rejects changing a date to a non-date value', () => {
     const existing = dedent`
       date = 1979-05-27
