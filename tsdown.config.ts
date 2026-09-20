@@ -6,7 +6,7 @@ const pkg = require('./package.json');
 
 const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${pkg.license}`;
 
-// Main build options. Each entry point is built in its own config block so the
+// Main build options (keep the published package compact). Each entry point is built in its own config block so the
 // output is a single self-contained bundle. Building several entries together
 // would code-split the shared modules into chunk files, which is the shim/chunk
 // layout this package deliberately avoids.
