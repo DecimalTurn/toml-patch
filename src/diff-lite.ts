@@ -177,6 +177,9 @@ export default function diffLite(before: any, after: any, path: Path = []): Edit
 }
 
 function compareObjects(before: any, after: any, path: Path): Edit[] {
+  // Only key membership matters, not key order: patch-lite edits values by
+  // path and never reorders keys, so the key order of `after` does not affect
+  // the output and is intentionally ignored.
   const beforeKeys = Object.keys(before);
   const afterKeys = Object.keys(after);
 

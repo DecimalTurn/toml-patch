@@ -74,11 +74,12 @@
  - removed keys
  - added or removed array elements
  - array reordering
- - object-key reordering
  - key renames
  - scalar/container type changes
  - edits to paths that do not exist in the source
  - unsupported value types
+
+ Object key order is intentionally ignored: edits are applied to the source's keys by path, so the key order of the `updated` object does not affect the output.
 
  Errors should identify the unsupported operation and, where possible, the affected path. Keep the error messages stable enough for callers to test them without depending on internal parser details.
 
