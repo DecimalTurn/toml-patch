@@ -60,6 +60,20 @@ if (!patch(source, { a: 2 }).includes('a = 2')) throw new Error('patch failed');
     ],
     { cwd: consumerDir, stdio: 'inherit' },
   );
+
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `import { patch } from '@decimalturn/toml-patch/patch-lite';
+const source = 'version = "1.0.0"\\n';
+if (patch(source, { version: '1.0.1' }) !== 'version = "1.0.1"\\n') {
+  throw new Error('patch-lite failed');
+}`,
+    ],
+    { cwd: consumerDir, stdio: 'inherit' },
+  );
 } finally {
   rmSync(tempDir, { force: true, recursive: true });
 }

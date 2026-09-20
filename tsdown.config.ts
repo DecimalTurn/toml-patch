@@ -33,6 +33,7 @@ export default defineConfig([
     // Development build: readable ESM with source maps for debugging.
     entry: {
       'toml-patch': 'src/index.ts',
+      'patch-lite': 'src/patch-lite-entry.ts',
     },
     format: 'esm',
     outDir: 'dist/dev',

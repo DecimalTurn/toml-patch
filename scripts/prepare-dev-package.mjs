@@ -12,7 +12,9 @@ const root = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const devPackageDir = join(root, 'dist', 'dev-package');
 const devFile = 'dist/dev/toml-patch.js';
+const devLiteFile = 'dist/dev/patch-lite.js';
 const declarationFile = 'dist/index.d.ts';
+const liteDeclarationFile = 'dist/patch-lite.d.ts';
 
 rmSync(devPackageDir, { force: true, recursive: true });
 mkdirSync(join(devPackageDir, 'dist'), { recursive: true });
@@ -43,6 +45,11 @@ const devPackageJson = {
       types: `./${declarationFile}`,
       import: `./${devFile}`,
       default: `./${devFile}`,
+    },
+    './patch-lite': {
+      types: `./${liteDeclarationFile}`,
+      import: `./${devLiteFile}`,
+      default: `./${devLiteFile}`,
     },
   },
   publishConfig: {
