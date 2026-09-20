@@ -30,10 +30,6 @@ export default defineConfig([
     ...mainBuild,
   },
   {
-    entry: { patch: 'src/patch-entry.ts' },
-    ...mainBuild,
-  },
-  {
     entry: { 'patch-lite': 'src/patch-lite-entry.ts' },
     ...mainBuild,
   },

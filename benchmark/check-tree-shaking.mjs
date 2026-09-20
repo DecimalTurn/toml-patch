@@ -29,7 +29,7 @@ const scenarios = [
   },
   {
     name: 'patch from subpath',
-    code: `export { patch } from '../dist/patch.js';`,
+    code: `export { patch } from '../dist/toml-patch.js';`,
   },
   {
     name: 'patch + TomlFormat (root)',
@@ -37,7 +37,7 @@ const scenarios = [
   },
   {
     name: 'patch + format subpaths',
-    code: `export { patch } from '../dist/patch.js'; export { TomlFormat } from '../dist/format.js';`,
+    code: `export { patch } from '../dist/toml-patch.js'; export { TomlFormat } from '../dist/format.js';`,
   },
 ];
 

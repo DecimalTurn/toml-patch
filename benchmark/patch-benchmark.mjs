@@ -7,7 +7,7 @@
  *   node benchmark/patch-benchmark.mjs
  *
  * Prerequisites:
- *   pnpm run build   (so dist/patch.js, dist/patch-lite.js and dist/toml-patch.js exist)
+ *   pnpm run build   (so dist/patch-lite.js and dist/toml-patch.js exist)
  *
  * The report is written to benchmark/patch-benchmark.md (regenerated on every
  * run). Numbers vary by machine, so that file is gitignored.
@@ -22,8 +22,7 @@ const rootDir = join(__dirname, '..');
 
 const importDist = (file) => import(pathToFileURL(join(rootDir, 'dist', file)).href);
 
-const { parse } = await importDist('toml-patch.js');
-const { patch } = await importDist('patch.js');
+const { parse, patch } = await importDist('toml-patch.js');
 const { patch: patchLite } = await importDist('patch-lite.js');
 
 const source = [

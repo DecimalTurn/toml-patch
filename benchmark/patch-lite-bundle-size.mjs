@@ -1,11 +1,11 @@
 /**
- * Compare bundle sizes between patch and patch-lite subpath exports.
+ * Compare bundle sizes between the full toml-patch bundle and the patch-lite subpath export.
  *
  * Usage:
  *   node benchmark/patch-lite-bundle-size.mjs
  *
  * Prerequisites:
- *   pnpm run build   (so dist/patch.js and dist/patch-lite.js exist)
+ *   pnpm run build   (so dist/toml-patch.js and dist/patch-lite.js exist)
  */
 
 import { join, dirname } from 'path';
@@ -58,10 +58,10 @@ function measure(esbuildCmd, entryPoint, label) {
   return { minifiedBytes, gzippedBytes };
 }
 
-function getPatchEntry() {
-  const distFile = join(rootDir, 'dist', 'patch.js');
+function getFullEntry() {
+  const distFile = join(rootDir, 'dist', 'toml-patch.js');
   if (!existsSync(distFile)) {
-    console.error('dist/patch.js not found. Run `pnpm run build` first.');
+    console.error('dist/toml-patch.js not found. Run `pnpm run build` first.');
     process.exit(1);
   }
   return distFile;
@@ -78,53 +78,53 @@ function getPatchLiteEntry() {
 
 const esbuildCmd = ensureEsbuild();
 
-console.log('Bundling patch...');
-const patch = measure(esbuildCmd, getPatchEntry(), 'patch');
+console.log('Bundling toml-patch...');
+const full = measure(esbuildCmd, getFullEntry(), 'toml-patch');
 
 console.log('Bundling patch-lite...');
 const patchLite = measure(esbuildCmd, getPatchLiteEntry(), 'patch-lite');
 
-const diffMin = patchLite.minifiedBytes - patch.minifiedBytes;
-const diffGz = patchLite.gzippedBytes - patch.gzippedBytes;
+const diffMin = patchLite.minifiedBytes - full.minifiedBytes;
+const diffGz = patchLite.gzippedBytes - full.gzippedBytes;
 
 console.log();
 console.log('======================================================================');
-console.log('  Bundle Size Comparison: patch vs patch-lite');
+console.log('  Bundle Size Comparison: toml-patch vs patch-lite');
 console.log('======================================================================');
 console.log();
-console.log(`  ${'Metric'.padEnd(18)} ${'patch'.padEnd(16)} ${'patch-lite'.padEnd(16)} Difference`);
+console.log(`  ${'Metric'.padEnd(18)} ${'toml-patch'.padEnd(16)} ${'patch-lite'.padEnd(16)} Difference`);
 console.log(`  ${'-'.repeat(18)} ${'-'.repeat(16)} ${'-'.repeat(16)} ${'-'.repeat(12)}`);
-console.log(`  ${'Minified'.padEnd(18)} ~${formatKB(patch.minifiedBytes).padStart(6)} kB     ~${formatKB(patchLite.minifiedBytes).padStart(6)} kB     ${diffMin >= 0 ? '+' : ''}${formatKB(diffMin)} kB`);
-console.log(`  ${'Min + Gzipped'.padEnd(18)} ~${formatKB(patch.gzippedBytes).padStart(6)} kB     ~${formatKB(patchLite.gzippedBytes).padStart(6)} kB     ${diffGz >= 0 ? '+' : ''}${formatKB(diffGz)} kB`);
+console.log(`  ${'Minified'.padEnd(18)} ~${formatKB(full.minifiedBytes).padStart(6)} kB     ~${formatKB(patchLite.minifiedBytes).padStart(6)} kB     ${diffMin >= 0 ? '+' : ''}${formatKB(diffMin)} kB`);
+console.log(`  ${'Min + Gzipped'.padEnd(18)} ~${formatKB(full.gzippedBytes).padStart(6)} kB     ~${formatKB(patchLite.gzippedBytes).padStart(6)} kB     ${diffGz >= 0 ? '+' : ''}${formatKB(diffGz)} kB`);
 console.log(`  ${'Dependencies'.padEnd(18)} ${'0'.padStart(7)}        ${'0'.padStart(7)}        -`);
 console.log();
 
-const patchMin = `~${formatKB(patch.minifiedBytes)} kB`;
-const patchGz = `~${formatKB(patch.gzippedBytes)} kB`;
+const fullMin = `~${formatKB(full.minifiedBytes)} kB`;
+const fullGz = `~${formatKB(full.gzippedBytes)} kB`;
 const patchLiteMin = `~${formatKB(patchLite.minifiedBytes)} kB`;
 const patchLiteGz = `~${formatKB(patchLite.gzippedBytes)} kB`;
 const diffMinStr = `${diffMin >= 0 ? '+' : ''}${formatKB(diffMin)} kB`;
 const diffGzStr = `${diffGz >= 0 ? '+' : ''}${formatKB(diffGz)} kB`;
 
 const mdTable = [
-  '| Metric | patch | patch-lite | Difference |',
-  '|--------|-------|------------|------------|',
-  `| Minified | ${patchMin} | ${patchLiteMin} | ${diffMinStr} |`,
-  `| Min + Gzipped | ${patchGz} | ${patchLiteGz} | ${diffGzStr} |`,
+  '| Metric | toml-patch | patch-lite | Difference |',
+  '|--------|------------|------------|------------|',
+  `| Minified | ${fullMin} | ${patchLiteMin} | ${diffMinStr} |`,
+  `| Min + Gzipped | ${fullGz} | ${patchLiteGz} | ${diffGzStr} |`,
   '| Dependencies | 0 | 0 | - |'
 ].join('\n');
 
-let md = '# Bundle Size Comparison: patch vs patch-lite\n\n';
+let md = '# Bundle Size Comparison: toml-patch vs patch-lite\n\n';
 md += '## How to generate this report\n\n';
 md += 'From the repository root:\n\n';
-md += '1. Build the package (required so `dist/patch.js` and `dist/patch-lite.js` exist):\n';
+md += '1. Build the package (required so `dist/toml-patch.js` and `dist/patch-lite.js` exist):\n';
 md += '   `pnpm run build`\n';
 md += '2. Run the comparison script:\n';
 md += '   `node benchmark/patch-lite-bundle-size.mjs`\n\n';
 md += 'The script writes this file (`benchmark/patch-lite-bundle-size.md`) directly.\n\n';
 md += '## Results\n\n';
 md += `${mdTable}\n\n`;
-md += `patch-lite difference is **${diffMinStr} minified** / **${diffGzStr} gzipped** versus patch.\n`;
+md += `patch-lite difference is **${diffMinStr} minified** / **${diffGzStr} gzipped** versus toml-patch.\n`;
 
 writeFileSync(join(rootDir, 'benchmark', 'patch-lite-bundle-size.md'), md);
 console.log('Report written to benchmark/patch-lite-bundle-size.md');
