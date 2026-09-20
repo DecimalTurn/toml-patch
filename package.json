@@ -81,6 +81,7 @@
     "bench:bundle-size": "node benchmark/bundle-size.mjs",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
+    "bench:patch": "node benchmark/patch-benchmark.mjs",
     "bench:patch-lite": "node benchmark/patch-lite-bundle-size.mjs",
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && tsdown",
