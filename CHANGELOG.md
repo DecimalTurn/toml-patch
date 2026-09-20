@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving surrounding formatting.
+- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving surrounding formatting. ([#309])
 
 ### Changed
 
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
 - Packaging: Ship tree-shakable ESM output and focused `./patch` and `./format` subpath exports.
-- Packaging: expose the edit-only `patch-lite` entry from the `dev` dist-tag package as a `./patch-lite` subpath export.
+- Packaging: expose the edit-only `patch-lite` entry from the `dev` dist-tag package as a `./patch-lite` subpath export. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
@@ -460,6 +460,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#297]: https://github.com/DecimalTurn/toml-patch/pull/297
 [#298]: https://github.com/DecimalTurn/toml-patch/pull/298
 [#303]: https://github.com/DecimalTurn/toml-patch/pull/303
+[#309]: https://github.com/DecimalTurn/toml-patch/pull/309
 [#311]: https://github.com/DecimalTurn/toml-patch/pull/311
 [#312]: https://github.com/DecimalTurn/toml-patch/pull/312
 [#313]: https://github.com/DecimalTurn/toml-patch/pull/313
