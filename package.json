@@ -73,6 +73,7 @@
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
     "bench:patch": "node benchmark/patch-benchmark.mjs",
     "bench:patch-lite": "node benchmark/patch-lite-bundle-size.mjs",
+    "bench:tree-shaking": "node benchmark/check-tree-shaking.mjs",
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && tsdown",
     "build:demo": "node scripts/build-demo.mjs",
