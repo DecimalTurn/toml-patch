@@ -80,6 +80,8 @@ const updated = patch(existing, { version: '1.0.1' });
 
 The lite function edits existing scalar values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, scalar/container type changes and unsupported value types throw before any output is produced. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
 
+Unlike the full `patch()`, the lite distribution performs no encoding validation on its output: it does not reject strings containing unpaired UTF-16 surrogates, which cannot be represented as valid TOML/UTF-8. Use the full `patch()` when this validation is required.
+
 The lite distribution is also published as a standalone package under the `lite` npm dist-tag:
 
 ```sh

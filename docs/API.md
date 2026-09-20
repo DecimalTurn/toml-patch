@@ -118,6 +118,8 @@ It throws before returning any output for unsupported structural changes:
 - edits to paths that do not exist in the source
 - unsupported value types (undefined, symbols, functions and other non-TOML values)
 
+Unlike the full `patch()` API, the lite function performs no encoding validation on its output: strings containing unpaired UTF-16 surrogates are emitted as-is rather than rejected, producing text that is not valid TOML/UTF-8. Use the full `patch()` when output encoding validation is required.
+
 Use the full `patch()` API for additions, removals, moves, renames and advanced formatting.
 
 #### Example
