@@ -46,11 +46,6 @@
       "types": "./dist/patch-lite.d.ts",
       "import": "./dist/patch-lite.js",
       "default": "./dist/patch-lite.js"
-    },
-    "./format": {
-      "types": "./dist/format.d.ts",
-      "import": "./dist/format.js",
-      "default": "./dist/format.js"
     }
   },
   "scripts": {

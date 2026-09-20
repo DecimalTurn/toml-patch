@@ -28,16 +28,8 @@ const scenarios = [
     code: `export { patch } from '../dist/toml-patch.js';`,
   },
   {
-    name: 'patch from subpath',
-    code: `export { patch } from '../dist/toml-patch.js';`,
-  },
-  {
     name: 'patch + TomlFormat (root)',
     code: `export { patch, TomlFormat } from '../dist/toml-patch.js';`,
-  },
-  {
-    name: 'patch + format subpaths',
-    code: `export { patch } from '../dist/toml-patch.js'; export { TomlFormat } from '../dist/format.js';`,
   },
 ];
 

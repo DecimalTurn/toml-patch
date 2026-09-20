@@ -34,10 +34,6 @@ export default defineConfig([
     ...mainBuild,
   },
   {
-    entry: { format: 'src/format-entry.ts' },
-    ...mainBuild,
-  },
-  {
     // Development build: readable ESM with source maps for debugging.
     entry: {
       'toml-patch': 'src/index.ts',

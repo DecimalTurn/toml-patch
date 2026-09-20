@@ -53,7 +53,7 @@ This command:
 The build outputs are:
 - `dist/toml-patch.js` - canonical ESM entrypoint (for Node.js and modern bundlers)
 - `dist/toml-patch.d.ts` - canonical TypeScript type declarations
-- `dist/patch-lite.js` and `dist/format.js` - focused subpath entry points
+- `dist/patch-lite.js` - lite version entry point
 
 ### Testing
 
