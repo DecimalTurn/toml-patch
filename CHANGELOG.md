@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
-- Build: add a tree-shaking validation benchmark with size and runtime smoke checks, wired into CI. ([#309])
 - Packaging: expose the edit-only `patch-lite` entry from the `dev` dist-tag package as a `./patch-lite` subpath export. ([#309])
 
 ## [3.1.2] - 2026-09-22
