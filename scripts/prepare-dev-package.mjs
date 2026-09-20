@@ -13,7 +13,7 @@ const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const devPackageDir = join(root, 'dist', 'dev-package');
 const devFile = 'dist/dev/toml-patch.js';
 const devLiteFile = 'dist/dev/patch-lite.js';
-const declarationFile = 'dist/index.d.ts';
+const declarationFile = 'dist/toml-patch.d.ts';
 const liteDeclarationFile = 'dist/patch-lite.d.ts';
 
 rmSync(devPackageDir, { force: true, recursive: true });

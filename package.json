@@ -35,12 +35,12 @@
   },
   "type": "module",
   "sideEffects": false,
-  "types": "./dist/index.d.ts",
+  "types": "./dist/toml-patch.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "types": "./dist/toml-patch.d.ts",
+      "import": "./dist/toml-patch.js",
+      "default": "./dist/toml-patch.js"
     },
     "./patch": {
       "types": "./dist/patch.d.ts",

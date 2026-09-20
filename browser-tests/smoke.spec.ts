@@ -1,47 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { join, normalize, sep } from 'path';
+import { join } from 'path';
 
-const distDir = join(process.cwd(), 'dist');
-const origin = 'http://toml-patch.test';
+const bundle = readFileSync(join(process.cwd(), 'dist/toml-patch.js'), 'utf-8');
 
-// The ESM build is code-split, so the root entry imports relative chunks.
-// Serve the dist directory over a synthetic origin so the browser can resolve
-// those imports, then load the entry in a real browser module context with no
-// Node.js APIs available.
+// Load the bundle into the page via a blob URL so it runs in a real browser
+// module context — no Node.js APIs available.
 async function loadTOML(page: import('@playwright/test').Page) {
-  await page.route(`${origin}/**`, async (route) => {
-    const { pathname } = new URL(route.request().url());
-
-    if (pathname === '/') {
-      await route.fulfill({
-        body: '<!doctype html><title>toml-patch</title>',
-        contentType: 'text/html'
-      });
-      return;
-    }
-
-    const file = normalize(join(distDir, pathname.slice(1)));
-    if (!file.startsWith(distDir + sep)) {
-      await route.fulfill({ status: 404, body: 'Not found' });
-      return;
-    }
-
-    let body: string;
-    try {
-      body = readFileSync(file, 'utf-8');
-    } catch {
-      await route.fulfill({ status: 404, body: 'Not found' });
-      return;
-    }
-
-    await route.fulfill({ body, contentType: 'application/javascript' });
-  });
-
-  await page.goto(`${origin}/`);
-  await page.evaluate(async (entry: string) => {
-    (window as any).__TOML__ = await import(entry);
-  }, `${origin}/index.js`);
+  await page.goto('about:blank');
+  await page.evaluate(async (src: string) => {
+    const blob = new Blob([src], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    (window as any).__TOML__ = await import(url);
+    URL.revokeObjectURL(url);
+  }, bundle);
 }
 
 test.beforeEach(async ({ page }) => {

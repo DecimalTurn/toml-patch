@@ -204,7 +204,7 @@ Examples:
 let TOML_IMPLEMENTATIONS = [
   { 
     name: 'toml-patch (current)',
-    path: '../dist/index.js',
+    path: '../dist/toml-patch.js',
   },
   {
     name: '@iarna/toml',
@@ -261,7 +261,7 @@ const implementationsToRun = self ? [TOML_IMPLEMENTATIONS[0]] :
 const allResults = [];
 
 // First load the current version to parse all TOML files
-const currentToml = await loadModule('../dist/index.js');
+const currentToml = await loadModule('../dist/toml-patch.js');
 
 // Curated sample of representative benchmarks
 const SAMPLE_FILES = [

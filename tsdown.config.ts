@@ -6,28 +6,40 @@ const pkg = require('./package.json');
 
 const banner = `//! ${pkg.name} v${pkg.version} - ${pkg.homepage} - @license: ${pkg.license}`;
 
+// Main build options. Each entry point is built in its own config block so the
+// output is a single self-contained bundle. Building several entries together
+// would code-split the shared modules into chunk files, which is the shim/chunk
+// layout this package deliberately avoids.
+const mainBuild = {
+  format: 'esm' as const,
+  outDir: 'dist',
+  clean: false,
+  dts: true,
+  minify: true,
+  treeshake: true,
+  fixedExtension: false,
+  banner: {
+    js: banner,
+  },
+};
+
 export default defineConfig([
   {
-    // Main build: consumed by bundlers (webpack/rollup/esbuild/vite) and Node.
-    // Keep the published package compact. Downstream bundlers can still
-    // tree-shake the ESM output and apply their own minification.
-    entry: {
-      index: 'src/index.ts',
-      'toml-patch': 'src/toml-patch.ts',
-      patch: 'src/patch-entry.ts',
-      'patch-lite': 'src/patch-lite-entry.ts',
-      format: 'src/format-entry.ts',
-    },
-    format: 'esm',
-    outDir: 'dist',
-    clean: false,
-    dts: true,
-    minify: true,
-    treeshake: true,
-    fixedExtension: false,
-    banner: {
-      js: banner,
-    },
+    // Main entry point: the full library.
+    entry: { 'toml-patch': 'src/index.ts' },
+    ...mainBuild,
+  },
+  {
+    entry: { patch: 'src/patch-entry.ts' },
+    ...mainBuild,
+  },
+  {
+    entry: { 'patch-lite': 'src/patch-lite-entry.ts' },
+    ...mainBuild,
+  },
+  {
+    entry: { format: 'src/format-entry.ts' },
+    ...mainBuild,
   },
   {
     // Development build: readable ESM with source maps for debugging.

@@ -21,11 +21,11 @@ mkdirSync(tmpDir, { recursive: true });
 const scenarios = [
   {
     name: 'Full (all exports)',
-    code: `export { parse, stringify, patch, TomlFormat, TomlDocument } from '../dist/index.js';`,
+    code: `export { parse, stringify, patch, TomlFormat, TomlDocument } from '../dist/toml-patch.js';`,
   },
   {
     name: 'patch from root',
-    code: `export { patch } from '../dist/index.js';`,
+    code: `export { patch } from '../dist/toml-patch.js';`,
   },
   {
     name: 'patch from subpath',
@@ -33,7 +33,7 @@ const scenarios = [
   },
   {
     name: 'patch + TomlFormat (root)',
-    code: `export { patch, TomlFormat } from '../dist/index.js';`,
+    code: `export { patch, TomlFormat } from '../dist/toml-patch.js';`,
   },
   {
     name: 'patch + format subpaths',
