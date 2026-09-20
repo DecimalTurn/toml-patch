@@ -1,7 +1,6 @@
 import { isFloat as isFloatNode } from './cst';
 import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 import { PatchLiteError, formatPath, Path } from './diff-lite';
-import { assertNoLoneSurrogate } from './utils';
 
 /**
  * Encodes a JavaScript leaf value as valid TOML, independent of the full
@@ -83,10 +82,6 @@ function encodeNonFinite(value: number): string {
 }
 
 function encodeBasicString(value: string): string {
-  // Reject unpaired UTF-16 surrogates, matching the full stringify/patch path,
-  // rather than emitting text that is not valid TOML/UTF-8.
-  assertNoLoneSurrogate(value, 'String value');
-
   let out = '"';
 
   for (const ch of value) {
