@@ -1,5 +1,4 @@
 import {
-  cpSync,
   mkdirSync,
   readFileSync,
   rmSync,
