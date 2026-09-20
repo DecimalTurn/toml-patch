@@ -10402,3 +10402,61 @@ test('multiline empty array accepts an explicit indentation width', () => {
         "4",]
     ` + '\n');
   });
+
+describe('Format preservation for numbers', () => {
+
+  test('Bumping an integer keeps it as an integer', () => {
+    const src = dedent`
+    a = 1
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a++;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 2
+    ` + '\n');
+
+  });
+  
+  test('Bumping a float with .0 keeps the .0', () => {
+    const src = dedent`
+    a = 1.0
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a++;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 2.0
+    ` + '\n');
+
+  });
+
+  test('Multiplying a float with exponent and  .0 keeps the .0', () => {
+    const src = dedent`
+    a = 1.0e10
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = obj.a * 10;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 1.0e11
+    ` + '\n');
+
+  });
+
+});
