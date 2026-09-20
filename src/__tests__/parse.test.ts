@@ -233,3 +233,7 @@ test('a multiline literal string holds double quotes at any count', () => {
   expect(parse(`a = '''"'''\n`)).toEqual({ a: '"' });
   expect(parse(`a = '''"""'''\n`)).toEqual({ a: '"""' });
 });
+
+test('rejects the invalid float 1.e06 (fraction must start with a digit)', () => {
+  expect(() => parse('x = 1.e06\n')).toThrow(/fraction must start with digit/);
+});

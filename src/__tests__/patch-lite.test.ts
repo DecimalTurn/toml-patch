@@ -462,4 +462,8 @@ describe('rejections', () => {
     expectPatchError(() => patch(existing, { scalar: 1, list: [1, 2, 3], table: { x: 1, y: 2 } }), 'AddedKey');
     expectPatchError(() => patch(existing, { scalar: 1, list: [1, 2, 3], table: 'text' }), 'TypeChange');
   });
+
+  test('rejects the invalid float 1.e06 in the source', () => {
+    expect(() => patch('x = 1.e06\n', { x: 5 })).toThrow(/fraction must start with digit/);
+  });
 });
