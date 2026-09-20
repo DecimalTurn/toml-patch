@@ -10422,6 +10422,31 @@ describe('Format preservation for numbers', () => {
     ` + '\n');
 
   });
+
+  //The following might seems controversial, but the motivation for the following is that toml-patch
+  // tries to basically immitate what a human would do when editing a TOML file and it's pretty natural 
+  // to remove the unnecessary decimal point when a float becomes an integer.
+  // Furthermore, it is easily possible to overrride this by using TomlFormat.minimumDecimals = 1
+  // which forces the patch to always include at least one decimal place.
+  // However, if we don't make the default behavior to remove the unnecessary decimal point, it would be less natural for human readers.
+  // there would be no way to make the output take use the simpler integer representation.
+  test('Bumping a float to an integer value returns an integer', () => {
+    const src = dedent`
+    a = 1.5
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 2;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 2
+    ` + '\n');
+
+  });
   
   test('Bumping a float with .0 keeps the .0', () => {
     const src = dedent`
