@@ -15,6 +15,23 @@ export interface Span {
   columns: number;
 }
 
+const lineIndexCache = new Map<string, number[]>();
+const MAX_LINE_INDEX_CACHE_SIZE = 32;
+
+function getCachedLines(input: string): number[] {
+  const cached = lineIndexCache.get(input);
+  if (cached) return cached;
+
+  const lines = findLines(input);
+
+  if (lineIndexCache.size >= MAX_LINE_INDEX_CACHE_SIZE) {
+    lineIndexCache.clear();
+  }
+  lineIndexCache.set(input, lines);
+
+  return lines;
+}
+
 export function getSpan(location: Location): Span {
   return {
     lines: location.end.line - location.start.line + 1,
@@ -77,7 +94,7 @@ export function findPosition(input: string | number[], index: number): Position 
 }
 
 export function getLine(input: string, position: Position): string {
-  const lines = findLines(input);
+  const lines = getCachedLines(input);
 
   const start = lines[position.line - 2] !== undefined ? lines[position.line - 2] + 1 : 0;
   const end = lines[position.line - 1] || input.length;
