@@ -15,6 +15,29 @@ export interface Span {
   columns: number;
 }
 
+// Since getLine() is called repeatedly with the same input while parsing dotted keys,
+// we need to cache the line indexes for the ongoing input string.
+let cachedInput: string | undefined;
+let cachedLines: number[] | undefined;
+
+function getCachedLines(input: string): number[] {
+  if (cachedInput === input && cachedLines !== undefined) {
+    return cachedLines;
+  }
+
+  const lines = findLines(input);
+  cachedInput = input;
+  cachedLines = lines;
+
+  return lines;
+}
+
+/** Clears the line index cache so the parsed input is not retained after a parse. */
+export function clearCachedLines(): void {
+  cachedInput = undefined;
+  cachedLines = undefined;
+}
+
 export function getSpan(location: Location): Span {
   return {
     lines: location.end.line - location.start.line + 1,
@@ -76,8 +99,15 @@ export function findPosition(input: string | number[], index: number): Position 
   return { line, column };
 }
 
+/**
+ * Retrieves the line of text from the input string corresponding to the given position.
+ * 
+ * @param input The input string containing the text
+ * @param position The position within the input string for which to retrieve the line
+ * @returns The line of text corresponding to the given position
+ */
 export function getLine(input: string, position: Position): string {
-  const lines = findLines(input);
+  const lines = getCachedLines(input);
 
   const start = lines[position.line - 2] !== undefined ? lines[position.line - 2] + 1 : 0;
   const end = lines[position.line - 1] || input.length;
@@ -85,6 +115,12 @@ export function getLine(input: string, position: Position): string {
   return input.substring(start, end);
 }
 
+/**
+ * Finds the line break positions in the input string.
+ * 
+ * @param input The input string in which to find line break positions
+ * @returns An array of indexes representing the positions of line breaks in the input string
+ */
 export function findLines(input: string): number[] {
   const indexes: number[] = [];
 
