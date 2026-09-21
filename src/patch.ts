@@ -784,6 +784,29 @@ function findDottedKeyStyle(root: Document, prefix: string[]): KeyValue | undefi
 }
 
 /**
+ * Renders an integral value as a TOML float in the style of an existing float:
+ * the same decimal-place count, and exponent notation when the original used it
+ * (e.g. `1.0` -> `2.0`, `1.0e10` -> `1.0e11`).
+ */
+function renderFloatLike(value: number, existingRaw: string): string {
+  const expIndex = existingRaw.search(/[eE]/);
+  const mantissaRaw = expIndex === -1 ? existingRaw : existingRaw.slice(0, expIndex);
+  const decimalPlaces = mantissaRaw.includes('.')
+    ? mantissaRaw.length - mantissaRaw.indexOf('.') - 1
+    : 0;
+
+  if (expIndex === -1) {
+    return value.toFixed(decimalPlaces);
+  }
+
+  const [mantissa, exponent] = value.toExponential().split(/[eE]/);
+  const renderedMantissa = decimalPlaces > 0
+    ? Number(mantissa).toFixed(decimalPlaces)
+    : mantissa;
+  return `${renderedMantissa}e${exponent.replace(/^\+/, '')}`;
+}
+
+/**
  * Preserves formatting from the existing node when applying it to the replacement node.
  * This includes multiline string formats, trailing commas, DateTime formats, etc.
  * 
@@ -853,7 +876,27 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     }
     // If existing had no sign and replacement has no sign, leave as-is (nan)
   }
-  
+
+  // Preserve the float-ness of a "round" float (an integral-valued float such as
+  // `1.0` or `1.0e10`) when the replacement value became an integer: keep it a
+  // float in the original's style, so `1.0 -> 2` stays `2.0` and
+  // `1.0e10 -> 1e11` stays `1.0e11`. A fractional original (e.g. `1.5`) still
+  // collapses to an integer when the new value is whole.
+  if (isFloat(existing) && replacement.type === NodeType.Integer) {
+    const existingFloat = existing as FloatNode;
+    if (
+      Number.isInteger(existingFloat.value)
+      && typeof replacement.value === 'number'
+      && Number.isInteger(replacement.value)
+    ) {
+      const newRaw = renderFloatLike(replacement.value, existingFloat.raw);
+      const replacementFloat = replacement as unknown as FloatNode;
+      replacementFloat.type = NodeType.Float;
+      replacementFloat.raw = newRaw;
+      replacementFloat.loc.end.column = replacementFloat.loc.start.column + newRaw.length;
+    }
+  }
+
   // Preserve array trailing comma format
   if (isInlineArray(existing) && isInlineArray(replacement)) {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
