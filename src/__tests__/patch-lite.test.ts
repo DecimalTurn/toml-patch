@@ -205,6 +205,24 @@ describe('edits', () => {
     expect(patch(existing, { ratio: 2 })).toBe('ratio = 2.0\n');
   });
 
+  test('keeps a fractional float as a float when the new value is integral', () => {
+    const existing = 'a = 1.5\n';
+    const updated = { a: 2 };
+    const once = patch(existing, updated);
+
+    expect(once).toBe('a = 2.0\n');
+    expect(parse(once)).toEqual(updated);
+  });
+
+  test('preserves exponent notation when replacing an exponent float', () => {
+    const existing = 'a = 1.0e10\n';
+    const updated = { a: 1e11 };
+    const once = patch(existing, updated);
+
+    expect(once).toBe('a = 1.0e11\n');
+    expect(parse(once)).toEqual(updated);
+  });
+
   test('encodes replacement strings with proper escaping', () => {
     const existing = 's = "old"\n';
 

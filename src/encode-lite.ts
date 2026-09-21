@@ -19,7 +19,7 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
     if (Number.isSafeInteger(value) && !Object.is(value, -0) && !isFloatNode(existingValue)) {
       return encodeInteger(value);
     }
-    return encodeFloat(value);
+    return encodeFloat(value, isFloatNode(existingValue) ? existingValue.raw : undefined);
   }
 
   if (value instanceof Date) {
@@ -69,10 +69,34 @@ function encodeInteger(value: number): string {
   return String(value);
 }
 
-function encodeFloat(value: number): string {
+function encodeFloat(value: number, existingRaw?: string): string {
   if (Object.is(value, -0)) return '-0.0';
+
+  // Preserve exponent notation when the source used it (e.g. `1.0e10` ->
+  // `1.0e11`) rather than expanding into a long plain float.
+  if (existingRaw && /[eE]/.test(existingRaw)) {
+    return encodeExponentFloat(value, existingRaw);
+  }
+
   const raw = String(value);
   return /[.eE]/.test(raw) ? raw : `${raw}.0`;
+}
+
+/**
+ * Renders a value in exponent notation, matching an existing float's style:
+ * the same mantissa decimal-place count and a TOML exponent (no leading `+`).
+ */
+function encodeExponentFloat(value: number, existingRaw: string): string {
+  const mantissaRaw = existingRaw.slice(0, existingRaw.search(/[eE]/));
+  const decimalPlaces = mantissaRaw.includes('.')
+    ? mantissaRaw.length - mantissaRaw.indexOf('.') - 1
+    : 0;
+
+  const [mantissa, exponent] = value.toExponential().split(/[eE]/);
+  const renderedMantissa = decimalPlaces > 0
+    ? Number(mantissa).toFixed(decimalPlaces)
+    : mantissa;
+  return `${renderedMantissa}e${exponent.replace(/^\+/, '')}`;
 }
 
 function encodeNonFinite(value: number): string {
