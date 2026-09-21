@@ -21,7 +21,7 @@ import {
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation, getLine, Location } from './location';
+import { clonePosition, cloneLocation, getLine, clearCachedLines, Location } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
 import { createSourceAttacher } from './cst-source';
@@ -257,12 +257,16 @@ export default function* parseTOML(input: string, newlineState?: NewlineScanStat
   const cursor = new Cursor(tokenize(input, newlineState));
   const attachSource = createSourceAttacher(input);
   
-  while (!cursor.next().done) {
-    const blocks = walkBlock(cursor, input);
-    for (const block of blocks) {
-      attachSource(block);
-      yield block;
+  try {
+    while (!cursor.next().done) {
+      const blocks = walkBlock(cursor, input);
+      for (const block of blocks) {
+        attachSource(block);
+        yield block;
+      }
     }
+  } finally {
+    clearCachedLines();
   }
 }
 
@@ -282,11 +286,15 @@ export function* continueParsingTOML(existingAst: CST, remainingString: string):
   // Parse and yield all items from the remaining string using non-generator path
   const cursor = new Cursor(tokenize(remainingString));
   
-  while (!cursor.next().done) {
-    const blocks = walkBlock(cursor, remainingString);
-    for (const block of blocks) {
-      yield block;
+  try {
+    while (!cursor.next().done) {
+      const blocks = walkBlock(cursor, remainingString);
+      for (const block of blocks) {
+        yield block;
+      }
     }
+  } finally {
+    clearCachedLines();
   }
 }
 

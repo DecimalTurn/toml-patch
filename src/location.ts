@@ -32,6 +32,12 @@ function getCachedLines(input: string): number[] {
   return lines;
 }
 
+/** Clears the line index cache so the parsed input is not retained after a parse. */
+export function clearCachedLines(): void {
+  cachedInput = undefined;
+  cachedLines = undefined;
+}
+
 export function getSpan(location: Location): Span {
   return {
     lines: location.end.line - location.start.line + 1,
