@@ -205,7 +205,7 @@ describe('edits', () => {
     expect(patch(existing, { ratio: 2 })).toBe('ratio = 2.0\n');
   });
 
-  test('keeps a fractional float as a float when the new value is integral', () => {
+  test('keeps a fractional float as a float when the new value is a whole number', () => {
     const existing = 'a = 1.5\n';
     const updated = { a: 2 };
     const once = patch(existing, updated);
@@ -220,6 +220,15 @@ describe('edits', () => {
     const once = patch(existing, updated);
 
     expect(once).toBe('a = 1.0e11\n');
+    expect(parse(once)).toEqual(updated);
+  });
+
+  test('drops an insignificant fraction when an exponent float becomes a whole number', () => {
+    const existing = 'a = 1.25e10\n';
+    const updated = { a: 1e11 };
+    const once = patch(existing, updated);
+
+    expect(once).toBe('a = 1e11\n');
     expect(parse(once)).toEqual(updated);
   });
 

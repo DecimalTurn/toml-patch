@@ -84,18 +84,26 @@ function encodeFloat(value: number, existingRaw?: string): string {
 
 /**
  * Renders a value in exponent notation, matching an existing float's style:
- * the same mantissa decimal-place count and a TOML exponent (no leading `+`).
+ * a TOML exponent (no leading `+`) and the mantissa's decimal-place count, but
+ * dropping a non-zero fraction once the new value becomes a whole number.
  */
 function encodeExponentFloat(value: number, existingRaw: string): string {
   const mantissaRaw = existingRaw.slice(0, existingRaw.search(/[eE]/));
-  const decimalPlaces = mantissaRaw.includes('.')
-    ? mantissaRaw.length - mantissaRaw.indexOf('.') - 1
-    : 0;
+  const dotIndex = mantissaRaw.indexOf('.');
+  const fraction = dotIndex === -1 ? '' : mantissaRaw.slice(dotIndex + 1);
+  const isRound = !/[1-9]/.test(fraction);
+  const valueIsIntegral = Number.isInteger(value) && !Object.is(value, -0);
+
+  // Keep the original's decimal count only for an explicit "round" float; a
+  // non-zero fraction is insignificant once the new value becomes a whole number.
+  const minDecimals = valueIsIntegral ? (isRound ? fraction.length : 0) : 0;
 
   const [mantissa, exponent] = value.toExponential().split(/[eE]/);
-  const renderedMantissa = decimalPlaces > 0
-    ? Number(mantissa).toFixed(decimalPlaces)
-    : mantissa;
+  const mantissaDecimals = mantissa.includes('.') ? mantissa.length - mantissa.indexOf('.') - 1 : 0;
+  const decimals = Math.max(minDecimals, mantissaDecimals);
+  const renderedMantissa = decimals > 0
+    ? Number(mantissa).toFixed(decimals)
+    : String(Number(mantissa));
   return `${renderedMantissa}e${exponent.replace(/^\+/, '')}`;
 }
 
