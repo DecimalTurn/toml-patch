@@ -10361,7 +10361,7 @@ test('multiline empty array accepts an explicit indentation width', () => {
     ` + '\n');
   });
 
-    test('Abruptly closing array: adding a new string to multiline array preserves indentation', () => {
+  test('Abruptly closing array: adding a new string to multiline array preserves indentation', () => {
     const src = dedent`
       points = [ 
                  "1",
@@ -10423,9 +10423,13 @@ describe('Format preservation for numbers', () => {
 
   });
 
-  //The following might seems controversial, but the motivation for the following is that toml-patch
+  // The following might seems controversial, but the motivation for the following is that toml-patch
   // tries to basically immitate what a human would do when editing a TOML file and it's pretty natural 
   // to remove the unnecessary decimal point when a float becomes an integer.
+  // This doesn't go against the principle of preserving formatting in the sense that we assume 
+  // that a float with a non-zero fractional part is likely written with decimals because it has to
+  // but if it becomes an integer, it wouldn't include the decimal point since the implied formatting 
+  // principle is to include as many decimal places as necessary, but not more than needed (only significant decimal places).
   // Furthermore, it is easily possible to overrride this by using TomlFormat.minimumDecimals = 1
   // which forces the patch to always include at least one decimal place.
   // However, if we don't make the default behavior to remove the unnecessary decimal point, it would be less natural for human readers.
@@ -10466,7 +10470,25 @@ describe('Format preservation for numbers', () => {
 
   });
 
-  test('Multiplying a float with exponent and  .0 keeps the .0', () => {
+  test('Bumping a float with .00 keeps the .00', () => {
+    const src = dedent`
+    a = 1.00
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a++;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 2.00
+    ` + '\n');
+
+  });
+
+  test('Multiplying a float with exponent and .0 keeps the .0', () => {
     const src = dedent`
     a = 1.0e10
     ` + '\n';
@@ -10480,6 +10502,45 @@ describe('Format preservation for numbers', () => {
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
     a = 1.0e11
+    ` + '\n');
+
+  });
+
+    // See also comment for "Bumping a float to an integer value returns an integer".
+    test('Changing a float with exponent and fractional part to an integer gets rid of the fractional part', () => {
+    const src = dedent`
+    a = 1.25e10
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 1e11
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 1e11
+    ` + '\n');
+
+  });
+
+    test('Changing a float with exponent and fractional part to an integer gets rid of the fractional part unless minimumDecimals is used', () => {
+    const src = dedent`
+    a = 1.25e10
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 1e11
+
+    const options = { minimumDecimals: 2 };
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj, options);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 1.00e11
     ` + '\n');
 
   });
