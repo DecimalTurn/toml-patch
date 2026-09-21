@@ -15,19 +15,19 @@ export interface Span {
   columns: number;
 }
 
-const lineIndexCache = new Map<string, number[]>();
-const MAX_LINE_INDEX_CACHE_SIZE = 32;
+// Since getLine() is called repeatedly with the same input while parsing dotted keys,
+// we need to cache the line index of the most recently seen input.
+let cachedInput: string | undefined;
+let cachedLines: number[] | undefined;
 
 function getCachedLines(input: string): number[] {
-  const cached = lineIndexCache.get(input);
-  if (cached) return cached;
+  if (cachedInput === input && cachedLines !== undefined) {
+    return cachedLines;
+  }
 
   const lines = findLines(input);
-
-  if (lineIndexCache.size >= MAX_LINE_INDEX_CACHE_SIZE) {
-    lineIndexCache.clear();
-  }
-  lineIndexCache.set(input, lines);
+  cachedInput = input;
+  cachedLines = lines;
 
   return lines;
 }
