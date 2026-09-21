@@ -57,6 +57,7 @@
     "specs": "vitest run --config vitest.specs.config.ts",
     "benchmark": "npm-run-all2 bench:*",
     "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
+    "benchmark:smol": "node benchmark/smol-benchmark.mjs",
     "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
     "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",

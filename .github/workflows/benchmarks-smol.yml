@@ -1,0 +1,33 @@
+name: Benchmarks (smol-toml)
+on: 
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: true
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24.x
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        run_install: false
+    # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
+    - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      with:
+        mode: firewall
+        firewall-version: latest # or use a pinned version (see releases)
+    - name: Install
+      run: sfw pnpm install --frozen-lockfile
+      env:
+        CI: true
+    - name: Build
+      run: pnpm run build
+    - name: Benchmark smol-toml fixtures
+      run: pnpm run benchmark:smol
