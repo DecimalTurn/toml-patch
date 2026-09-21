@@ -3,7 +3,6 @@
 exports[`should handle escaped solidus 1`] = `
 Array [
   Object {
-    "end": 1,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -15,11 +14,9 @@ Array [
       },
     },
     "raw": "a",
-    "start": 0,
     "type": "Literal",
   },
   Object {
-    "end": 3,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -31,11 +28,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 2,
     "type": "Equal",
   },
   Object {
-    "end": 8,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -47,7 +42,6 @@ Array [
       },
     },
     "raw": "\\"\\\\\\\\\\"",
-    "start": 4,
     "type": "Literal",
   },
 ]
@@ -56,7 +50,6 @@ Array [
 exports[`should tokenize complex input 1`] = `
 Array [
   Object {
-    "end": 32,
     "loc": Object {
       "end": Object {
         "column": 32,
@@ -68,11 +61,9 @@ Array [
       },
     },
     "raw": "# This is a TOML document. Boom.",
-    "start": 0,
     "type": "Comment",
   },
   Object {
-    "end": 39,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -84,11 +75,9 @@ Array [
       },
     },
     "raw": "title",
-    "start": 34,
     "type": "Literal",
   },
   Object {
-    "end": 41,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -100,11 +89,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 40,
     "type": "Equal",
   },
   Object {
-    "end": 56,
     "loc": Object {
       "end": Object {
         "column": 22,
@@ -116,11 +103,9 @@ Array [
       },
     },
     "raw": "\\"TOML Example\\"",
-    "start": 42,
     "type": "Literal",
   },
   Object {
-    "end": 59,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -132,11 +117,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 58,
     "type": "Bracket",
   },
   Object {
-    "end": 64,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -148,11 +131,9 @@ Array [
       },
     },
     "raw": "owner",
-    "start": 59,
     "type": "Literal",
   },
   Object {
-    "end": 65,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -164,11 +145,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 64,
     "type": "Bracket",
   },
   Object {
-    "end": 70,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -180,11 +159,9 @@ Array [
       },
     },
     "raw": "name",
-    "start": 66,
     "type": "Literal",
   },
   Object {
-    "end": 72,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -196,11 +173,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 71,
     "type": "Equal",
   },
   Object {
-    "end": 93,
     "loc": Object {
       "end": Object {
         "column": 27,
@@ -212,11 +187,9 @@ Array [
       },
     },
     "raw": "\\"Tom Preston-Werner\\"",
-    "start": 73,
     "type": "Literal",
   },
   Object {
-    "end": 106,
     "loc": Object {
       "end": Object {
         "column": 12,
@@ -228,11 +201,9 @@ Array [
       },
     },
     "raw": "organization",
-    "start": 94,
     "type": "Literal",
   },
   Object {
-    "end": 108,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -244,11 +215,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 107,
     "type": "Equal",
   },
   Object {
-    "end": 117,
     "loc": Object {
       "end": Object {
         "column": 23,
@@ -260,11 +229,9 @@ Array [
       },
     },
     "raw": "\\"GitHub\\"",
-    "start": 109,
     "type": "Literal",
   },
   Object {
-    "end": 121,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -276,11 +243,9 @@ Array [
       },
     },
     "raw": "bio",
-    "start": 118,
     "type": "Literal",
   },
   Object {
-    "end": 123,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -292,11 +257,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 122,
     "type": "Equal",
   },
   Object {
-    "end": 176,
     "loc": Object {
       "end": Object {
         "column": 58,
@@ -308,11 +271,9 @@ Array [
       },
     },
     "raw": "\\"GitHub Cofounder & CEO\\\\nLikes tater tots and beer.\\"",
-    "start": 124,
     "type": "Literal",
   },
   Object {
-    "end": 180,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -324,11 +285,9 @@ Array [
       },
     },
     "raw": "dob",
-    "start": 177,
     "type": "Literal",
   },
   Object {
-    "end": 182,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -340,11 +299,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 181,
     "type": "Equal",
   },
   Object {
-    "end": 203,
     "loc": Object {
       "end": Object {
         "column": 26,
@@ -356,11 +313,9 @@ Array [
       },
     },
     "raw": "1979-05-27T07:32:00Z",
-    "start": 183,
     "type": "Literal",
   },
   Object {
-    "end": 233,
     "loc": Object {
       "end": Object {
         "column": 56,
@@ -372,11 +327,9 @@ Array [
       },
     },
     "raw": "# First class dates? Why not?",
-    "start": 204,
     "type": "Comment",
   },
   Object {
-    "end": 236,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -388,11 +341,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 235,
     "type": "Bracket",
   },
   Object {
-    "end": 244,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -404,11 +355,9 @@ Array [
       },
     },
     "raw": "database",
-    "start": 236,
     "type": "Literal",
   },
   Object {
-    "end": 245,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -420,11 +369,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 244,
     "type": "Bracket",
   },
   Object {
-    "end": 252,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -436,11 +383,9 @@ Array [
       },
     },
     "raw": "server",
-    "start": 246,
     "type": "Literal",
   },
   Object {
-    "end": 254,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -452,11 +397,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 253,
     "type": "Equal",
   },
   Object {
-    "end": 268,
     "loc": Object {
       "end": Object {
         "column": 22,
@@ -468,11 +411,9 @@ Array [
       },
     },
     "raw": "\\"192.168.1.1\\"",
-    "start": 255,
     "type": "Literal",
   },
   Object {
-    "end": 274,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -484,11 +425,9 @@ Array [
       },
     },
     "raw": "ports",
-    "start": 269,
     "type": "Literal",
   },
   Object {
-    "end": 276,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -500,11 +439,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 275,
     "type": "Equal",
   },
   Object {
-    "end": 278,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -516,11 +453,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 277,
     "type": "Bracket",
   },
   Object {
-    "end": 283,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -532,11 +467,9 @@ Array [
       },
     },
     "raw": "8001",
-    "start": 279,
     "type": "Literal",
   },
   Object {
-    "end": 284,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -548,11 +481,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 283,
     "type": "Comma",
   },
   Object {
-    "end": 289,
     "loc": Object {
       "end": Object {
         "column": 20,
@@ -564,11 +495,9 @@ Array [
       },
     },
     "raw": "8001",
-    "start": 285,
     "type": "Literal",
   },
   Object {
-    "end": 290,
     "loc": Object {
       "end": Object {
         "column": 21,
@@ -580,11 +509,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 289,
     "type": "Comma",
   },
   Object {
-    "end": 295,
     "loc": Object {
       "end": Object {
         "column": 26,
@@ -596,11 +523,9 @@ Array [
       },
     },
     "raw": "8002",
-    "start": 291,
     "type": "Literal",
   },
   Object {
-    "end": 297,
     "loc": Object {
       "end": Object {
         "column": 28,
@@ -612,11 +537,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 296,
     "type": "Bracket",
   },
   Object {
-    "end": 312,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -628,11 +551,9 @@ Array [
       },
     },
     "raw": "connection_max",
-    "start": 298,
     "type": "Literal",
   },
   Object {
-    "end": 314,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -644,11 +565,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 313,
     "type": "Equal",
   },
   Object {
-    "end": 319,
     "loc": Object {
       "end": Object {
         "column": 21,
@@ -660,11 +579,9 @@ Array [
       },
     },
     "raw": "5000",
-    "start": 315,
     "type": "Literal",
   },
   Object {
-    "end": 327,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -676,11 +593,9 @@ Array [
       },
     },
     "raw": "enabled",
-    "start": 320,
     "type": "Literal",
   },
   Object {
-    "end": 329,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -692,11 +607,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 328,
     "type": "Equal",
   },
   Object {
-    "end": 334,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -708,11 +621,9 @@ Array [
       },
     },
     "raw": "true",
-    "start": 330,
     "type": "Literal",
   },
   Object {
-    "end": 337,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -724,11 +635,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 336,
     "type": "Bracket",
   },
   Object {
-    "end": 344,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -740,11 +649,9 @@ Array [
       },
     },
     "raw": "servers",
-    "start": 337,
     "type": "Literal",
   },
   Object {
-    "end": 345,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -756,11 +663,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 344,
     "type": "Bracket",
   },
   Object {
-    "end": 413,
     "loc": Object {
       "end": Object {
         "column": 66,
@@ -772,11 +677,9 @@ Array [
       },
     },
     "raw": "# You can indent as you please. Tabs or spaces. TOML don't care.",
-    "start": 349,
     "type": "Comment",
   },
   Object {
-    "end": 417,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -788,11 +691,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 416,
     "type": "Bracket",
   },
   Object {
-    "end": 424,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -804,11 +705,9 @@ Array [
       },
     },
     "raw": "servers",
-    "start": 417,
     "type": "Literal",
   },
   Object {
-    "end": 425,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -820,11 +719,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 424,
     "type": "Dot",
   },
   Object {
-    "end": 430,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -836,11 +733,9 @@ Array [
       },
     },
     "raw": "alpha",
-    "start": 425,
     "type": "Literal",
   },
   Object {
-    "end": 431,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -852,11 +747,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 430,
     "type": "Bracket",
   },
   Object {
-    "end": 436,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -868,11 +761,9 @@ Array [
       },
     },
     "raw": "ip",
-    "start": 434,
     "type": "Literal",
   },
   Object {
-    "end": 438,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -884,11 +775,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 437,
     "type": "Equal",
   },
   Object {
-    "end": 449,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -900,11 +789,9 @@ Array [
       },
     },
     "raw": "\\"10.0.0.1\\"",
-    "start": 439,
     "type": "Literal",
   },
   Object {
-    "end": 454,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -916,11 +803,9 @@ Array [
       },
     },
     "raw": "dc",
-    "start": 452,
     "type": "Literal",
   },
   Object {
-    "end": 456,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -932,11 +817,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 455,
     "type": "Equal",
   },
   Object {
-    "end": 465,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -948,11 +831,9 @@ Array [
       },
     },
     "raw": "\\"eqdc10\\"",
-    "start": 457,
     "type": "Literal",
   },
   Object {
-    "end": 470,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -964,11 +845,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 469,
     "type": "Bracket",
   },
   Object {
-    "end": 477,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -980,11 +859,9 @@ Array [
       },
     },
     "raw": "servers",
-    "start": 470,
     "type": "Literal",
   },
   Object {
-    "end": 478,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -996,11 +873,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 477,
     "type": "Dot",
   },
   Object {
-    "end": 482,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -1012,11 +887,9 @@ Array [
       },
     },
     "raw": "beta",
-    "start": 478,
     "type": "Literal",
   },
   Object {
-    "end": 483,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -1028,11 +901,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 482,
     "type": "Bracket",
   },
   Object {
-    "end": 488,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -1044,11 +915,9 @@ Array [
       },
     },
     "raw": "ip",
-    "start": 486,
     "type": "Literal",
   },
   Object {
-    "end": 490,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -1060,11 +929,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 489,
     "type": "Equal",
   },
   Object {
-    "end": 501,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -1076,11 +943,9 @@ Array [
       },
     },
     "raw": "\\"10.0.0.2\\"",
-    "start": 491,
     "type": "Literal",
   },
   Object {
-    "end": 506,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -1092,11 +957,9 @@ Array [
       },
     },
     "raw": "dc",
-    "start": 504,
     "type": "Literal",
   },
   Object {
-    "end": 508,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -1108,11 +971,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 507,
     "type": "Equal",
   },
   Object {
-    "end": 517,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -1124,11 +985,9 @@ Array [
       },
     },
     "raw": "\\"eqdc10\\"",
-    "start": 509,
     "type": "Literal",
   },
   Object {
-    "end": 527,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1140,11 +999,9 @@ Array [
       },
     },
     "raw": "country",
-    "start": 520,
     "type": "Literal",
   },
   Object {
-    "end": 529,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -1156,11 +1013,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 528,
     "type": "Equal",
   },
   Object {
-    "end": 534,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -1172,11 +1027,9 @@ Array [
       },
     },
     "raw": "\\"中国\\"",
-    "start": 530,
     "type": "Literal",
   },
   Object {
-    "end": 567,
     "loc": Object {
       "end": Object {
         "column": 49,
@@ -1188,11 +1041,9 @@ Array [
       },
     },
     "raw": "# This should be parsed as UTF-8",
-    "start": 535,
     "type": "Comment",
   },
   Object {
-    "end": 570,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -1204,11 +1055,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 569,
     "type": "Bracket",
   },
   Object {
-    "end": 577,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -1220,11 +1069,9 @@ Array [
       },
     },
     "raw": "clients",
-    "start": 570,
     "type": "Literal",
   },
   Object {
-    "end": 578,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1236,11 +1083,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 577,
     "type": "Bracket",
   },
   Object {
-    "end": 583,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -1252,11 +1097,9 @@ Array [
       },
     },
     "raw": "data",
-    "start": 579,
     "type": "Literal",
   },
   Object {
-    "end": 585,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -1268,11 +1111,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 584,
     "type": "Equal",
   },
   Object {
-    "end": 587,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -1284,11 +1125,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 586,
     "type": "Bracket",
   },
   Object {
-    "end": 589,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -1300,11 +1139,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 588,
     "type": "Bracket",
   },
   Object {
-    "end": 596,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -1316,11 +1153,9 @@ Array [
       },
     },
     "raw": "\\"gamma\\"",
-    "start": 589,
     "type": "Literal",
   },
   Object {
-    "end": 597,
     "loc": Object {
       "end": Object {
         "column": 18,
@@ -1332,11 +1167,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 596,
     "type": "Comma",
   },
   Object {
-    "end": 605,
     "loc": Object {
       "end": Object {
         "column": 26,
@@ -1348,11 +1181,9 @@ Array [
       },
     },
     "raw": "\\"delta\\"",
-    "start": 598,
     "type": "Literal",
   },
   Object {
-    "end": 606,
     "loc": Object {
       "end": Object {
         "column": 27,
@@ -1364,11 +1195,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 605,
     "type": "Bracket",
   },
   Object {
-    "end": 607,
     "loc": Object {
       "end": Object {
         "column": 28,
@@ -1380,11 +1209,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 606,
     "type": "Comma",
   },
   Object {
-    "end": 609,
     "loc": Object {
       "end": Object {
         "column": 30,
@@ -1396,11 +1223,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 608,
     "type": "Bracket",
   },
   Object {
-    "end": 610,
     "loc": Object {
       "end": Object {
         "column": 31,
@@ -1412,11 +1237,9 @@ Array [
       },
     },
     "raw": "1",
-    "start": 609,
     "type": "Literal",
   },
   Object {
-    "end": 611,
     "loc": Object {
       "end": Object {
         "column": 32,
@@ -1428,11 +1251,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 610,
     "type": "Comma",
   },
   Object {
-    "end": 613,
     "loc": Object {
       "end": Object {
         "column": 34,
@@ -1444,11 +1265,9 @@ Array [
       },
     },
     "raw": "2",
-    "start": 612,
     "type": "Literal",
   },
   Object {
-    "end": 614,
     "loc": Object {
       "end": Object {
         "column": 35,
@@ -1460,11 +1279,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 613,
     "type": "Bracket",
   },
   Object {
-    "end": 616,
     "loc": Object {
       "end": Object {
         "column": 37,
@@ -1476,11 +1293,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 615,
     "type": "Bracket",
   },
   Object {
-    "end": 665,
     "loc": Object {
       "end": Object {
         "column": 86,
@@ -1492,11 +1307,9 @@ Array [
       },
     },
     "raw": "# just an update to make sure parsers support it",
-    "start": 617,
     "type": "Comment",
   },
   Object {
-    "end": 706,
     "loc": Object {
       "end": Object {
         "column": 39,
@@ -1508,11 +1321,9 @@ Array [
       },
     },
     "raw": "# Line breaks are OK when inside arrays",
-    "start": 667,
     "type": "Comment",
   },
   Object {
-    "end": 712,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -1524,11 +1335,9 @@ Array [
       },
     },
     "raw": "hosts",
-    "start": 707,
     "type": "Literal",
   },
   Object {
-    "end": 714,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -1540,11 +1349,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 713,
     "type": "Equal",
   },
   Object {
-    "end": 716,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1556,11 +1363,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 715,
     "type": "Bracket",
   },
   Object {
-    "end": 726,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1572,11 +1377,9 @@ Array [
       },
     },
     "raw": "\\"alpha\\"",
-    "start": 719,
     "type": "Literal",
   },
   Object {
-    "end": 727,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -1588,11 +1391,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 726,
     "type": "Comma",
   },
   Object {
-    "end": 737,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1604,11 +1405,9 @@ Array [
       },
     },
     "raw": "\\"omega\\"",
-    "start": 730,
     "type": "Literal",
   },
   Object {
-    "end": 739,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -1620,11 +1419,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 738,
     "type": "Bracket",
   },
   Object {
-    "end": 746,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -1636,11 +1433,9 @@ Array [
       },
     },
     "raw": "count",
-    "start": 741,
     "type": "Literal",
   },
   Object {
-    "end": 748,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -1652,11 +1447,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 747,
     "type": "Equal",
   },
   Object {
-    "end": 750,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -1668,11 +1461,9 @@ Array [
       },
     },
     "raw": "{",
-    "start": 749,
     "type": "Curly",
   },
   Object {
-    "end": 752,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -1684,11 +1475,9 @@ Array [
       },
     },
     "raw": "a",
-    "start": 751,
     "type": "Literal",
   },
   Object {
-    "end": 754,
     "loc": Object {
       "end": Object {
         "column": 13,
@@ -1700,11 +1489,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 753,
     "type": "Equal",
   },
   Object {
-    "end": 756,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -1716,11 +1503,9 @@ Array [
       },
     },
     "raw": "1",
-    "start": 755,
     "type": "Literal",
   },
   Object {
-    "end": 757,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -1732,11 +1517,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 756,
     "type": "Comma",
   },
   Object {
-    "end": 759,
     "loc": Object {
       "end": Object {
         "column": 18,
@@ -1748,11 +1531,9 @@ Array [
       },
     },
     "raw": "b",
-    "start": 758,
     "type": "Literal",
   },
   Object {
-    "end": 760,
     "loc": Object {
       "end": Object {
         "column": 19,
@@ -1764,11 +1545,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 759,
     "type": "Equal",
   },
   Object {
-    "end": 761,
     "loc": Object {
       "end": Object {
         "column": 20,
@@ -1780,11 +1559,9 @@ Array [
       },
     },
     "raw": "2",
-    "start": 760,
     "type": "Literal",
   },
   Object {
-    "end": 765,
     "loc": Object {
       "end": Object {
         "column": 24,
@@ -1796,11 +1573,9 @@ Array [
       },
     },
     "raw": ",",
-    "start": 764,
     "type": "Comma",
   },
   Object {
-    "end": 767,
     "loc": Object {
       "end": Object {
         "column": 26,
@@ -1812,11 +1587,9 @@ Array [
       },
     },
     "raw": "c",
-    "start": 766,
     "type": "Literal",
   },
   Object {
-    "end": 769,
     "loc": Object {
       "end": Object {
         "column": 28,
@@ -1828,11 +1601,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 768,
     "type": "Equal",
   },
   Object {
-    "end": 771,
     "loc": Object {
       "end": Object {
         "column": 30,
@@ -1844,11 +1615,9 @@ Array [
       },
     },
     "raw": "3",
-    "start": 770,
     "type": "Literal",
   },
   Object {
-    "end": 773,
     "loc": Object {
       "end": Object {
         "column": 32,
@@ -1860,11 +1629,9 @@ Array [
       },
     },
     "raw": "}",
-    "start": 772,
     "type": "Curly",
   },
   Object {
-    "end": 785,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -1876,11 +1643,9 @@ Array [
       },
     },
     "raw": "# Products",
-    "start": 775,
     "type": "Comment",
   },
   Object {
-    "end": 790,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -1892,11 +1657,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 789,
     "type": "Bracket",
   },
   Object {
-    "end": 791,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -1908,11 +1671,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 790,
     "type": "Bracket",
   },
   Object {
-    "end": 799,
     "loc": Object {
       "end": Object {
         "column": 12,
@@ -1924,11 +1685,9 @@ Array [
       },
     },
     "raw": "products",
-    "start": 791,
     "type": "Literal",
   },
   Object {
-    "end": 800,
     "loc": Object {
       "end": Object {
         "column": 13,
@@ -1940,11 +1699,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 799,
     "type": "Bracket",
   },
   Object {
-    "end": 801,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -1956,11 +1713,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 800,
     "type": "Bracket",
   },
   Object {
-    "end": 808,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -1972,11 +1727,9 @@ Array [
       },
     },
     "raw": "name",
-    "start": 804,
     "type": "Literal",
   },
   Object {
-    "end": 810,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -1988,11 +1741,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 809,
     "type": "Equal",
   },
   Object {
-    "end": 819,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -2004,11 +1755,9 @@ Array [
       },
     },
     "raw": "\\"Hammer\\"",
-    "start": 811,
     "type": "Literal",
   },
   Object {
-    "end": 825,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2020,11 +1769,9 @@ Array [
       },
     },
     "raw": "sku",
-    "start": 822,
     "type": "Literal",
   },
   Object {
-    "end": 827,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2036,11 +1783,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 826,
     "type": "Equal",
   },
   Object {
-    "end": 837,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -2052,11 +1797,9 @@ Array [
       },
     },
     "raw": "738594937",
-    "start": 828,
     "type": "Literal",
   },
   Object {
-    "end": 842,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -2068,11 +1811,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 841,
     "type": "Bracket",
   },
   Object {
-    "end": 843,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -2084,11 +1825,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 842,
     "type": "Bracket",
   },
   Object {
-    "end": 851,
     "loc": Object {
       "end": Object {
         "column": 12,
@@ -2100,11 +1839,9 @@ Array [
       },
     },
     "raw": "products",
-    "start": 843,
     "type": "Literal",
   },
   Object {
-    "end": 852,
     "loc": Object {
       "end": Object {
         "column": 13,
@@ -2116,11 +1853,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 851,
     "type": "Bracket",
   },
   Object {
-    "end": 853,
     "loc": Object {
       "end": Object {
         "column": 14,
@@ -2132,11 +1867,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 852,
     "type": "Bracket",
   },
   Object {
-    "end": 860,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -2148,11 +1881,9 @@ Array [
       },
     },
     "raw": "name",
-    "start": 856,
     "type": "Literal",
   },
   Object {
-    "end": 862,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -2164,11 +1895,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 861,
     "type": "Equal",
   },
   Object {
-    "end": 869,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -2180,11 +1909,9 @@ Array [
       },
     },
     "raw": "\\"Nail\\"",
-    "start": 863,
     "type": "Literal",
   },
   Object {
-    "end": 875,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2196,11 +1923,9 @@ Array [
       },
     },
     "raw": "sku",
-    "start": 872,
     "type": "Literal",
   },
   Object {
-    "end": 877,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2212,11 +1937,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 876,
     "type": "Equal",
   },
   Object {
-    "end": 887,
     "loc": Object {
       "end": Object {
         "column": 17,
@@ -2228,11 +1951,9 @@ Array [
       },
     },
     "raw": "284758393",
-    "start": 878,
     "type": "Literal",
   },
   Object {
-    "end": 895,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2244,11 +1965,9 @@ Array [
       },
     },
     "raw": "color",
-    "start": 890,
     "type": "Literal",
   },
   Object {
-    "end": 897,
     "loc": Object {
       "end": Object {
         "column": 9,
@@ -2260,11 +1979,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 896,
     "type": "Equal",
   },
   Object {
-    "end": 904,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -2276,7 +1993,6 @@ Array [
       },
     },
     "raw": "\\"gray\\"",
-    "start": 898,
     "type": "Literal",
   },
 ]
@@ -2285,7 +2001,6 @@ Array [
 exports[`should tokenize dotted key with spaces 1`] = `
 Array [
   Object {
-    "end": 1,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -2297,11 +2012,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 0,
     "type": "Bracket",
   },
   Object {
-    "end": 2,
     "loc": Object {
       "end": Object {
         "column": 2,
@@ -2313,11 +2026,9 @@ Array [
       },
     },
     "raw": "[",
-    "start": 1,
     "type": "Bracket",
   },
   Object {
-    "end": 4,
     "loc": Object {
       "end": Object {
         "column": 4,
@@ -2329,11 +2040,9 @@ Array [
       },
     },
     "raw": "a",
-    "start": 3,
     "type": "Literal",
   },
   Object {
-    "end": 6,
     "loc": Object {
       "end": Object {
         "column": 6,
@@ -2345,11 +2054,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 5,
     "type": "Dot",
   },
   Object {
-    "end": 10,
     "loc": Object {
       "end": Object {
         "column": 10,
@@ -2361,11 +2068,9 @@ Array [
       },
     },
     "raw": "\\"b\\"",
-    "start": 7,
     "type": "Literal",
   },
   Object {
-    "end": 12,
     "loc": Object {
       "end": Object {
         "column": 12,
@@ -2377,11 +2082,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 11,
     "type": "Dot",
   },
   Object {
-    "end": 16,
     "loc": Object {
       "end": Object {
         "column": 16,
@@ -2393,11 +2096,9 @@ Array [
       },
     },
     "raw": "'c'",
-    "start": 13,
     "type": "Literal",
   },
   Object {
-    "end": 18,
     "loc": Object {
       "end": Object {
         "column": 18,
@@ -2409,11 +2110,9 @@ Array [
       },
     },
     "raw": "]",
-    "start": 17,
     "type": "Bracket",
   },
   Object {
-    "end": 19,
     "loc": Object {
       "end": Object {
         "column": 19,
@@ -2425,7 +2124,6 @@ Array [
       },
     },
     "raw": "]",
-    "start": 18,
     "type": "Bracket",
   },
 ]
@@ -2434,7 +2132,6 @@ Array [
 exports[`should tokenize multiline strings 1`] = `
 Array [
   Object {
-    "end": 6,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2446,11 +2143,9 @@ Array [
       },
     },
     "raw": "a",
-    "start": 5,
     "type": "Literal",
   },
   Object {
-    "end": 8,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2462,11 +2157,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 7,
     "type": "Equal",
   },
   Object {
-    "end": 12,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -2478,11 +2171,9 @@ Array [
       },
     },
     "raw": "\\"b\\"",
-    "start": 9,
     "type": "Literal",
   },
   Object {
-    "end": 18,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2494,11 +2185,9 @@ Array [
       },
     },
     "raw": "c",
-    "start": 17,
     "type": "Literal",
   },
   Object {
-    "end": 20,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2510,11 +2199,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 19,
     "type": "Equal",
   },
   Object {
-    "end": 24,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -2526,11 +2213,9 @@ Array [
       },
     },
     "raw": "'d'",
-    "start": 21,
     "type": "Literal",
   },
   Object {
-    "end": 30,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2542,11 +2227,9 @@ Array [
       },
     },
     "raw": "e",
-    "start": 29,
     "type": "Literal",
   },
   Object {
-    "end": 32,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2558,11 +2241,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 31,
     "type": "Equal",
   },
   Object {
-    "end": 52,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2576,11 +2257,9 @@ Array [
     "raw": "\\"\\"\\"
       f
     \\"\\"\\"",
-    "start": 33,
     "type": "Literal",
   },
   Object {
-    "end": 58,
     "loc": Object {
       "end": Object {
         "column": 5,
@@ -2592,11 +2271,9 @@ Array [
       },
     },
     "raw": "g",
-    "start": 57,
     "type": "Literal",
   },
   Object {
-    "end": 60,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2608,11 +2285,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 59,
     "type": "Equal",
   },
   Object {
-    "end": 80,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2626,11 +2301,9 @@ Array [
     "raw": "'''
       h
     '''",
-    "start": 61,
     "type": "Literal",
   },
   Object {
-    "end": 88,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2642,11 +2315,9 @@ Array [
       },
     },
     "raw": "\\"i\\"",
-    "start": 85,
     "type": "Literal",
   },
   Object {
-    "end": 89,
     "loc": Object {
       "end": Object {
         "column": 8,
@@ -2658,11 +2329,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 88,
     "type": "Dot",
   },
   Object {
-    "end": 92,
     "loc": Object {
       "end": Object {
         "column": 11,
@@ -2674,11 +2343,9 @@ Array [
       },
     },
     "raw": "'j'",
-    "start": 89,
     "type": "Literal",
   },
   Object {
-    "end": 93,
     "loc": Object {
       "end": Object {
         "column": 12,
@@ -2690,11 +2357,9 @@ Array [
       },
     },
     "raw": ".",
-    "start": 92,
     "type": "Dot",
   },
   Object {
-    "end": 94,
     "loc": Object {
       "end": Object {
         "column": 13,
@@ -2706,11 +2371,9 @@ Array [
       },
     },
     "raw": "k",
-    "start": 93,
     "type": "Literal",
   },
   Object {
-    "end": 96,
     "loc": Object {
       "end": Object {
         "column": 15,
@@ -2722,11 +2385,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 95,
     "type": "Equal",
   },
   Object {
-    "end": 100,
     "loc": Object {
       "end": Object {
         "column": 19,
@@ -2738,7 +2399,6 @@ Array [
       },
     },
     "raw": "\\"l\\"",
-    "start": 97,
     "type": "Literal",
   },
 ]
@@ -2747,7 +2407,6 @@ Array [
 exports[`should tokenize simple input 1`] = `
 Array [
   Object {
-    "end": 1,
     "loc": Object {
       "end": Object {
         "column": 1,
@@ -2759,11 +2418,9 @@ Array [
       },
     },
     "raw": "a",
-    "start": 0,
     "type": "Literal",
   },
   Object {
-    "end": 3,
     "loc": Object {
       "end": Object {
         "column": 3,
@@ -2775,11 +2432,9 @@ Array [
       },
     },
     "raw": "=",
-    "start": 2,
     "type": "Equal",
   },
   Object {
-    "end": 7,
     "loc": Object {
       "end": Object {
         "column": 7,
@@ -2791,7 +2446,6 @@ Array [
       },
     },
     "raw": "\\"b\\"",
-    "start": 4,
     "type": "Literal",
   },
 ]

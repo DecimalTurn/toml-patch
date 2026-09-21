@@ -15,10 +15,6 @@ export interface Token {
   type: TokenType;
   raw: string;
   loc: Location;
-  /** Absolute UTF-16 offset of the token's first code unit in the input. */
-  start: number;
-  /** Absolute UTF-16 offset one past the token's last code unit in the input. */
-  end: number;
 }
 
 export const IS_WHITESPACE = /\s/;
@@ -110,15 +106,15 @@ export function* tokenize(input: string, newlineState?: NewlineScanState): Itera
     } else if (code === CH_LF) {
       recordNewline(pos);
     } else if (code === CH_LBRACKET || code === CH_RBRACKET) {
-      yield { type: TokenType.Bracket, raw: input[pos], loc: locate(pos, pos + 1), start: pos, end: pos + 1 };
+      yield { type: TokenType.Bracket, raw: input[pos], loc: locate(pos, pos + 1) };
     } else if (code === CH_LBRACE || code === CH_RBRACE) {
-      yield { type: TokenType.Curly, raw: input[pos], loc: locate(pos, pos + 1), start: pos, end: pos + 1 };
+      yield { type: TokenType.Curly, raw: input[pos], loc: locate(pos, pos + 1) };
     } else if (code === CH_EQUAL) {
-      yield { type: TokenType.Equal, raw: '=', loc: locate(pos, pos + 1), start: pos, end: pos + 1 };
+      yield { type: TokenType.Equal, raw: '=', loc: locate(pos, pos + 1) };
     } else if (code === CH_COMMA) {
-      yield { type: TokenType.Comma, raw: ',', loc: locate(pos, pos + 1), start: pos, end: pos + 1 };
+      yield { type: TokenType.Comma, raw: ',', loc: locate(pos, pos + 1) };
     } else if (code === CH_DOT) {
-      yield { type: TokenType.Dot, raw: '.', loc: locate(pos, pos + 1), start: pos, end: pos + 1 };
+      yield { type: TokenType.Dot, raw: '.', loc: locate(pos, pos + 1) };
     } else if (code === CH_HASH) {
       yield comment();
     } else {
@@ -175,9 +171,7 @@ export function* tokenize(input: string, newlineState?: NewlineScanState): Itera
     return {
       type: TokenType.Comment,
       raw: input.slice(start, pos + 1),
-      loc: locate(start, pos + 1),
-      start,
-      end: pos + 1
+      loc: locate(start, pos + 1)
     };
   }
 
@@ -295,9 +289,7 @@ export function* tokenize(input: string, newlineState?: NewlineScanState): Itera
     return {
       type: TokenType.Literal,
       raw: input.slice(start, pos + 1),
-      loc: locate(start, pos + 1),
-      start,
-      end: pos + 1
+      loc: locate(start, pos + 1)
     };
   }
 
@@ -432,9 +424,7 @@ export function* tokenize(input: string, newlineState?: NewlineScanState): Itera
     return {
       type: TokenType.Literal,
       raw: input.slice(start, pos + 1),
-      loc: locate(start, pos + 1),
-      start,
-      end: pos + 1
+      loc: locate(start, pos + 1)
     };
   }
 }

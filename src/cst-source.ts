@@ -13,27 +13,33 @@ const nodeParents = new WeakMap<TreeNode, TreeNode>();
 const linkedRoots = new WeakSet<TreeNode>();
 const originalChildren = new WeakMap<TreeNode, TreeNode[]>();
 
-function positionToOffset(lineStarts: number[], position: Position): number {
+export function positionToOffset(lineStarts: number[], position: Position): number {
   return (lineStarts[position.line - 1] ?? lineStarts[lineStarts.length - 1]) + position.column;
+}
+
+/** Builds the absolute offset of the first code unit of every line. */
+export function buildLineStarts(source: string): number[] {
+  const lineStarts = [0];
+  for (let index = 0; index < source.length; index++) {
+    if (source.charCodeAt(index) === 0x0a) lineStarts.push(index + 1);
+  }
+  return lineStarts;
 }
 
 export function attachSource(node: TreeNode, source: string): void {
   createSourceAttacher(source)(node);
 }
 
-export function createSourceAttacher(source: string): (node: TreeNode) => void {
-  const lineStarts = [0];
-  for (let index = 0; index < source.length; index++) {
-    if (source.charCodeAt(index) === 0x0a) lineStarts.push(index + 1);
-  }
+export function createSourceAttacher(source: string, lineStarts?: number[]): (node: TreeNode) => void {
+  const starts = lineStarts ?? buildLineStarts(source);
 
   const attach = (root: TreeNode): void => {
     const stack: TreeNode[] = [root];
     while (stack.length > 0) {
       const current = stack.pop()!;
       const range = [
-        positionToOffset(lineStarts, current.loc.start),
-        positionToOffset(lineStarts, current.loc.end)
+        positionToOffset(starts, current.loc.start),
+        positionToOffset(starts, current.loc.end)
       ] as const;
 
       Object.defineProperty(current, 'range', {
