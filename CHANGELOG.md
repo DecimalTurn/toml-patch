@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
 - Packaging: expose the edit-only `patch-lite` entry from the `dev` dist-tag package as a `./patch-lite` subpath export. ([#309])
 
+### Fixed
+
+- Patching: preserve float formatting when replacing floating-point values with whole-number values and when updating exponent floats. ([#309])
+
 ## [3.1.2] - 2026-09-22
 
 ### Changed
