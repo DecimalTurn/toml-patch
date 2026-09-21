@@ -1,6 +1,11 @@
 name: Benchmarks (smol-toml)
-on: 
+on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published toml-patch version to also benchmark (leave empty to skip)'
+        required: false
+        default: ''
 
 jobs:
   benchmark:
@@ -30,4 +35,11 @@ jobs:
     - name: Build
       run: pnpm run build
     - name: Benchmark smol-toml fixtures
-      run: pnpm run benchmark:smol
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        if [ -n "$VERSION" ]; then
+          pnpm run benchmark:smol -- --versions "$VERSION"
+        else
+          pnpm run benchmark:smol
+        fi
