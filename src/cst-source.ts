@@ -26,12 +26,29 @@ export function buildLineStarts(source: string): number[] {
   return lineStarts;
 }
 
+// A single slot is enough because parsing is synchronous and uses one source
+// at a time. Keying by the full string also makes staleness impossible, since
+// strings are immutable.
+let cachedSource: string | undefined;
+let cachedLineStarts: number[] | undefined;
+
+/** Returns the memoized line starts for a source, building them on first use. */
+export function getLineStarts(source: string): number[] {
+  if (cachedSource === source && cachedLineStarts !== undefined) {
+    return cachedLineStarts;
+  }
+  const starts = buildLineStarts(source);
+  cachedSource = source;
+  cachedLineStarts = starts;
+  return starts;
+}
+
 export function attachSource(node: TreeNode, source: string): void {
   createSourceAttacher(source)(node);
 }
 
-export function createSourceAttacher(source: string, lineStarts?: number[]): (node: TreeNode) => void {
-  const starts = lineStarts ?? buildLineStarts(source);
+export function createSourceAttacher(source: string): (node: TreeNode) => void {
+  const starts = getLineStarts(source);
 
   const attach = (root: TreeNode): void => {
     const stack: TreeNode[] = [root];

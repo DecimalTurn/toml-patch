@@ -24,7 +24,7 @@ import Cursor from './cursor';
 import { clonePosition, cloneLocation, Location } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
-import { createSourceAttacher, buildLineStarts } from './cst-source';
+import { createSourceAttacher, getLineStarts } from './cst-source';
 
 import {
   DateFormatHelper,
@@ -255,11 +255,10 @@ export {
 export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
   const cursor = new Cursor(tokenize(input, newlineState));
-  const lineStarts = buildLineStarts(input);
-  const attachSource = createSourceAttacher(input, lineStarts);
+  const attachSource = createSourceAttacher(input);
   
   while (!cursor.next().done) {
-    const blocks = walkBlock(cursor, input, lineStarts);
+    const blocks = walkBlock(cursor, input);
     for (const block of blocks) {
       attachSource(block);
       yield block;
@@ -282,10 +281,9 @@ export function* continueParsingTOML(existingAst: CST, remainingString: string):
   
   // Parse and yield all items from the remaining string using non-generator path
   const cursor = new Cursor(tokenize(remainingString));
-  const lineStarts = buildLineStarts(remainingString);
   
   while (!cursor.next().done) {
-    const blocks = walkBlock(cursor, remainingString, lineStarts);
+    const blocks = walkBlock(cursor, remainingString);
     for (const block of blocks) {
       yield block;
     }
@@ -302,7 +300,7 @@ function comment(cursor: Cursor<Token>): Comment {
   };
 }
 
-function table(cursor: Cursor<Token>, input: string, lineStarts: number[]): Table | TableArray {
+function table(cursor: Cursor<Token>, input: string): Table | TableArray {
   // Table or TableArray
   //
   // [ key ]
@@ -522,7 +520,7 @@ function table(cursor: Cursor<Token>, input: string, lineStarts: number[]): Tabl
   let items: Array<KeyValue | Comment> = [];
   while (!cursor.peek().done && cursor.peek().value!.type !== TokenType.Bracket) {
     cursor.next();
-    const blocks = walkBlock(cursor, input, lineStarts) as Array<KeyValue | Comment>;
+    const blocks = walkBlock(cursor, input) as Array<KeyValue | Comment>;
     // Push directly instead of merge to avoid function call overhead
     for (let bi = 0; bi < blocks.length; bi++) {
       items.push(blocks[bi]);
@@ -1087,15 +1085,15 @@ function integer(cursor: Cursor<Token>, input: string): Integer {
  * @param input string
  * @returns Block[]
  */
-function walkBlock(cursor: Cursor<Token>, input: string, lineStarts: number[]): Block[] {
+function walkBlock(cursor: Cursor<Token>, input: string): Block[] {
   if (cursor.value!.type === TokenType.Comment) {
     return [comment(cursor)];
   } else if (cursor.value!.type === TokenType.Bracket) {
     // For tables, we can't easily avoid recursion, so just use the existing function
     // In practice, top-level tables aren't deeply nested
-    return [table(cursor, input, lineStarts)];
+    return [table(cursor, input)];
   } else if (cursor.value!.type === TokenType.Literal) {
-    return keyValue(cursor, input, lineStarts);
+    return keyValue(cursor, input);
   } else if (cursor.value!.type === TokenType.Equal) {
     throw new ParseError(
       input,
@@ -1118,7 +1116,7 @@ function walkBlock(cursor: Cursor<Token>, input: string, lineStarts: number[]): 
  * @param input string
  * @returns Array<KeyValue | Comment>
  */
-function keyValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): Array<KeyValue | Comment> {
+function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Comment> {
   // 3. KeyValue
   //
   // key = value
@@ -1153,7 +1151,11 @@ function keyValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): A
     value: keyValue2
   };
 
+  // Only build (and cache) line starts when a dotted key is actually present.
+  let lineStarts: number[] | undefined;
+
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
+    lineStarts ??= getLineStarts(input);
     cursor.next();
     const dot = cursor.value!;
     cursor.next();
@@ -1229,7 +1231,7 @@ function keyValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): A
     throw new ParseError(input, key.loc.start, `Expected value for key-value`);
   }
 
-  const results = walkValue(cursor, input, lineStarts);
+  const results = walkValue(cursor, input);
   const value = results[0] as Value;
 
   // Key/value pairs must be separated by a newline (or EOF). Whitespace alone isn't enough.
@@ -1276,7 +1278,7 @@ function keyValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): A
   return results as unknown as Array<KeyValue | Comment>;
 }
 
-function walkValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): Array<Value | Comment> {
+function walkValue(cursor: Cursor<Token>, input: string): Array<Value | Comment> {
   if (cursor.value!.type === TokenType.Literal) {
     const raw = cursor.value!.raw;
 
@@ -1303,10 +1305,10 @@ function walkValue(cursor: Cursor<Token>, input: string, lineStarts: number[]): 
       return [integer(cursor, input)];
     }
   } else if (cursor.value!.type === TokenType.Curly) {
-    const [inline_table, comments] = inlineTable(cursor, input, lineStarts);
+    const [inline_table, comments] = inlineTable(cursor, input);
     return [inline_table, ...comments];
   } else if (cursor.value!.type === TokenType.Bracket) {
-    const [inline_array, comments] = inlineArray(cursor, input, lineStarts);
+    const [inline_array, comments] = inlineArray(cursor, input);
     return [inline_array, ...comments];
   } else if (cursor.value!.type === TokenType.Dot) {
     throw new ParseError(
@@ -1342,7 +1344,7 @@ function detectCommaSpace(items: { loc: Location }[]): number | undefined {
   return undefined;
 }
 
-function inlineTable(cursor: Cursor<Token>, input: string, lineStarts: number[]): [InlineTable, Comment[]] {
+function inlineTable(cursor: Cursor<Token>, input: string): [InlineTable, Comment[]] {
   if (cursor.value!.raw !== '{') {
     throw new ParseError(
       input,
@@ -1405,7 +1407,7 @@ function inlineTable(cursor: Cursor<Token>, input: string, lineStarts: number[])
     }
 
     // Recursively parse the key-value, but without generators
-    const blocks = walkBlock(cursor, input, lineStarts);
+    const blocks = walkBlock(cursor, input);
     const item = blocks[0];
 
     if (item.type === NodeType.KeyValue) {
@@ -1444,7 +1446,7 @@ function inlineTable(cursor: Cursor<Token>, input: string, lineStarts: number[])
   return [value, comments];
 }
 
-function inlineArray(cursor: Cursor<Token>, input: string, lineStarts: number[]): [InlineArray, Comment[]] {
+function inlineArray(cursor: Cursor<Token>, input: string): [InlineArray, Comment[]] {
   // 7. InlineArray
   if (cursor.value!.raw !== '[') {
     throw new ParseError(
@@ -1495,7 +1497,7 @@ function inlineArray(cursor: Cursor<Token>, input: string, lineStarts: number[])
         throw new ParseError(input, cursor.value!.loc.start, 'Missing comma between array elements');
       }
 
-      const results = walkValue(cursor, input, lineStarts);
+      const results = walkValue(cursor, input);
       const item = results[0];
 
       value.items.push({
