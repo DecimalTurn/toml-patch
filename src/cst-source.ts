@@ -13,7 +13,7 @@ const nodeParents = new WeakMap<TreeNode, TreeNode>();
 const linkedRoots = new WeakSet<TreeNode>();
 const originalChildren = new WeakMap<TreeNode, TreeNode[]>();
 
-export function positionToOffset(lineStarts: number[], position: Position): number {
+function positionToOffset(lineStarts: number[], position: Position): number {
   return (lineStarts[position.line - 1] ?? lineStarts[lineStarts.length - 1]) + position.column;
 }
 
@@ -32,7 +32,7 @@ export function buildLineStarts(source: string): number[] {
 let cachedSource: string | undefined;
 let cachedLineStarts: number[] | undefined;
 
-/** Returns the memoized line starts for a source, building them on first use. */
+/** Returns the cached line starts for a source, building them on first use. */
 export function getLineStarts(source: string): number[] {
   if (cachedSource === source && cachedLineStarts !== undefined) {
     return cachedLineStarts;
