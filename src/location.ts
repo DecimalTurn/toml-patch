@@ -15,23 +15,6 @@ export interface Span {
   columns: number;
 }
 
-// Since getLine() is called repeatedly with the same input while parsing dotted keys,
-// we need to cache the line index of the most recently seen input.
-let cachedInput: string | undefined;
-let cachedLines: number[] | undefined;
-
-function getCachedLines(input: string): number[] {
-  if (cachedInput === input && cachedLines !== undefined) {
-    return cachedLines;
-  }
-
-  const lines = findLines(input);
-  cachedInput = input;
-  cachedLines = lines;
-
-  return lines;
-}
-
 export function getSpan(location: Location): Span {
   return {
     lines: location.end.line - location.start.line + 1,
@@ -101,7 +84,7 @@ export function findPosition(input: string | number[], index: number): Position 
  * @returns The line of text corresponding to the given position
  */
 export function getLine(input: string, position: Position): string {
-  const lines = getCachedLines(input);
+  const lines = findLines(input);
 
   const start = lines[position.line - 2] !== undefined ? lines[position.line - 2] + 1 : 0;
   const end = lines[position.line - 1] || input.length;

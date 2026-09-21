@@ -24,7 +24,7 @@ describe('location.getLine', () => {
     expect(getLine(first, { line: 2, column: 0 })).toBe('three = 2');
   });
 
-  test('does not serve stale indexes for different inputs of equal length', () => {
+  test('returns the correct line for inputs with different line boundaries', () => {
     const first = 'aa\nbb';
     const second = 'a\nbbb';
 

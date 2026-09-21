@@ -21,7 +21,7 @@ import {
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation, getLine, Location } from './location';
+import { clonePosition, cloneLocation, Location } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
 import { createSourceAttacher } from './cst-source';
@@ -1151,6 +1151,8 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
     value: keyValue2
   };
 
+  let keyEndOffset = cursor.value!.end;
+
   while (!cursor.peek().done && cursor.peek().value!.type === TokenType.Dot) {
     cursor.next();
     const dot = cursor.value!;
@@ -1164,12 +1166,11 @@ function keyValue(cursor: Cursor<Token>, input: string): Array<KeyValue | Commen
       validateBareKeyChars(partRaw, input, cursor.value!.loc.start);
     }
 
-    const keyLine = getLine(input, key.loc.end);
-    const dotLine = getLine(input, dot.loc.end);
-    const before = keyLine.slice(key.loc.end.column, dot.loc.start.column);
-    const after = dotLine.slice(dot.loc.end.column, cursor.value!.loc.start.column);
+    const before = input.slice(keyEndOffset, dot.start);
+    const after = input.slice(dot.end, cursor.value!.start);
 
     key.loc.end = cursor.value!.loc.end;
+    keyEndOffset = cursor.value!.end;
     key.raw += `${before}.${after}${cursor.value!.raw}`;
     key.value.push(parseKeyString(cursor.value!.raw, input, cursor.value!.loc.start));
   }
