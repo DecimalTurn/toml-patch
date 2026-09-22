@@ -5,8 +5,8 @@
  * on the fixtures in submodules/smol-toml/bench/testfiles.
  *
  * Usage:
- *   pnpm run benchmark:smol
- *   pnpm run benchmark:smol -- --versions 3.0.2
+ *   pnpm run bench:smol
+ *   pnpm run bench:smol -- --versions 3.0.2
  *
  * Options:
  *   --versions <list>  Comma-separated published toml-patch versions to also

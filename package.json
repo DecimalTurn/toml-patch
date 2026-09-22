@@ -55,15 +55,18 @@
     "test:all": "pnpm run test && pnpm run test:js && pnpm run test:playwright",
     "typecheck": "tsc",
     "specs": "vitest run --config vitest.specs.config.ts",
-    "benchmark": "npm-run-all2 bench:*",
-    "benchmark:ci": "npm-run-all2 \"bench:* -- --sample --versions latest\"",
-    "benchmark:smol": "node benchmark/smol-benchmark.mjs",
+    
+    "bench:iarna": "npm-run-all2 bench:iarna:parse bench:iarna:stringify",
+    "bench:iarna:ci": "npm-run-all2 \"bench:iarna:parse bench:iarna:stringify -- --sample --versions latest\"",
+    "bench:iarna:parse": "node benchmark/parse-benchmark.mjs",
+    "bench:iarna:stringify": "node benchmark/stringify-benchmark.mjs",
+    "bench:smol": "node benchmark/smol-benchmark.mjs",
+
     "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
     "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",
     "fuzz3": "npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 9999 --mutations 3",
-    "bench:parse": "node benchmark/parse-benchmark.mjs",
-    "bench:stringify": "node benchmark/stringify-benchmark.mjs",
+
     "profile": "node benchmark/profile.mjs",
     "build": "rimraf dist && tsdown",
     "build:demo": "node scripts/build-demo.mjs",

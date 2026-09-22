@@ -45,7 +45,7 @@ jobs:
         VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
       run: |
         if [ -n "$VERSION" ]; then
-          pnpm run benchmark:smol -- --versions "$VERSION"
+          pnpm run bench:smol -- --versions "$VERSION"
         else
-          pnpm run benchmark:smol
+          pnpm run bench:smol
         fi

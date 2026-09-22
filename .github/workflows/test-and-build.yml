@@ -86,7 +86,7 @@ jobs:
 
     # - name: Benchmark (CI samples)
     #   if: matrix.benchmark
-    #   run: pnpm run benchmark:ci
+    #   run: pnpm run bench:iarna:ci
 
     # - name: Check Performance
     #   if: matrix.benchmark

@@ -133,7 +133,7 @@ This runs tests against the official TOML spec test cases from the submodules.
 To measure performance:
 
 ```bash
-pnpm run benchmark
+pnpm run bench:iarna
 ```
 
 This runs benchmarks for both parsing and stringifying operations. To see example outputs:

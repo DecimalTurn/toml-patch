@@ -2,7 +2,7 @@
  * Benchmark stringify function using iarna-toml files
  * 
  * Usage:
- *   npm run benchmark:stringify [-- <options>]
+ *   pnpm run bench:stringify [-- <options>]
  *   
  * Options:
  *   --sample         Run curated sample of 10 representative benchmarks
@@ -190,13 +190,13 @@ Options:
   --output           Write results to output-<commit-hash>.md
   
 Examples:
-  npm run benchmark:stringify
-  npm run benchmark:stringify -- --sample
-  npm run benchmark:stringify -- --sample --self
-  npm run benchmark:stringify -- --detailed
-  npm run benchmark:stringify -- --file hard
-  npm run benchmark:stringify -- --package 0
-  npm run benchmark:stringify -- --output`);
+  pnpm run bench:stringify
+  pnpm run bench:stringify -- --sample
+  pnpm run bench:stringify -- --sample --self
+  pnpm run bench:stringify -- --detailed
+  pnpm run bench:stringify -- --file hard
+  pnpm run bench:stringify -- --package 0
+  pnpm run bench:stringify -- --output`);
   process.exit(0);
 }
 

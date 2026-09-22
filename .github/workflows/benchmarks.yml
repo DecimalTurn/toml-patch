@@ -30,4 +30,4 @@ jobs:
     - name: Build
       run: pnpm run build
     - name: Full Benchmark Suite
-      run: pnpm run benchmark
+      run: pnpm run bench:iarna
