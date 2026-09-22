@@ -28,7 +28,7 @@ The source-aware emitter (`toTOMLCursor`) is used by `patch()`, not by `stringif
 ## Status
 
 - Done: changes 1, 2 and 3.
-- Change 4, partly: profiling showed the dominant stringify-generation cost was the writer's dirty tracking (`setDirty` via `Object.defineProperty`, `markMutation`, `linkParents`, `markSubtreeDirty`) rather than `insert`/`applyWrites` position math. `insert`/`remove`/`replace` now skip `markMutation` when the root is a stringify root, and every generated container is marked as one. The remaining cost is the `applyWrites`/`shiftNode`/`move` position machinery, which a direct position-generation refactor would still remove.
+- Change 4, partly: profiling showed the dominant stringify-generation cost was the writer's dirty tracking (`setDirty` via `Object.defineProperty`, `markMutation`, `linkParents`, `markSubtreeDirty`) rather than `insert`/`applyWrites` position math. `insert`/`remove`/`replace` now skip `markMutation` when the root is a stringify root, and every generated container is marked as one. Compact generated inline arrays and tables now place their children directly with `shiftNode`, avoiding nested `insert`/`applyWrites` calls. Multiline containers and table extraction still use the existing writer machinery. A fully direct position-generation path would remove the remaining `applyWrites`/`shiftNode`/`move` work.
 
 ## Scope
 

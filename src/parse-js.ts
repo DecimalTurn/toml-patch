@@ -1,4 +1,4 @@
-import { Value, KeyValue, Document, InlineArray, InlineTable, isKeyValue, isInlineArray, isInlineTable } from './cst';
+import { Value, KeyValue, Document, InlineArray, InlineTable, InlineItem, isKeyValue, isInlineArray, isInlineTable } from './cst';
 import {
   generateDocument,
   generateKeyValue,
@@ -15,7 +15,7 @@ import {
 import { TomlFormat } from './toml-format';
 import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline, normalizeGeneratedInlineRows } from './formatter';
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
-import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth } from './writer';
+import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth, shiftNode } from './writer';
 import { prepareInsertedNestedInlineContainer } from './inline-layout';
 import { getInlineContainerLayout, markInlineContainerPositioned, resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
 
@@ -91,6 +91,37 @@ function* walkObject(
   }
 }
 
+function appendCompactInlineItem(
+  parent: InlineArray | InlineTable,
+  child: InlineItem,
+  format: TomlFormat
+): void {
+  const previous = parent.items[parent.items.length - 1];
+  if (previous) previous.comma = true;
+
+  const start = previous
+    ? {
+        line: previous.loc.end.line,
+        column: previous.loc.end.column + 2
+      }
+    : {
+        line: parent.loc.start.line,
+        column: parent.loc.start.column + (format.bracketSpacing ? 2 : 1)
+      };
+
+  shiftNode(child, {
+    lines: start.line - child.loc.start.line,
+    columns: start.column - child.loc.start.column
+  });
+  (parent.items as InlineItem[]).push(child);
+
+  child.comma = false;
+  parent.loc.end = {
+    line: child.loc.end.line,
+    column: child.loc.end.column + (format.bracketSpacing ? 2 : 1)
+  };
+}
+
 function walkValue(
   value: any,
   format: TomlFormat,
@@ -139,6 +170,24 @@ function walkInlineArray(
   setInlineContainerLayout(inline_array, multiline);
   setRootIndentWidth(inline_array, format.indentWidth);
   markStringifyRoot(inline_array);
+  if (!multiline) {
+    for (const element of value) {
+      const item = walkValue(element, format, depth + 1, multiline);
+      const inline_array_item = generateInlineItem(item);
+
+      if ((item.type === 'InlineArray' || item.type === 'InlineTable') &&
+          getInlineContainerLayout(item) === true) {
+        markInlineContainerPositioned(item);
+      }
+      appendCompactInlineItem(inline_array, inline_array_item, format);
+    }
+    if (inline_array.items.length > 0 && format.trailingComma) {
+      const last = inline_array.items[inline_array.items.length - 1];
+      last.comma = true;
+      inline_array.loc.end.column++;
+    }
+    return inline_array;
+  }
   for (const element of value) {
     const item = walkValue(element, format, depth + 1, multiline);
     const inline_array_item = generateInlineItem(item);
@@ -172,6 +221,17 @@ function walkInlineTable(
   setInlineContainerLayout(inline_table, multiline);
   setRootIndentWidth(inline_table, format.indentWidth);
   markStringifyRoot(inline_table);
+  if (!multiline) {
+    for (const item of walkObject(value, format, depth + 1, multiline)) {
+      appendCompactInlineItem(inline_table, generateInlineItem(item), format);
+    }
+    if (inline_table.items.length > 0 && format.trailingComma) {
+      const last = inline_table.items[inline_table.items.length - 1];
+      last.comma = true;
+      inline_table.loc.end.column++;
+    }
+    return inline_table;
+  }
   for (const item of walkObject(value, format, depth + 1, multiline)) {
     const inline_table_item = generateInlineItem(item);
 
