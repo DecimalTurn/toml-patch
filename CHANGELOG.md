@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Parsing: Improve performance for parsing object outside of a patching operation. Attach extra data lazily during patching instead of on every parse
+- Parsing: Improve performance for parsing object outside of a patching operation. Attach extra data lazily during patching (or for TomlDocument instances) instead of on every parse ([#312])
 
 ## [3.1.1] - 2026-09-21
 
@@ -449,5 +449,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#298]: https://github.com/DecimalTurn/toml-patch/pull/298
 [#303]: https://github.com/DecimalTurn/toml-patch/pull/303
 [#311]: https://github.com/DecimalTurn/toml-patch/pull/311
+[#312]: https://github.com/DecimalTurn/toml-patch/pull/312
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
