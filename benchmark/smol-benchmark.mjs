@@ -211,11 +211,21 @@ for (const impl of IMPLEMENTATIONS) {
 function report(label, results) {
   for (const fixture of FIXTURES) {
     console.log(`\n${label} ${fixture.name} (${(fixture.data.length / 1024).toFixed(1)} KB)`);
-    for (const { impl, hz } of results.filter((r) => r.fixture === fixture.name)) {
+    const rows = results.filter((r) => r.fixture === fixture.name);
+    const smolHz = rows.find((r) => r.impl === 'smol-toml')?.hz;
+    for (const { impl, hz } of rows) {
       const opsPerSec = hz < 1 ? hz.toFixed(3) : formatNumber(hz.toFixed(hz < 100 ? 2 : 0));
-      console.log(`  ${impl}: ${opsPerSec} ops/sec`);
+      const note = impl === 'smol-toml'
+        ? ' (reference)'
+        : smolHz ? ` (${formatFactor(smolHz / hz)} than smol-toml)` : '';
+      console.log(`  ${impl}: ${opsPerSec} ops/sec${note}`);
     }
   }
+}
+
+/** Formats a slowdown factor as `Nx slower` or `Nx faster`. */
+function formatFactor(factor) {
+  return factor < 1 ? `${(1 / factor).toFixed(1)}x faster` : `${factor.toFixed(1)}x slower`;
 }
 
 report('Parse:', parseResults);
@@ -227,8 +237,8 @@ checkThresholds(parseResults, stringifyResults);
 
 /**
  * Reads the thresholds TOML file and sets a non-zero exit code when the
- * current build's measured throughput falls below any configured minimum.
- * Thresholds are keyed by operation (`parse` / `stringify`) and fixture name.
+ * current build is more than `maxSlowdown` times slower than smol-toml on any
+ * fixture. Factors are keyed by operation (`parse` / `stringify`).
  */
 function checkThresholds(parseResults, stringifyResults) {
   if (!existsSync(THRESHOLDS_PATH)) {
@@ -240,19 +250,23 @@ function checkThresholds(parseResults, stringifyResults) {
   const byOperation = { parse: parseResults, stringify: stringifyResults };
 
   let failed = false;
-  console.log('\nPerformance thresholds:');
-  for (const [operation, minByFixture] of Object.entries(thresholds)) {
+  console.log('\nPerformance thresholds (max slowdown vs smol-toml):');
+  for (const [operation, config] of Object.entries(thresholds)) {
     const results = byOperation[operation];
-    if (!results) continue;
-    for (const [fixture, minimum] of Object.entries(minByFixture)) {
-      const result = results.find((r) => r.fixture === fixture && r.impl === CURRENT_IMPL);
-      if (!result) {
-        console.warn(`  ⚠️  No ${CURRENT_IMPL} result for ${operation} ${fixture}; skipping`);
+    const maxSlowdown = config?.maxSlowdown;
+    if (!results || typeof maxSlowdown !== 'number') continue;
+
+    for (const fixture of FIXTURES) {
+      const current = results.find((r) => r.fixture === fixture.name && r.impl === CURRENT_IMPL);
+      const smol = results.find((r) => r.fixture === fixture.name && r.impl === 'smol-toml');
+      if (!current || !smol) {
+        console.warn(`  ⚠️  Missing toml-patch or smol-toml result for ${operation} ${fixture.name}; skipping`);
         continue;
       }
-      const ok = result.hz >= minimum;
+      const slowdown = smol.hz / current.hz;
+      const ok = slowdown <= maxSlowdown;
       if (!ok) failed = true;
-      console.log(`  ${ok ? '✅' : '❌'} ${operation} ${fixture}: ${formatHz(result.hz)} ops/sec (min ${minimum})`);
+      console.log(`  ${ok ? '✅' : '❌'} ${operation} ${fixture.name}: ${slowdown.toFixed(1)}x slower than smol-toml (max ${maxSlowdown}x)`);
     }
   }
 
@@ -262,8 +276,4 @@ function checkThresholds(parseResults, stringifyResults) {
   } else {
     console.log('\n✅ All performance thresholds met.');
   }
-}
-
-function formatHz(hz) {
-  return hz < 1 ? hz.toFixed(3) : formatNumber(hz.toFixed(hz < 100 ? 2 : 0));
 }
