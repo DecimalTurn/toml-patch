@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-09-22
+
 ### Changed
 
 - Parsing: Improve performance for parsing object outside of a patching operation. Attach extra data lazily during patching (or for TomlDocument instances) instead of on every parse ([#312])
