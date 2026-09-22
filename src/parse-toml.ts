@@ -14,17 +14,18 @@ import {
   DateTime,
   InlineTable,
   InlineArray,
+  InlineItem,
   Comment,
   CST,
-  Block
+  Block,
+  TreeNode
 } from './cst';
 import { Token, TokenType, tokenize, DOUBLE_QUOTE, SINGLE_QUOTE, NewlineScanState } from './tokenizer';
 import { parseString } from './parse-string';
 import Cursor from './cursor';
-import { clonePosition, cloneLocation, getLine, clearCachedLines, Location } from './location';
+import { clonePosition, cloneLocation, getLine, clearCachedLines, Location, Position } from './location';
 import { setCommaSpace } from './inline-comma-space';
 import ParseError from './parse-error';
-import { createSourceAttacher } from './cst-source';
 
 import {
   DateFormatHelper,
@@ -255,13 +256,11 @@ export {
 export default function* parseTOML(input: string, newlineState?: NewlineScanState): CST {
   // Use non-generator parsing to avoid stack overflow on deeply nested structures
   const cursor = new Cursor(tokenize(input, newlineState));
-  const attachSource = createSourceAttacher(input);
   
   try {
     while (!cursor.next().done) {
       const blocks = walkBlock(cursor, input);
       for (const block of blocks) {
-        attachSource(block);
         yield block;
       }
     }
@@ -272,12 +271,19 @@ export default function* parseTOML(input: string, newlineState?: NewlineScanStat
 
 /**
  * Continues parsing TOML from a remaining string and appends the results to an existing CST.
- * 
+ *
  * @param existingAst - The existing CST to append to
  * @param remainingString - The remaining TOML string to parse
+ * @param startPosition - Absolute source position of the first character of
+ *   `remainingString`. When provided, the newly parsed blocks' locations are
+ *   rebased from suffix-relative to absolute positions.
  * @returns A new complete CST with both the existing and newly parsed items
  */
-export function* continueParsingTOML(existingAst: CST, remainingString: string): CST {
+export function* continueParsingTOML(
+  existingAst: CST,
+  remainingString: string,
+  startPosition?: Position
+): CST {
   // Yield all items from the existing CST
   for (const item of existingAst) {
     yield item;
@@ -290,11 +296,56 @@ export function* continueParsingTOML(existingAst: CST, remainingString: string):
     while (!cursor.next().done) {
       const blocks = walkBlock(cursor, remainingString);
       for (const block of blocks) {
+        if (startPosition) rebaseBlock(block, startPosition);
         yield block;
       }
     }
   } finally {
     clearCachedLines();
+  }
+}
+
+/**
+ * Offsets a suffix-relative position to its absolute position in the full
+ * source. The first line of the suffix is shifted by `start.column` while
+ * subsequent lines are only shifted by `start.line - 1`.
+ */
+function offsetPosition(position: Position, start: Position): Position {
+  return {
+    line: position.line + start.line - 1,
+    column: position.line === 1 ? position.column + start.column : position.column
+  };
+}
+
+/**
+ * Rebases every node location in a block parsed from a suffix back to absolute
+ * positions, so source attachment and the source-aware writer see consistent
+ * offsets after an incremental `update()`.
+ */
+function rebaseBlock(block: Block, start: Position): void {
+  const stack: TreeNode[] = [block];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    node.loc.start = offsetPosition(node.loc.start, start);
+    node.loc.end = offsetPosition(node.loc.end, start);
+
+    if (node.type === NodeType.KeyValue) {
+      const keyValue = node as KeyValue;
+      stack.push(keyValue.value, keyValue.key);
+    } else if (
+      node.type === NodeType.TableKey ||
+      node.type === NodeType.TableArrayKey ||
+      node.type === NodeType.InlineItem
+    ) {
+      stack.push((node as TableKey | TableArrayKey | InlineItem).item);
+    } else if (node.type === NodeType.Table || node.type === NodeType.TableArray) {
+      const table = node as Table | TableArray;
+      stack.push(table.key);
+      for (let index = table.items.length - 1; index >= 0; index--) stack.push(table.items[index]);
+    } else if (node.type === NodeType.InlineTable || node.type === NodeType.InlineArray) {
+      const items = (node as InlineTable | InlineArray).items;
+      for (let index = items.length - 1; index >= 0; index--) stack.push(items[index]);
+    }
   }
 }
 

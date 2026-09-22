@@ -21,6 +21,17 @@ export function attachSource(node: TreeNode, source: string): void {
   createSourceAttacher(source)(node);
 }
 
+/**
+ * Attaches source positions to every node reachable from the given roots using
+ * a single `lineStarts` scan. This prepares a CST parsed without source
+ * attachment (the default, since attachment is only needed for patching) for
+ * the `range` and node-source lookups used by the writer and stringifier.
+ */
+export function attachSources(roots: Iterable<TreeNode>, source: string): void {
+  const attach = createSourceAttacher(source);
+  for (const root of roots) attach(root);
+}
+
 export function createSourceAttacher(source: string): (node: TreeNode) => void {
   const lineStarts = [0];
   for (let index = 0; index < source.length; index++) {

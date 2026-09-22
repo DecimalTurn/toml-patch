@@ -3,6 +3,7 @@ import toJS from './to-js';
 import { TomlFormat } from './toml-format';
 import { Block } from './cst';
 import { patchCst } from './patch';
+import { attachSources } from './cst-source';
 import { detectNewline, resolveTomlFormat } from './toml-format';
 import { truncateCst } from './truncate';
 import type { ParseOptions, IntegersAsBigInt } from './parse-options';
@@ -99,6 +100,7 @@ export class TomlDocument {
       (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
     const trailingCommaExplicit = format instanceof TomlFormat ||
       (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
+    attachSources(this._cst, sourceBefore);
     const result = patchCst(
       this._cst,
       updatedObject,
@@ -174,7 +176,10 @@ export class TomlDocument {
     
     const remainingToml = remainingLines.join(this._format.newLine);
     
-    this._cst = Array.from(continueParsingTOML(truncatedCst, remainingToml));
+    this._cst = Array.from(continueParsingTOML(truncatedCst, remainingToml, {
+      line: continueFromLine,
+      column: continueFromColumn
+    }));
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics

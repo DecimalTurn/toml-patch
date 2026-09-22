@@ -53,6 +53,7 @@ import {
   recordInlineTableCommentDelta
 } from './comment-alignment';
 import { getSpan } from './location';
+import { attachSources } from './cst-source';
 import { stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import traverse from './traverse';
 import { prepareInsertedNestedInlineContainer, positionGeneratedNestedInlineTables } from './inline-layout';
@@ -80,7 +81,9 @@ export default function patch(existing: string, updated: any, format?: Partial<T
   // The tokenizer flags mixed line endings as it scans, so this requires no
   // separate pass over the input.
   const newlineState = createNewlineScanState();
-  const existing_cst = Array.from(parseTOML(stripLeadingBom(existing), newlineState));
+  const existingToml = stripLeadingBom(existing);
+  const existing_cst = Array.from(parseTOML(existingToml, newlineState));
+  attachSources(existing_cst, existingToml);
 
   // Auto-detect formatting preferences from the existing TOML string for fallback
   const autoDetectedFormat = TomlFormat.autoDetectFormatWithCst(existing, existing_cst);
