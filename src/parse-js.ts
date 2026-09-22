@@ -17,7 +17,7 @@ import { formatTopLevel, formatEmptyLines, formatNestedTablesMultiline, normaliz
 import { isObject, isString, isBigInt, isInteger, isFloat, isBoolean, isDate, isTemporal } from './utils';
 import { insert, applyWrites, applyBracketSpacing, applyTrailingComma, markStringifyRoot, setRootIndentWidth, shiftNode } from './writer';
 import { prepareInsertedNestedInlineContainer } from './inline-layout';
-import { getInlineContainerLayout, markInlineContainerPositioned, resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
+import { resolveInlineContainerLayout, setInlineContainerLayout } from './inline-format';
 
 /**
  * Parses a JavaScript object into a CST Document, applying formatting options from TomlFormat.
@@ -175,10 +175,6 @@ function walkInlineArray(
       const item = walkValue(element, format, depth + 1, multiline);
       const inline_array_item = generateInlineItem(item);
 
-      if ((item.type === 'InlineArray' || item.type === 'InlineTable') &&
-          getInlineContainerLayout(item) === true) {
-        markInlineContainerPositioned(item);
-      }
       appendCompactInlineItem(inline_array, inline_array_item, format);
     }
     if (inline_array.items.length > 0 && format.trailingComma) {
@@ -192,10 +188,6 @@ function walkInlineArray(
     const item = walkValue(element, format, depth + 1, multiline);
     const inline_array_item = generateInlineItem(item);
 
-    if (!multiline && (item.type === 'InlineArray' || item.type === 'InlineTable') &&
-        getInlineContainerLayout(item) === true) {
-      markInlineContainerPositioned(item);
-    }
     prepareInsertedNestedInlineContainer(inline_array, inline_array_item, format.indentWidth);
     insert(inline_array, inline_array, inline_array_item);
   }
