@@ -1,6 +1,6 @@
 import parseTOML from './parse-toml';
 import parseJS from './parse-js';
-import toTOML from './to-toml';
+import toTOML, { toTOMLSequential } from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
@@ -66,7 +66,9 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
   const fmt = resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
-  const tomlString = toTOML(document.items, fmt);
+  const tomlString = format == null
+    ? toTOMLSequential(document.items, fmt)
+    : toTOML(document.items, fmt);
   return fmt.leadingBom ? `${UTF8_BOM}${tomlString}` : tomlString;
 }
 
