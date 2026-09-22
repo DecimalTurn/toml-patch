@@ -1,6 +1,6 @@
 import parseTOML from './parse-toml';
 import parseJS from './parse-js';
-import toTOML from './to-toml';
+import toTOML, { toTOMLSequential } from './to-toml';
 import toJS from './to-js';
 import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
@@ -8,6 +8,30 @@ import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import { TomlDocument } from './toml-document';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
+
+/**
+ * Frozen default format reused for stringify() calls that pass no format
+ * object, avoiding a TomlFormat allocation on every call.
+ */
+const DEFAULT_STRINGIFY_FORMAT: TomlFormat = Object.freeze(TomlFormat.default()) as TomlFormat;
+
+/** True when a resolved format produces byte-identical output to the defaults. */
+function isDefaultFormat(fmt: TomlFormat): boolean {
+  const d = DEFAULT_STRINGIFY_FORMAT;
+  return fmt.newLine === d.newLine &&
+    fmt.trailingNewline === d.trailingNewline &&
+    fmt.trailingComma === d.trailingComma &&
+    fmt.bracketSpacing === d.bracketSpacing &&
+    fmt.inlineTableStart === d.inlineTableStart &&
+    fmt.truncateZeroTimeInDates === d.truncateZeroTimeInDates &&
+    fmt.useTabsForIndentation === d.useTabsForIndentation &&
+    fmt.indentWidth === d.indentWidth &&
+    fmt.minimumDecimals === d.minimumDecimals &&
+    fmt.leadingBom === d.leadingBom &&
+    fmt.updateOrder === d.updateOrder &&
+    fmt.multilineTable === d.multilineTable &&
+    fmt.multilineArray === d.multilineArray;
+}
 
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
@@ -63,10 +87,14 @@ export function parse(value: string | Uint8Array, options?: ParseOptions): any {
  * @returns The stringified TOML representation
  */
 export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const fmt = resolveTomlFormat(format, TomlFormat.default());
+  const fmt = format == null
+    ? DEFAULT_STRINGIFY_FORMAT
+    : resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
-  const tomlString = toTOML(document.items, fmt);
+  const tomlString = isDefaultFormat(fmt)
+    ? toTOMLSequential(document.items, fmt)
+    : toTOML(document.items, fmt);
   return fmt.leadingBom ? `${UTF8_BOM}${tomlString}` : tomlString;
 }
 

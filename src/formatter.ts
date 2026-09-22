@@ -15,7 +15,7 @@ import {
   TreeNode
 } from './cst';
 import { generateTable, generateDocument, generateTableArray } from './generate';
-import { insert, remove, applyWrites, shiftNode } from './writer';
+import { insert, remove, applyWrites, shiftNode, markStringifyRoot } from './writer';
 import { TomlFormat } from './toml-format';
 import { getInlineContainerLayout, hasStructuralMultilineRows } from './inline-format';
 import { getCommaSpace } from './inline-comma-space';
@@ -87,6 +87,7 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
 
 function formatTable(key_value: KeyValue, bracketSpacing: boolean): Table {
   const table = generateTable(key_value.key.value);
+  markStringifyRoot(table);
 
   for (const item of (key_value.value as InlineTable).items) {
     insert(table, table, item.item, undefined, undefined, undefined, undefined, true);
@@ -99,6 +100,7 @@ function formatTable(key_value: KeyValue, bracketSpacing: boolean): Table {
 
 function formatTableArray(key_value: KeyValue, bracketSpacing: boolean): TableArray[] {
   const root = generateDocument();
+  markStringifyRoot(root);
 
   for (const inline_array_item of (key_value.value as InlineArray).items) {
     const table_array = generateTableArray(key_value.key.value);
@@ -399,6 +401,7 @@ function processTableForNestedInlines(table: Table | TableArray, additionalTable
   // stays valid regardless of index shifts.
   for (const { item, nestedTableKey } of toExtract) {
     const separateTable = generateTable(nestedTableKey);
+    markStringifyRoot(separateTable);
     const inlineTable = item.value as InlineTable;
 
     for (const inlineItem of inlineTable.items) {
