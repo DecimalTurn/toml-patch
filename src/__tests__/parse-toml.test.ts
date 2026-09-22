@@ -14,6 +14,7 @@ import {
 import { example, fruit, hard_example, hard_example_unicode, kitchen_sink } from '../__fixtures__';
 import dedent from 'dedent';
 import { createLocate } from '../location';
+import { attachSources } from '../cst-source';
 
 test('it should parse inline table', () => {
   expect([...parseTOML(`key = { end = true}`)]).toMatchSnapshot();
@@ -22,6 +23,8 @@ test('it should parse inline table', () => {
 test('parsed CST ranges agree with node locations', () => {
   const source = `# heading\n[section]\nvalue = [1, { nested = """\ntext""" }, 3]\n`;
   const locate = createLocate(source);
+  const blocks = [...parseTOML(source)];
+  attachSources(blocks, source);
 
   function check(node: TreeNode): void {
     expect(node.range).toBeDefined();
@@ -40,7 +43,7 @@ test('parsed CST ranges agree with node locations', () => {
     }
   }
 
-  for (const block of parseTOML(source)) check(block);
+  for (const block of blocks) check(block);
 });
 
 test('it should parse examples', () => {
