@@ -699,136 +699,165 @@ export function toTOMLSequential(cst: CST, format: TomlFormat): string {
     }
   };
 
-  const appendRelativeGap = (
-    from: { line: number; column: number },
-    to: { line: number; column: number },
-    absoluteIndent = false
-  ): void => {
-    if (to.line > from.line) {
-      append(format.newLine.repeat(to.line - from.line));
-      if (to.column > 0) append(absoluteIndent ? SPACE.repeat(to.column) : indentation(to.column));
-    } else if (to.line === from.line && to.column > from.column) {
-      append(SPACE.repeat(to.column - from.column));
-    }
-  };
-
-  const emitInlineItems = (container: InlineArray | InlineTable): void => {
-    const generatedMultilineTable = isInlineTable(container) && isGeneratedNestedTable(container);
-    let previous: InlineItem | undefined;
-    for (const current of container.items as InlineItem[]) {
-      const from = previous
-        ? { line: previous.loc.end.line, column: previous.loc.end.column + (previous.comma ? 1 : 0) }
-        : { line: container.loc.start.line, column: container.loc.start.column + 1 };
-      appendRelativeGap(from, current.loc.start, generatedMultilineTable);
-      emitNode(current, false);
-      previous = current;
-    }
-
-    if (previous) {
-      if (generatedMultilineTable && previous.comma) append(SPACE);
-      appendRelativeGap(
-        { line: previous.loc.end.line, column: previous.loc.end.column + (previous.comma ? 1 : 0) },
-        { line: container.loc.end.line, column: container.loc.end.column - 1 },
-        generatedMultilineTable
-      );
-    }
-  };
-
-  const emitNode = (node: TreeNode, place = true): void => {
+  const leafRaw = (node: TreeNode): string => {
     switch (node.type) {
-      case NodeType.Document:
-        for (const item of (node as Document).items) emitNode(item);
+      case NodeType.Key: return (node as Key).raw;
+      case NodeType.String: return (node as StringNode).raw;
+      case NodeType.Integer: return (node as Integer).raw;
+      case NodeType.Float: return (node as Float).raw;
+      case NodeType.Boolean: return (node as BooleanNode).value.toString();
+      case NodeType.DateTime: return (node as DateTime).raw;
+      case NodeType.Comment: return (node as Comment).raw;
+      default: return '';
+    }
+  };
+
+  // Iterative command stack: emits in structural order without recursion, so
+  // arbitrarily deep nesting (the toml-test "scaling" fixtures) cannot overflow
+  // the call stack. Command encoding:
+  //   [0, node, place]                  emit a node
+  //   [1, text]                         append raw text
+  //   [2, fl, fc, tl, tc, absolute]     append a relative gap from (fl, fc) to (tl, tc)
+  //   [3, line, column]                 advance the cursor
+  const stack: any[] = [];
+
+  const pushNode = (node: TreeNode, place: boolean): void => {
+    switch (node.type) {
+      case NodeType.Document: {
+        const items = (node as Document).items;
+        for (let i = items.length - 1; i >= 0; i--) stack.push([0, items[i], true]);
         break;
+      }
       case NodeType.Table: {
         const table = node as Table;
-        emitNode(table.key, place);
-        for (const item of table.items) emitNode(item);
+        const items = table.items;
+        for (let i = items.length - 1; i >= 0; i--) stack.push([0, items[i], true]);
+        stack.push([0, table.key, place]);
         break;
       }
       case NodeType.TableKey: {
         const tableKey = node as TableKey;
-        if (place) advanceTo(tableKey.loc.start.line, tableKey.loc.start.column);
-        append(`[${tableKey.item.raw}]`);
+        stack.push([1, `[${tableKey.item.raw}]`]);
+        if (place) stack.push([3, tableKey.loc.start.line, tableKey.loc.start.column]);
         break;
       }
       case NodeType.TableArray: {
         const tableArray = node as TableArray;
-        emitNode(tableArray.key, place);
-        for (const item of tableArray.items) emitNode(item);
+        const items = tableArray.items;
+        for (let i = items.length - 1; i >= 0; i--) stack.push([0, items[i], true]);
+        stack.push([0, tableArray.key, place]);
         break;
       }
       case NodeType.TableArrayKey: {
         const tableArrayKey = node as TableArrayKey;
-        if (place) advanceTo(tableArrayKey.loc.start.line, tableArrayKey.loc.start.column);
-        append(`[[${tableArrayKey.item.raw}]]`);
+        stack.push([1, `[[${tableArrayKey.item.raw}]]`]);
+        if (place) stack.push([3, tableArrayKey.loc.start.line, tableArrayKey.loc.start.column]);
         break;
       }
       case NodeType.KeyValue: {
         const keyValue = node as KeyValue;
-        if (place) advanceTo(keyValue.loc.start.line, keyValue.loc.start.column);
-        emitNode(keyValue.key, false);
-        appendRelativeGap(keyValue.key.loc.end, { line: keyValue.loc.start.line, column: keyValue.equals });
-        append('=');
-        appendRelativeGap({ line: keyValue.loc.start.line, column: keyValue.equals + 1 }, keyValue.value.loc.start);
-        emitNode(keyValue.value, false);
+        stack.push([0, keyValue.value, false]);
+        stack.push([2, keyValue.loc.start.line, keyValue.equals + 1, keyValue.value.loc.start.line, keyValue.value.loc.start.column, false]);
+        stack.push([1, '=']);
+        stack.push([2, keyValue.key.loc.end.line, keyValue.key.loc.end.column, keyValue.loc.start.line, keyValue.equals, false]);
+        stack.push([0, keyValue.key, false]);
+        if (place) stack.push([3, keyValue.loc.start.line, keyValue.loc.start.column]);
         break;
       }
       case NodeType.Key:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as Key).raw);
-        break;
       case NodeType.String:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as StringNode).raw);
-        break;
       case NodeType.Integer:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as Integer).raw);
-        break;
       case NodeType.Float:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as Float).raw);
-        break;
       case NodeType.Boolean:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as BooleanNode).value.toString());
-        break;
       case NodeType.DateTime:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as DateTime).raw);
+      case NodeType.Comment: {
+        stack.push([1, leafRaw(node)]);
+        if (place) stack.push([3, node.loc.start.line, node.loc.start.column]);
         break;
+      }
       case NodeType.InlineArray: {
         const array = node as InlineArray;
-        if (place) advanceTo(array.loc.start.line, array.loc.start.column);
-        append('[');
-        emitInlineItems(array);
-        append(']');
+        const items = array.items as InlineItem[];
+        stack.push([1, ']']);
+        if (items.length > 0) {
+          const last = items[items.length - 1];
+          stack.push([2, last.loc.end.line, last.loc.end.column + (last.comma ? 1 : 0), array.loc.end.line, array.loc.end.column - 1, false]);
+        }
+        for (let i = items.length - 1; i >= 0; i--) {
+          const current = items[i];
+          const previous = i > 0 ? items[i - 1] : undefined;
+          stack.push([0, current, false]);
+          stack.push(previous
+            ? [2, previous.loc.end.line, previous.loc.end.column + (previous.comma ? 1 : 0), current.loc.start.line, current.loc.start.column, false]
+            : [2, array.loc.start.line, array.loc.start.column + 1, current.loc.start.line, current.loc.start.column, false]);
+        }
+        stack.push([1, '[']);
+        if (place) stack.push([3, array.loc.start.line, array.loc.start.column]);
         break;
       }
       case NodeType.InlineTable: {
         const table = node as InlineTable;
-        if (place) advanceTo(table.loc.start.line, table.loc.start.column);
-        append('{');
-        emitInlineItems(table);
-        append('}');
+        const items = table.items as InlineItem[];
+        const generatedMultilineTable = isGeneratedNestedTable(table);
+        stack.push([1, '}']);
+        if (items.length > 0) {
+          const last = items[items.length - 1];
+          if (generatedMultilineTable && last.comma) stack.push([1, SPACE]);
+          stack.push([2, last.loc.end.line, last.loc.end.column + (last.comma ? 1 : 0), table.loc.end.line, table.loc.end.column - 1, generatedMultilineTable]);
+        }
+        for (let i = items.length - 1; i >= 0; i--) {
+          const current = items[i];
+          const previous = i > 0 ? items[i - 1] : undefined;
+          stack.push([0, current, false]);
+          stack.push(previous
+            ? [2, previous.loc.end.line, previous.loc.end.column + (previous.comma ? 1 : 0), current.loc.start.line, current.loc.start.column, generatedMultilineTable]
+            : [2, table.loc.start.line, table.loc.start.column + 1, current.loc.start.line, current.loc.start.column, generatedMultilineTable]);
+        }
+        stack.push([1, '{']);
+        if (place) stack.push([3, table.loc.start.line, table.loc.start.column]);
         break;
       }
       case NodeType.InlineItem: {
         const item = node as InlineItem;
-        emitNode(item.item, false);
-        if (item.comma) append(',');
+        if (item.comma) stack.push([1, ',']);
+        stack.push([0, item.item, false]);
         break;
       }
-      case NodeType.Comment:
-        if (place) advanceTo(node.loc.start.line, node.loc.start.column);
-        append((node as Comment).raw);
-        break;
       default:
         throw new Error(`toTOMLSequential: Unrecognized node type: ${String((node as any).type)}`);
     }
   };
 
-  for (const root of roots) emitNode(root);
+  for (let i = roots.length - 1; i >= 0; i--) stack.push([0, roots[i], true]);
+
+  while (stack.length > 0) {
+    const command = stack.pop()!;
+    switch (command[0]) {
+      case 0:
+        pushNode(command[1], command[2]);
+        break;
+      case 1:
+        append(command[1]);
+        break;
+      case 2: {
+        const fromLine = command[1];
+        const fromColumn = command[2];
+        const toLine = command[3];
+        const toColumn = command[4];
+        const absoluteIndent = command[5];
+        if (toLine > fromLine) {
+          append(format.newLine.repeat(toLine - fromLine));
+          if (toColumn > 0) append(absoluteIndent ? SPACE.repeat(toColumn) : indentation(toColumn));
+        } else if (toLine === fromLine && toColumn > fromColumn) {
+          append(SPACE.repeat(toColumn - fromColumn));
+        }
+        break;
+      }
+      case 3:
+        advanceTo(command[1], command[2]);
+        break;
+    }
+  }
 
   return chunks.join('').replace(/\r\n|\n/g, format.newLine) + format.newLine.repeat(format.trailingNewline);
 }
