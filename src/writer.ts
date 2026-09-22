@@ -196,7 +196,9 @@ export function replace(root: Root, parent: TreeNode, existing: TreeNode, replac
   };
 
   addOffset(offset, getExitOffsets(root), replacement, existing);
-  markMutation(root, parent, replacement);
+  if (!stringifyRoots.has(root)) {
+    markMutation(root, parent, replacement);
+  }
   dirty_roots.add(root);
 }
 /**
@@ -274,7 +276,11 @@ export function insert(root: Root, parent: TreeNode, child: TreeNode, index?: nu
 
   const offsets = getExitOffsets(root);
   offsets.set(child, offset);
-  markMutation(root, parent, child);
+  // Stringify builds the tree from scratch: nothing ever reads the `dirty`
+  // flags, so skip the linkParents + markSubtreeDirty walk entirely.
+  if (!stringifyRoots.has(root)) {
+    markMutation(root, parent, child);
+  }
   dirty_roots.add(root);
 }
 
@@ -707,7 +713,9 @@ export function remove(root: Root, parent: TreeNode, node: TreeNode, hostItems?:
     throw new Error(`Unsupported parent type "${parent.type}" for remove`);
   }
 
-  markMutation(root, parent);
+  if (!stringifyRoots.has(root)) {
+    markMutation(root, parent);
+  }
 
   let index = parent.items.indexOf(node);
   if (index < 0) {

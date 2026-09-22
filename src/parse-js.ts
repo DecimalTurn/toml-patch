@@ -46,16 +46,26 @@ export default function parseJS(
   // 1. Top-level objects/arrays should be tables/table arrays
   // 2. Convert nested inline tables to separate tables based on preferNestedTablesMultiline
   formatTopLevel(document, format);
-  formatNestedTablesMultiline(document, format);
-  for (const item of document.items) {
-    if (item.type === 'Table' || item.type === 'TableArray') {
-      normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
-    } else if (isKeyValue(item) && (isInlineArray(item.value) || isInlineTable(item.value))) {
-      // Root key-values stay key-values when `inlineTableStart` is 0, so they
-      // never reach formatTopLevel/formatNestedTablesMultiline. Their nested
-      // multiline containers still need the same row/key alignment as the rows
-      // of a converted table (fuzz3 seed 18515).
-      normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
+
+  // `formatNestedTablesMultiline` only extracts tables when inlineTableStart > 1
+  // (depth-0 tables were already handled by formatTopLevel), and
+  // `normalizeGeneratedInlineRows` only moves rows when a multiline container
+  // was generated. Skip both full-tree passes when the format cannot trigger
+  // them, which is the common default-format case.
+  if ((format.inlineTableStart ?? 1) > 1) {
+    formatNestedTablesMultiline(document, format);
+  }
+  if (format.multilineTable !== 'auto' || format.multilineArray !== 'auto') {
+    for (const item of document.items) {
+      if (item.type === 'Table' || item.type === 'TableArray') {
+        normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
+      } else if (isKeyValue(item) && (isInlineArray(item.value) || isInlineTable(item.value))) {
+        // Root key-values stay key-values when `inlineTableStart` is 0, so they
+        // never reach formatTopLevel/formatNestedTablesMultiline. Their nested
+        // multiline containers still need the same row/key alignment as the rows
+        // of a converted table (fuzz3 seed 18515).
+        normalizeGeneratedInlineRows(item, format.indentWidth, format.bracketSpacing);
+      }
     }
   }
 
@@ -128,6 +138,7 @@ function walkInlineArray(
     resolveInlineContainerLayout('array', depth, parentIsMultiline, format);
   setInlineContainerLayout(inline_array, multiline);
   setRootIndentWidth(inline_array, format.indentWidth);
+  markStringifyRoot(inline_array);
   for (const element of value) {
     const item = walkValue(element, format, depth + 1, multiline);
     const inline_array_item = generateInlineItem(item);
@@ -160,6 +171,7 @@ function walkInlineTable(
     resolveInlineContainerLayout('table', depth, parentIsMultiline, format);
   setInlineContainerLayout(inline_table, multiline);
   setRootIndentWidth(inline_table, format.indentWidth);
+  markStringifyRoot(inline_table);
   for (const item of walkObject(value, format, depth + 1, multiline)) {
     const inline_table_item = generateInlineItem(item);
 

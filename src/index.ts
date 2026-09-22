@@ -10,6 +10,12 @@ import { TomlDocument } from './toml-document';
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
 
 /**
+ * Frozen default format reused for stringify() calls that pass no format
+ * object, avoiding a TomlFormat allocation on every call.
+ */
+const DEFAULT_STRINGIFY_FORMAT: TomlFormat = Object.freeze(TomlFormat.default()) as TomlFormat;
+
+/**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
  *
  * When raw bytes (Uint8Array / Buffer) are provided, they are decoded with
@@ -63,7 +69,9 @@ export function parse(value: string | Uint8Array, options?: ParseOptions): any {
  * @returns The stringified TOML representation
  */
 export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat): string {
-  const fmt = resolveTomlFormat(format, TomlFormat.default());
+  const fmt = format == null
+    ? DEFAULT_STRINGIFY_FORMAT
+    : resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
   const tomlString = format == null
