@@ -657,9 +657,13 @@ export function toTOMLCursor(cst: CST, format: TomlFormat): string {
  * produced by `parseJS`.
  */
 export function toTOMLSequential(cst: CST, format: TomlFormat): string {
-  const roots = isIterable(cst)
-    ? Array.from(cst as Iterable<TreeNode>)
-    : [cst as unknown as TreeNode];
+  // `stringify()` passes `document.items` (an array), so avoid Array.from's
+  // eager copy of an array that is already indexable.
+  const roots: TreeNode[] = Array.isArray(cst)
+    ? cst
+    : isIterable(cst)
+      ? Array.from(cst as Iterable<TreeNode>)
+      : [cst as unknown as TreeNode];
   const chunks: string[] = [];
   let line = 1;
   let column = 0;
