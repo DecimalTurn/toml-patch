@@ -397,6 +397,17 @@ describe('TomlDocument', () => {
       expect(doc.toJsObject).toEqual({ section: { key: 'changed' } });
     });
 
+    it('patches correctly after an incremental update deeper in the document', () => {
+      const toml = `a = 1\nb = 2\nc = 3\n`;
+      const doc = new TomlDocument(toml);
+
+      doc.update(`a = 1\nb = 2\nc = 33\n`);
+
+      doc.patch({ a: 1, b: 2, c: 3 });
+
+      expect(doc.toTomlString).toBe(`a = 1\nb = 2\nc = 3\n`);
+    });
+
     it('handles adding a new key to existing section', () => {
       const toml = dedent`
         [section]

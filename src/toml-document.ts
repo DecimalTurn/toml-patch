@@ -176,7 +176,10 @@ export class TomlDocument {
     
     const remainingToml = remainingLines.join(this._format.newLine);
     
-    this._cst = Array.from(continueParsingTOML(truncatedCst, remainingToml));
+    this._cst = Array.from(continueParsingTOML(truncatedCst, remainingToml, {
+      line: continueFromLine,
+      column: continueFromColumn
+    }));
     this._currentTomlString = tomlContent;
     
     // Update the auto-detected format with the new string's characteristics
