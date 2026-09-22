@@ -19,9 +19,13 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
 import mri from 'mri';
+import { parse as parseToml } from 'smol-toml';
 
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const THRESHOLDS_PATH = join(__dirname, 'smol-benchmark.thresholds.toml');
+const CURRENT_IMPL = 'toml-patch (current)';
 
 const FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const FIXTURES = [
@@ -30,7 +34,7 @@ const FIXTURES = [
 ];
 
 const IMPLEMENTATIONS = [
-  { name: 'toml-patch (current)', path: join(__dirname, '../dist/toml-patch.js') },
+  { name: CURRENT_IMPL, path: join(__dirname, '../dist/toml-patch.js') },
   { name: 'smol-toml', path: join(__dirname, '../node_modules/smol-toml') },
   { name: '@iarna/toml', path: join(__dirname, '../submodules/iarna-toml/toml.js') },
 ];
@@ -216,3 +220,50 @@ function report(label, results) {
 
 report('Parse:', parseResults);
 report('Stringify:', stringifyResults);
+
+// CI gate: fail when the current build's throughput drops below a configured
+// minimum. Thresholds live in smol-benchmark.thresholds.toml.
+checkThresholds(parseResults, stringifyResults);
+
+/**
+ * Reads the thresholds TOML file and sets a non-zero exit code when the
+ * current build's measured throughput falls below any configured minimum.
+ * Thresholds are keyed by operation (`parse` / `stringify`) and fixture name.
+ */
+function checkThresholds(parseResults, stringifyResults) {
+  if (!existsSync(THRESHOLDS_PATH)) {
+    console.log('\nNo benchmark thresholds found; skipping the performance gate.');
+    return;
+  }
+
+  const thresholds = parseToml(readFileSync(THRESHOLDS_PATH, 'utf8'));
+  const byOperation = { parse: parseResults, stringify: stringifyResults };
+
+  let failed = false;
+  console.log('\nPerformance thresholds:');
+  for (const [operation, minByFixture] of Object.entries(thresholds)) {
+    const results = byOperation[operation];
+    if (!results) continue;
+    for (const [fixture, minimum] of Object.entries(minByFixture)) {
+      const result = results.find((r) => r.fixture === fixture && r.impl === CURRENT_IMPL);
+      if (!result) {
+        console.warn(`  ⚠️  No ${CURRENT_IMPL} result for ${operation} ${fixture}; skipping`);
+        continue;
+      }
+      const ok = result.hz >= minimum;
+      if (!ok) failed = true;
+      console.log(`  ${ok ? '✅' : '❌'} ${operation} ${fixture}: ${formatHz(result.hz)} ops/sec (min ${minimum})`);
+    }
+  }
+
+  if (failed) {
+    console.error('\n❌ Performance threshold crossed. See output above.');
+    process.exitCode = 1;
+  } else {
+    console.log('\n✅ All performance thresholds met.');
+  }
+}
+
+function formatHz(hz) {
+  return hz < 1 ? hz.toFixed(3) : formatNumber(hz.toFixed(hz < 100 ? 2 : 0));
+}

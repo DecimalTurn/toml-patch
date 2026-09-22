@@ -6,6 +6,12 @@ on:
         description: 'Published toml-patch version to also benchmark (leave empty to skip)'
         required: false
         default: ''
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'benchmark/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 jobs:
   benchmark:
@@ -36,7 +42,7 @@ jobs:
       run: pnpm run build
     - name: Benchmark smol-toml fixtures
       env:
-        VERSION: ${{ inputs.version }}
+        VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
       run: |
         if [ -n "$VERSION" ]; then
           pnpm run benchmark:smol -- --versions "$VERSION"

@@ -1,0 +1,16 @@
+# Minimum throughput (ops/sec) for the current toml-patch build on each
+# smol-toml fixture. The CI benchmark job fails when the measured throughput
+# drops below one of these values.
+#
+# These values are intentionally conservative: they guard against large (>3x)
+# regressions while tolerating run-to-run and machine-to-machine noise. The
+# benchmark prints the measured throughput, so recalibrate these from a stable
+# CI run and raise a value when a slowdown is intentional.
+
+[parse]
+"toml-spec-example" = 2000
+"5mb-mixed" = 0.3
+
+[stringify]
+"toml-spec-example" = 500
+"5mb-mixed" = 0.06
