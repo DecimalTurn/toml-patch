@@ -25,6 +25,11 @@ The source-aware emitter (`toTOMLCursor`) is used by `patch()`, not by `stringif
 
 5. **(Stretch) Direct JS-to-TOML writer without a CST.** Serialize straight from the JS object, as smol-toml does. Fastest possible, but it duplicates string, date, key quoting and table-nesting logic that currently lives in `generate.ts` and `parseJS`, so it has the highest risk of behavioral drift.
 
+## Status
+
+- Done: changes 1, 2 and 3.
+- Change 4, partly: profiling showed the dominant stringify-generation cost was the writer's dirty tracking (`setDirty` via `Object.defineProperty`, `markMutation`, `linkParents`, `markSubtreeDirty`) rather than `insert`/`applyWrites` position math. `insert`/`remove`/`replace` now skip `markMutation` when the root is a stringify root, and every generated container is marked as one. The remaining cost is the `applyWrites`/`shiftNode`/`move` position machinery, which a direct position-generation refactor would still remove.
+
 ## Scope
 
 In scope:
