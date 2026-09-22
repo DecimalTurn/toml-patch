@@ -4,7 +4,7 @@
 # any fixture for that operation.
 
 [parse]
-maxSlowdown = 10
+maxSlowdown = 5
 
 [stringify]
-maxSlowdown = 40
+maxSlowdown = 25
