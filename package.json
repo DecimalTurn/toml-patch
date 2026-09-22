@@ -55,7 +55,7 @@
     "test:all": "pnpm run test && pnpm run test:js && pnpm run test:playwright",
     "typecheck": "tsc",
     "specs": "vitest run --config vitest.specs.config.ts",
-    
+
     "bench:iarna": "npm-run-all2 bench:iarna:parse bench:iarna:stringify",
     "bench:iarna:ci": "npm-run-all2 \"bench:iarna:parse bench:iarna:stringify -- --sample --versions latest\"",
     "bench:iarna:parse": "node benchmark/parse-benchmark.mjs",
@@ -111,7 +111,12 @@
   "json-comments": {
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",
     "package.json": {
-      "devDependencies.js-yaml": "Used by specs/specs.test.ts to parse YAML expected-value fixtures from submodules/spec-tests (https://github.com/iarna/toml-spec-tests)."
+      "devDependencies.js-yaml": "Used by specs/specs.test.ts to parse YAML expected-value fixtures from submodules/spec-tests (https://github.com/iarna/toml-spec-tests).",
+      "scripts.bench:iarna": "Runs the iarna fixture benchmarks, parse first then stringify, comparing toml-patch with @iarna/toml and smol-toml.",
+      "scripts.bench:iarna:ci": "Sampled bench:iarna run that also compares against the latest published toml-patch. Wired to the benchmark steps in test-and-build.yml, which are currently commented out.",
+      "scripts.bench:iarna:parse": "Parse-only benchmark over the fixtures in submodules/iarna-toml/benchmark.",
+      "scripts.bench:iarna:stringify": "Stringify-only benchmark over the same iarna fixtures. Every implementation stringifies the object parsed by the current build so the inputs match.",
+      "scripts.bench:smol": "Parse and stringify benchmark on smol-toml's fixtures, including the ~5 MB document. Fails the CI job when toml-patch exceeds the maxSlowdown budgets in benchmark/smol-benchmark.thresholds.toml."
     }
   }
 }
