@@ -15,6 +15,24 @@ export type { IntegersAsBigInt, ParseOptions } from './parse-options';
  */
 const DEFAULT_STRINGIFY_FORMAT: TomlFormat = Object.freeze(TomlFormat.default()) as TomlFormat;
 
+/** True when a resolved format produces byte-identical output to the defaults. */
+function isDefaultFormat(fmt: TomlFormat): boolean {
+  const d = DEFAULT_STRINGIFY_FORMAT;
+  return fmt.newLine === d.newLine &&
+    fmt.trailingNewline === d.trailingNewline &&
+    fmt.trailingComma === d.trailingComma &&
+    fmt.bracketSpacing === d.bracketSpacing &&
+    fmt.inlineTableStart === d.inlineTableStart &&
+    fmt.truncateZeroTimeInDates === d.truncateZeroTimeInDates &&
+    fmt.useTabsForIndentation === d.useTabsForIndentation &&
+    fmt.indentWidth === d.indentWidth &&
+    fmt.minimumDecimals === d.minimumDecimals &&
+    fmt.leadingBom === d.leadingBom &&
+    fmt.updateOrder === d.updateOrder &&
+    fmt.multilineTable === d.multilineTable &&
+    fmt.multilineArray === d.multilineArray;
+}
+
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.
  *
@@ -74,7 +92,7 @@ export function stringify(value: any, format?: Partial<TomlFormat> | TomlFormat)
     : resolveTomlFormat(format, TomlFormat.default());
   
   const document = parseJS(value, fmt);
-  const tomlString = format == null
+  const tomlString = isDefaultFormat(fmt)
     ? toTOMLSequential(document.items, fmt)
     : toTOML(document.items, fmt);
   return fmt.leadingBom ? `${UTF8_BOM}${tomlString}` : tomlString;

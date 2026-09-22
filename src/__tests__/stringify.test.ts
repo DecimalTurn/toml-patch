@@ -25,6 +25,21 @@ test('should stringify example from readme', () => {
 
 });
 
+test('default-equivalent formats produce the same output as no format', () => {
+  const value = {
+    title: 'TOML Example',
+    owner: { name: 'Tim', dob: new Date('1979-05-27T07:32:00Z') },
+    ports: [8000, 8001],
+    nested: { a: { b: 1 } },
+    points: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+    text: 'line one\nline two'
+  };
+
+  const noFormat = stringify(value);
+  expect(stringify(value, {})).toBe(noFormat);
+  expect(stringify(value, TomlFormat.default())).toBe(noFormat);
+});
+
 test('should stringify simple example', () => {
 
   //Stringify the object
