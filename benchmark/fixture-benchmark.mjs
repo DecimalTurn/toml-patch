@@ -45,8 +45,6 @@ const FIXTURES = [
   { dir: SMOL_FIXTURES_DIR, name: 'toml-spec-example', label: 'smol-toml spec example' },
   { dir: SMOL_FIXTURES_DIR, name: '5mb-mixed', label: 'smol-toml 5MB mixed' },
   { dir: IARNA_FIXTURES_DIR, name: '0A-spec-01-example-v0.4.0', label: 'iarna spec example v0.4.0' },
-  { dir: IARNA_FIXTURES_DIR, name: '0A-spec-02-example-hard-unicode', label: 'iarna spec example, hard unicode' },
-  { dir: IARNA_FIXTURES_DIR, name: '01-small-doc-mixed-type-inline-array', label: 'iarna small document, mixed types' },
 ].map(({ dir, name, label }) => ({
   name,
   label,
