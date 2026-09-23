@@ -10,7 +10,7 @@ import { PatchLiteError, formatPath, Path } from './diff-lite';
 export function encodeValue(value: any, existingValue: any, path: Path): string {
   const type = typeof value;
 
-  if (type === 'string') return encodeBasicString(value);
+  if (type === 'string') return encodeString(value, existingValue?.raw);
   if (type === 'boolean') return value ? 'true' : 'false';
   if (type === 'bigint') return value.toString();
 
@@ -130,6 +130,43 @@ function encodeExponentFloat(value: number, existingRaw: string): string {
 function encodeNonFinite(value: number): string {
   if (Number.isNaN(value)) return 'nan';
   return value > 0 ? 'inf' : '-inf';
+}
+
+/**
+ * Encodes a string while preserving a multiline literal (`'''`) format when the
+ * source value used one. The leading newline style is kept and backslashes are
+ * left untouched (literal strings do not escape), matching the full patch().
+ * Values that cannot be represented verbatim in a literal string fall back to
+ * a basic string.
+ */
+function encodeString(value: string, existingRaw?: string): string {
+  if (existingRaw && existingRaw.startsWith("'''") && canUseMultilineLiteral(value)) {
+    const leadingNewLine = existingRaw.startsWith("'''\r\n")
+      ? '\r\n'
+      : existingRaw.startsWith("'''\n")
+        ? '\n'
+        : '';
+    return "'''" + leadingNewLine + value + "'''";
+  }
+  return encodeBasicString(value);
+}
+
+/**
+ * True when `value` can be written verbatim inside a multiline literal string:
+ * no `'''`, no control characters other than tab, and no standalone carriage
+ * return (newlines must be LF or CRLF).
+ */
+function canUseMultilineLiteral(value: string): boolean {
+  if (value.includes("'''")) return false;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code === 0x0d) {
+      if (value.charCodeAt(i + 1) !== 0x0a) return false;
+    } else if ((code < 0x20 && code !== 0x09 && code !== 0x0a) || code === 0x7f) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function encodeBasicString(value: string): string {
