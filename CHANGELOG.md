@@ -9,12 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving surrounding formatting. ([#309])
+- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
 
 ### Changed
 
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
-- Packaging: expose the edit-only `patch-lite` entry from the `dev` dist-tag package as a `./patch-lite` subpath export. ([#309])
 
 ### Fixed
 
