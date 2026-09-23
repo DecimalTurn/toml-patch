@@ -17,26 +17,24 @@ All scenarios are bundled with the same esbuild settings (`--bundle --format=esm
 
 | Entry point | Minified | Gzipped | Brotli | vs full package (same build) |
 |---|---|---|---|---|
-| full package (all exports), prod bundle | 151.62 kB | 46.59 kB | 40.24 kB | — |
-| `patch` only, prod bundle | 148.01 kB | 45.35 kB | 39.29 kB | −3.61 kB (2.4%) |
-| full package (all exports), dev build | 152.94 kB | 46.97 kB | 40.55 kB | — |
-| `patch` only, dev build | 149.32 kB | 45.71 kB | 39.56 kB | −3.62 kB (2.4%) |
-| `parse` only, dev build | 34.45 kB | 10.35 kB | 9.26 kB | −118.49 kB (77.5%) |
-| `stringify` only, dev build | 69.17 kB | 21.21 kB | 18.82 kB | −83.77 kB (54.8%) |
-| `LocalDate` only, dev build | 0.56 kB | 0.31 kB | 0.26 kB | −152.38 kB (99.6%) |
+| full package (all exports), prod bundle | 157.02 kB | 47.95 kB | 41.33 kB | — |
+| `patch` only, prod bundle | 148.97 kB | 45.60 kB | 39.48 kB | −8.05 kB (5.1%) |
+| full package (all exports), dev build | 158.38 kB | 48.30 kB | 41.69 kB | — |
+| `patch` only, dev build | 150.30 kB | 45.94 kB | 39.81 kB | −8.07 kB (5.1%) |
+| `parse` only, dev build | 37.82 kB | 11.48 kB | 10.31 kB | −120.56 kB (76.1%) |
+| `stringify` only, dev build | 73.33 kB | 22.23 kB | 19.72 kB | −85.04 kB (53.7%) |
+| `LocalDate` only, dev build | 31.52 kB | 9.65 kB | 8.65 kB | −126.86 kB (80.1%) |
 
-**Tree-shaking away everything except `patch` saves 3.61 kB minified (2.4%) and 1.24 kB gzipped (2.7%).** That result holds for both builds: the unbundled dev build saves 3.62 kB minified (2.4%) over the full dev build.
+**Tree-shaking away everything except `patch` saves 8.05 kB minified (5.1%) and 2.35 kB gzipped (4.9%).** That result holds for both builds: the unbundled dev build saves 8.07 kB minified (5.1%) over the full dev build.
 
 ## Why the saving is small
 
-`patch` is the heaviest entry point: it needs the tokenizer, the parser, the writer, the generator, the formatter and the comment-handling machinery. Out of 33 dev modules a `patch`-only bundle keeps 30, dropping only `toml-document.js`, `toml-patch.js`, `truncate.js`.
+`patch` is the heaviest entry point: it needs the tokenizer, the parser, the writer, the generator, the formatter and the comment-handling machinery, so almost every module is reachable from it. Out of 33 dev modules a `patch`-only bundle keeps 31, dropping only `toml-document.js`, `truncate.js`.
 
-That dropped chain is the `TomlDocument` API (`toml-document.js` → `truncate.js`) plus the entry barrel's own code, which only declares the `parse`/`stringify`/`parseDocument` wrappers.
-
-The other entry points reuse the same internals, so for them tree-shaking pays off a lot: `parse` alone is 34.45 kB, 77.5% smaller than the full package.
+The other entry points reuse the same internals, so for them tree-shaking pays off far more: `parse` alone is 37.82 kB (76.1% smaller than the full package) and `LocalDate` alone is 31.52 kB (80.1% smaller).
 
 ## Takeaway
 
-- A consumer that needs `patch` should not expect meaningful savings from tree-shaking: 3.61 kB minified, 1.24 kB gzipped.
-- The unbundled `dev` build is not faster for `patch`-only consumers; both builds land within ~1 kB of each other.
-- Tree-shaking matters for consumers who use `parse`, `stringify` or the individual date classes without `patch`.
+- A consumer that needs `patch` only gets a small saving from tree-shaking: 8.05 kB minified, 2.35 kB gzipped.
+- The unbundled `dev` build is not significantly smaller for `patch`-only consumers; both builds land within a couple of kB of each other.
+- Tree-shaking matters most for consumers who use `parse`, `stringify` or the individual date classes without `patch`.
