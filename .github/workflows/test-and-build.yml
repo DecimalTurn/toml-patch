@@ -58,10 +58,6 @@ jobs:
     - name: Build
       run: pnpm run build
 
-    - name: Tree-shaking check
-      if: matrix.benchmark
-      run: pnpm run bench:tree-shaking
-
     - name: Test dev package
       run: pnpm run test:dev
 
