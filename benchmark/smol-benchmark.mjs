@@ -21,6 +21,7 @@ import Benchmark from 'benchmark';
 import mri from 'mri';
 import { Temporal } from '@js-temporal/polyfill';
 import { checkThresholds } from './check-thresholds.mjs';
+import { buildRankedTable, buildReport } from './ranked-tables.mjs';
 
 const { Suite } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -251,58 +252,41 @@ function writeMarkdown(parseResults, stringifyResults) {
     '@iarna/toml': `@iarna/toml@${JSON.parse(readFileSync(join(__dirname, '../submodules/iarna-toml/package.json'), 'utf8')).version}`,
   };
 
-  let markdown = '# smol-toml Fixture Benchmark Results\n\n';
-  markdown += '*Time per iteration. Lower is better.*\n\n';
+  /** Reader-facing fixture name, e.g. `spec example`. */
+  const fixtureLabel = (name) => name === 'toml-spec-example'
+    ? 'spec example'
+    : '5MB randomly generated file';
 
-  for (const [label, results] of [
-    ['Parse', parseResults],
-    ['Stringify', stringifyResults],
-  ]) {
-    for (const fixture of FIXTURES) {
-      const names = [...new Set([...IMPLEMENTATIONS.map(({ name }) => name),
-        ...(label === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : [])])];
-      const rows = names.map((name) => ({
-        name,
-        hz: results.find((result) => result.fixture === fixture.name && result.impl === name)?.hz,
-      })).sort((left, right) => (right.hz ?? 0) - (left.hz ?? 0));
-      const fastest = rows[0]?.hz;
-      const baselineHz = rows.find(({ name }) => name === BASELINE_IMPL)?.hz;
-      const currentHz = rows.find(({ name }) => name === CURRENT_IMPL)?.hz;
-      const fixtureName = fixture.name === 'toml-spec-example'
-        ? 'spec example'
-        : '5MB randomly generated file';
+  /** Reader-facing implementation name, e.g. `smol-toml@1.9.0 (Date)`. */
+  const implementationLabel = (name, benchmarkType) => {
+    const suffix = name === CURRENT_IMPL
+      ? benchmarkType === 'Parse' ? ' (Date, current)' : ' (current)'
+      : name === 'smol-toml' && benchmarkType === 'Parse' ? ' (Date)' : '';
+    return (versions[name] ?? name) + suffix;
+  };
 
-      markdown += `#### ${label}, ${fixtureName}\n\n`;
-      markdown += '|    | Library | Performance | Slowdown | Notes |';
-      if (comparisonName) markdown += ' Ratio |';
-      markdown += '\n|:--:|---|---|---|---|';
-      if (comparisonName) markdown += '---|';
-      markdown += '\n';
+  /** One ranked table per fixture, with the parse Date/Temporal variants. */
+  const tablesFor = (benchmarkType, results) => {
+    const ids = [...new Set([
+      ...IMPLEMENTATIONS.map(({ name }) => name),
+      ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
+    ])];
+    return FIXTURES.map((fixture) => buildRankedTable({
+      heading: `${benchmarkType}, ${fixtureLabel(fixture.name)}`,
+      rows: ids.map((id) => ({
+        id,
+        label: implementationLabel(id, benchmarkType),
+        hz: results.find((result) => result.fixture === fixture.name && result.impl === id)?.hz,
+      })),
+      includeRank: true,
+      ratio: comparisonName ? { compareId: comparisonName, currentId: CURRENT_IMPL } : undefined,
+    }));
+  };
 
-      for (const [index, { name, hz }] of rows.entries()) {
-        const rank = hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-';
-        const milliseconds = hz ? 1000 / hz : 0;
-        const performance = hz
-          ? milliseconds < 1 ? `${(milliseconds * 1000).toFixed(2)} \u00b5s/iter` : `${milliseconds.toFixed(2)} ms/iter`
-          : '**DNF**';
-        const slowdown = hz && fastest
-          ? `${(fastest / hz).toFixed(2).replace(/\.00$/, '')}x`
-          : '**DNF**';
-        const library = versions[name] ?? name;
-        const suffix = name === CURRENT_IMPL
-          ? label === 'Parse' ? ' (Date, current)' : ' (current)'
-          : name === 'smol-toml' && label === 'Parse' ? ' (Date)' : '';
-        const row = [rank, library + suffix, performance, slowdown, ''];
-        if (comparisonName) {
-          row.push(name === CURRENT_IMPL && baselineHz && currentHz
-            ? (currentHz / baselineHz).toFixed(2)
-            : '');
-        }
-        markdown += '| ' + row.join(' | ') + ' |\n';
-      }
-      markdown += '\n';
-    }
-  }
+  const markdown = buildReport({
+    title: 'smol-toml Fixture Benchmark Results',
+    tables: [...tablesFor('Parse', parseResults), ...tablesFor('Stringify', stringifyResults)],
+  });
 
   writeFileSync(MARKDOWN_PATH, markdown, 'utf8');
   console.log(`\n${markdown}`);

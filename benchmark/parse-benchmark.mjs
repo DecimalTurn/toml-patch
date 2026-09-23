@@ -20,6 +20,7 @@ import Benchmark from 'benchmark';
 import { globSync } from 'glob';
 import mri from 'mri';
 import { checkThresholds } from './check-thresholds.mjs';
+import { buildRankedTable, buildReport } from './ranked-tables.mjs';
 
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -508,137 +509,32 @@ const thresholdFailed = checkThresholds({
 if (thresholdFailed) process.exitCode = 1;
 
 /**
- * Prints a cross-implementation comparison table
+ * Builds the per-fixture ranked tables shared by the console output and the
+ * summary file. Row order carries the ranking, so there is no rank column.
  */
-function printGlobalSummary(allResults, benchmarkType, compareName) {
-  console.log('\n' + c.title('═'.repeat(70)));
-  console.log(c.title(`  📊 Cross-Implementation Comparison: ${benchmarkType}`));
-  console.log(c.title('═'.repeat(70)) + '\n');
-
-  const current = allResults.find(r => r.name === CURRENT_IMPL) ?? allResults[allResults.length - 1];
-  const compare = compareName ? allResults.find(r => r.name === compareName) : null;
-  const benchmarkNames = Object.keys(allResults[0].benchmarks);
-  const showRatio = compare != null;
-
-  const headers = ['Benchmark', ...allResults.map(r => r.name).reverse()];
-  if (showRatio) headers.push('Ratio');
-
-  const rows = [];
-  for (const benchName of benchmarkNames) {
-    const row = [benchName];
-    for (const impl of [...allResults].reverse()) {
-      const hz = impl.benchmarks[benchName];
-      row.push(hz != null ? formatNumber(hz.toFixed(hz < 100 ? 2 : 0)) : 'N/A');
-    }
-    if (showRatio) {
-      const compareHz = compare.benchmarks[benchName];
-      const currentHz = current.benchmarks[benchName];
-      if (compareHz && currentHz && compareHz > 0) {
-        const ratio = currentHz / compareHz;
-        const formatted = `${ratio.toFixed(2)}x`;
-        row.push(ratio >= 1 ? c.success(formatted) : c.error(formatted));
-      } else {
-        row.push('N/A');
-      }
-    }
-    rows.push(row);
-  }
-
-  // Average row (only when there are multiple benchmarks)
-  if (benchmarkNames.length > 1) {
-    const avgRow = [c.bright('Average')];
-    for (const impl of [...allResults].reverse()) {
-      avgRow.push(c.bright(formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0))));
-    }
-    if (showRatio && compare.average > 0) {
-      const ratio = current.average / compare.average;
-      const formatted = `${ratio.toFixed(2)}x`;
-      avgRow.push(ratio >= 1 ? c.success(c.bright(formatted)) : c.error(c.bright(formatted)));
-    }
-    rows.push(avgRow);
-  }
-
-  console.log(createTable(headers, rows));
-
-  // Print ranking by average when more than 2 implementations
-  if (allResults.length > 2) {
-    const ranked = [...allResults].sort((a, b) => b.average - a.average);
-    console.log();
-    console.log(c.title('🏆 Ranking by average throughput:'));
-    ranked.forEach((impl, idx) => {
-      const emoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '  ';
-      const ops = formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0));
-      console.log(`  ${emoji} ${impl.name}: ${c.highlight(ops)} ops/sec`);
-    });
-  }
-
-  console.log();
+function buildSummary(allResults, benchmarkType, compareName) {
+  const fixtureNames = Object.keys(allResults[0].benchmarks);
+  return buildReport({
+    title: `${benchmarkType} Benchmark Results`,
+    tables: fixtureNames.map(fixture => buildRankedTable({
+      heading: `${benchmarkType}, ${fixture}`,
+      rows: allResults.map(impl => ({ id: impl.name, hz: impl.benchmarks[fixture] })),
+      ratio: compareName ? { compareId: compareName, currentId: CURRENT_IMPL } : undefined,
+    })),
+  });
 }
 
 /**
- * Writes a markdown summary of benchmark results
+ * Prints the comparison tables for the run
+ */
+function printGlobalSummary(allResults, benchmarkType, compareName) {
+  console.log('\n' + buildSummary(allResults, benchmarkType, compareName));
+}
+
+/**
+ * Writes the comparison tables to the summary file
  */
 function writeMarkdownSummary(allResults, benchmarkType, filename, compareName) {
-  const current = allResults.find(r => r.name === CURRENT_IMPL) ?? allResults[allResults.length - 1];
-  const compare = compareName ? allResults.find(r => r.name === compareName) : null;
-  const benchmarkNames = Object.keys(allResults[0].benchmarks);
-  const showRatio = compare != null;
-
-  let markdown = `# ${benchmarkType} Benchmark Results\n\n`;
-  markdown += `*All measurements in operations per second (ops/sec). Higher is better.*\n\n`;
-  markdown += `## Cross-Implementation Comparison\n\n`;
-
-  // Table header
-  const headers = ['Benchmark', ...allResults.map(r => r.name).reverse()];
-  if (showRatio) headers.push('Ratio');
-  markdown += '| ' + headers.join(' | ') + ' |\n';
-  markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-
-  // Table rows
-  for (const benchName of benchmarkNames) {
-    const row = [benchName];
-    for (const impl of [...allResults].reverse()) {
-      const hz = impl.benchmarks[benchName];
-      row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
-    }
-    if (showRatio) {
-      const compareHz = compare.benchmarks[benchName];
-      const currentHz = current.benchmarks[benchName];
-      if (compareHz && currentHz && compareHz > 0) {
-        const ratio = currentHz / compareHz;
-        row.push(ratio.toFixed(2));
-      } else {
-        row.push('N/A');
-      }
-    }
-    markdown += '| ' + row.join(' | ') + ' |\n';
-  }
-
-  // Average row (only when there are multiple benchmarks)
-  if (benchmarkNames.length > 1) {
-    const avgRow = ['**Average**'];
-    for (const impl of [...allResults].reverse()) {
-      avgRow.push(`**${impl.average.toFixed(impl.average < 100 ? 2 : 0)}**`);
-    }
-    if (showRatio && compare.average > 0) {
-      const ratio = current.average / compare.average;
-      avgRow.push(`**${ratio.toFixed(2)}**`);
-    }
-    markdown += '| ' + avgRow.join(' | ') + ' |\n';
-  }
-
-  // Ranking when more than 2 implementations
-  if (allResults.length > 2) {
-    const ranked = [...allResults].sort((a, b) => b.average - a.average);
-    markdown += '\n## Ranking by Average Throughput\n\n';
-    ranked.forEach((impl, idx) => {
-      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
-      const ops = impl.average.toFixed(impl.average < 100 ? 2 : 0);
-      markdown += `${medal} ${impl.name}: ${ops} ops/sec\n`;
-    });
-  }
-
-  // Write to file
-  writeFileSync(filename, markdown, 'utf8');
+  writeFileSync(filename, buildSummary(allResults, benchmarkType, compareName), 'utf8');
   console.log(c.dim(`\n📝 Benchmark results written to ${filename}\n`));
 }
