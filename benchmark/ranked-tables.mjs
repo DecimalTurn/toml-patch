@@ -51,8 +51,8 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
     headers.push('');
     separators.push(':--:');
   }
-  headers.push('Library', 'Performance', 'Slowdown', 'Notes');
-  separators.push('---', '---', '---', '---');
+  headers.push('Library', 'Performance', 'Slowdown');
+  separators.push('---', '---', '---');
   if (ratio) {
     headers.push('Ratio');
     separators.push('---');
@@ -67,7 +67,7 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
     if (includeRank) {
       cells.push(hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-');
     }
-    cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz), '');
+    cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz));
     if (ratio) {
       cells.push(id === ratio.currentId && compareHz && hz
         ? (hz / compareHz).toFixed(2)
