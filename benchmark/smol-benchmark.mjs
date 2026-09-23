@@ -1,8 +1,9 @@
 /**
- * Benchmark parse and stringify using smol-toml's benchmark fixtures.
+ * Benchmark parse and stringify on every fixture the project tracks.
  *
- * Compares toml-patch (the current build) against smol-toml and @iarna/toml
- * on the fixtures in submodules/smol-toml/bench/testfiles.
+ * Compares toml-patch (the current build) against smol-toml and @iarna/toml on
+ * smol-toml's two benchmark documents plus the representative spec examples
+ * from the iarna corpus.
  *
  * Usage:
  *   pnpm run bench:smol
@@ -34,11 +35,22 @@ const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-smol.md');
 
 globalThis.Temporal ??= Temporal;
 
-const FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
+const SMOL_FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
+const IARNA_FIXTURES_DIR = join(__dirname, '../submodules/iarna-toml/benchmark');
+
+// The two smol-toml documents plus the spec examples from the iarna corpus. The
+// remaining iarna fixtures are single-type or scaling documents that these
+// already cover.
 const FIXTURES = [
-  { name: 'toml-spec-example', data: readFileSync(join(FIXTURES_DIR, 'toml-spec-example.toml'), 'utf8') },
-  { name: '5mb-mixed', data: readFileSync(join(FIXTURES_DIR, '5mb-mixed.toml'), 'utf8') },
-];
+  { dir: SMOL_FIXTURES_DIR, name: 'toml-spec-example', label: 'smol-toml spec example' },
+  { dir: SMOL_FIXTURES_DIR, name: '5mb-mixed', label: 'smol-toml 5MB mixed' },
+  { dir: IARNA_FIXTURES_DIR, name: '0A-spec-01-example-v0.4.0', label: 'iarna spec example v0.4.0' },
+  { dir: IARNA_FIXTURES_DIR, name: '0A-spec-02-example-hard-unicode', label: 'iarna spec example, hard unicode' },
+].map(({ dir, name, label }) => ({
+  name,
+  label,
+  data: readFileSync(join(dir, `${name}.toml`), 'utf8'),
+}));
 
 const IMPLEMENTATIONS = [
   { name: CURRENT_IMPL, path: join(__dirname, '../dist/toml-patch.js') },
@@ -158,14 +170,21 @@ async function runSuite(suite) {
 const parseResults = [];
 const stringifyResults = [];
 
-// Match the smol-toml README: every implementation stringifies the same
-// object parsed by smol-toml with legacy Date values.
+// Match the smol-toml README: every implementation stringifies the same object,
+// parsed by smol-toml with legacy Date values. A fixture smol-toml cannot parse
+// has no shared input, so it stays parse-only.
 const referenceToml = await loadModule(join(__dirname, '../node_modules/smol-toml'));
-const parsedFixtures = FIXTURES.map(({ name, data }) => ({
-  name,
-  data,
-  value: referenceToml.parse(data, { useLegacyDate: true, maxDepth: 1010 })
-}));
+const parsedFixtures = [];
+for (const fixture of FIXTURES) {
+  try {
+    parsedFixtures.push({
+      ...fixture,
+      value: referenceToml.parse(fixture.data, { useLegacyDate: true, maxDepth: 1010 }),
+    });
+  } catch (error) {
+    console.warn(`Skipping ${fixture.name} stringify: smol-toml could not parse it (${error.message})`);
+  }
+}
 
 for (const impl of IMPLEMENTATIONS) {
   let TOML;
@@ -252,11 +271,6 @@ function writeMarkdown(parseResults, stringifyResults) {
     '@iarna/toml': `@iarna/toml@${JSON.parse(readFileSync(join(__dirname, '../submodules/iarna-toml/package.json'), 'utf8')).version}`,
   };
 
-  /** Reader-facing fixture name, e.g. `spec example`. */
-  const fixtureLabel = (name) => name === 'toml-spec-example'
-    ? 'spec example'
-    : '5MB randomly generated file';
-
   /** Reader-facing implementation name, e.g. `smol-toml@1.9.0 (Date)`. */
   const implementationLabel = (name, benchmarkType) => {
     const suffix = name === CURRENT_IMPL
@@ -266,13 +280,13 @@ function writeMarkdown(parseResults, stringifyResults) {
   };
 
   /** One ranked table per fixture, with the parse Date/Temporal variants. */
-  const tablesFor = (benchmarkType, results) => {
+  const tablesFor = (benchmarkType, results, tableFixtures) => {
     const ids = [...new Set([
       ...IMPLEMENTATIONS.map(({ name }) => name),
       ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
     ])];
-    return FIXTURES.map((fixture) => buildRankedTable({
-      heading: `${benchmarkType}, ${fixtureLabel(fixture.name)}`,
+    return tableFixtures.map((fixture) => buildRankedTable({
+      heading: `${benchmarkType}, ${fixture.label}`,
       rows: ids.map((id) => ({
         id,
         label: implementationLabel(id, benchmarkType),
@@ -284,8 +298,11 @@ function writeMarkdown(parseResults, stringifyResults) {
   };
 
   const markdown = buildReport({
-    title: 'smol-toml Fixture Benchmark Results',
-    tables: [...tablesFor('Parse', parseResults), ...tablesFor('Stringify', stringifyResults)],
+    title: 'Fixture Benchmark Results',
+    tables: [
+      ...tablesFor('Parse', parseResults, FIXTURES),
+      ...tablesFor('Stringify', stringifyResults, parsedFixtures),
+    ],
   });
 
   writeFileSync(MARKDOWN_PATH, markdown, 'utf8');
@@ -296,8 +313,9 @@ function writeMarkdown(parseResults, stringifyResults) {
 writeMarkdown(parseResults, stringifyResults);
 
 // CI gate: fail when the current build's throughput drops below the budgets
-// configured for the smol suite in thresholds.toml.
-const fixtures = FIXTURES.map(({ name }) => name);
+// configured for the fixture suite in thresholds.toml.
+const parseFixtures = FIXTURES.map(({ name }) => name);
+const stringifyFixtures = parsedFixtures.map(({ name }) => name);
 const hzFor = (results) => (impl, fixture) =>
   results.find((result) => result.fixture === fixture && result.impl === impl)?.hz;
 
@@ -305,8 +323,8 @@ const thresholdFailed = checkThresholds({
   suite: 'smol',
   currentName: CURRENT_IMPL,
   operations: [
-    { name: 'parse', fixtures, hzFor: hzFor(parseResults) },
-    { name: 'stringify', fixtures, hzFor: hzFor(stringifyResults) },
+    { name: 'parse', fixtures: parseFixtures, hzFor: hzFor(parseResults) },
+    { name: 'stringify', fixtures: stringifyFixtures, hzFor: hzFor(stringifyResults) },
   ],
 });
 

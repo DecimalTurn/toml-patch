@@ -9,11 +9,8 @@
  *
  *   reference = "smol-toml"
  *
- *   [iarna.parse]
- *   maxSlowdown = 15
- *
  *   [smol.parse]
- *   maxSlowdown = 5
+ *   maxSlowdown = 8
  *
  * The `reference` key is optional and defaults to smol-toml.
  */

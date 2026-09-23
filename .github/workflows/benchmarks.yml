@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Published toml-patch version to also benchmark in the smol-toml job (leave empty to skip)'
+        description: 'Published toml-patch version to also benchmark in the benchmark job (leave empty to skip)'
         required: false
         default: ''
   pull_request:
@@ -14,7 +14,7 @@ on:
       - 'pnpm-lock.yaml'
 
 jobs:
-  # Both benchmark jobs consume this build, so they always measure the same bundle.
+  # The benchmark job consumes this build, so it always measures the same bundle.
   build:
     runs-on: ubuntu-latest
     steps:
@@ -79,69 +79,6 @@ jobs:
         name: dist-baseline
         path: dist/
 
-  benchmark-iarna:
-    needs: [build, build-baseline]
-    # Run even when the baseline build fails, so a broken base branch cannot
-    # block the pull request benchmarks.
-    if: always() && !cancelled()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v7
-      with:
-        submodules: true
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
-      with:
-        node-version: 24.x
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v6
-      with:
-        run_install: false
-    # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
-    - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
-      with:
-        mode: firewall
-        firewall-version: latest # or use a pinned version (see releases)
-    - name: Install
-      run: sfw pnpm install --frozen-lockfile
-      env:
-        CI: true
-    - name: Download build
-      uses: actions/download-artifact@v8
-      with:
-        name: dist
-        path: dist
-    - name: Download baseline build
-      id: baseline
-      continue-on-error: true
-      uses: actions/download-artifact@v8
-      with:
-        name: dist-baseline
-        path: baseline
-    # The gate runs the curated sample on pull requests and the full corpus when
-    # the workflow is dispatched by hand. The baseline is only passed when it
-    # downloaded, so a failed base branch build degrades to a plain benchmark run.
-    - name: Benchmark iarna fixtures
-      env:
-        DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-        BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
-      run: |
-        if [ "$DISPATCH" = "true" ]; then
-          pnpm run bench:iarna
-        else
-          pnpm run bench:iarna:ci
-        fi
-    - name: Upload benchmark summary
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: benchmark-iarna-summary
-        path: |
-          benchmark-parse.md
-          benchmark-stringify.md
-        if-no-files-found: ignore
-
   benchmark-smol:
     needs: [build, build-baseline]
     if: always() && !cancelled()
@@ -180,7 +117,7 @@ jobs:
       with:
         name: dist-baseline
         path: baseline
-    - name: Benchmark smol-toml fixtures
+    - name: Benchmark fixtures
       env:
         VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
         BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
@@ -194,24 +131,23 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: benchmark-smol-summary
+        name: benchmark-summary
         path: benchmark-smol.md
         if-no-files-found: ignore
 
   # Posts one comment on the pull request holding every benchmark summary. The
   # comment is updated in place on later pushes instead of piling up.
   report:
-    needs: [benchmark-iarna, benchmark-smol]
+    needs: [benchmark-smol]
     if: always() && !cancelled() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-    - name: Download benchmark summaries
+    - name: Download benchmark summary
       uses: actions/download-artifact@v8
       with:
-        pattern: benchmark-*-summary
-        merge-multiple: true
+        name: benchmark-summary
         path: summaries
     - name: Build comment
       run: |
@@ -222,7 +158,7 @@ jobs:
           echo "This branch measured against \`${{ github.base_ref || 'latest' }}\` in one run on the same runner."
           echo 'Ratios close to 1.0 are within run to run noise.'
           echo ''
-          for file in summaries/benchmark-parse.md summaries/benchmark-stringify.md summaries/benchmark-smol.md; do
+          for file in summaries/benchmark-smol.md; do
             if [ -f "$file" ]; then
               sed -e 's/^# /### /' -e 's/^## /#### /' "$file"
               echo ''
