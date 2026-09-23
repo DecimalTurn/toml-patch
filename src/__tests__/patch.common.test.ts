@@ -757,3 +757,71 @@ describe.each(implementations)('Multiline delimiters appearing in content (%s pa
     ` + '\n');
   });
 });
+
+describe.each(implementations)('Mandatory escape characters through patch (%s patch)', (_label, patch) => {
+  test('should escape backspace (\\b) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\x08end'; // \x08 = backspace
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\bend"\n');
+    expect(parse(patched).msg).toEqual('line\x08end');
+  });
+
+  test('should escape form feed (\\f) when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'page\x0Cbreak'; // \x0C = form feed
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "page\\fbreak"\n');
+    expect(parse(patched).msg).toEqual('page\x0Cbreak');
+  });
+
+  test('should escape carriage return (\\r) when patching a singleline basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'line\rend';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "line\\rend"\n');
+    expect(parse(patched).msg).toEqual('line\rend');
+  });
+
+  test('should escape an arbitrary disallowed control character (ESC, \\x1b) as \\uXXXX', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'esc\x1Bchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "esc\\u001bchar"\n');
+    expect(parse(patched).msg).toEqual('esc\x1Bchar');
+  });
+
+  test('should escape DEL (\\x7f) as \\u007F when patching a basic string value', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "del\\u007Fchar"\n');
+    expect(parse(patched).msg).toEqual('del\x7Fchar');
+  });
+
+  test('should escape disallowed control characters in a multiline basic string', () => {
+    const existing = 'msg = """hello"""\n';
+
+    const obj = parse(existing);
+    obj.msg = 'back\x08space';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = """back\\bspace"""\n');
+    expect(parse(patched).msg).toEqual('back\x08space');
+  });
+});
