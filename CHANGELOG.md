@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
+- Patching: accept smol-toml date objects when patching and stringifying values. ([#309])
 
 ### Changed
 
@@ -17,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: preserve float formatting when replacing floating-point values with whole-number values and when updating exponent floats. ([#309])
+- Patching: preserve the number formatting of edited values. Floats with an explicit zero fraction keep their decimal places (`1.0` -> `2.0`, `1.00` -> `2.00`), exponent notation is kept when the source used it (`1.0e10` -> `1.0e11`), and floats with a non-zero fraction collapse to a plain integer when their value becomes whole (`1.5` -> `2`, `1.25e10` -> `1e11`). `minimumDecimals` still forces the requested decimal places. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
