@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
 import mri from 'mri';
-import { parse as parseToml } from 'smol-toml';
+import { checkThresholds } from './check-thresholds.mjs';
 
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -233,47 +233,17 @@ report('Stringify:', stringifyResults);
 
 // CI gate: fail when the current build's throughput drops below a configured
 // minimum. Thresholds live in smol-benchmark.thresholds.toml.
-checkThresholds(parseResults, stringifyResults);
+const fixtures = FIXTURES.map(({ name }) => name);
+const hzFor = (results) => (impl, fixture) =>
+  results.find((result) => result.fixture === fixture && result.impl === impl)?.hz;
 
-/**
- * Reads the thresholds TOML file and sets a non-zero exit code when the
- * current build is more than `maxSlowdown` times slower than smol-toml on any
- * fixture. Factors are keyed by operation (`parse` / `stringify`).
- */
-function checkThresholds(parseResults, stringifyResults) {
-  if (!existsSync(THRESHOLDS_PATH)) {
-    console.log('\nNo benchmark thresholds found; skipping the performance gate.');
-    return;
-  }
+const thresholdFailed = checkThresholds({
+  thresholdsPath: THRESHOLDS_PATH,
+  currentName: CURRENT_IMPL,
+  operations: [
+    { name: 'parse', fixtures, hzFor: hzFor(parseResults) },
+    { name: 'stringify', fixtures, hzFor: hzFor(stringifyResults) },
+  ],
+});
 
-  const thresholds = parseToml(readFileSync(THRESHOLDS_PATH, 'utf8'));
-  const byOperation = { parse: parseResults, stringify: stringifyResults };
-
-  let failed = false;
-  console.log('\nPerformance thresholds (max slowdown vs smol-toml):');
-  for (const [operation, config] of Object.entries(thresholds)) {
-    const results = byOperation[operation];
-    const maxSlowdown = config?.maxSlowdown;
-    if (!results || typeof maxSlowdown !== 'number') continue;
-
-    for (const fixture of FIXTURES) {
-      const current = results.find((r) => r.fixture === fixture.name && r.impl === CURRENT_IMPL);
-      const smol = results.find((r) => r.fixture === fixture.name && r.impl === 'smol-toml');
-      if (!current || !smol) {
-        console.warn(`  ⚠️  Missing toml-patch or smol-toml result for ${operation} ${fixture.name}; skipping`);
-        continue;
-      }
-      const slowdown = smol.hz / current.hz;
-      const ok = slowdown <= maxSlowdown;
-      if (!ok) failed = true;
-      console.log(`  ${ok ? '✅' : '❌'} ${operation} ${fixture.name}: ${slowdown.toFixed(1)}x slower than smol-toml (max ${maxSlowdown}x)`);
-    }
-  }
-
-  if (failed) {
-    console.error('\n❌ Performance threshold crossed. See output above.');
-    process.exitCode = 1;
-  } else {
-    console.log('\n✅ All performance thresholds met.');
-  }
-}
+if (thresholdFailed) process.exitCode = 1;

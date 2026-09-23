@@ -18,6 +18,7 @@ import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
 import { globSync } from 'glob';
 import mri from 'mri';
+import { checkThresholds } from './check-thresholds.mjs';
 
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -459,6 +460,22 @@ if (allResults.length > 1) {
   const mdFile = getOutputFilename();
   writeMarkdownSummary(allResults, 'Parse', mdFile);
 }
+
+// CI gate: fail when the current build drops below the budgets in
+// iarna-benchmark.thresholds.toml.
+const thresholdFailed = checkThresholds({
+  thresholdsPath: join(__dirname, 'iarna-benchmark.thresholds.toml'),
+  currentName: 'toml-patch (current)',
+  operations: [
+    {
+      name: 'parse',
+      fixtures: benchmarks.map(({ name }) => name),
+      hzFor: (impl, fixture) => allResults.find(r => r.name === impl)?.benchmarks[fixture],
+    },
+  ],
+});
+
+if (thresholdFailed) process.exitCode = 1;
 
 /**
  * Prints a cross-implementation comparison table

@@ -1,0 +1,17 @@
+# Maximum allowed slowdown of the current toml-patch build relative to
+# smol-toml, measured in the same benchmark run. The CI benchmark job fails
+# when toml-patch is more than `maxSlowdown` times slower than smol-toml on any
+# fixture for that operation.
+#
+# These budgets are wider than the ones in smol-benchmark.thresholds.toml
+# because this corpus is made of many small documents, where toml-patch's fixed
+# per-document overhead dominates. The slowest fixture of the `--sample` set
+# currently measures around 7x for parse and 25x for stringify.
+
+reference = "smol-toml"
+
+[parse]
+maxSlowdown = 15
+
+[stringify]
+maxSlowdown = 40
