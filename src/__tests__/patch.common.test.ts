@@ -139,4 +139,58 @@ describe.each(implementations)('String format preservation (%s patch)', (_label,
     D:\Data\Files'''
     ` + '\n');
   });
+
+  test('Preserves a multiline basic string when editing a string', () => {
+    const src = dedent`
+    a = """
+    hello
+    """
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'goodbye';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = """
+    goodbye"""
+    ` + '\n');
+  });
+
+  test('Escapes backslashes in a preserved multiline basic string', () => {
+    const src = dedent`
+    a = """
+    hello
+    """
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'D:\\Data\\Files';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = """
+    D:\\Data\\Files"""
+    ` + '\n');
+  });
+
+  test('Escapes embedded triple quotes in a preserved multiline basic string', () => {
+    const src = dedent`
+    a = """
+    hello
+    """
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'has """ inside';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = """
+    has ""\" inside"""
+    ` + '\n');
+  });
 });
