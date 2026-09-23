@@ -11,10 +11,10 @@
 reference = "smol-toml"
 
 [iarna.parse]
-maxSlowdown = 15
+maxSlowdown = 8
 
 [iarna.stringify]
-maxSlowdown = 40
+maxSlowdown = 32
 
 [smol.parse]
 maxSlowdown = 5
