@@ -17,7 +17,7 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
   if (type === 'number') {
     if (!Number.isFinite(value)) return encodeNonFinite(value);
     if (Number.isSafeInteger(value) && !Object.is(value, -0) && !isFloatNode(existingValue)) {
-      return encodeInteger(value);
+      return encodeInteger(value, existingValue?.raw);
     }
     return encodeFloat(value, isFloatNode(existingValue) ? existingValue.raw : undefined);
   }
@@ -65,7 +65,26 @@ function toTomlPatchDate(value: Date): Date {
   return new OffsetDateTime(canonical, false);
 }
 
-function encodeInteger(value: number): string {
+/** Detects the radix and prefix of a prefixed integer literal (`0x`/`0o`/`0b`). */
+function integerRadixOf(raw: string): { radix: number; prefix: string } | undefined {
+  if (raw.startsWith('0x')) return { radix: 16, prefix: '0x' };
+  if (raw.startsWith('0o')) return { radix: 8, prefix: '0o' };
+  if (raw.startsWith('0b')) return { radix: 2, prefix: '0b' };
+  return undefined;
+}
+
+function encodeInteger(value: number, existingRaw?: string): string {
+  if (existingRaw) {
+    const radixInfo = integerRadixOf(existingRaw);
+    // TOML prefixed integers cannot carry a sign, so negative values fall
+    // back to plain decimal.
+    if (radixInfo && value >= 0) {
+      const uppercaseHex = radixInfo.radix === 16 && /[A-F]/.test(existingRaw);
+      let digits = value.toString(radixInfo.radix);
+      if (uppercaseHex) digits = digits.toUpperCase();
+      return radixInfo.prefix + digits;
+    }
+  }
   return String(value);
 }
 
@@ -104,7 +123,8 @@ function encodeExponentFloat(value: number, existingRaw: string): string {
   const renderedMantissa = decimals > 0
     ? Number(mantissa).toFixed(decimals)
     : String(Number(mantissa));
-  return `${renderedMantissa}e${exponent.replace(/^\+/, '')}`;
+  const uppercaseExponent = existingRaw.includes('E');
+  return `${renderedMantissa}${uppercaseExponent ? 'E' : 'e'}${exponent.replace(/^\+/, '')}`;
 }
 
 function encodeNonFinite(value: number): string {

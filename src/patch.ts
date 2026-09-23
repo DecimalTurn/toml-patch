@@ -20,6 +20,8 @@ import {
   isInlineItem,
   isString,
   isComment,
+  isInteger as isIntegerNode,
+  Integer as IntegerNode,
   isFloat,
   Float as FloatNode,
   hasItem,
@@ -808,13 +810,73 @@ function decimalPlacesOfRaw(raw: string): number {
 }
 
 /** Renders a value in TOML exponent notation (e.g. `1.0e11`) with at least `minimumDecimals` decimals. */
-function renderExponentNotation(value: number, minimumDecimals: number): string {
+function renderExponentNotation(value: number, minimumDecimals: number, uppercaseExponent = false): string {
   const [mantissa, exponent] = value.toExponential().split(/[eE]/);
   const decimals = Math.max(minimumDecimals, decimalPlacesOfRaw(mantissa));
   const renderedMantissa = decimals > 0
     ? Number(mantissa).toFixed(decimals)
     : String(Number(mantissa));
-  return `${renderedMantissa}e${exponent.replace(/^\+/, '')}`;
+  return `${renderedMantissa}${uppercaseExponent ? 'E' : 'e'}${exponent.replace(/^\+/, '')}`;
+}
+
+/** Detects the radix and prefix of a prefixed integer literal (`0x`/`0o`/`0b`). */
+function integerRadixOf(raw: string): { radix: number; prefix: string } | undefined {
+  if (raw.startsWith('0x')) return { radix: 16, prefix: '0x' };
+  if (raw.startsWith('0o')) return { radix: 8, prefix: '0o' };
+  if (raw.startsWith('0b')) return { radix: 2, prefix: '0b' };
+  return undefined;
+}
+
+/** Extracts the underscore grouping period: the digit count of the rightmost group. */
+function underscorePeriodOf(raw: string): number | undefined {
+  let body = raw;
+  if (body.startsWith('+') || body.startsWith('-')) body = body.slice(1);
+  if (body.startsWith('0x') || body.startsWith('0o') || body.startsWith('0b')) body = body.slice(2);
+  const lastUnderscore = body.lastIndexOf('_');
+  return lastUnderscore === -1 ? undefined : body.length - lastUnderscore - 1;
+}
+
+/** Inserts an underscore every `period` digits, counted from the right. */
+function groupDigits(digits: string, period: number): string {
+  if (digits.length <= period) return digits;
+  let result = '';
+  let count = 0;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    result = digits[i] + result;
+    count++;
+    if (count === period && i > 0) {
+      result = '_' + result;
+      count = 0;
+    }
+  }
+  return result;
+}
+
+/** Renders an integer in the style of an existing integer literal (radix, digit case, grouping). */
+function renderIntegerLike(value: number | bigint, existingRaw: string): string | undefined {
+  const radixInfo = integerRadixOf(existingRaw);
+  const period = underscorePeriodOf(existingRaw);
+
+  if (radixInfo) {
+    // TOML prefixed integers (hex/octal/binary) cannot carry a sign, so a
+    // negative value cannot keep the original radix. Fall back to the default
+    // decimal rendering by returning undefined.
+    const negative = typeof value === 'bigint' ? value < 0n : value < 0;
+    if (negative) return undefined;
+
+    const uppercaseHex = radixInfo.radix === 16 && /[A-F]/.test(existingRaw);
+    let digits = value.toString(radixInfo.radix);
+    if (uppercaseHex) digits = digits.toUpperCase();
+    return radixInfo.prefix + (period ? groupDigits(digits, period) : digits);
+  }
+
+  if (period) {
+    const negative = typeof value === 'bigint' ? value < 0n : value < 0;
+    const abs = negative ? value.toString().slice(1) : value.toString();
+    return (negative ? '-' : '') + groupDigits(abs, period);
+  }
+
+  return undefined;
 }
 
 /**
@@ -888,6 +950,19 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     // If existing had no sign and replacement has no sign, leave as-is (nan)
   }
 
+  // Preserve integer literal formatting (underscore grouping and radix prefix)
+  // when an integer is replaced by another integer. `1_000_000 -> 10000` keeps
+  // the grouping and becomes `10_000`; `0xFF -> 256` stays hexadecimal `0x100`.
+  if (isIntegerNode(existing) && replacement.type === NodeType.Integer) {
+    const existingInt = existing as IntegerNode;
+    const newRaw = renderIntegerLike(replacement.value, existingInt.raw);
+    if (newRaw !== undefined) {
+      const replacementInt = replacement as IntegerNode;
+      replacementInt.raw = newRaw;
+      replacementInt.loc.end.column = replacementInt.loc.start.column + newRaw.length;
+    }
+  }
+
   // Preserve number formatting when replacing an existing float:
   // - a "round" float (zero fraction, e.g. `1.0`, `1.00`, `1.0e10`) keeps its
   //   decimal-place count when the new value is a whole number;
@@ -905,10 +980,11 @@ function preserveFormatting(existing: Value, replacement: Value): void {
 
       let newRaw: string | undefined;
       if (hasExponent) {
+        const uppercaseExponent = existingFloat.raw.includes('E');
         const minDecimals = valueIsIntegral
           ? Math.max(isRound ? fractionLength : 0, replacementDecimals)
           : replacementDecimals;
-        newRaw = renderExponentNotation(value, minDecimals);
+        newRaw = renderExponentNotation(value, minDecimals, uppercaseExponent);
       } else if (valueIsIntegral && isRound) {
         newRaw = value.toFixed(Math.max(fractionLength, replacementDecimals));
       }
