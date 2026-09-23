@@ -148,7 +148,56 @@ function encodeString(value: string, existingRaw?: string): string {
         : '';
     return "'''" + leadingNewLine + value + "'''";
   }
+  if (existingRaw && existingRaw.startsWith('"""')) {
+    return encodeMultilineBasicString(value, existingRaw);
+  }
   return encodeBasicString(value);
+}
+
+/**
+ * Encodes a value as a multiline basic string (`"""`), preserving the leading
+ * newline style of the source and escaping backslashes, control characters and
+ * embedded triple quotes, matching the full patch().
+ */
+function encodeMultilineBasicString(value: string, existingRaw: string): string {
+  const leadingNewLine = existingRaw.startsWith('"""\r\n')
+    ? '\r\n'
+    : existingRaw.startsWith('"""\n')
+      ? '\n'
+      : '';
+  return '"""' + leadingNewLine + escapeMultilineBasicContent(value) + '"""';
+}
+
+/**
+ * Escapes the content of a multiline basic string: backslashes are doubled,
+ * control characters are escaped, newlines stay literal (CR only as part of
+ * CRLF), and embedded `"""` is protected as `""\"`.
+ */
+function escapeMultilineBasicContent(value: string): string {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    const code = value.charCodeAt(i);
+    if (ch === '\\') out += '\\\\';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\n') out += '\n';
+    else if (ch === '\f') out += '\\f';
+    else if (ch === '\r') {
+      // A carriage return is only valid when part of CRLF; escape it otherwise.
+      out += value.charCodeAt(i + 1) === 0x0a ? '\r' : '\\r';
+    } else if (
+      (code >= 0x00 && code <= 0x07) ||
+      code === 0x0b ||
+      (code >= 0x0e && code <= 0x1f) ||
+      code === 0x7f
+    ) {
+      out += '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+    } else {
+      out += ch;
+    }
+  }
+  return out.replace(/"""/g, '""\\"');
 }
 
 /**
