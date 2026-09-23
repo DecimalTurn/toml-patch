@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patching: preserve the number formatting of edited values. Floats with an explicit zero fraction keep their decimal places (`1.0` -> `2.0`, `1.00` -> `2.00`), exponent notation is kept when the source used it (`1.0e10` -> `1.0e11`), and floats with a non-zero fraction collapse to a plain integer when their value becomes whole (`1.5` -> `2`, `1.25e10` -> `1e11`). `minimumDecimals` still forces the requested decimal places. ([#309])
+- Patching: preserve underscore grouping in integer literals, counted from the right, when the value changes (`1_000_000` -> `10000` becomes `10_000`). ([#309])
+- Patching: preserve hexadecimal, octal and binary integer notation (`0x`, `0o`, `0b`) and the exponent marker case (`e` vs `E`) when editing numbers. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
