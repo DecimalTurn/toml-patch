@@ -4,6 +4,7 @@ import diffLite, { formatPath } from './diff-lite';
 import { encodeValue } from './encode-lite';
 import findByPath from './find-by-path';
 import { hasLeadingBom, UTF8_BOM } from './decode-utf8';
+import { attachSources } from './cst-source';
 import {
   NodeType,
   Document,
@@ -69,6 +70,7 @@ export default function patchLite(existing: string, updated: any): string {
   const source = hadBom ? existing.slice(1) : existing;
 
   const items = Array.from(parseTOML(source));
+  attachSources(items, source);
   const existingJs = toJS(items, source, { integersAsBigInt: 'asNeeded', temporal: false });
 
   const changes = diffLite(existingJs, updated);
