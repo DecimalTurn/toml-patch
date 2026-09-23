@@ -11,7 +11,7 @@ const implementations: Array<[string, (src: string, obj: any) => string]> = [
   ['lite', patchLite],
 ];
 
-describe.each(implementations)('Format preservation for numbers (%s patch)', (_label, patch) => {
+describe.each(implementations)('Number format preservation (%s patch)', (_label, patch) => {
   test('Preserves uppercase E in exponent notation', () => {
     const src = dedent`
     a = 1.0E10
@@ -99,6 +99,44 @@ describe.each(implementations)('Format preservation for numbers (%s patch)', (_l
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
     a = -2391
+    ` + '\n');
+  });
+});
+
+describe.each(implementations)('String format preservation (%s patch)', (_label, patch) => {
+  test('Preserves a multiline literal string when editing a string', () => {
+    const src = dedent`
+    a = '''
+    hello
+    '''
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'goodbye';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = '''
+    goodbye'''
+    ` + '\n');
+  });
+
+  test('Does not escape backslashes in a preserved multiline literal string', () => {
+    const src = dedent`
+    a = '''
+    C:\Users\Example
+    '''
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'D:\\Data\\Files';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = '''
+    D:\Data\Files'''
     ` + '\n');
   });
 });
