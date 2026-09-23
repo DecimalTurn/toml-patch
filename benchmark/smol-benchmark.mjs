@@ -24,7 +24,6 @@ import { checkThresholds } from './check-thresholds.mjs';
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const THRESHOLDS_PATH = join(__dirname, 'smol-benchmark.thresholds.toml');
 const CURRENT_IMPL = 'toml-patch (current)';
 
 const FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
@@ -231,14 +230,14 @@ function formatFactor(factor) {
 report('Parse:', parseResults);
 report('Stringify:', stringifyResults);
 
-// CI gate: fail when the current build's throughput drops below a configured
-// minimum. Thresholds live in smol-benchmark.thresholds.toml.
+// CI gate: fail when the current build's throughput drops below the budgets
+// configured for the smol suite in thresholds.toml.
 const fixtures = FIXTURES.map(({ name }) => name);
 const hzFor = (results) => (impl, fixture) =>
   results.find((result) => result.fixture === fixture && result.impl === impl)?.hz;
 
 const thresholdFailed = checkThresholds({
-  thresholdsPath: THRESHOLDS_PATH,
+  suite: 'smol',
   currentName: CURRENT_IMPL,
   operations: [
     { name: 'parse', fixtures, hzFor: hzFor(parseResults) },

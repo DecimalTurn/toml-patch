@@ -5,36 +5,48 @@
  * fixture of an operation and reports a failure when the current build is more
  * than `maxSlowdown` times slower than the reference.
  *
- * Threshold files look like this:
+ * Suites and their budgets live together in benchmark/thresholds.toml:
  *
  *   reference = "smol-toml"
  *
- *   [parse]
- *   maxSlowdown = 12
+ *   [iarna.parse]
+ *   maxSlowdown = 15
  *
- *   [stringify]
- *   maxSlowdown = 40
+ *   [smol.parse]
+ *   maxSlowdown = 5
  *
  * The `reference` key is optional and defaults to smol-toml.
  */
 
 import { existsSync, readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { parse as parseToml } from 'smol-toml';
 
 export const DEFAULT_REFERENCE = 'smol-toml';
+export const DEFAULT_THRESHOLDS_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'thresholds.toml'
+);
 
 /**
  * @param {object} options
- * @param {string} options.thresholdsPath Path of the thresholds TOML file.
+ * @param {string} options.suite Benchmark suite, matching a table in the thresholds file.
  * @param {string} options.currentName Implementation name of the current build.
  * @param {Array<{
  *   name: string,
  *   fixtures: string[],
  *   hzFor: (impl: string, fixture: string) => number | undefined
  * }>} options.operations Operations to check, in report order.
+ * @param {string} [options.thresholdsPath] Path of the thresholds TOML file.
  * @returns {boolean} `true` when at least one threshold was crossed.
  */
-export function checkThresholds({ thresholdsPath, currentName, operations }) {
+export function checkThresholds({
+  suite,
+  currentName,
+  operations,
+  thresholdsPath = DEFAULT_THRESHOLDS_PATH,
+}) {
   if (!existsSync(thresholdsPath)) {
     console.log(`\nNo thresholds file at ${thresholdsPath}; skipping the performance gate.`);
     return false;
@@ -43,13 +55,14 @@ export function checkThresholds({ thresholdsPath, currentName, operations }) {
   const thresholds = parseToml(readFileSync(thresholdsPath, 'utf8'));
   const referenceName =
     typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
+  const suiteThresholds = thresholds[suite] ?? {};
 
-  console.log(`\nPerformance thresholds (max slowdown vs ${referenceName}):`);
+  console.log(`\nPerformance thresholds for ${suite} (max slowdown vs ${referenceName}):`);
 
   let failed = false;
 
   for (const { name, fixtures, hzFor } of operations) {
-    const maxSlowdown = thresholds[name]?.maxSlowdown;
+    const maxSlowdown = suiteThresholds[name]?.maxSlowdown;
     if (typeof maxSlowdown !== 'number') continue;
 
     // Runs restricted to a subset of implementations have no reference to

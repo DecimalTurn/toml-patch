@@ -1,0 +1,23 @@
+# Maximum allowed slowdown of the current toml-patch build relative to
+# smol-toml, measured in the same benchmark run. A benchmark suite fails when
+# toml-patch is more than `maxSlowdown` times slower than the reference on any
+# fixture for that operation.
+#
+# The iarna corpus is made of many small documents, where toml-patch's fixed
+# per-document overhead dominates, so its budgets are wider than the smol-toml
+# ones. The slowest fixture of the iarna `--sample` set currently measures
+# around 7x for parse and 25x for stringify.
+
+reference = "smol-toml"
+
+[iarna.parse]
+maxSlowdown = 15
+
+[iarna.stringify]
+maxSlowdown = 40
+
+[smol.parse]
+maxSlowdown = 5
+
+[smol.stringify]
+maxSlowdown = 25

@@ -358,10 +358,10 @@ if (allResults.length > 1) {
   writeMarkdownSummary(allResults, 'Stringify', mdFile);
 }
 
-// CI gate: fail when the current build drops below the budgets in
-// iarna-benchmark.thresholds.toml.
+// CI gate: fail when the current build drops below the budgets configured for
+// the iarna suite in thresholds.toml.
 const thresholdFailed = checkThresholds({
-  thresholdsPath: join(__dirname, 'iarna-benchmark.thresholds.toml'),
+  suite: 'iarna',
   currentName: 'toml-patch (current)',
   operations: [
     {
