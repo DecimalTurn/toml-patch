@@ -175,17 +175,17 @@ md += `That result holds for both builds: the unbundled dev build saves ${saving
 const droppedList = droppedModules.map((m) => `\`${m}\``).join(', ');
 md += `## Why the saving is small\n\n`;
 md += `\`patch\` is the heaviest entry point: it needs the tokenizer, the parser, the writer, the generator, `;
-md += `the formatter and the comment-handling machinery. Out of ${fullDev.devModules.length} dev modules a `;
-md += `\`patch\`-only bundle keeps ${keptModules.length}, dropping only ${droppedList}.\n\n`;
-md += `That dropped chain is the \`TomlDocument\` API (\`toml-document.js\` → \`truncate.js\`) plus the entry `;
-md += `barrel's own code, which only declares the \`parse\`/\`stringify\`/\`parseDocument\` wrappers.\n\n`;
-md += `The other entry points reuse the same internals, so for them tree-shaking pays off a lot: `;
-md += `\`parse\` alone is ${kB(parseDev.bytes)} kB, ${pct(fullDev.bytes - parseDev.bytes, fullDev.bytes)} smaller than the full package.\n\n`;
+md += `the formatter and the comment-handling machinery, so almost every module is reachable from it. `;
+md += `Out of ${fullDev.devModules.length} dev modules a \`patch\`-only bundle keeps ${keptModules.length}`;
+md += droppedModules.length ? `, dropping only ${droppedList}.\n\n` : ` and drops nothing.\n\n`;
+md += `The other entry points reuse the same internals, so for them tree-shaking pays off far more: `;
+md += `\`parse\` alone is ${kB(parseDev.bytes)} kB (${pct(fullDev.bytes - parseDev.bytes, fullDev.bytes)} smaller than the full package) `;
+md += `and \`LocalDate\` alone is ${kB(localDateDev.bytes)} kB (${pct(fullDev.bytes - localDateDev.bytes, fullDev.bytes)} smaller).\n\n`;
 md += `## Takeaway\n\n`;
-md += `- A consumer that needs \`patch\` should not expect meaningful savings from tree-shaking: `;
+md += `- A consumer that needs \`patch\` only gets a small saving from tree-shaking: `;
 md += `${savingMin} kB minified, ${savingGz} kB gzipped.\n`;
-md += `- The unbundled \`dev\` build is not faster for \`patch\`-only consumers; both builds land within ~1 kB of each other.\n`;
-md += `- Tree-shaking matters for consumers who use \`parse\`, \`stringify\` or the individual date classes without \`patch\`.\n`;
+md += `- The unbundled \`dev\` build is not significantly smaller for \`patch\`-only consumers; both builds land within a couple of kB of each other.\n`;
+md += `- Tree-shaking matters most for consumers who use \`parse\`, \`stringify\` or the individual date classes without \`patch\`.\n`;
 
 writeFileSync(join(rootDir, 'benchmark', 'tree-shaking.md'), md);
 console.log('📝 Report written to benchmark/tree-shaking.md');
