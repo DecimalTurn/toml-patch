@@ -718,12 +718,14 @@ test('should stringify emoji as raw character (not unicode escape) from fresh JS
 });
 
 // --- Copilot review #280: stringifyRoots fast-path safety ---
-// These tests exercise batched top-level table promotion during stringify and
-// verify that regrouping root items preserves their output and ordering.
+// These tests exercise the formatter's remove()+insert() sequence during stringify,
+// verifying that skipping emptiedByRemove/hadNonLastRemoval for stringify roots
+// does NOT produce incorrect output.
 
 test('stringifyRoots fast-path: multiple inline tables extracted to sections', () => {
   // All root-level values are inline tables needing extraction (formatTopLevel).
-  // All root-level values are promoted while retaining their original order.
+  // The formatter calls remove() then insert() for each, but the document never
+  // becomes empty between operations — the wasEmptied compensation is never needed.
   const obj = {
     alpha: { x: 1 },
     beta: { y: 2 },
@@ -748,7 +750,7 @@ test('stringifyRoots fast-path: multiple inline tables extracted to sections', (
 
 test('stringifyRoots fast-path: mixed inline tables and plain keys at root', () => {
   // Some root values are inline tables, some are scalars. The formatter
-  // must keep scalars ahead of the promoted sections.
+  // must remove+insert the tables while leaving scalars in place.
   const obj = {
     title: 'My App',
     version: '1.0',
@@ -806,7 +808,8 @@ test('stringifyRoots fast-path: nested inline tables extracted at depth 2', () =
 
 test('stringifyRoots fast-path: all inline tables extracted, no scalars at root', () => {
   // Edge case: root has ONLY inline tables, all extracted. The document
-  // promotes every root item and positions the resulting sections in order.
+  // iterates through remove+insert for every item — maximum stress on
+  // the offset accumulation path.
   const obj = {
     section_a: { key: 'a' },
     section_b: { key: 'b' },

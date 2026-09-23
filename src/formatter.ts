@@ -63,29 +63,23 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
     return false;
   }) as KeyValue[];
 
-  if (move_to_top_level.length === 0) return document;
+  move_to_top_level.forEach(node => {
+    remove(document, document, node);
 
-  const moved_nodes = new Set(move_to_top_level);
-  const converted_nodes: TreeNode[] = [];
-  for (const node of move_to_top_level) {
     if (isInlineTable(node.value)) {
       // Fast path: empty inline tables don't need the full formatTable
       // machinery (inline table copy, insert loop, applyWrites).
       if ((node.value as InlineTable).items.length === 0) {
-        converted_nodes.push(generateTable(node.key.value));
+        insert(document, document, generateTable(node.key.value));
       } else {
-        converted_nodes.push(formatTable(node, format.bracketSpacing));
+        insert(document, document, formatTable(node, format.bracketSpacing));
       }
     } else {
-      converted_nodes.push(...formatTableArray(node, format.bracketSpacing));
+      formatTableArray(node, format.bracketSpacing).forEach(table_array => {
+        insert(document, document, table_array);
+      });
     }
-  }
-
-  const remaining_nodes = document.items.filter(item => !moved_nodes.has(item as KeyValue));
-  document.items.length = 0;
-  for (const node of [...remaining_nodes, ...converted_nodes]) {
-    insert(document, document, node);
-  }
+  });
 
   applyWrites(document);
   return document;
