@@ -9,11 +9,8 @@
  *
  *   reference = "smol-toml"
  *
- *   [iarna.parse]
- *   maxSlowdown = 15
- *
- *   [smol.parse]
- *   maxSlowdown = 5
+ *   [fixtures.parse]
+ *   maxSlowdown = 8
  *
  * The `reference` key is optional and defaults to smol-toml.
  */
@@ -57,7 +54,7 @@ export function checkThresholds({
     typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
   const suiteThresholds = thresholds[suite] ?? {};
 
-  console.log(`\nPerformance thresholds for ${suite} (max slowdown vs ${referenceName}):`);
+  console.log(`\nPerformance thresholds for ${suite} fixtures (max slowdown vs ${referenceName}):`);
 
   let failed = false;
 
