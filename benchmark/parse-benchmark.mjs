@@ -5,7 +5,7 @@
  *   pnpm run bench:iarna [-- <options>]
  *   
  * Options:
- *   --sample      Run curated sample of 10 representative benchmarks
+ *   --sample      Run curated sample of 7 representative benchmarks
  *   --package     Only run benchmark for specific package (by index)
  *   --file <n>    Run specific file(s) using a matching pattern
  *   --baseline    Path of a build to compare the current one against (e.g. the latest branch)
@@ -203,7 +203,7 @@ if (help) {
 Usage: node benchmark/parse-benchmark.mjs [options]
 
 Options:
-  --sample           Run curated sample of 10 representative benchmarks
+  --sample           Run curated sample of 7 representative benchmarks
   --package <index>  Only run benchmark for the given implementation (0-based index)
   --file <pattern>   Run benchmarks matching the file pattern
   --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
@@ -291,12 +291,9 @@ const SAMPLE_FILES = [
   '0A-spec-02-example-hard-unicode.toml',
   '01-small-doc-mixed-type-inline-array.toml',
   '0C-scaling-string-40kb.toml',
-  '0C-scaling-array-inline-1000.toml',
-  '0C-scaling-table-inline-1000.toml',
   '0B-types-scalar-string-multiline-1079-chars.toml',
   '0B-types-scalar-datetimes.toml',
-  '0B-types-scalar-ints.toml',
-  '0B-types-table.toml'
+  '0B-types-scalar-ints.toml'
 ];
 
 // Determine which files to benchmark

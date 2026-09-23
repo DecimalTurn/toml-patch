@@ -5,7 +5,7 @@
  *   pnpm run bench:stringify [-- <options>]
  *   
  * Options:
- *   --sample         Run curated sample of 10 representative benchmarks
+ *   --sample         Run curated sample of 7 representative benchmarks
  *   --detailed       Run detailed profiling of stringify components
  *   --package <n>    Run benchmark for specific implementation
  *   --file <n>       Run specific file(s) matching pattern
@@ -186,7 +186,7 @@ if (help) {
 Usage: node benchmark/stringify-benchmark.mjs [options]
 
 Options:
-  --sample           Run curated sample of 10 representative benchmarks
+  --sample           Run curated sample of 7 representative benchmarks
   --detailed         Run detailed profiling of stringify process
   --package <index>  Only run benchmark for the given implementation (0-based index)
   --self             Shorthand for --package 0 (toml-patch current only)
@@ -221,11 +221,11 @@ let TOML_IMPLEMENTATIONS = [
     name: 'smol-toml',
     path: resolveWorkspacePackage('smol-toml'),
   },
-  {
-    name: '@rainbowatcher/toml-edit-js',
-    path: installPackageToCache('@rainbowatcher/toml-edit-js'),
-    needsInit: true,
-  }
+  // {
+  //   name: '@rainbowatcher/toml-edit-js',
+  //   path: installPackageToCache('@rainbowatcher/toml-edit-js'),
+  //   needsInit: true,
+  // }
 ].filter(impl => impl.path != null);
 
 // Add specific versions if requested
@@ -288,12 +288,9 @@ const SAMPLE_FILES = [
   '0A-spec-02-example-hard-unicode.toml',
   '01-small-doc-mixed-type-inline-array.toml',
   '0C-scaling-string-40kb.toml',
-  '0C-scaling-array-inline-1000.toml',
-  '0C-scaling-table-inline-1000.toml',
   '0B-types-scalar-string-multiline-1079-chars.toml',
   '0B-types-scalar-datetimes.toml',
-  '0B-types-scalar-ints.toml',
-  '0B-types-table.toml'
+  '0B-types-scalar-ints.toml'
 ];
 
 // Determine which files to benchmark
