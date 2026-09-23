@@ -231,7 +231,8 @@ function encodeBasicString(value: string): string {
     else if (ch === '\n') out += '\\n';
     else if (ch === '\f') out += '\\f';
     else if (ch === '\r') out += '\\r';
-    else if (code < 0x20 || code === 0x7f) out += '\\u' + code.toString(16).padStart(4, '0');
+    else if (code < 0x20) out += '\\u' + code.toString(16).padStart(4, '0');
+    else if (code === 0x7f) out += '\\u007F';
     else out += ch;
   }
 
