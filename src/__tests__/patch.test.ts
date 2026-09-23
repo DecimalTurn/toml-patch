@@ -10545,4 +10545,55 @@ describe('Format preservation for numbers', () => {
 
   });
 
+  test('Preserves underscore grouping in a decimal integer', () => {
+    const src = dedent`
+    a = 1_000_000
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = obj.a + 1;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 1_000_001
+    ` + '\n');
+  });
+
+  test('Re-groups a decimal integer using the existing grouping counted from the right', () => {
+    const src = dedent`
+    a = 1_000_000
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 10000;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 10_000
+    ` + '\n');
+  });
+
+  test('Re-groups a negative decimal integer and keeps its sign', () => {
+    const src = dedent`
+    a = -1_000_000
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = -10000;
+
+    expect(typeof obj.a).toBe('number');
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = -10_000
+    ` + '\n');
+  });
+
 });
