@@ -19,14 +19,19 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
 import Benchmark from 'benchmark';
 import mri from 'mri';
+import { Temporal } from '@js-temporal/polyfill';
 import { checkThresholds } from './check-thresholds.mjs';
 
-const { Suite, formatNumber } = Benchmark;
+const { Suite } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const CURRENT_IMPL = 'toml-patch (current)';
 const BASELINE_IMPL = 'toml-patch (baseline)';
+const SMOL_TEMPORAL = 'smol-toml (Temporal)';
+const CURRENT_TEMPORAL = 'toml-patch (current, Temporal)';
 const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-smol.md');
+
+globalThis.Temporal ??= Temporal;
 
 const FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const FIXTURES = [
@@ -130,7 +135,10 @@ async function loadModule(modulePath) {
 }
 
 function createParseRunner(TOML, name) {
-  if (name === 'smol-toml') return (toml) => TOML.parse(toml, { maxDepth: 1010 });
+  if (name === 'smol-toml') return (toml) => TOML.parse(toml, { useLegacyDate: true, maxDepth: 1010 });
+  if (name === SMOL_TEMPORAL) return (toml) => TOML.parse(toml, { useLegacyDate: false, maxDepth: 1010 });
+  if (name === CURRENT_IMPL) return (toml) => TOML.parse(toml, { temporal: false });
+  if (name === CURRENT_TEMPORAL) return (toml) => TOML.parse(toml, { temporal: true });
   return (toml) => TOML.parse(toml);
 }
 
@@ -149,13 +157,13 @@ async function runSuite(suite) {
 const parseResults = [];
 const stringifyResults = [];
 
-// Pre-parse the fixtures with the current build so every implementation
-// stringifies the same object, mirroring the parse benchmark's inputs.
-const currentToml = await loadModule(join(__dirname, '../dist/toml-patch.js'));
+// Match the smol-toml README: every implementation stringifies the same
+// object parsed by smol-toml with legacy Date values.
+const referenceToml = await loadModule(join(__dirname, '../node_modules/smol-toml'));
 const parsedFixtures = FIXTURES.map(({ name, data }) => ({
   name,
   data,
-  value: currentToml.parse(data)
+  value: referenceToml.parse(data, { useLegacyDate: true, maxDepth: 1010 })
 }));
 
 for (const impl of IMPLEMENTATIONS) {
@@ -167,28 +175,33 @@ for (const impl of IMPLEMENTATIONS) {
     continue;
   }
 
-  // Parse.
-  const parseFn = createParseRunner(TOML, impl.name);
-  const runnable = FIXTURES.filter(({ name, data }) => {
-    try {
-      parseFn(data);
-      return true;
-    } catch {
-      console.warn(`Skipping ${impl.name} parse on ${name}: failed`);
-      return false;
-    }
-  });
+  // Parse Date and Temporal variants separately, as in the upstream README.
+  const parseNames = [impl.name];
+  if (impl.name === 'smol-toml') parseNames.push(SMOL_TEMPORAL);
+  if (impl.name === CURRENT_IMPL) parseNames.push(CURRENT_TEMPORAL);
+  for (const parseName of parseNames) {
+    const parseFn = createParseRunner(TOML, parseName);
+    const runnable = FIXTURES.filter(({ name, data }) => {
+      try {
+        parseFn(data);
+        return true;
+      } catch {
+        console.warn(`Skipping ${parseName} parse on ${name}: failed`);
+        return false;
+      }
+    });
 
-  if (runnable.length > 0) {
-    for (const { data } of runnable) {
-      const iterations = data.length > 1_000_000 ? 3 : 50;
-      for (let i = 0; i < iterations; i++) parseFn(data);
-    }
-    const suite = new Suite(`${impl.name} parse`);
-    for (const { name, data } of runnable) suite.add(name, () => parseFn(data));
-    const hzByName = await runSuite(suite);
-    for (const { name } of runnable) {
-      parseResults.push({ fixture: name, impl: impl.name, hz: hzByName.get(name) });
+    if (runnable.length > 0) {
+      for (const { data } of runnable) {
+        const iterations = data.length > 1_000_000 ? 3 : 50;
+        for (let i = 0; i < iterations; i++) parseFn(data);
+      }
+      const suite = new Suite(`${parseName} parse`);
+      for (const { name, data } of runnable) suite.add(name, () => parseFn(data));
+      const hzByName = await runSuite(suite);
+      for (const { name } of runnable) {
+        parseResults.push({ fixture: name, impl: parseName, hz: hzByName.get(name) });
+      }
     }
   }
 
@@ -220,83 +233,82 @@ for (const impl of IMPLEMENTATIONS) {
   }
 }
 
-// Report.
-function report(label, results) {
-  for (const fixture of FIXTURES) {
-    console.log(`\n${label} ${fixture.name} (${(fixture.data.length / 1024).toFixed(1)} KB)`);
-    const rows = results.filter((r) => r.fixture === fixture.name);
-    const smolHz = rows.find((r) => r.impl === 'smol-toml')?.hz;
-    for (const { impl, hz } of rows) {
-      const opsPerSec = hz < 1 ? hz.toFixed(3) : formatNumber(hz.toFixed(hz < 100 ? 2 : 0));
-      const note = impl === 'smol-toml'
-        ? ' (reference)'
-        : smolHz ? ` (${formatFactor(smolHz / hz)} than smol-toml)` : '';
-      console.log(`  ${impl}: ${opsPerSec} ops/sec${note}`);
-    }
-  }
-}
-
-/** Formats a slowdown factor as `Nx slower` or `Nx faster`. */
-function formatFactor(factor) {
-  return factor < 1 ? `${(1 / factor).toFixed(1)}x faster` : `${factor.toFixed(1)}x slower`;
-}
-
 /**
- * Writes a markdown summary of both operations. When a baseline build was
- * benchmarked, the tables gain a Ratio column comparing the current build with
- * it, which is what the CI report posts on pull requests.
+ * Writes per-fixture ranked tables like the smol-toml README. A baseline run
+ * keeps the CI Ratio column comparing the current build with the baseline.
  */
 function writeMarkdown(parseResults, stringifyResults) {
   const comparisonName = parseResults.some((result) => result.impl === BASELINE_IMPL)
     ? BASELINE_IMPL
     : null;
-  const implNames = IMPLEMENTATIONS.map(({ name }) => name).reverse();
+  const tomlPatchVersion = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')).version;
+  const smolVersion = JSON.parse(readFileSync(join(__dirname, '../node_modules/smol-toml/package.json'), 'utf8')).version;
+  const versions = {
+    [CURRENT_IMPL]: `@decimalturn/toml-patch@${tomlPatchVersion}`,
+    [CURRENT_TEMPORAL]: `@decimalturn/toml-patch@${tomlPatchVersion} (Temporal, current)`,
+    'smol-toml': `smol-toml@${smolVersion}`,
+    [SMOL_TEMPORAL]: `smol-toml@${smolVersion} (Temporal)`,
+    '@iarna/toml': `@iarna/toml@${JSON.parse(readFileSync(join(__dirname, '../submodules/iarna-toml/package.json'), 'utf8')).version}`,
+  };
 
   let markdown = '# smol-toml Fixture Benchmark Results\n\n';
-  markdown += '*All measurements in operations per second (ops/sec). Higher is better.*\n\n';
+  markdown += '*Time per iteration. Lower is better.*\n\n';
 
   for (const [label, results] of [
     ['Parse', parseResults],
     ['Stringify', stringifyResults],
   ]) {
-    const headers = ['Benchmark', ...implNames];
-    if (comparisonName) headers.push('Ratio');
-
-    markdown += `## ${label}\n\n`;
-    markdown += '| ' + headers.join(' | ') + ' |\n';
-    markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-
     for (const fixture of FIXTURES) {
-      const hzFor = (impl) =>
-        results.find((result) => result.fixture === fixture.name && result.impl === impl)?.hz;
-      const sizeKB = (fixture.data.length / 1024).toFixed(1);
-      const row = [`${fixture.name} (${sizeKB} KB)`];
+      const names = [...new Set([...IMPLEMENTATIONS.map(({ name }) => name),
+        ...(label === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : [])])];
+      const rows = names.map((name) => ({
+        name,
+        hz: results.find((result) => result.fixture === fixture.name && result.impl === name)?.hz,
+      })).sort((left, right) => (right.hz ?? 0) - (left.hz ?? 0));
+      const fastest = rows[0]?.hz;
+      const baselineHz = rows.find(({ name }) => name === BASELINE_IMPL)?.hz;
+      const currentHz = rows.find(({ name }) => name === CURRENT_IMPL)?.hz;
+      const fixtureName = fixture.name === 'toml-spec-example'
+        ? 'spec example'
+        : '5MB randomly generated file';
 
-      for (const impl of implNames) {
-        const hz = hzFor(impl);
-        row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
+      markdown += `#### ${label}, ${fixtureName}\n\n`;
+      markdown += '|    | Library | Performance | Slowdown | Notes |';
+      if (comparisonName) markdown += ' Ratio |';
+      markdown += '\n|:--:|---|---|---|---|';
+      if (comparisonName) markdown += '---|';
+      markdown += '\n';
+
+      for (const [index, { name, hz }] of rows.entries()) {
+        const rank = hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-';
+        const milliseconds = hz ? 1000 / hz : 0;
+        const performance = hz
+          ? milliseconds < 1 ? `${(milliseconds * 1000).toFixed(2)} \u00b5s/iter` : `${milliseconds.toFixed(2)} ms/iter`
+          : '**DNF**';
+        const slowdown = hz && fastest
+          ? `${(fastest / hz).toFixed(2).replace(/\.00$/, '')}x`
+          : '**DNF**';
+        const library = versions[name] ?? name;
+        const suffix = name === CURRENT_IMPL
+          ? label === 'Parse' ? ' (Date, current)' : ' (current)'
+          : name === 'smol-toml' && label === 'Parse' ? ' (Date)' : '';
+        const row = [rank, library + suffix, performance, slowdown, ''];
+        if (comparisonName) {
+          row.push(name === CURRENT_IMPL && baselineHz && currentHz
+            ? (currentHz / baselineHz).toFixed(2)
+            : '');
+        }
+        markdown += '| ' + row.join(' | ') + ' |\n';
       }
-
-      if (comparisonName) {
-        const baselineHz = hzFor(comparisonName);
-        const currentHz = hzFor(CURRENT_IMPL);
-        row.push(
-          baselineHz && currentHz && baselineHz > 0 ? (currentHz / baselineHz).toFixed(2) : 'N/A'
-        );
-      }
-
-      markdown += '| ' + row.join(' | ') + ' |\n';
+      markdown += '\n';
     }
-
-    markdown += '\n';
   }
 
   writeFileSync(MARKDOWN_PATH, markdown, 'utf8');
+  console.log(`\n${markdown}`);
   console.log(`\nBenchmark results written to ${MARKDOWN_PATH}`);
 }
 
-report('Parse:', parseResults);
-report('Stringify:', stringifyResults);
 writeMarkdown(parseResults, stringifyResults);
 
 // CI gate: fail when the current build's throughput drops below the budgets

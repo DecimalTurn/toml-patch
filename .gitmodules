@@ -9,4 +9,4 @@
 	url = https://github.com/iarna/iarna-toml.git
 [submodule "submodules/smol-toml"]
 	path = submodules/smol-toml
-	url = https://DecimalTurn@github.com/DecimalTurn/smol-toml.git
+	url = https://github.com/squirrelchat/smol-toml.git
