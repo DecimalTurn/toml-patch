@@ -50,6 +50,7 @@ const FIXTURES = [
 ].map(({ dir, name, label }) => ({
   name,
   label,
+  file: `${name}.toml`,
   data: readFileSync(join(dir, `${name}.toml`), 'utf8'),
 }));
 
@@ -287,7 +288,7 @@ function writeMarkdown(parseResults, stringifyResults) {
       ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
     ])];
     return tableFixtures.map((fixture) => buildRankedTable({
-      heading: `${benchmarkType}, ${fixture.label}`,
+      heading: `${benchmarkType}, ${fixture.label} (${fixture.file})`,
       rows: ids.map((id) => ({
         id,
         label: implementationLabel(id, benchmarkType),
