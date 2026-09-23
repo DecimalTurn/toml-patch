@@ -13,7 +13,7 @@
  *   3. Bundles each with esbuild (minified, no external deps)
  *   4. Measures raw minified size and gzipped size
  *   5. Prints a comparison table to the console
- *   6. Updates the bundle size section in promo.md
+ *   6. Writes benchmark/bundle-size.md
  */
 
 import { join, dirname } from 'path';
@@ -151,29 +151,3 @@ md += `Both libraries have **0** runtime dependencies.\n`;
 
 writeFileSync(join(rootDir, 'benchmark', 'bundle-size.md'), md);
 console.log('📝 Full comparison written to benchmark/bundle-size.md');
-
-// ── Update promo.md ────────────────────────────────────────────────
-
-const promoPath = join(rootDir, 'promo.md');
-if (existsSync(promoPath)) {
-  let promo = readFileSync(promoPath, 'utf8');
-
-  // Match the existing table (from header row through the Dependencies row)
-  const tableRegex = /\| Metric \| smol-toml \| @decimalturn\/toml-patch \| Difference \|[\s\S]*?\| Dependencies \| 0 \| 0 \| — \|/;
-
-  if (tableRegex.test(promo)) {
-    promo = promo.replace(tableRegex, mdTable);
-
-    // Also update the summary sentence
-    const summaryRegex = /So the increase would be around \*\*\+[\d.]+ kB minified\*\* \/ \*\*\+[\d.]+ kB gzipped\*\*/;
-    const newSummary = `So the increase would be around **${diffMinStr} minified** / **${diffGzStr} gzipped**`;
-    promo = promo.replace(summaryRegex, newSummary);
-
-    writeFileSync(promoPath, promo);
-    console.log('✅ Updated bundle size table in promo.md');
-  } else {
-    console.log('⚠️  Could not find the bundle size table in promo.md — skipping update.');
-  }
-} else {
-  console.log('ℹ️  promo.md not found — skipping update.');
-}
