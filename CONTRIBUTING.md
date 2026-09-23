@@ -133,12 +133,12 @@ This runs tests against the official TOML spec test cases from the submodules.
 To measure performance:
 
 ```bash
-pnpm run bench:smol
+pnpm run bench
 ```
 
 This runs parse and stringify benchmarks over every tracked fixture and writes
-the tables to `benchmark-smol.md`. It exits non-zero when toml-patch exceeds the
-budgets in `benchmark/thresholds.toml`.
+the tables to `benchmark-fixtures.md`. It exits non-zero when toml-patch exceeds
+the budgets in `benchmark/thresholds.toml`.
 
 ### Complete Development Cycle
 

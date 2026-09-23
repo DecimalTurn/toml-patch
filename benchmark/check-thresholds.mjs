@@ -9,7 +9,7 @@
  *
  *   reference = "smol-toml"
  *
- *   [smol.parse]
+ *   [fixtures.parse]
  *   maxSlowdown = 8
  *
  * The `reference` key is optional and defaults to smol-toml.

@@ -9,8 +9,8 @@
 
 reference = "smol-toml"
 
-[smol.parse]
+[fixtures.parse]
 maxSlowdown = 8
 
-[smol.stringify]
+[fixtures.stringify]
 maxSlowdown = 25

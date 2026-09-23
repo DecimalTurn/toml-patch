@@ -2,12 +2,12 @@
  * Benchmark parse and stringify on every fixture the project tracks.
  *
  * Compares toml-patch (the current build) against smol-toml and @iarna/toml on
- * smol-toml's two benchmark documents plus the representative spec examples
+ * smol-toml's two benchmark documents plus three representative small documents
  * from the iarna corpus.
  *
  * Usage:
- *   pnpm run bench:smol
- *   pnpm run bench:smol -- --versions 3.0.2
+ *   pnpm run bench
+ *   pnpm run bench -- --versions 3.0.2
  *
  * Options:
  *   --versions <list>  Comma-separated published toml-patch versions to also
@@ -31,21 +31,22 @@ const CURRENT_IMPL = 'toml-patch (current)';
 const BASELINE_IMPL = 'toml-patch (baseline)';
 const SMOL_TEMPORAL = 'smol-toml (Temporal)';
 const CURRENT_TEMPORAL = 'toml-patch (current, Temporal)';
-const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-smol.md');
+const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-fixtures.md');
 
 globalThis.Temporal ??= Temporal;
 
 const SMOL_FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const IARNA_FIXTURES_DIR = join(__dirname, '../submodules/iarna-toml/benchmark');
 
-// The two smol-toml documents plus the spec examples from the iarna corpus. The
-// remaining iarna fixtures are single-type or scaling documents that these
-// already cover.
+// The two smol-toml documents plus the small representative documents from the
+// iarna corpus. The remaining iarna fixtures are single-type or scaling
+// documents that these already cover.
 const FIXTURES = [
   { dir: SMOL_FIXTURES_DIR, name: 'toml-spec-example', label: 'smol-toml spec example' },
   { dir: SMOL_FIXTURES_DIR, name: '5mb-mixed', label: 'smol-toml 5MB mixed' },
   { dir: IARNA_FIXTURES_DIR, name: '0A-spec-01-example-v0.4.0', label: 'iarna spec example v0.4.0' },
   { dir: IARNA_FIXTURES_DIR, name: '0A-spec-02-example-hard-unicode', label: 'iarna spec example, hard unicode' },
+  { dir: IARNA_FIXTURES_DIR, name: '01-small-doc-mixed-type-inline-array', label: 'iarna small document, mixed types' },
 ].map(({ dir, name, label }) => ({
   name,
   label,
@@ -320,7 +321,7 @@ const hzFor = (results) => (impl, fixture) =>
   results.find((result) => result.fixture === fixture && result.impl === impl)?.hz;
 
 const thresholdFailed = checkThresholds({
-  suite: 'smol',
+  suite: 'fixtures',
   currentName: CURRENT_IMPL,
   operations: [
     { name: 'parse', fixtures: parseFixtures, hzFor: hzFor(parseResults) },

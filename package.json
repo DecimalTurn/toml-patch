@@ -56,7 +56,7 @@
     "typecheck": "tsc",
     "specs": "vitest run --config vitest.specs.config.ts",
 
-    "bench:smol": "node benchmark/smol-benchmark.mjs",
+    "bench": "node benchmark/fixture-benchmark.mjs",
 
     "fuzz": "npx -y tsx scripts/fuzz-run.ts --seed 0 --to 9999 --mutations 3 --progress 100",
     "seed-toml": "npx -y tsx scripts/generate-seed-toml.ts",
@@ -108,7 +108,7 @@
     "tips": "Please install the JsonComments plugin to enable commenting functionality for JSON files, see: https://github.com/zhangfisher/json_comments_extension",
     "package.json": {
       "devDependencies.js-yaml": "Used by specs/specs.test.ts to parse YAML expected-value fixtures from submodules/spec-tests (https://github.com/iarna/toml-spec-tests).",
-      "scripts.bench:smol": "Parse and stringify benchmark over every tracked fixture. Fails the CI job when toml-patch exceeds the maxSlowdown budgets in benchmark/thresholds.toml. Set BENCH_BASELINE to a build path to add the branch comparison."
+      "scripts.bench": "Parse and stringify benchmark over every tracked fixture. Fails the CI job when toml-patch exceeds the maxSlowdown budgets in benchmark/thresholds.toml. Set BENCH_BASELINE to a build path to add the branch comparison."
     }
   }
 }
