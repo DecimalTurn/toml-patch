@@ -7,14 +7,19 @@
  *
  * Usage:
  *   pnpm run bench
+ *   pnpm run bench:all
  *   pnpm run bench -- --versions 3.0.2
  *
  * Options:
+ *   --all              Benchmark every fixture in both corpora instead of the
+ *                      curated set, covering the single-type and scaling
+ *                      documents the curated set leaves out.
+ *   --list             Print the fixtures that would run and exit.
  *   --versions <list>  Comma-separated published toml-patch versions to also
  *                      benchmark (installed to .bench-cache on first use).
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
@@ -35,22 +40,44 @@ const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-fixtures.md');
 
 globalThis.Temporal ??= Temporal;
 
+const { versions, baseline, all, list } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
+  boolean: ['all', 'list'],
+  string: ['versions', 'baseline'],
+});
+
 const SMOL_FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const IARNA_FIXTURES_DIR = join(__dirname, '../submodules/iarna-toml/benchmark');
 
-// The two smol-toml documents plus the small representative documents from the
-// iarna corpus. The remaining iarna fixtures are single-type or scaling
-// documents that these already cover.
-const FIXTURES = [
+// The curated set the pull request gate runs: the two smol-toml documents plus
+// the iarna spec example.
+const CURATED_FIXTURES = [
   { dir: SMOL_FIXTURES_DIR, name: 'toml-spec-example', label: 'smol-toml spec example' },
   { dir: SMOL_FIXTURES_DIR, name: '5mb-mixed', label: 'smol-toml 5MB mixed' },
   { dir: IARNA_FIXTURES_DIR, name: '0A-spec-01-example-v0.4.0', label: 'iarna spec example v0.4.0' },
-].map(({ dir, name, label }) => ({
+];
+
+/** Every `.toml` file in both corpora, labelled where a curated label exists. */
+function corpusFixtures() {
+  const labels = new Map(CURATED_FIXTURES.map(({ name, label }) => [name, label]));
+  return [SMOL_FIXTURES_DIR, IARNA_FIXTURES_DIR]
+    .flatMap((dir) => readdirSync(dir)
+      .filter((file) => file.endsWith('.toml'))
+      .sort()
+      .map((file) => ({ dir, name: file.slice(0, -'.toml'.length) })))
+    .map(({ dir, name }) => ({ dir, name, label: labels.get(name) }));
+}
+
+const FIXTURES = (all ? corpusFixtures() : CURATED_FIXTURES).map(({ dir, name, label }) => ({
   name,
   label,
-  file: `${name}.toml`,
+  title: label ? `${label} (${name}.toml)` : `${name}.toml`,
   data: readFileSync(join(dir, `${name}.toml`), 'utf8'),
 }));
+
+if (list) {
+  for (const fixture of FIXTURES) console.log(fixture.title);
+  process.exit(0);
+}
 
 const IMPLEMENTATIONS = [
   { name: CURRENT_IMPL, path: join(__dirname, '../dist/toml-patch.js') },
@@ -91,10 +118,6 @@ function installPackageToCache(packageName, version) {
     return null;
   }
 }
-
-const { versions, baseline } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
-  string: ['versions', 'baseline'],
-});
 
 // Prepend published versions requested via --versions (e.g. "3.0.5").
 if (versions) {
@@ -286,7 +309,7 @@ function writeMarkdown(parseResults, stringifyResults) {
       ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
     ])];
     return tableFixtures.map((fixture) => buildRankedTable({
-      heading: `${benchmarkType}, ${fixture.label} (${fixture.file})`,
+      heading: `${benchmarkType}, ${fixture.title}`,
       rows: ids.map((id) => ({
         id,
         label: implementationLabel(id, benchmarkType),

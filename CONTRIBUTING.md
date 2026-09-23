@@ -136,9 +136,13 @@ To measure performance:
 pnpm run bench
 ```
 
-This runs parse and stringify benchmarks over every tracked fixture and writes
-the tables to `benchmark-fixtures.md`. It exits non-zero when toml-patch exceeds
-the budgets in `benchmark/thresholds.toml`.
+This runs parse and stringify benchmarks over the curated fixtures and writes the
+tables to `benchmark-fixtures.md`. It exits non-zero when toml-patch exceeds the
+budgets in `benchmark/thresholds.toml`.
+
+To cover every fixture in both corpora, including the single-type and scaling
+documents the curated set leaves out, run `pnpm run bench:all`. Add `--list` to
+either command to print the fixtures without running them.
 
 ### Complete Development Cycle
 

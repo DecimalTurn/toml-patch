@@ -117,13 +117,19 @@ jobs:
       with:
         name: dist-baseline
         path: baseline
+    # The gate runs the curated fixtures on pull requests and every fixture when
+    # the workflow is dispatched by hand. The baseline is only passed when it
+    # downloaded, so a failed base branch build degrades to a plain benchmark run.
     - name: Benchmark fixtures
       env:
+        DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
         VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
         BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
       run: |
         if [ -n "$VERSION" ]; then
           pnpm run bench -- --versions "$VERSION"
+        elif [ "$DISPATCH" = "true" ]; then
+          pnpm run bench:all
         else
           pnpm run bench
         fi
