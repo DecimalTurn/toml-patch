@@ -8,6 +8,7 @@
  *   --sample      Run curated sample of 10 representative benchmarks
  *   --package     Only run benchmark for specific package (by index)
  *   --file <n>    Run specific file(s) using a matching pattern
+ *   --baseline    Path of a build to compare the current one against (e.g. the latest branch)
  *   --output      Write results to output-<commit-hash>.md
  */
 
@@ -22,6 +23,9 @@ import { checkThresholds } from './check-thresholds.mjs';
 
 const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const CURRENT_IMPL = 'toml-patch (current)';
+const BASELINE_IMPL = 'toml-patch (baseline)';
 
 // ANSI color codes
 const colors = {
@@ -187,9 +191,9 @@ async function loadModule(modulePath) {
 }
 
 // Parse command line args
-const { help, sample, package: packageIndex, file, versions, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
+const { help, sample, package: packageIndex, file, versions, baseline, output, _: filter } = mri(process.argv.slice(2).filter(a => a !== '--'), {
   boolean: ['help', 'sample', 'output'],
-  string: ['file', 'versions'],
+  string: ['file', 'versions', 'baseline'],
   number: ['package']
 });
 
@@ -203,6 +207,7 @@ Options:
   --package <index>  Only run benchmark for the given implementation (0-based index)
   --file <pattern>   Run benchmarks matching the file pattern
   --versions <list>  Comma-separated list of versions to benchmark (e.g., 0.7.0,0.6.0)
+  --baseline <path>  Path of a build to compare the current one against (e.g. the latest branch)
   --output           Write results to output-<commit-hash>.md
   
 Examples:
@@ -211,6 +216,7 @@ Examples:
   pnpm run bench:iarna -- --file hard
   pnpm run bench:iarna -- --package 0
   pnpm run bench:iarna -- --versions 0.7.0,0.6.0
+  pnpm run bench:iarna -- --baseline worktrees/latest/dist/toml-patch.js
   pnpm run bench:iarna -- --output`);
   process.exit(0);
 }
@@ -218,7 +224,7 @@ Examples:
 // Define TOML implementations to test
 let TOML_IMPLEMENTATIONS = [
   { 
-    name: 'toml-patch (current)',
+    name: CURRENT_IMPL,
     path: '../dist/toml-patch.js',
   },
   { 
@@ -265,6 +271,18 @@ if (versions) {
   ];
   
   console.log();
+}
+
+// Add the build to compare against. CI points this at the base branch, so the
+// Ratio column reports the branch against branch comparison. Relative paths are
+// resolved from the repository root.
+const baselinePath = baseline ?? process.env.BENCH_BASELINE;
+if (baselinePath) {
+  const resolvedBaseline = resolve(join(__dirname, '..'), baselinePath);
+  if (!existsSync(resolvedBaseline)) {
+    throw new Error(`Baseline build not found: ${resolvedBaseline}`);
+  }
+  TOML_IMPLEMENTATIONS.push({ name: BASELINE_IMPL, path: resolvedBaseline });
 }
 
 // Curated sample of representative benchmarks
@@ -451,21 +469,36 @@ function getOutputFilename() {
   return null;
 }
 
+// The Ratio column compares the current build with the baseline build when one
+// was benchmarked, and with the single other implementation otherwise.
+const compareName = resolveCompareName(allResults, baselinePath ? BASELINE_IMPL : null);
+
 // Print global comparison if multiple implementations were benchmarked
 if (allResults.length > 1) {
-  printGlobalSummary(allResults, 'Parse');
+  printGlobalSummary(allResults, 'Parse', compareName);
   const mdFile = getOutputFilename() ?? join(__dirname, '..', 'benchmark-parse.md');
-  writeMarkdownSummary(allResults, 'Parse', mdFile);
+  writeMarkdownSummary(allResults, 'Parse', mdFile, compareName);
 } else if (output && allResults.length === 1) {
   const mdFile = getOutputFilename();
-  writeMarkdownSummary(allResults, 'Parse', mdFile);
+  writeMarkdownSummary(allResults, 'Parse', mdFile, compareName);
+}
+
+/**
+ * Picks the implementation the Ratio column compares the current build against.
+ */
+function resolveCompareName(results, baselineName) {
+  if (baselineName && results.some(result => result.name === baselineName)) {
+    return baselineName;
+  }
+  if (results.length === 2) return results[0].name;
+  return null;
 }
 
 // CI gate: fail when the current build drops below the budgets configured for
 // the iarna suite in thresholds.toml.
 const thresholdFailed = checkThresholds({
   suite: 'iarna',
-  currentName: 'toml-patch (current)',
+  currentName: CURRENT_IMPL,
   operations: [
     {
       name: 'parse',
@@ -480,14 +513,15 @@ if (thresholdFailed) process.exitCode = 1;
 /**
  * Prints a cross-implementation comparison table
  */
-function printGlobalSummary(allResults, benchmarkType) {
+function printGlobalSummary(allResults, benchmarkType, compareName) {
   console.log('\n' + c.title('═'.repeat(70)));
   console.log(c.title(`  📊 Cross-Implementation Comparison: ${benchmarkType}`));
   console.log(c.title('═'.repeat(70)) + '\n');
 
-  const baseline = allResults[0];
-  const benchmarkNames = Object.keys(baseline.benchmarks);
-  const showRatio = allResults.length === 2;
+  const current = allResults.find(r => r.name === CURRENT_IMPL) ?? allResults[allResults.length - 1];
+  const compare = compareName ? allResults.find(r => r.name === compareName) : null;
+  const benchmarkNames = Object.keys(allResults[0].benchmarks);
+  const showRatio = compare != null;
 
   const headers = ['Benchmark', ...allResults.map(r => r.name).reverse()];
   if (showRatio) headers.push('Ratio');
@@ -500,10 +534,10 @@ function printGlobalSummary(allResults, benchmarkType) {
       row.push(hz != null ? formatNumber(hz.toFixed(hz < 100 ? 2 : 0)) : 'N/A');
     }
     if (showRatio) {
-      const baseHz = baseline.benchmarks[benchName];
-      const otherHz = allResults[1].benchmarks[benchName];
-      if (baseHz && otherHz && baseHz > 0) {
-        const ratio = otherHz / baseHz;
+      const compareHz = compare.benchmarks[benchName];
+      const currentHz = current.benchmarks[benchName];
+      if (compareHz && currentHz && compareHz > 0) {
+        const ratio = currentHz / compareHz;
         const formatted = `${ratio.toFixed(2)}x`;
         row.push(ratio >= 1 ? c.success(formatted) : c.error(formatted));
       } else {
@@ -519,8 +553,8 @@ function printGlobalSummary(allResults, benchmarkType) {
     for (const impl of [...allResults].reverse()) {
       avgRow.push(c.bright(formatNumber(impl.average.toFixed(impl.average < 100 ? 2 : 0))));
     }
-    if (showRatio && baseline.average > 0) {
-      const ratio = allResults[1].average / baseline.average;
+    if (showRatio && compare.average > 0) {
+      const ratio = current.average / compare.average;
       const formatted = `${ratio.toFixed(2)}x`;
       avgRow.push(ratio >= 1 ? c.success(c.bright(formatted)) : c.error(c.bright(formatted)));
     }
@@ -547,10 +581,11 @@ function printGlobalSummary(allResults, benchmarkType) {
 /**
  * Writes a markdown summary of benchmark results
  */
-function writeMarkdownSummary(allResults, benchmarkType, filename) {
-  const baseline = allResults[0];
-  const benchmarkNames = Object.keys(baseline.benchmarks);
-  const showRatio = allResults.length === 2;
+function writeMarkdownSummary(allResults, benchmarkType, filename, compareName) {
+  const current = allResults.find(r => r.name === CURRENT_IMPL) ?? allResults[allResults.length - 1];
+  const compare = compareName ? allResults.find(r => r.name === compareName) : null;
+  const benchmarkNames = Object.keys(allResults[0].benchmarks);
+  const showRatio = compare != null;
 
   let markdown = `# ${benchmarkType} Benchmark Results\n\n`;
   markdown += `*All measurements in operations per second (ops/sec). Higher is better.*\n\n`;
@@ -570,10 +605,10 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
       row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
     }
     if (showRatio) {
-      const baseHz = baseline.benchmarks[benchName];
-      const otherHz = allResults[1].benchmarks[benchName];
-      if (baseHz && otherHz && baseHz > 0) {
-        const ratio = otherHz / baseHz;
+      const compareHz = compare.benchmarks[benchName];
+      const currentHz = current.benchmarks[benchName];
+      if (compareHz && currentHz && compareHz > 0) {
+        const ratio = currentHz / compareHz;
         row.push(ratio.toFixed(2));
       } else {
         row.push('N/A');
@@ -588,8 +623,8 @@ function writeMarkdownSummary(allResults, benchmarkType, filename) {
     for (const impl of [...allResults].reverse()) {
       avgRow.push(`**${impl.average.toFixed(impl.average < 100 ? 2 : 0)}**`);
     }
-    if (showRatio && baseline.average > 0) {
-      const ratio = allResults[1].average / baseline.average;
+    if (showRatio && compare.average > 0) {
+      const ratio = current.average / compare.average;
       avgRow.push(`**${ratio.toFixed(2)}**`);
     }
     markdown += '| ' + avgRow.join(' | ') + ' |\n';

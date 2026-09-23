@@ -114,11 +114,11 @@
     "package.json": {
       "devDependencies.js-yaml": "Used by specs/specs.test.ts to parse YAML expected-value fixtures from submodules/spec-tests (https://github.com/iarna/toml-spec-tests).",
       "scripts.bench:iarna": "Runs the iarna fixture benchmarks, parse first then stringify, comparing toml-patch with @iarna/toml and smol-toml.",
-      "scripts.bench:iarna:ci": "Sampled bench:iarna run used by CI. Fails when toml-patch exceeds the maxSlowdown budgets for the iarna suite in benchmark/thresholds.toml.",
+      "scripts.bench:iarna:ci": "Sampled bench:iarna run used by CI. Fails when toml-patch exceeds the maxSlowdown budgets for the iarna suite in benchmark/thresholds.toml. Set BENCH_BASELINE to a build path to add the branch comparison.",
       "scripts.bench:iarna:published": "Sampled bench:iarna run that also compares against the latest published toml-patch. It replaces the other implementations, so the threshold gate is skipped.",
       "scripts.bench:iarna:parse": "Parse-only benchmark over the fixtures in submodules/iarna-toml/benchmark.",
       "scripts.bench:iarna:stringify": "Stringify-only benchmark over the same iarna fixtures. Every implementation stringifies the object parsed by the current build so the inputs match.",
-      "scripts.bench:smol": "Parse and stringify benchmark on smol-toml's fixtures, including the ~5 MB document. Fails the CI job when toml-patch exceeds the maxSlowdown budgets for the smol suite in benchmark/thresholds.toml."
+      "scripts.bench:smol": "Parse and stringify benchmark on smol-toml's fixtures, including the ~5 MB document. Fails the CI job when toml-patch exceeds the maxSlowdown budgets for the smol suite in benchmark/thresholds.toml. Set BENCH_BASELINE to a build path to add the branch comparison."
     }
   }
 }

@@ -13,7 +13,7 @@
  *                      benchmark (installed to .bench-cache on first use).
  */
 
-import { readFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
@@ -25,6 +25,8 @@ const { Suite, formatNumber } = Benchmark;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const CURRENT_IMPL = 'toml-patch (current)';
+const BASELINE_IMPL = 'toml-patch (baseline)';
+const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-smol.md');
 
 const FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const FIXTURES = [
@@ -72,8 +74,8 @@ function installPackageToCache(packageName, version) {
   }
 }
 
-const { versions } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
-  string: ['versions'],
+const { versions, baseline } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
+  string: ['versions', 'baseline'],
 });
 
 // Prepend published versions requested via --versions (e.g. "3.0.5").
@@ -90,6 +92,18 @@ if (versions) {
     }
   }
   IMPLEMENTATIONS.unshift(...versionImpls);
+}
+
+// Add the build to compare against. CI points this at the base branch, so the
+// Ratio column reports the branch against branch comparison. Relative paths are
+// resolved from the repository root.
+const baselinePath = baseline ?? process.env.BENCH_BASELINE;
+if (baselinePath) {
+  const resolvedBaseline = resolve(join(__dirname, '..'), baselinePath);
+  if (!existsSync(resolvedBaseline)) {
+    throw new Error(`Baseline build not found: ${resolvedBaseline}`);
+  }
+  IMPLEMENTATIONS.push({ name: BASELINE_IMPL, path: resolvedBaseline });
 }
 
 /** Resolves a package directory to its entry point and imports it. */
@@ -227,8 +241,63 @@ function formatFactor(factor) {
   return factor < 1 ? `${(1 / factor).toFixed(1)}x faster` : `${factor.toFixed(1)}x slower`;
 }
 
+/**
+ * Writes a markdown summary of both operations. When a baseline build was
+ * benchmarked, the tables gain a Ratio column comparing the current build with
+ * it, which is what the CI report posts on pull requests.
+ */
+function writeMarkdown(parseResults, stringifyResults) {
+  const comparisonName = parseResults.some((result) => result.impl === BASELINE_IMPL)
+    ? BASELINE_IMPL
+    : null;
+  const implNames = IMPLEMENTATIONS.map(({ name }) => name).reverse();
+
+  let markdown = '# smol-toml Fixture Benchmark Results\n\n';
+  markdown += '*All measurements in operations per second (ops/sec). Higher is better.*\n\n';
+
+  for (const [label, results] of [
+    ['Parse', parseResults],
+    ['Stringify', stringifyResults],
+  ]) {
+    const headers = ['Benchmark', ...implNames];
+    if (comparisonName) headers.push('Ratio');
+
+    markdown += `## ${label}\n\n`;
+    markdown += '| ' + headers.join(' | ') + ' |\n';
+    markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+
+    for (const fixture of FIXTURES) {
+      const hzFor = (impl) =>
+        results.find((result) => result.fixture === fixture.name && result.impl === impl)?.hz;
+      const sizeKB = (fixture.data.length / 1024).toFixed(1);
+      const row = [`${fixture.name} (${sizeKB} KB)`];
+
+      for (const impl of implNames) {
+        const hz = hzFor(impl);
+        row.push(hz != null ? hz.toFixed(hz < 100 ? 2 : 0) : 'N/A');
+      }
+
+      if (comparisonName) {
+        const baselineHz = hzFor(comparisonName);
+        const currentHz = hzFor(CURRENT_IMPL);
+        row.push(
+          baselineHz && currentHz && baselineHz > 0 ? (currentHz / baselineHz).toFixed(2) : 'N/A'
+        );
+      }
+
+      markdown += '| ' + row.join(' | ') + ' |\n';
+    }
+
+    markdown += '\n';
+  }
+
+  writeFileSync(MARKDOWN_PATH, markdown, 'utf8');
+  console.log(`\nBenchmark results written to ${MARKDOWN_PATH}`);
+}
+
 report('Parse:', parseResults);
 report('Stringify:', stringifyResults);
+writeMarkdown(parseResults, stringifyResults);
 
 // CI gate: fail when the current build's throughput drops below the budgets
 // configured for the smol suite in thresholds.toml.
