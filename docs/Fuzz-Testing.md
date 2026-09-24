@@ -34,7 +34,7 @@ matters when you change core logic and want a broad regression signal.
 `patch-lite` is edit-only, so its harness (`src/__tests__/fuzz-patch-lite.ts`)
 differs from the `patch` one:
 
-1. **Edits, not structural changes.** It mutates scalar leaves in place
+1. **Edits, not structural changes.** It mutates primitive leaves in place
    (strings, booleans, numbers and bigints) and skips date/time values. It then
    re-parses the output and checks it equals the edited object, and re-applies
    the same edit to confirm the result is unchanged. Replacement values are
@@ -42,7 +42,7 @@ differs from the `patch` one:
    astral characters, negative zero, non-finite numbers and out-of-safe-range
    bigints.
 2. **Rejections.** For the same random document it applies structural mutations
-   (added and removed keys, a scalar replaced by a container, added array
+   (added and removed keys, a primitive replaced by a container, added array
    elements, array reordering) and asserts each throws a `PatchLiteError`
    rather than crashing or returning partial output.
 
