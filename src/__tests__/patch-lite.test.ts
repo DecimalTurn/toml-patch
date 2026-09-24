@@ -238,6 +238,34 @@ describe('edits', () => {
     expect(patch(existing, { s: 'a"b\\c\nd' })).toBe('s = "a\\"b\\\\c\\nd"\n');
   });
 
+  test('preserves a single-line literal string when editing a string', () => {
+    const existing = "s = 'old'\n";
+
+    expect(patch(existing, { s: 'new' })).toBe("s = 'new'\n");
+  });
+
+  test('grows a single-line literal to a multiline literal when the value contains a newline', () => {
+    // The full patch() keeps the single-line delimiters and writes a raw
+    // newline into `'one\ntwo'`, which is not valid TOML.
+    const existing = "s = 'old'\n";
+    const updated = { s: 'one\ntwo' };
+    const result = patch(existing, updated);
+
+    expect(result).toBe("s = '''one\ntwo'''\n");
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('falls back to a basic string when no literal string can hold the value', () => {
+    // A literal string cannot represent DEL, and `'''` cannot appear in a
+    // multiline literal, so a basic string is the only valid rendering.
+    const existing = "s = 'old'\n";
+    const updated = { s: 'del\x7fchar' };
+    const result = patch(existing, updated);
+
+    expect(result).toBe('s = "del\\u007Fchar"\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
   test('classifies unsafe integer-valued numbers as floats', () => {
     const existing = 'count = 5\n';
     const updated = { count: 1e21 };

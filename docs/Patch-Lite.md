@@ -6,7 +6,7 @@ rename anything.
 
 It exists to answer one question: *do you only need to change values in a document you already
 have?* If the answer is yes, `patch-lite` gives you the same guarantees as the full `patch()` for
-those edits at **26.6% of the minified size** and roughly **1.9x the throughput**.
+those edits at **26.7% of the minified size** and roughly **1.9x the throughput**.
 
 ```js
 import { patch } from '@decimalturn/toml-patch/patch-lite';
@@ -23,14 +23,15 @@ patch(existing, { version: '1.0.1' });
 | Change an existing value (string, number, boolean, bigint, date/time) | ✅ | ✅ |
 | Change a value nested in tables, dotted keys, inline tables, arrays or arrays of tables | ✅ | ✅ |
 | Apply several value edits in one call | ✅ | ✅ |
-| Keep comments, whitespace, line endings and a leading BOM byte-for-byte | ✅ | ✅ |
+| Keep comments, whitespace | ✅ | ✅ |
+| Preserve a leading BOM byte-for-byte | ✅ | ✅ |
 | Get the original string back unchanged when nothing changed | ✅ | ✅ |
 | Add or remove a key | ❌ | ✅ |
 | Rename a key | ❌ | ✅ |
 | Add or remove array elements | ❌ | ✅ |
 | Reorder array elements or object keys | ❌ | ✅ |
 | Replace a primitive with a table/array, or the reverse | ❌ | ✅ |
-| Keep the quote style of an edited literal string (`'…'`) | ❌ | ✅ |
+| Keep the quote style of an edited literal string (`'…'`) | ✅ | ✅ |
 | Choose formatting options (line endings, indentation, trailing commas) | ❌ | ✅ |
 | Control the case of generated escape sequences | ❌ | ✅ |
 | Reject strings with unpaired UTF-16 surrogates | ❌ | ✅ |
@@ -177,13 +178,13 @@ follows a fixed table:
 | Source style | `patch-lite` output | Full `patch()` |
 | --- | --- | --- |
 | `"…"` single-line basic | `"…"` basic, escaping as needed | same |
-| `'…'` single-line literal | **`"…"` basic** | keeps the literal style, upgrading to `'''…'''` when the value contains `'` |
+| `'…'` single-line literal | `'…'`, growing to `'''…'''` when the value contains an apostrophe or a newline | keeps the literal style |
 | `"""…"""` multiline basic | `"""…"""`, keeping the leading-newline style | same |
 | `'''…'''` multiline literal | `'''…'''` when the value can be literal, otherwise a **single-line `"…"`** | falls back to `"""…"""` |
 
-So an edited single-line literal string always comes back double-quoted, and an edited multiline
-literal string that can no longer be literal collapses onto one line. Untouched strings are never
-rewritten and keep their exact bytes.
+So a single-line literal keeps its quotes whenever the value can still be written literally, and an
+edited multiline literal string that can no longer be literal collapses onto one line. Untouched
+strings are never rewritten and keep their exact bytes.
 
 Content rules inside a basic string: backslashes are doubled, `\b`, `\t` and `\f` use their short
 forms, a carriage return is only emitted literally as part of CRLF (otherwise as `\r`), other control
@@ -248,8 +249,8 @@ Measured with `pnpm run bench:bundle-size` and `pnpm run bench:patch-lite`
 
 | Metric | full `patch()` | `patch-lite` | Difference |
 | --- | --- | --- | --- |
-| Minified | ~162.1 kB | ~43.1 kB | -119.0 kB (26.6% of full) |
-| Min + gzipped | ~50.0 kB | ~13.1 kB | -36.8 kB (26.2% of full) |
+| Minified | ~162.1 kB | ~43.3 kB | -118.8 kB (26.7% of full) |
+| Min + gzipped | ~50.0 kB | ~13.2 kB | -36.8 kB (26.4% of full) |
 | Runtime dependencies | 0 | 0 | — |
 
 `patch-lite` is held to a hard budget of 48 kB minified and 14 kB gzipped by
@@ -290,7 +291,9 @@ Before you switch, check for:
    succeed.
 2. **A third `format` argument.** It is ignored, not rejected, so formatting expectations can fail
    silently at runtime. Remove it or keep the full API.
-3. **Literal string styles.** Edited `'…'` values come back double-quoted.
+3. **Multiline literal fallback.** When an edited `'''…'''` value can no longer be written
+   literally, `patch-lite` emits a single-line basic string where the full `patch()` emits a
+   multiline basic string.
 4. **Document normalisation.** If you relied on `newLine` or `trailingNewline` to normalise output,
    `patch-lite` will not do it.
 5. **Temporal objects and unpaired surrogates.** Both are accepted by the full API in ways the lite

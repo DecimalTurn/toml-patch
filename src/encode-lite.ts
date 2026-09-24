@@ -133,23 +133,33 @@ function encodeNonFinite(value: number): string {
 }
 
 /**
- * Encodes a string while preserving a multiline literal (`'''`) format when the
- * source value used one. The leading newline style is kept and backslashes are
- * left untouched (literal strings do not escape), matching the full patch().
- * Values that cannot be represented verbatim in a literal string fall back to
- * a basic string.
+ * Encodes a string while preserving the source's literal style. A multiline
+ * literal (`'''`) keeps its delimiters and leading newline, and a single-line
+ * literal (`'`) stays single-quoted. Backslashes are left untouched because
+ * literal strings do not escape, matching the full patch(). A value that can no
+ * longer be written literally grows to a multiline literal where possible and
+ * falls back to a basic string otherwise.
  */
 function encodeString(value: string, existingRaw?: string): string {
-  if (existingRaw && existingRaw.startsWith("'''") && canUseMultilineLiteral(value)) {
-    const leadingNewLine = existingRaw.startsWith("'''\r\n")
-      ? '\r\n'
-      : existingRaw.startsWith("'''\n")
-        ? '\n'
-        : '';
-    return "'''" + leadingNewLine + value + "'''";
-  }
-  if (existingRaw && existingRaw.startsWith('"""')) {
-    return encodeMultilineBasicString(value, existingRaw);
+  if (existingRaw) {
+    if (existingRaw.startsWith("'''")) {
+      if (!canUseMultilineLiteral(value)) return encodeBasicString(value);
+      const leadingNewLine = existingRaw.startsWith("'''\r\n")
+        ? '\r\n'
+        : existingRaw.startsWith("'''\n")
+          ? '\n'
+          : '';
+      return "'''" + leadingNewLine + value + "'''";
+    }
+    if (existingRaw.startsWith('"""')) {
+      return encodeMultilineBasicString(value, existingRaw);
+    }
+    if (existingRaw.startsWith("'")) {
+      if (canUseLiteralString(value)) return "'" + value + "'";
+      // Single quotes are non-negotiable but one of them is: a value holding an
+      // apostrophe or a newline moves up to a multiline literal.
+      if (canUseMultilineLiteral(value)) return "'''" + value + "'''";
+    }
   }
   return encodeBasicString(value);
 }
@@ -198,6 +208,19 @@ function escapeMultilineBasicContent(value: string): string {
     }
   }
   return out.replace(/"""/g, '""\\"');
+}
+
+/**
+ * True when `value` can be written verbatim inside a single-line literal
+ * string: no apostrophe, no newline, and no control character other than tab.
+ */
+function canUseLiteralString(value: string): boolean {
+  if (value.includes("'")) return false;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f) return false;
+  }
+  return true;
 }
 
 /**

@@ -121,6 +121,96 @@ describe.each(implementations)('Number format preservation (%s patch)', (_label,
 });
 
 describe.each(implementations)('String format preservation (%s patch)', (_label, patch) => {
+  test('Preserves a single-line literal string when editing a string', () => {
+    const src = dedent`
+    a = 'hello'
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'goodbye';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 'goodbye'
+    ` + '\n');
+  });
+
+  test('Does not escape backslashes in a preserved single-line literal string', () => {
+    const src = dedent`
+    a = 'C:\Users\Example'
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'D:\\Data\\Files';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 'D:\Data\Files'
+    ` + '\n');
+  });
+
+  test('Keeps the literal style when the value contains a double quote', () => {
+    const src = dedent`
+    a = 'hello'
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'say "hi"';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 'say "hi"'
+    ` + '\n');
+  });
+
+  test('Grows a single-line literal to a multiline literal when the value contains an apostrophe', () => {
+    const src = dedent`
+    a = 'hello'
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = "it's";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = '''it's'''
+    ` + '\n');
+  });
+
+  test('Falls back to a basic string when a single-line literal value holds a triple apostrophe', () => {
+    const src = dedent`
+    a = 'hello'
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = "it's ''' here";
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = "it's ''' here"
+    ` + '\n');
+  });
+
+  test('Preserves the delimiters of an empty single-line literal string', () => {
+    const src = dedent`
+    a = ''
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = 'filled';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+    a = 'filled'
+    ` + '\n');
+  });
+
   test('Preserves a multiline literal string when editing a string', () => {
     const src = dedent`
     a = '''
