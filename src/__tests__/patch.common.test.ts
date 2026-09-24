@@ -466,13 +466,14 @@ describe.each(implementations)('Multiline string preservation (%s patch)', (_lab
     obj.package.description = "New path: D:\\Data\\Files\n";
     const patched = patch(existing, obj);
 
-    const expectedOutput = `[package]
-name = "example"
-description = """
-New path: D:\\\\Data\\\\Files
-"""
-version = "1.0.0"
-`;
+    const expectedOutput = dedent`
+      [package]
+      name = "example"
+      description = """
+      New path: D:\\Data\\Files
+      """
+      version = "1.0.0"
+      ` + '\n';
 
     expect(patched).toEqual(expectedOutput);
   });
