@@ -141,6 +141,44 @@ jobs:
         path: benchmark-fixtures.md
         if-no-files-found: ignore
 
+  # Absolute bundle size budgets from benchmark/thresholds.toml. This is its own
+  # job because a failure in the reference comparison above would skip the gate.
+  bundle-size:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24.x
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        run_install: false
+    # Protection Against Supply Chain Attacks: https://socket.dev/blog/introducing-socket-firewall
+    - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      with:
+        mode: firewall
+        firewall-version: latest # or use a pinned version (see releases)
+    - name: Install
+      run: sfw pnpm install --frozen-lockfile
+      env:
+        CI: true
+    # The bundling scripts install esbuild into .bench-cache on first use.
+    # Fetching it through the firewall keeps the supply chain protection in place
+    # and means the job downloads nothing at run time.
+    - name: Install esbuild for bundling
+      run: sfw npm install --prefix .bench-cache/esbuild --no-save --no-package-lock esbuild
+    - name: Download build
+      uses: actions/download-artifact@v8
+      with:
+        name: dist
+        path: dist
+    - name: Bundle size budgets
+      run: pnpm run bench:patch-lite
+
   # Posts one comment on the pull request holding every benchmark summary. The
   # comment is updated in place on later pushes instead of piling up.
   report:

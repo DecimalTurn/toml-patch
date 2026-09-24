@@ -257,8 +257,9 @@ Measured with `pnpm run bench:bundle-size` and `pnpm run bench:patch-lite`
 | Min + gzipped | ~50.0 kB | ~13.2 kB | -36.8 kB (26.4% of full) |
 | Runtime dependencies | 0 | 0 | — |
 
-`patch-lite` is held to a hard budget of 48 kB minified and 14 kB gzipped by
-`benchmark/patch-lite-bundle-size.mjs`, which fails the build check if it is exceeded.
+`patch-lite` is held to a hard budget of 48 kB minified and 14 kB gzipped, recorded in
+`benchmark/thresholds.toml` alongside the performance budgets and enforced on every pull request by
+the `bundle-size` job in the benchmarks workflow.
 
 Throughput on the in-place edit benchmark (`pnpm run bench:patch`) is roughly 1.9x the full
 pipeline — about 3,300 ops/sec against 1,700 ops/sec in this repository's run, with wide variance

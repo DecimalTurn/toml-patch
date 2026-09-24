@@ -1,6 +1,9 @@
 /**
  * Compare bundle sizes between the full toml-patch bundle and the patch-lite subpath export.
  *
+ * The patch-lite budget lives in benchmark/thresholds.toml (`[bundle.patch-lite]`),
+ * and the script exits non-zero when the bundle grows past it.
+ *
  * Usage:
  *   node benchmark/patch-lite-bundle-size.mjs
  *
@@ -13,15 +16,11 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { gzipSync } from 'zlib';
+import { checkBundleThresholds } from './check-thresholds.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const cacheDir = join(rootDir, '.bench-cache');
-
-// Hard size budget for the lite distribution. It must stay well under the
-// full patch bundle while reserving headroom for the edit-only engine.
-const BUDGET_MINIFIED = 48 * 1024;
-const BUDGET_GZIPPED = 14 * 1024;
 
 function formatKB(bytes) {
   return (bytes / 1024).toFixed(1);
@@ -129,11 +128,10 @@ md += `patch-lite difference is **${diffMinStr} minified** / **${diffGzStr} gzip
 writeFileSync(join(rootDir, 'benchmark', 'patch-lite-bundle-size.md'), md);
 console.log('Report written to benchmark/patch-lite-bundle-size.md');
 
-if (patchLite.minifiedBytes > BUDGET_MINIFIED || patchLite.gzippedBytes > BUDGET_GZIPPED) {
-  console.error(
-    `patch-lite exceeded its size budget ` +
-    `(minified ${patchLite.minifiedBytes} > ${BUDGET_MINIFIED}, ` +
-    `gzipped ${patchLite.gzippedBytes} > ${BUDGET_GZIPPED}).`
-  );
-  process.exitCode = 1;
-}
+const overBudget = checkBundleThresholds({
+  suite: 'bundle.patch-lite',
+  minifiedBytes: patchLite.minifiedBytes,
+  gzippedBytes: patchLite.gzippedBytes,
+});
+
+if (overBudget) process.exitCode = 1;

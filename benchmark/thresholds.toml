@@ -7,10 +7,21 @@
 # budget leaves room for them. The ~5 MB document is where raw throughput shows
 # up.
 
+
 reference = "smol-toml"
+
+# Note that those thresholds are for CI (Linux) and might not apply to 
+# other environments (especially Windows).
 
 [fixtures.parse]
 maxSlowdown = 8
 
 [fixtures.stringify]
 maxSlowdown = 25
+
+# Bundle size budgets, in kB (1 kB = 1024 bytes). The bundle measurement scripts
+# fail when a bundle grows past its budget. A budget key that is left out is not
+# gated, and a bundle with no budget at all is measured without failing.
+[bundle.patch-lite]
+maxMinified = 48
+maxGzipped = 14
