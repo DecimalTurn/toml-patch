@@ -626,6 +626,28 @@ describe.each(implementations)('Multiline string preservation (%s patch)', (_lab
     expect(patched).toEqual(expectedOutput);
   });
 
+  test('should escape a standalone carriage return in a multiline basic string', () => {
+    const existing = dedent`
+      [package]
+      name = "example"
+      description = """
+      A simple package
+      """
+      version = "1.0.0"
+      ` + '\n';
+
+    const obj = parse(existing);
+    // A carriage return is only valid inside a multiline string as part of CRLF,
+    // so a standalone one has to be escaped to keep the output parseable.
+    obj.package.description = 'one\rtwo';
+    const patched = patch(existing, obj);
+
+    expect(parse(patched)).toEqual(obj);
+    expect(patched).toEqual(
+      '[package]\nname = "example"\ndescription = """\none\\rtwo"""\nversion = "1.0.0"\n'
+    );
+  });
+
   test('should handle conversion from regular string to multiline string format preserved', () => {
     const existing = dedent`
       [package]
