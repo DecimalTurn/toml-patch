@@ -15,10 +15,10 @@ The script writes this file (`benchmark/bundle-size.md`) directly.
 
 | Metric | smol-toml | @decimalturn/toml-patch | Difference |
 |--------|-----------|-------------------------|------------|
-| Minified | ~13.4 kB | ~153.5 kB | +140.1 kB |
-| Min + Gzipped | ~5.3 kB | ~47.5 kB | +42.2 kB |
+| Minified | ~16.3 kB | ~162.1 kB | +145.8 kB |
+| Min + Gzipped | ~6.5 kB | ~50.0 kB | +43.5 kB |
 | Dependencies | 0 | 0 | — |
 
-The increase would be around **+140.1 kB minified** / **+42.2 kB gzipped**.
+The increase would be around **+145.8 kB minified** / **+43.5 kB gzipped**.
 
 Both libraries have **0** runtime dependencies.
