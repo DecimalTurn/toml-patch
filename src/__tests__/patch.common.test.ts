@@ -239,6 +239,31 @@ describe.each(implementations)('String format preservation (%s patch)', (_label,
     expect(result).toBe("a = '''one\ntwo'''\n");
   });
 
+  test('Keeps a leading newline when a value moves to a multiline literal', () => {
+    // The newline directly after `'''` is dropped when the document is read
+    // back, so a value starting with one needs an extra, disposable newline
+    // after the delimiter.
+    const src = "a = 'hello'\n";
+
+    const obj = parse(src) as any;
+    obj.a = '\none';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe("a = '''\n\none'''\n");
+  });
+
+  test('Keeps a leading newline in a multiline basic string', () => {
+    const src = 'a = """hello"""\n';
+
+    const obj = parse(src) as any;
+    obj.a = '\none';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe('a = """\n\none"""\n');
+  });
+
   test('Falls back to a basic string when a literal value holds a control character', () => {
     // Literal strings cannot represent DEL, so the value needs escaping. Writing
     // it verbatim would produce TOML that the parser rejects.

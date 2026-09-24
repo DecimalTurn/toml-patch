@@ -267,14 +267,24 @@ function generateLiteralString(value: string): String {
   };
 }
 
+/**
+ * Returns the newline to write directly after a multiline delimiter.
+ *
+ * TOML drops a newline that immediately follows the opening delimiter, so a
+ * value that starts with one needs an extra, disposable newline in front of it
+ * to survive the round trip.
+ */
+function multilineLeadingNewLine(existingRaw: string, delimiter: string, content: string): string {
+  if (existingRaw.startsWith(delimiter + '\r\n')) return '\r\n';
+  if (existingRaw.startsWith(delimiter + '\n')) return '\n';
+  if (content.startsWith('\r\n')) return '\r\n';
+  return content.startsWith('\n') ? '\n' : '';
+}
+
 function generateMultilineBasicString(value: string, existingRaw: string, escapeSequenceUpperCase = true): String {
   const escaped = escapeStringContent(value, existingRaw, 'multiline-basic', escapeSequenceUpperCase);
 
-  const leadingNewLine = existingRaw.startsWith('"""\r\n')
-    ? '\r\n'
-    : existingRaw.startsWith('"""\n')
-    ? '\n'
-    : '';
+  const leadingNewLine = multilineLeadingNewLine(existingRaw, '"""', escaped);
 
   let raw = '"""' + leadingNewLine + escaped + '"""';
 
@@ -301,11 +311,7 @@ function generateMultilineBasicString(value: string, existingRaw: string, escape
 
 function generateMultilineLiteralString(value: string, existingRaw: string): String {
 
-  const leadingNewLine = existingRaw.startsWith("'''\r\n")
-    ? '\r\n'
-    : existingRaw.startsWith("'''\n")
-    ? '\n'
-    : '';
+  const leadingNewLine = multilineLeadingNewLine(existingRaw, "'''", value);
 
   const raw = "'''" + leadingNewLine + value + "'''";
   const endLocation = endlocation(raw);

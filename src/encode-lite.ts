@@ -145,16 +145,25 @@ function encodeNonFinite(value: number): string {
  * longer be written literally grows to a multiline literal where possible and
  * falls back to a basic string otherwise.
  */
+/**
+ * The newline to write directly after a multiline delimiter.
+ *
+ * TOML drops a newline that immediately follows the opening delimiter, so a
+ * value that starts with one needs an extra, disposable newline in front of it
+ * to survive the round trip.
+ */
+function multilineLeadingNewLine(existingRaw: string, delimiter: string, content: string): string {
+  if (existingRaw.startsWith(delimiter + '\r\n')) return '\r\n';
+  if (existingRaw.startsWith(delimiter + '\n')) return '\n';
+  if (content.startsWith('\r\n')) return '\r\n';
+  return content.startsWith('\n') ? '\n' : '';
+}
+
 function encodeString(value: string, existingRaw?: string): string {
   if (existingRaw) {
     if (existingRaw.startsWith("'''")) {
       if (!canUseMultilineLiteral(value)) return encodeBasicString(value);
-      const leadingNewLine = existingRaw.startsWith("'''\r\n")
-        ? '\r\n'
-        : existingRaw.startsWith("'''\n")
-          ? '\n'
-          : '';
-      return "'''" + leadingNewLine + value + "'''";
+      return "'''" + multilineLeadingNewLine(existingRaw, "'''", value) + value + "'''";
     }
     if (existingRaw.startsWith('"""')) {
       return encodeMultilineBasicString(value, existingRaw);
@@ -163,7 +172,9 @@ function encodeString(value: string, existingRaw?: string): string {
       if (canUseLiteralString(value)) return "'" + value + "'";
       // Single quotes are non-negotiable but one of them is: a value holding an
       // apostrophe or a newline moves up to a multiline literal.
-      if (canUseMultilineLiteral(value)) return "'''" + value + "'''";
+      if (canUseMultilineLiteral(value)) {
+        return "'''" + multilineLeadingNewLine(existingRaw, "'''", value) + value + "'''";
+      }
     }
   }
   return encodeBasicString(value);
@@ -175,12 +186,8 @@ function encodeString(value: string, existingRaw?: string): string {
  * embedded triple quotes, matching the full patch().
  */
 function encodeMultilineBasicString(value: string, existingRaw: string): string {
-  const leadingNewLine = existingRaw.startsWith('"""\r\n')
-    ? '\r\n'
-    : existingRaw.startsWith('"""\n')
-      ? '\n'
-      : '';
-  return '"""' + leadingNewLine + escapeMultilineBasicContent(value) + '"""';
+  const content = escapeMultilineBasicContent(value);
+  return '"""' + multilineLeadingNewLine(existingRaw, '"""', content) + content + '"""';
 }
 
 /**
