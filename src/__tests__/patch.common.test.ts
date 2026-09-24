@@ -1053,6 +1053,19 @@ describe.each(implementations)('Mandatory escape characters through patch (%s pa
     expect(parse(patched).msg).toEqual('del\x7Fchar');
   });
 
+  test('should not take the escape case from escaped content', () => {
+    // `\\uabcd` is the text `\uabcd`, not an escape, so it must not decide the
+    // case of the escapes the library generates.
+    const existing = 'msg = "\\\\uabcd"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "del\\u007Fchar"\n');
+    expect(parse(patched).msg).toEqual('del\x7Fchar');
+  });
+
   test('should escape disallowed control characters in a multiline basic string', () => {
     const existing = 'msg = """hello"""\n';
 

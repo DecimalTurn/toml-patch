@@ -224,6 +224,14 @@ function escapeCaseOfRaw(raw: string): boolean | null {
     const n1 = raw[i + 1];
     if (!n1) return null;
 
+    if (n1 === '\\') {
+      // An escaped backslash: the character after it is content, so the second
+      // backslash does not start a hex escape. `\\uabcd` is the text `\uabcd`
+      // and must not decide the case of the escapes the library generates.
+      i++;
+      continue;
+    }
+
     if (n1 === 'x' && /^[0-9A-Fa-f]{2}$/.test(raw.slice(i + 2, i + 4))) {
       return /[A-F]/.test(raw.slice(i + 2, i + 4));
     }
