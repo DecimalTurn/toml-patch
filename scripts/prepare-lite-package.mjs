@@ -39,12 +39,12 @@ function copyReferencedFiles(sourceFile, targetName, pattern) {
 copyReferencedFiles(
   sourceJs,
   'patch.js',
-  /from["']\.\/([^"']+)["']/g,
+  /from\s*["']\.\/([^"']+)["']/g,
 );
 copyReferencedFiles(
   sourceTypes,
   'patch.d.ts',
-  /from["']\.\/([^"']+)["']/g,
+  /from\s*["']\.\/([^"']+)["']/g,
 );
 
 const litePackageJson = {
