@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
 - Patching: accept smol-toml date objects when patching and stringifying values. ([#309])
 - Formatting: Add `escapeSequenceUpperCase` option to `TomlFormat` to control the case of generated hex escape sequences. When patching, the case is auto-detected from the first hex escape in the document. ([#309])
+- Patching: keep the sign of a negative zero. Editing a value to `-0` writes it as `-0.0` instead of leaving the existing zero in place. ([#309])
 
 ### Changed
 
@@ -25,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: fall back to a multiline literal (`'''...'''`) or a basic string when an edited literal string value cannot be written literally, instead of emitting TOML that the parser rejects. ([#309])
 - Patching: keep escape sequences that are string content intact when writing basic strings. A value holding text such as `\u000c` was written back as `\u000C`, changing the value, in both `patch()` and `stringify()`. ([#309])
 - Patching: escape a standalone carriage return written into a multiline basic string, instead of emitting a raw CR that the parser rejects when the document is read back. ([#309])
+- Patching: keep a leading newline in an edited multiline string. A value starting with a newline came back without it, because the newline directly after the opening delimiter is dropped when the document is read. ([#309])
+- Patching: keep the raw form of `inf`, `nan` and `-0` when the edited value came from a document that used exponent notation, instead of throwing or dropping the sign of the zero. ([#309])
+- Patch-lite: write a negative NaN as `-nan` instead of an unsigned `nan`, so the value stops looking changed on later calls. ([#309])
+- Escape sequences: do not take the document's escape sequence case from escaped content such as the text `\uabcd`. ([#309])
+- Formatting: apply `escapeSequenceUpperCase` to generated keys, not only to values. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
