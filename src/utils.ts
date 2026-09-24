@@ -17,6 +17,16 @@ export function blank(): BlankObject {
   return Object.create(null);
 }
 
+/**
+ * Equality that keeps the sign of zero.
+ *
+ * `0 === -0` is true, but TOML spells the sign (`0` against `-0.0`), so an edit
+ * that only flips the sign would otherwise look like no change at all.
+ */
+export function sameValue(a: any, b: any): boolean {
+  return a === b && (typeof a !== 'number' || Object.is(a, b));
+}
+
 export function isString(value: any): value is string {
   return typeof value === 'string';
 }
@@ -229,6 +239,11 @@ export function stableStringify(object: any): string {
     const view = new DataView(buf.buffer);
     const sign = view.getUint32(4, true) & 0x80000000 ? '-' : '+';
       output.push(`${sign}${String(value)}`);
+    } else if (typeof value === 'number' && Object.is(value, -0)) {
+      // JSON.stringify(-0) is "0", so negative zero would compare equal to a
+      // plain zero and an edit that only flips the sign would be skipped.
+      // TOML spells the sign (`0` against `-0.0`), so keep them apart here too.
+      output.push('-0');
     } else {
       output.push(JSON.stringify(value));
     }

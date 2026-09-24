@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify } from './utils';
+import { isObject, datesEqual, stableStringify, sameValue } from './utils';
 
 /**
  * A path into a JavaScript object, mixing object keys and array indices.
@@ -107,7 +107,7 @@ export default function diffLite(before: any, after: any, path: Path = []): Edit
     return [];
   }
 
-  if (before === after) return [];
+  if (sameValue(before, after)) return [];
 
   if (
     typeof before === 'number' &&

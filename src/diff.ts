@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify, merge } from './utils';
+import { isObject, datesEqual, stableStringify, merge, sameValue } from './utils';
 import { Path } from './find-by-path';
 
 export enum ChangeType {
@@ -74,7 +74,7 @@ export interface DiffOptions {
 }
 
 export default function diff(before: any, after: any, path: Path = [], options: DiffOptions = {}): Change[] {
-  if (before === after || datesEqual(before, after)) {
+  if (sameValue(before, after) || datesEqual(before, after)) {
     return [];
   }
 

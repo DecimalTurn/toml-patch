@@ -118,6 +118,21 @@ describe.each(implementations)('Number format preservation (%s patch)', (_label,
     a = -2391
     ` + '\n');
   });
+
+  test('Distinguishes negative zero from zero', () => {
+    const src = dedent`
+    a = 0
+    ` + '\n';
+
+    const obj = parse(src) as any;
+    obj.a = -0;
+
+    const result = patch(src, obj);
+    expect(result).toEqual(dedent`
+    a = -0.0
+    ` + '\n');
+    expect(Object.is(parse(result).a, -0)).toBe(true);
+  });
 });
 
 describe.each(implementations)('String format preservation (%s patch)', (_label, patch) => {
