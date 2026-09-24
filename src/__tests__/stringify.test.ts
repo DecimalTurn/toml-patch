@@ -50,6 +50,21 @@ test('escapeSequenceUpperCase controls the case of generated escape sequences', 
   expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('msg = "del\\u007fchar"\n');
 });
 
+test('only escapes the library generates have their case changed', () => {
+  // The value is the literal text `\u000c`, not a form feed. The backslash is
+  // escaped, so the sequence is content and has to survive as written.
+  expect(stringify({ msg: '\\u000c' })).toBe('msg = "\\\\u000c"\n');
+  expect(stringify({ msg: '\\u000c' }, { escapeSequenceUpperCase: false })).toBe(
+    'msg = "\\\\u000c"\n'
+  );
+
+  // A vertical tab has to be escaped by the library, so it does follow the option.
+  expect(stringify({ msg: '\u000b' })).toBe('msg = "\\u000B"\n');
+  expect(stringify({ msg: '\u000b' }, { escapeSequenceUpperCase: false })).toBe(
+    'msg = "\\u000b"\n'
+  );
+});
+
 test('should stringify simple example', () => {
 
   //Stringify the object
