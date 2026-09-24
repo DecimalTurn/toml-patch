@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
 - Patching: accept smol-toml date objects when patching and stringifying values. ([#309])
+- Formatting: Add `escapeSequenceUpperCase` option to `TomlFormat` to control the case of generated hex escape sequences. When patching, the case is auto-detected from the first hex escape in the document. ([#309])
 
 ### Changed
 
