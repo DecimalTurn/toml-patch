@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: preserve hexadecimal, octal and binary integer notation (`0x`, `0o`, `0b`) and the exponent marker case (`e` vs `E`) when editing numbers. ([#309])
 - Patching: fall back to a multiline literal (`'''...'''`) or a basic string when an edited literal string value cannot be written literally, instead of emitting TOML that the parser rejects. ([#309])
 - Patching: keep escape sequences that are string content intact when writing basic strings. A value holding text such as `\u000c` was written back as `\u000C`, changing the value, in both `patch()` and `stringify()`. ([#309])
+- Patching: escape a standalone carriage return written into a multiline basic string, instead of emitting a raw CR that the parser rejects when the document is read back. ([#309])
 
 ## [3.1.2] - 2026-09-22
 

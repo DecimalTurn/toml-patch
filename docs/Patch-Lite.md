@@ -229,10 +229,6 @@ The full `patch()` instead rewrites every newline in the output to `format.newLi
 document-level normalisation applied to string values too. That means the full pipeline can change
 your value: an `\n` written into a CRLF document comes back as `\r\n`. Choose accordingly.
 
-A related difference: a standalone carriage return inside a multiline basic string is escaped as
-`\r` by `patch-lite`, while the full `patch()` writes it out raw, which produces TOML that its own
-tokenizer rejects.
-
 ### 6. Multiline basic strings are not rebuilt with line continuations
 
 When a `"""` string in the source uses line-ending backslash continuations, the full `patch()`

@@ -186,7 +186,7 @@ function applyPreferredAndMandatoryEscapes(
  *
  * In `singleline-basic` mode, output is suitable for `"..."` strings.
  * In `multiline-basic` mode, output is suitable for `"""..."""` strings and additionally
- * protects embedded triple quotes.
+ * escapes standalone carriage returns and protects embedded triple quotes.
  *
  * @param value - Unescaped JS string value.
  * @param existingRaw - Existing TOML raw string used to infer preferred escapes.
@@ -210,5 +210,12 @@ export function escapeStringContent(
 
   const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode, escapeSequenceUpperCase);
 
-  return mode === 'multiline-basic' ? escaped.replace(/"""/g, '""\\"') : escaped;
+  if (mode !== 'multiline-basic') {
+    return escaped;
+  }
+
+  // A carriage return is only allowed in a multiline string as part of CRLF, so a
+  // standalone one is escaped rather than written out raw, which would produce a
+  // document that cannot be parsed back.
+  return escaped.replace(/\r(?!\n)/g, '\\r').replace(/"""/g, '""\\"');
 }
