@@ -40,7 +40,7 @@ patch(existing, { version: '1.0.1' });
 | Preserve underscore formatting of numbers | ❌ | ✅ |
 | Preserve comments alignment | ❌ | ✅ |
 | Control the number of decimal places for float values | ❌ | ✅ |
-| Preserve line ending backlashes in multiline basic strings | ❌ | ✅ |
+| Preserve line ending backslashes in multiline basic strings | ❌ | ✅ |
 
 If any item marked ❌ is a requirement, use the full `patch()` from the package root. The two
 share a call shape, so switching later is an import change — but see
