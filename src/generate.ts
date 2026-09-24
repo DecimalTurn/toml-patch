@@ -29,7 +29,7 @@ import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
-import { escapeStringContent } from './escape-preference';
+import { escapeStringContent, upperCaseHexEscapes } from './escape-preference';
 import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
 
 /**
@@ -147,9 +147,7 @@ export function generateKeyValue(
 function quoteTomlString(value: string, escapeSequenceUpperCase = true): string {
   // JSON.stringify leaves U+007F as a raw character, but TOML requires it escaped.
   const withDel = JSON.stringify(value).replace(/\x7f/g, '\\u007f');
-  return escapeSequenceUpperCase
-    ? withDel.replace(/\\u([0-9a-f]{4})/g, (_m, hex) => `\\u${hex.toUpperCase()}`)
-    : withDel;
+  return escapeSequenceUpperCase ? upperCaseHexEscapes(withDel) : withDel;
 }
 
 function keyValueToRaw(value: string[]): string {

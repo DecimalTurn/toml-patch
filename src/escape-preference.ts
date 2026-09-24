@@ -84,6 +84,24 @@ function mandatoryEscaping(ch: string, mode: EscapeMode, escapeSequenceUpperCase
 }
 
 /**
+ * Uppercases the hex digits of the `\uXXXX` escapes in string content that has
+ * already been escaped, for example `\u007f` to `\u007F`.
+ *
+ * Only escapes are rewritten. A `\uXXXX` that is content rather than an escape
+ * is preceded by an escaped backslash, so its run of backslashes has an even
+ * length and the sequence is left as written. Uppercasing those would change
+ * the value: a string holding the text `\u000c` must not come back as `\u000C`.
+ *
+ * @param escaped - Content that has already been escaped for a basic string.
+ * @returns The content with the hex digits of its escapes uppercased.
+ */
+export function upperCaseHexEscapes(escaped: string): string {
+  return escaped.replace(/(\\+)u([0-9a-f]{4})/g, (match, backslashes: string, hex: string) =>
+    backslashes.length % 2 === 1 ? `${backslashes}u${hex.toUpperCase()}` : match
+  );
+}
+
+/**
  * Scans a raw TOML string token and records preferred escape sequence representations for characters.
  *
  * Example: if `existingRaw` contains `\u263A`, this map stores `☺ -> "\\u263A"`.
@@ -187,9 +205,7 @@ export function escapeStringContent(
     const escaped = JSON.stringify(value).slice(1, -1);
     // JSON.stringify only escapes U+0000–U+001F, but TOML also forbids U+007F (DEL).
     const withDel = escaped.replace(/\x7f/g, '\\u007f');
-    return escapeSequenceUpperCase
-      ? withDel.replace(/\\u([0-9a-f]{4})/g, (_m, hex) => `\\u${hex.toUpperCase()}`)
-      : withDel;
+    return escapeSequenceUpperCase ? upperCaseHexEscapes(withDel) : withDel;
   }
 
   const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode, escapeSequenceUpperCase);
