@@ -9903,3 +9903,36 @@ describe('Format preservation for numbers', () => {
   });
 
 });
+
+describe('escape sequence case', () => {
+  test('escapeSequenceUpperCase: false emits lowercase escape sequences', () => {
+    const existing = 'msg = "hello"\n';
+
+    const obj = parse(existing);
+    obj.msg = 'del\x7Fchar';
+
+    const patched = patch(existing, obj, { escapeSequenceUpperCase: false });
+    expect(patched).toBe('msg = "del\\u007fchar"\n');
+    expect(parse(patched).msg).toEqual('del\x7Fchar');
+  });
+
+  test('auto-detects uppercase escape sequences', () => {
+    const existing = 'msg = "\\u263A"\nother = "hello"\n';
+
+    const obj = parse(existing);
+    obj.other = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "\\u263A"\nother = "del\\u007Fchar"\n');
+  });
+
+  test('auto-detects lowercase escape sequences', () => {
+    const existing = 'msg = "\\u263a"\nother = "hello"\n';
+
+    const obj = parse(existing);
+    obj.other = 'del\x7Fchar';
+
+    const patched = patch(existing, obj);
+    expect(patched).toBe('msg = "\\u263a"\nother = "del\\u007fchar"\n');
+  });
+});

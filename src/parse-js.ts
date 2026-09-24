@@ -139,7 +139,7 @@ function walkValue(
   }
 
   if (isString(value)) {
-    return generateString(value);
+    return generateString(value, undefined, format.escapeSequenceUpperCase);
   } else if (isBigInt(value)) {
     return generateInteger(value);
   } else if (isInteger(value)) {

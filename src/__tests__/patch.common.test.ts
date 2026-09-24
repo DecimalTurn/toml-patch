@@ -3,9 +3,23 @@ import { parse } from '../';
 import patchFull from '../patch';
 import { patch as patchLite } from '../patch-lite-entry';
 
-// Number-format preservation behaviors that must hold for both the full
-// `patch()` and the edit-only `patch-lite()`. Each test below runs twice,
-// once per implementation.
+/**
+ * Tests that must behave identically for both the full `patch()` and the
+ * edit-only `patch-lite()`.
+ *
+ * The `implementations` array below is reused by every `describe.each` block in
+ * this file, so each test runs twice — once per implementation. Anything that
+ * only one implementation can do (adding/removing/reordering keys, structural
+ * type changes, or formatting options that patch-lite does not support) belongs
+ * in the implementation-specific files (`patch.test.ts`, `patch-lite.test.ts`)
+ * instead.
+ *
+ * Covered here:
+ * - number format preservation (floats, exponent notation, integer radix and
+ *   underscore grouping)
+ * - string format preservation (basic and literal, single-line and multiline)
+ * - mandatory control-character escaping
+ */
 const implementations: Array<[string, (src: string, obj: any) => string]> = [
   ['full', patchFull],
   ['lite', patchLite],
@@ -799,7 +813,7 @@ describe.each(implementations)('Mandatory escape characters through patch (%s pa
     obj.msg = 'esc\x1Bchar';
 
     const patched = patch(existing, obj);
-    expect(patched).toBe('msg = "esc\\u001bchar"\n');
+    expect(patched).toBe('msg = "esc\\u001Bchar"\n');
     expect(parse(patched).msg).toEqual('esc\x1Bchar');
   });
 

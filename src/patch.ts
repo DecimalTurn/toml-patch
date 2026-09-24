@@ -690,9 +690,9 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
   return result;
 }
 
-function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[]): string {
+function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[], escapeSequenceUpperCase = true): string {
   return keyParts
-    .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic')}"`))
+    .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic', escapeSequenceUpperCase)}"`))
     .join('.');
 }
 
@@ -886,11 +886,11 @@ function renderIntegerLike(value: number | bigint, existingRaw: string): string 
  * @param existing - The existing node with formatting to preserve
  * @param replacement - The replacement node to apply formatting to
  */
-function preserveFormatting(existing: Value, replacement: Value): void {
+function preserveFormatting(existing: Value, replacement: Value, escapeSequenceUpperCase = true): void {
   
   // Preserve string format (handles basic, literal, multiline in all variants)
   if (isString(existing) && isString(replacement)) {
-    const newString = generateString(replacement.value, existing.raw);
+    const newString = generateString(replacement.value, existing.raw, escapeSequenceUpperCase);
     replacement.raw = newString.raw;
     replacement.loc = newString.loc;
   }
@@ -2219,7 +2219,7 @@ function applyChanges(
           }
         }
         
-        preserveFormatting(existing.value, replacement.value);
+        preserveFormatting(existing.value, replacement.value, format.escapeSequenceUpperCase);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);
         }
@@ -2239,7 +2239,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2390,7 +2390,7 @@ function applyChanges(
           }
         }
 
-        preserveFormatting(existingKeyValue.value, replacement.value);
+        preserveFormatting(existingKeyValue.value, replacement.value, format.escapeSequenceUpperCase);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
@@ -2403,7 +2403,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2480,7 +2480,7 @@ function applyChanges(
         }
 
         // Preserve formatting and edit the value within
-        preserveFormatting(existingKV.value, replacement.item.value);
+        preserveFormatting(existingKV.value, replacement.item.value, format.escapeSequenceUpperCase);
         parent = existingKV;
         existing = existingKV.value;
         replacement = replacement.item.value;
@@ -2496,7 +2496,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2775,7 +2775,7 @@ function applyChanges(
       // flag so the replacement doesn't introduce an unwanted trailing comma.
       if (isInlineItem(existing) && isInlineItem(replacement)) {
         if (isString(existing.item) && isString(replacement.item)) {
-          preserveFormatting(existing.item, replacement.item);
+          preserveFormatting(existing.item, replacement.item, format.escapeSequenceUpperCase);
           replacement.loc = {
             start: { ...replacement.item.loc.start },
             end: { ...replacement.item.loc.end }

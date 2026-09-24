@@ -15,6 +15,7 @@ export const DEFAULT_LEADING_BOM = false;
 export const DEFAULT_UPDATE_ORDER = false;
 export const DEFAULT_MULTILINE_TABLE = 'auto';
 export const DEFAULT_MULTILINE_ARRAY = 'auto';
+export const DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE = true;
 
 export type MultilineContainerMode = boolean | number | 'auto' | 'parent';
 
@@ -215,6 +216,64 @@ export function countTrailingNewlines(str: string): number {
   return count;
 }
 
+// Returns the case (uppercase vs lowercase) of the first hex escape sequence found in a
+// string's raw text, or null when the string contains no hex escape sequences.
+function escapeCaseOfRaw(raw: string): boolean | null {
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] !== '\\') continue;
+    const n1 = raw[i + 1];
+    if (!n1) return null;
+
+    if (n1 === 'x' && /^[0-9A-Fa-f]{2}$/.test(raw.slice(i + 2, i + 4))) {
+      return /[A-F]/.test(raw.slice(i + 2, i + 4));
+    }
+    if (n1 === 'u' && /^[0-9A-Fa-f]{4}$/.test(raw.slice(i + 2, i + 6))) {
+      return /[A-F]/.test(raw.slice(i + 2, i + 6));
+    }
+    if (n1 === 'U' && /^[0-9A-Fa-f]{8}$/.test(raw.slice(i + 2, i + 10))) {
+      return /[A-F]/.test(raw.slice(i + 2, i + 10));
+    }
+    // Simple escapes (\b, \t, \n, \f, \r, \", \\) carry no hex digits, so they
+    // cannot inform the case preference and are skipped.
+  }
+  return null;
+}
+
+function findEscapeCaseInNode(node: any): boolean | null {
+  if (!node || typeof node !== 'object') return null;
+
+  if (node.type === 'String' && typeof node.raw === 'string') {
+    const result = escapeCaseOfRaw(node.raw);
+    if (result !== null) return result;
+  }
+
+  for (const prop of ['key', 'item', 'value']) {
+    if (node[prop] && typeof node[prop] === 'object') {
+      const result = findEscapeCaseInNode(node[prop]);
+      if (result !== null) return result;
+    }
+  }
+  if (Array.isArray(node.items)) {
+    for (const child of node.items) {
+      const result = findEscapeCaseInNode(child);
+      if (result !== null) return result;
+    }
+  }
+
+  return null;
+}
+
+// Detects whether escape sequences in existing string values use uppercase hex digits.
+// The first hex escape sequence encountered in document order wins: uppercase hex (A-F)
+// selects uppercase output, lowercase selects lowercase output.
+export function detectEscapeSequenceUpperCase(cstNodes: Iterable<any>): boolean {
+  for (const node of cstNodes) {
+    const result = findEscapeCaseInNode(node);
+    if (result !== null) return result;
+  }
+  return DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE;
+}
+
 // Detects if tabs are used for indentation by checking the first few indented lines
 export function detectTabsForIndentation(str: string): boolean {
   const lines = str.split(/\r?\n/);
@@ -380,6 +439,7 @@ export function validateFormatObject(format: any): any {
     updateOrder: isBool,
     multilineTable: isMultilineContainerMode,
     multilineArray: isMultilineContainerMode,
+    escapeSequenceUpperCase: isBool,
   };
 
   const validatedFormat: any = {};
@@ -449,6 +509,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.indentWidth ?? fallbackFormat.indentWidth,
         validatedFormat.multilineTable ?? fallbackFormat.multilineTable,
         validatedFormat.multilineArray ?? fallbackFormat.multilineArray,
+        validatedFormat.escapeSequenceUpperCase ?? fallbackFormat.escapeSequenceUpperCase,
       );
     }
   } else {
@@ -594,6 +655,13 @@ export class TomlFormat {
    */
   multilineArray: MultilineContainerMode;
 
+  /**
+   * Whether to write `\uXXXX` / `\UXXXXXXXX` / `\xHH` escape sequences with
+   * uppercase hex digits. Auto-detected from the first hex escape sequence in
+   * the document during patching; defaults to `true` (uppercase hex).
+   */
+  escapeSequenceUpperCase: boolean;
+
   // These options were part of the original TimHall's version and are not yet implemented
   //printWidth?: number;
   //tabWidth?: number;
@@ -611,7 +679,8 @@ export class TomlFormat {
       updateOrder?: boolean,
     indentWidth?: number,
     multilineTable?: MultilineContainerMode | null,
-    multilineArray?: MultilineContainerMode | null
+    multilineArray?: MultilineContainerMode | null,
+    escapeSequenceUpperCase?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine == null ? DEFAULT_NEWLINE : normalizeNewLine(newLine);
@@ -627,6 +696,7 @@ export class TomlFormat {
     this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;
     this.multilineTable = multilineTable ?? DEFAULT_MULTILINE_TABLE;
     this.multilineArray = multilineArray ?? DEFAULT_MULTILINE_ARRAY;
+    this.escapeSequenceUpperCase = escapeSequenceUpperCase ?? DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE;
   }
 
   /**
@@ -658,7 +728,8 @@ export class TomlFormat {
       DEFAULT_UPDATE_ORDER,
       DEFAULT_INDENT_WIDTH,
       DEFAULT_MULTILINE_TABLE,
-      DEFAULT_MULTILINE_ARRAY
+      DEFAULT_MULTILINE_ARRAY,
+      DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE
     );
   }
 
@@ -754,6 +825,9 @@ export class TomlFormat {
     // Multiline container layout is caller intent, so it is never auto-detected.
     format.multilineTable = DEFAULT_MULTILINE_TABLE;
     format.multilineArray = DEFAULT_MULTILINE_ARRAY;
+
+    // Escape sequence case follows the first hex escape found in the document.
+    format.escapeSequenceUpperCase = detectEscapeSequenceUpperCase(cstNodes);
 
     return format;
   }

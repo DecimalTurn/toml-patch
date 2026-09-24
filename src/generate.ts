@@ -143,9 +143,12 @@ export function generateKeyValue(
   };
 }
 
-function quoteTomlString(value: string): string {
+function quoteTomlString(value: string, escapeSequenceUpperCase = true): string {
   // JSON.stringify leaves U+007F as a raw character, but TOML requires it escaped.
-  return JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+  const withDel = JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+  return escapeSequenceUpperCase
+    ? withDel.replace(/\\u([0-9a-f]{4})/g, (_m, hex) => `\\u${hex.toUpperCase()}`)
+    : withDel;
 }
 
 function keyValueToRaw(value: string[]): string {
@@ -176,20 +179,20 @@ export function generateKey(value: string[]): Key {
  * @param existingRaw - The existing raw string to determine multiline format (optional).
  * @returns A new String node.
  */
-export function generateString(value: string, existingRaw?: string): String {
+export function generateString(value: string, existingRaw?: string, escapeSequenceUpperCase = true): String {
   // Single choke point for string values from both stringify and patch — reject unpaired
   // surrogates here rather than emitting a document that isn't valid UTF-8.
   assertNoLoneSurrogate(value, 'String value');
 
   if (!existingRaw) {
-    return generateBasicString(value);
+    return generateBasicString(value, undefined, escapeSequenceUpperCase);
   }
-  return generateStringKeepFormatting(value, existingRaw);
+  return generateStringKeepFormatting(value, existingRaw, escapeSequenceUpperCase);
 }
 
-function generateStringKeepFormatting(value: string, existingRaw: string): String {
+function generateStringKeepFormatting(value: string, existingRaw: string, escapeSequenceUpperCase: boolean): String {
   if (isBasicString(existingRaw)) {
-    return generateBasicString(value, existingRaw);
+    return generateBasicString(value, existingRaw, escapeSequenceUpperCase);
   }
 
   if (isLiteralString(existingRaw)) {
@@ -204,7 +207,7 @@ function generateStringKeepFormatting(value: string, existingRaw: string): Strin
       const multilineRaw = `'''${existingValue}'''`;
       return generateMultilineLiteralString(value, multilineRaw);
     }
-    return generateBasicString(value);
+    return generateBasicString(value, undefined, escapeSequenceUpperCase);
   }
 
   if (isMultilineLiteralString(existingRaw)) {
@@ -214,23 +217,23 @@ function generateStringKeepFormatting(value: string, existingRaw: string): Strin
     }
     const existingValue = existingRaw.slice(3, -3);
     const multilineRaw = `"""${existingValue}"""`;
-    return generateMultilineBasicString(value, multilineRaw);
+    return generateMultilineBasicString(value, multilineRaw, escapeSequenceUpperCase);
   }
 
   if (isMultilineBasicString(existingRaw)) {
-    return generateMultilineBasicString(value, existingRaw);
+    return generateMultilineBasicString(value, existingRaw, escapeSequenceUpperCase);
   }
 
   // existingRaw is misformatted. This should be impossible
   throw new Error(`Existing raw string value is not valid: ${existingRaw}`);
 }
 
-function generateBasicString(value: string, existingRaw?: string): String {
+function generateBasicString(value: string, existingRaw?: string, escapeSequenceUpperCase = true): String {
   let raw = '';
   if (!existingRaw) {
-    raw = quoteTomlString(value);
+    raw = quoteTomlString(value, escapeSequenceUpperCase);
   } else {
-    raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic')}"`;
+    raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic', escapeSequenceUpperCase)}"`;
   }
    
   return {
@@ -264,8 +267,8 @@ function generateLiteralString(value: string): String {
   };
 }
 
-function generateMultilineBasicString(value: string, existingRaw: string): String {
-  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic');
+function generateMultilineBasicString(value: string, existingRaw: string, escapeSequenceUpperCase = true): String {
+  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic', escapeSequenceUpperCase);
 
   const leadingNewLine = existingRaw.startsWith('"""\r\n')
     ? '\r\n'

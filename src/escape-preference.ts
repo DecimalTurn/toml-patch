@@ -56,7 +56,7 @@ function isDisallowedControl(code: number, mode: EscapeMode): boolean {
   );
 }
 
-function mandatoryEscaping(ch: string, mode: EscapeMode): string {
+function mandatoryEscaping(ch: string, mode: EscapeMode, escapeSequenceUpperCase: boolean): string {
   switch (ch) {
     case '\\':
       return '\\\\';
@@ -75,7 +75,8 @@ function mandatoryEscaping(ch: string, mode: EscapeMode): string {
     default: {
       const code = ch.charCodeAt(0);
       if (isDisallowedControl(code, mode)) {
-        return `\\u${code.toString(16).padStart(4, '0').toUpperCase()}`;
+        const hex = code.toString(16).padStart(4, '0');
+        return `\\u${escapeSequenceUpperCase ? hex.toUpperCase() : hex}`;
       }
       return ch;
     }
@@ -144,7 +145,8 @@ export function collectPreferredEscapes(existingRaw: string): Map<string, string
 function applyPreferredAndMandatoryEscapes(
   value: string,
   preferred: Map<string, string>,
-  mode: EscapeMode
+  mode: EscapeMode,
+  escapeSequenceUpperCase: boolean
 ): string {
   let escaped = '';
 
@@ -155,7 +157,7 @@ function applyPreferredAndMandatoryEscapes(
       continue;
     }
 
-    escaped += mandatoryEscaping(ch, mode);
+    escaped += mandatoryEscaping(ch, mode, escapeSequenceUpperCase);
   }
 
   return escaped;
@@ -173,16 +175,24 @@ function applyPreferredAndMandatoryEscapes(
  * @param mode - String rendering mode (`singleline-basic` or `multiline-basic`).
  * @returns Escaped TOML string content without surrounding delimiters.
  */
-export function escapeStringContent(value: string, existingRaw: string, mode: EscapeMode): string {
+export function escapeStringContent(
+  value: string,
+  existingRaw: string,
+  mode: EscapeMode,
+  escapeSequenceUpperCase = true
+): string {
   const preferred = collectPreferredEscapes(existingRaw);
 
   if (preferred.size === 0 && mode === 'singleline-basic') {
     const escaped = JSON.stringify(value).slice(1, -1);
     // JSON.stringify only escapes U+0000–U+001F, but TOML also forbids U+007F (DEL).
-    return escaped.replace(/\x7f/g, '\\u007F');
+    const withDel = escaped.replace(/\x7f/g, '\\u007f');
+    return escapeSequenceUpperCase
+      ? withDel.replace(/\\u([0-9a-f]{4})/g, (_m, hex) => `\\u${hex.toUpperCase()}`)
+      : withDel;
   }
 
-  const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode);
+  const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode, escapeSequenceUpperCase);
 
   return mode === 'multiline-basic' ? escaped.replace(/"""/g, '""\\"') : escaped;
 }

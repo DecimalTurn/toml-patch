@@ -40,6 +40,16 @@ test('default-equivalent formats produce the same output as no format', () => {
   expect(stringify(value, TomlFormat.default())).toBe(noFormat);
 });
 
+test('escapeSequenceUpperCase controls the case of generated escape sequences', () => {
+  const value = { msg: 'del\x7Fchar' };
+
+  // Default: uppercase hex.
+  expect(stringify(value)).toBe('msg = "del\\u007Fchar"\n');
+
+  // Opt out for lowercase hex.
+  expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('msg = "del\\u007fchar"\n');
+});
+
 test('should stringify simple example', () => {
 
   //Stringify the object
