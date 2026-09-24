@@ -26,17 +26,21 @@ patch(existing, { version: '1.0.1' });
 | Keep comments, whitespace | ✅ | ✅ |
 | Preserve a leading BOM byte-for-byte | ✅ | ✅ |
 | Get the original string back unchanged when nothing changed | ✅ | ✅ |
+| Keep the quote style of an edited string, when the value allows it | ✅ | ✅ |
 | Add or remove a key | ❌ | ✅ |
 | Rename a key | ❌ | ✅ |
 | Add or remove array elements | ❌ | ✅ |
 | Reorder array elements or object keys | ❌ | ✅ |
 | Replace a primitive with a table/array, or the reverse | ❌ | ✅ |
-| Keep the quote style of an edited literal string (`'…'`) | ✅ | ✅ |
 | Choose formatting options (line endings, indentation, trailing commas) | ❌ | ✅ |
 | Control the case of generated escape sequences | ❌ | ✅ |
 | Reject strings with unpaired UTF-16 surrogates | ❌ | ✅ |
 | Use `Temporal` objects for date/time values | ❌ | ✅ |
 | Use `parse()`, `stringify()` or the `TomlDocument` class | ❌ | ✅ |
+| Preserve underscore formatting of numbers | ❌ | ✅ |
+| Preserve comments alignment | ❌ | ✅ |
+| Control the number of decimal places for float values | ❌ | ✅ |
+| Preserve line ending backlashes in multiline basic strings | ❌ | ✅ |
 
 If any item marked ❌ is a requirement, use the full `patch()` from the package root. The two
 share a call shape, so switching later is an import change — but see
