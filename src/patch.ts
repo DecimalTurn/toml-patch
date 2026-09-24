@@ -979,7 +979,11 @@ function preserveFormatting(existing: Value, replacement: Value, escapeSequenceU
       const replacementDecimals = decimalPlacesOfRaw(replacement.raw);
 
       let newRaw: string | undefined;
-      if (hasExponent) {
+      // `inf`, `nan` and `-0` carry no exponent component: their generated raw
+      // form already expresses the value, and rendering them as mantissa and
+      // exponent either throws (there is no exponent part to read) or drops the
+      // sign of the zero.
+      if (hasExponent && Number.isFinite(value) && !Object.is(value, -0)) {
         const uppercaseExponent = existingFloat.raw.includes('E');
         const minDecimals = valueIsIntegral
           ? Math.max(isRound ? fractionLength : 0, replacementDecimals)

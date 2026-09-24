@@ -133,6 +133,36 @@ describe.each(implementations)('Number format preservation (%s patch)', (_label,
     ` + '\n');
     expect(Object.is(parse(result).a, -0)).toBe(true);
   });
+
+  test('Keeps the raw form of non-finite and negative zero values with an exponent source', () => {
+    // None of these carry an exponent component, so the source's exponent
+    // notation must not be applied to them.
+    const src = dedent`
+    a = 1.0e10
+    ` + '\n';
+
+    const obj = parse(src) as any;
+
+    obj.a = Infinity;
+    expect(patch(src, obj)).toEqual(dedent`
+    a = inf
+    ` + '\n');
+
+    obj.a = -Infinity;
+    expect(patch(src, obj)).toEqual(dedent`
+    a = -inf
+    ` + '\n');
+
+    obj.a = NaN;
+    expect(patch(src, obj)).toEqual(dedent`
+    a = nan
+    ` + '\n');
+
+    obj.a = -0;
+    expect(patch(src, obj)).toEqual(dedent`
+    a = -0.0
+    ` + '\n');
+  });
 });
 
 describe.each(implementations)('String format preservation (%s patch)', (_label, patch) => {
