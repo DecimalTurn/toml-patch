@@ -28,6 +28,7 @@ import { LocalDate, LocalTime } from './parse-toml';
 import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
+import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
 import { escapeStringContent } from './escape-preference';
 import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
 
@@ -196,13 +197,13 @@ function generateStringKeepFormatting(value: string, existingRaw: string, escape
   }
 
   if (isLiteralString(existingRaw)) {
-    if (!value.includes("'")) {
+    // A literal string cannot escape anything, so the value has to be writable
+    // verbatim. Move up to MLLS when only the single-line form is ruled out and
+    // fall back to a basic string when the value cannot be literal at all.
+    if (canUseLiteralString(value)) {
       return generateLiteralString(value);
     }
-    // Value contains a single quote — single-line literal strings cannot contain '.
-    // Fall back to MLLS ('''value''') unless the value also contains ''', in which
-    // case we must use a basic string.
-    if (!value.includes("'''")) {
+    if (canUseMultilineLiteral(value)) {
       const existingValue = existingRaw.slice(1, -1);
       const multilineRaw = `'''${existingValue}'''`;
       return generateMultilineLiteralString(value, multilineRaw);
@@ -211,8 +212,9 @@ function generateStringKeepFormatting(value: string, existingRaw: string, escape
   }
 
   if (isMultilineLiteralString(existingRaw)) {
-    // Literal strings cannot contain ''' - fallback to basic multi-line string if needed
-    if (!value.includes("'''")) {
+    // Literal strings cannot hold ''' or a control character: fall back to a
+    // basic multi-line string when the value needs escaping.
+    if (canUseMultilineLiteral(value)) {
       return generateMultilineLiteralString(value, existingRaw);
     }
     const existingValue = existingRaw.slice(3, -3);

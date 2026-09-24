@@ -1,6 +1,7 @@
 import { isFloat as isFloatNode } from './cst';
 import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 import { PatchLiteError, formatPath, Path } from './diff-lite';
+import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
 
 /**
  * Encodes a JavaScript leaf value as valid TOML, independent of the full
@@ -208,37 +209,6 @@ function escapeMultilineBasicContent(value: string): string {
     }
   }
   return out.replace(/"""/g, '""\\"');
-}
-
-/**
- * True when `value` can be written verbatim inside a single-line literal
- * string: no apostrophe, no newline, and no control character other than tab.
- */
-function canUseLiteralString(value: string): boolean {
-  if (value.includes("'")) return false;
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if ((code < 0x20 && code !== 0x09) || code === 0x7f) return false;
-  }
-  return true;
-}
-
-/**
- * True when `value` can be written verbatim inside a multiline literal string:
- * no `'''`, no control characters other than tab, and no standalone carriage
- * return (newlines must be LF or CRLF).
- */
-function canUseMultilineLiteral(value: string): boolean {
-  if (value.includes("'''")) return false;
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code === 0x0d) {
-      if (value.charCodeAt(i + 1) !== 0x0a) return false;
-    } else if ((code < 0x20 && code !== 0x09 && code !== 0x0a) || code === 0x7f) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function encodeBasicString(value: string): string {

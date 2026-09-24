@@ -211,6 +211,32 @@ describe.each(implementations)('String format preservation (%s patch)', (_label,
     ` + '\n');
   });
 
+  test('Grows a single-line literal to a multiline literal when the value contains a newline', () => {
+    // A single-line literal string cannot hold a newline, so the value has to
+    // move up to MLLS rather than being written into `'...'` verbatim.
+    const src = "a = 'hello'\n";
+
+    const obj = parse(src) as any;
+    obj.a = 'one\ntwo';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe("a = '''one\ntwo'''\n");
+  });
+
+  test('Falls back to a basic string when a literal value holds a control character', () => {
+    // Literal strings cannot represent DEL, so the value needs escaping. Writing
+    // it verbatim would produce TOML that the parser rejects.
+    const src = "a = 'hello'\n";
+
+    const obj = parse(src) as any;
+    obj.a = 'del\x7fchar';
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toBe('a = "del\\u007Fchar"\n');
+  });
+
   test('Preserves a multiline literal string when editing a string', () => {
     const src = dedent`
     a = '''

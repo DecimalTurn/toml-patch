@@ -75,4 +75,18 @@ describe('literal strings', () => {
     expect(parse(patched).paths.output).toEqual("C:\\Users\\Alice'''s Documents\\Reports");
   });
 
+  describe('multiline literal strings', () => {
+    const mlExisting = "output = '''\nC:\\Users\\Alice\n'''\n";
+
+    test('should fallback to a basic string when a control character cannot be literal', () => {
+      // A multiline literal string cannot hold DEL, so the value needs escaping.
+      const obj = parse(mlExisting);
+      obj.output = 'del\x7fchar';
+      const patched = patch(mlExisting, obj);
+
+      expect(patched).toBe('output = """\ndel\\u007Fchar"""\n');
+      expect(parse(patched).output).toEqual('del\x7fchar');
+    });
+  });
+
 });

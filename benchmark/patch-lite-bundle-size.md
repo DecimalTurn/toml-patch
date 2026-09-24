@@ -15,8 +15,8 @@ The script writes this file (`benchmark/patch-lite-bundle-size.md`) directly.
 
 | Metric | toml-patch | patch-lite | Difference |
 |--------|------------|------------|------------|
-| Minified | ~162.1 kB | ~43.3 kB | -118.8 kB |
+| Minified | ~162.4 kB | ~43.3 kB | -119.1 kB |
 | Min + Gzipped | ~50.0 kB | ~13.2 kB | -36.8 kB |
 | Dependencies | 0 | 0 | - |
 
-patch-lite difference is **-118.8 kB minified** / **-36.8 kB gzipped** versus toml-patch.
+patch-lite difference is **-119.1 kB minified** / **-36.8 kB gzipped** versus toml-patch.
