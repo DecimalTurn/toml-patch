@@ -320,6 +320,43 @@ describe('edits', () => {
   });
 });
 
+/**
+ * The full `patch()` mirrors the case of the first hex escape found in the
+ * document, and `escapeSequenceUpperCase` can override it (see `patch.test.ts`
+ * > "escape sequence case"). `patch-lite()` takes no formatting options and
+ * always writes uppercase hex, so a lowercase source document is NOT mirrored.
+ * Spans that are not rewritten are left alone, so an existing `\u263a` keeps
+ * its lowercase spelling. These tests pin that asymmetry deliberately.
+ */
+describe('escape sequence case', () => {
+  test('always emits uppercase hex escapes even when the source uses lowercase', () => {
+    const existing = 'msg = "\\u263a"\nother = "hello"\n';
+
+    const updated = parse(existing);
+    updated.other = 'del\x7Fchar';
+
+    expect(patch(existing, updated)).toBe('msg = "\\u263a"\nother = "del\\u007Fchar"\n');
+  });
+
+  test('always emits uppercase for a control character the source spells in lowercase', () => {
+    const existing = 'msg = "\\u001b"\nother = "hello"\n';
+
+    const updated = parse(existing);
+    updated.other = '\x1bX';
+
+    expect(patch(existing, updated)).toBe('msg = "\\u001b"\nother = "\\u001BX"\n');
+  });
+
+  test('always emits uppercase hex escapes inside a multiline basic string', () => {
+    const existing = 'msg = "\\u263a"\nother = """\nhello\n"""\n';
+
+    const updated = parse(existing);
+    updated.other = 'del\x7Fchar';
+
+    expect(patch(existing, updated)).toBe('msg = "\\u263a"\nother = """\ndel\\u007Fchar"""\n');
+  });
+});
+
 describe('date edits', () => {
   test('edits a local date', () => {
     const existing = 'date = 1979-05-27\n';
