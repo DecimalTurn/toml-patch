@@ -45,8 +45,8 @@ export function generateDocument(): Document {
   };
 }
 
-export function generateTable(key: string[]): Table {
-  const table_key = generateTableKey(key);
+export function generateTable(key: string[], escapeSequenceUpperCase = true): Table {
+  const table_key = generateTableKey(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.Table,
@@ -56,8 +56,8 @@ export function generateTable(key: string[]): Table {
   };
 }
 
-export function generateTableKey(key: string[]): TableKey {
-  const raw = keyValueToRaw(key);
+export function generateTableKey(key: string[], escapeSequenceUpperCase = true): TableKey {
+  const raw = keyValueToRaw(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableKey,
@@ -77,8 +77,8 @@ export function generateTableKey(key: string[]): TableKey {
   };
 }
 
-export function generateTableArray(key: string[]): TableArray {
-  const table_array_key = generateTableArrayKey(key);
+export function generateTableArray(key: string[], escapeSequenceUpperCase = true): TableArray {
+  const table_array_key = generateTableArrayKey(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableArray,
@@ -88,8 +88,8 @@ export function generateTableArray(key: string[]): TableArray {
   };
 }
 
-export function generateTableArrayKey(key: string[]): TableArrayKey {
-  const raw = keyValueToRaw(key);
+export function generateTableArrayKey(key: string[], escapeSequenceUpperCase = true): TableArrayKey {
+  const raw = keyValueToRaw(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableArrayKey,
@@ -112,9 +112,10 @@ export function generateTableArrayKey(key: string[]): TableArrayKey {
 export function generateKeyValue(
   key: string[],
   value: Value,
-  shiftGeneratedMultilineEnd = false
+  shiftGeneratedMultilineEnd = false,
+  escapeSequenceUpperCase = true
 ): KeyValue {
-  const key_node = generateKey(key);
+  const key_node = generateKey(key, escapeSequenceUpperCase);
   const { column } = key_node.loc.end;
 
   const equals = column + 1;
@@ -150,18 +151,18 @@ function quoteTomlString(value: string, escapeSequenceUpperCase = true): string 
   return escapeSequenceUpperCase ? upperCaseHexEscapes(withDel) : withDel;
 }
 
-function keyValueToRaw(value: string[]): string {
+function keyValueToRaw(value: string[], escapeSequenceUpperCase = true): string {
   return value.map(part => {
     // Keys are encoded too, so a lone surrogate is just as invalid here as in a value.
     // JSON.stringify escapes the offending unit, so the message stays printable rather than
     // carrying the raw unpaired surrogate into logs.
     assertNoLoneSurrogate(part, `Key ${JSON.stringify(part)}`);
-    return IS_BARE_KEY.test(part) ? part : quoteTomlString(part);
+    return IS_BARE_KEY.test(part) ? part : quoteTomlString(part, escapeSequenceUpperCase);
   }).join('.');
 }
 
-export function generateKey(value: string[]): Key {
-  const raw = keyValueToRaw(value);
+export function generateKey(value: string[], escapeSequenceUpperCase = true): Key {
+  const raw = keyValueToRaw(value, escapeSequenceUpperCase);
 
   return {
     type: NodeType.Key,

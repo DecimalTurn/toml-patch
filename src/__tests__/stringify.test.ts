@@ -50,6 +50,13 @@ test('escapeSequenceUpperCase controls the case of generated escape sequences', 
   expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('msg = "del\\u007fchar"\n');
 });
 
+test('escapeSequenceUpperCase also applies to quoted keys', () => {
+  const value = { 'a\x7Fb': 1 };
+
+  expect(stringify(value)).toBe('"a\\u007Fb" = 1\n');
+  expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('"a\\u007fb" = 1\n');
+});
+
 test('only escapes the library generates have their case changed', () => {
   // The value is the literal text `\u000c`, not a form feed. The backslash is
   // escaped, so the sequence is content and has to survive as written.

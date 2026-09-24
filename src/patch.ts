@@ -1218,7 +1218,7 @@ function applyChanges(
 
     if (!changed) return entry;
 
-    const rebuilt = generateTableArray(entry.key.item.value);
+    const rebuilt = generateTableArray(entry.key.item.value, format.escapeSequenceUpperCase);
     for (const row of rows) insert(rebuilt, rebuilt, row);
     applyWrites(rebuilt);
     return rebuilt;
@@ -1352,7 +1352,7 @@ function applyChanges(
       if (jsValue !== undefined) {
         const freshValue = regenerateValue(jsValue, format);
         if (freshValue !== undefined) {
-          return generateKeyValue([...missing, ...child.key.value], freshValue);
+          return generateKeyValue([...missing, ...child.key.value], freshValue, false, format.escapeSequenceUpperCase);
         }
       }
     }
@@ -1481,7 +1481,7 @@ function applyChanges(
       }
     }
     if (isInlineTable(parent)) {
-      const keyValue = generateKeyValue((child.item as KeyValue).key.value, value);
+      const keyValue = generateKeyValue((child.item as KeyValue).key.value, value, false, format.escapeSequenceUpperCase);
       const regenerated = generateInlineItem(keyValue);
       regenerated.comma = child.comma;
       return regenerated;
@@ -1652,7 +1652,7 @@ function applyChanges(
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
-          const freshTableArray = generateTableArray(tableArrayKey);
+          const freshTableArray = generateTableArray(tableArrayKey, format.escapeSequenceUpperCase);
           const entryDoc = parseJS(jsValue, format);
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
@@ -1671,7 +1671,7 @@ function applyChanges(
               const keyNode = holder.item;
               const fullKey = tableArrayKey.concat(keyNode.value);
               keyNode.value = fullKey;
-              keyNode.raw = generateKey(fullKey).raw;
+              keyNode.raw = generateKey(fullKey, format.escapeSequenceUpperCase).raw;
               keyNode.loc.start.column = holder.loc.start.column + 1;
               keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
               holder.loc.end.column = keyNode.loc.start.column + keyNode.raw.length + 1;
@@ -2344,7 +2344,7 @@ function applyChanges(
           );
           if (matchLen > 0 && matchLen < existingKeyValue.key.value.length) {
             existingKeyValue.key.value = existingKeyValue.key.value.slice(0, matchLen);
-            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value).raw;
+            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value, format.escapeSequenceUpperCase).raw;
             const oldEndCol = existingKeyValue.key.loc.end.column;
             const newEndCol = existingKeyValue.key.loc.start.column + existingKeyValue.key.raw.length;
             const delta = newEndCol - oldEndCol;
@@ -2427,7 +2427,7 @@ function applyChanges(
           );
           if (matchLen > 0 && matchLen < existingKV.key.value.length) {
             existingKV.key.value = existingKV.key.value.slice(0, matchLen);
-            existingKV.key.raw = generateKey(existingKV.key.value).raw;
+            existingKV.key.raw = generateKey(existingKV.key.value, format.escapeSequenceUpperCase).raw;
             const oldEndCol = existingKV.key.loc.end.column;
             const newEndCol = existingKV.key.loc.start.column + existingKV.key.raw.length;
             const delta = newEndCol - oldEndCol;
@@ -2582,7 +2582,7 @@ function applyChanges(
                   removeMember(original, tableParent, existing);
                   commentEligibleNodes.add(freshKV);
                 } else {
-                  const newTable = generateTable(parentKey);
+                  const newTable = generateTable(parentKey, format.escapeSequenceUpperCase);
                   materialisedTables.add(newTable);
                   insert(original, newTable, freshKV, 0);
                   replace(original, tableParent, existing, newTable);
@@ -2730,7 +2730,7 @@ function applyChanges(
                 extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
                 commentEligibleNodes.add(freshKV);
               } else {
-                const newTable = generateTable(parentKey);
+                const newTable = generateTable(parentKey, format.escapeSequenceUpperCase);
                 materialisedTables.add(newTable);
                 insert(original, newTable, freshKV, 0);
                 replace(original, tableParent, existing, newTable);
@@ -2868,7 +2868,7 @@ function applyChanges(
                 // Rename the key in place (preserving original loc.start).
                 const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
                 aotKey.value = parentPath as string[];
-                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value);
+                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value, format.escapeSequenceUpperCase);
                 aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
                 aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
                 // Shrink loc.end to the header-only span.
@@ -2914,7 +2914,7 @@ function applyChanges(
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
-                const emptyTable = generateTable(parentPath as string[]);
+                const emptyTable = generateTable(parentPath as string[], format.escapeSequenceUpperCase);
                 materialisedTables.add(emptyTable);
                 // The removals above already spliced the document items, so a
                 // stale index (e.g. the removed entry was the last item) must
@@ -2963,7 +2963,7 @@ function applyChanges(
                 let value: any = rawUpdated;
                 for (const k of change.path.slice(0, -1)) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
-                  const emptyTable = generateTable(cstParentPath as string[]);
+                  const emptyTable = generateTable(cstParentPath as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   // Clamp to the post-removal items length — a stale last-item
                   // index inserts past the end and strands the generated
@@ -3064,7 +3064,7 @@ function applyChanges(
               const keyHolder = table.key;
               const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
               key.value = cstParentPath as string[];
-              key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+              key.raw = preserveEscapedKeyRaw(key.raw, key.value, format.escapeSequenceUpperCase);
               key.loc.end.column = key.loc.start.column + key.raw.length;
               keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
               // The body is gone — shrink table.loc to the header only.
@@ -3326,7 +3326,7 @@ function applyChanges(
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
-              const emptyTable = generateTable(cstParentKey as string[]);
+              const emptyTable = generateTable(cstParentKey as string[], format.escapeSequenceUpperCase);
               materialisedTables.add(emptyTable);
               // Insert at the original position so preceding comments
               // stay adjacent without a spurious blank line.  Clamp to the
@@ -3536,7 +3536,7 @@ function applyChanges(
                     : isTable(container)
                       ? (container as Table).key.item.value.concat(relativePrefix)
                       : relativePrefix;
-                  const emptyTable = generateTable(tableKey as string[]);
+                  const emptyTable = generateTable(tableKey as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
                   if (isAotEntry) {
@@ -3773,7 +3773,7 @@ function applyChanges(
           const segmentIndex = sourcePath.length - 1;
           const originalRaw = key.raw;
           key.value[segmentIndex] = change.to;
-          key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+          key.raw = preserveEscapedKeyRaw(key.raw, key.value, format.escapeSequenceUpperCase);
           preserveDottedKeySpacing(key, originalRaw);
           key.loc.end.column = key.loc.start.column + key.raw.length;
           return; // skip the rest of rename logic for this change
@@ -3815,7 +3815,7 @@ function applyChanges(
           const segmentIndex = fullSourcePath.length - 1;
           const originalRaw = parentKey.raw;
           parentKey.value[segmentIndex] = change.to;
-          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value, format.escapeSequenceUpperCase);
           preserveDottedKeySpacing(parentKey, originalRaw);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           return;
@@ -3829,7 +3829,7 @@ function applyChanges(
             arraysEqual(parentKey.value, fullSourcePath.slice(fullSourcePath.length - parentKey.value.length))) {
           const oldKeyRaw = parentKey.raw;
           parentKey.value[parentKey.value.length - 1] = change.to;
-          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value, format.escapeSequenceUpperCase);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           // The `=` position lives on the KeyValue, not the Key, and the value
           // keeps its own columns.  A rename that GROWS the last segment widens
@@ -3864,7 +3864,7 @@ function applyChanges(
       // Preserve key escape style from the original key raw when renaming.
       // Example: if the original key used "\\u263A", keep that escape form
       // instead of normalizing to the raw character (☺).
-      replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value);
+      replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value, format.escapeSequenceUpperCase);
       preserveDottedKeySpacing(replacementKey, parentKey.raw);
       replacementKey.loc.end.column = replacementKey.loc.start.column + replacementKey.raw.length;
 
@@ -4197,7 +4197,7 @@ function handleStructuralEdit(
               const oldRaw = row.key.raw;
               const dotted = tableKey.concat(row.key.value);
               row.key.value = dotted;
-              row.key.raw = generateKey(dotted).raw;
+              row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
               const delta = row.key.raw.length - oldRaw.length;
               row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
               row.equals += delta;
@@ -4673,7 +4673,7 @@ function convertNestedInlineTablesToMultiline(table: Table, original: Document, 
         // Only convert to separate table if depth is less than inlineTableStart
         if (depth < (format.inlineTableStart ?? 1) && format.inlineTableStart !== 0) {
           // Convert this inline table to a separate table section
-          const separateTable = generateTable(nestedTableKey);
+          const separateTable = generateTable(nestedTableKey, format.escapeSequenceUpperCase);
           
           // Move all items from the inline table to the separate table
           for (const inlineItem of item.value.items) {
@@ -4716,7 +4716,7 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
   // Convert the inline table to a separate table section
   const baseTableKey = parent.key.item.value; // Get the parent table's key path
   const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key
-  const separateTable = generateTable(nestedTableKey);
+  const separateTable = generateTable(nestedTableKey, format.escapeSequenceUpperCase);
   
   // We know child.value is an InlineTable from the calling context
   if (isInlineTable(child.value)) {

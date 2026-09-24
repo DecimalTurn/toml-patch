@@ -87,7 +87,8 @@ function* walkObject(
     yield generateKeyValue(
       [key],
       walkValue(value, format, depth, parentIsMultiline),
-      depth > 0 && !parentIsMultiline
+      depth > 0 && !parentIsMultiline,
+      format.escapeSequenceUpperCase
     );
   }
 }
