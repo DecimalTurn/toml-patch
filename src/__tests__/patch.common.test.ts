@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { parse } from '../';
+import { parse, stringify } from '../';
 import patchFull from '../patch';
 import { patch as patchLite } from '../patch-lite-entry';
 import { LocalDate, LocalDateTime, OffsetDateTime } from '../parse-toml';
@@ -646,6 +646,14 @@ describe.each(implementations)('Multiline string preservation (%s patch)', (_lab
     expect(patched).toEqual(
       '[package]\nname = "example"\ndescription = """\none\\rtwo"""\nversion = "1.0.0"\n'
     );
+
+    // stringify() has no source to preserve, so it writes a basic string, and the
+    // carriage return has to be escaped there too.
+    const reparsed = parse(patched);
+    expect(stringify(reparsed)).toBe(
+      '[package]\nname = "example"\ndescription = "one\\rtwo"\nversion = "1.0.0"\n'
+    );
+    expect(parse(stringify(reparsed))).toEqual(reparsed);
   });
 
   test('should handle conversion from regular string to multiline string format preserved', () => {
