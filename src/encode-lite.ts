@@ -2,6 +2,7 @@ import { isFloat as isFloatNode } from './cst';
 import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 import { PatchLiteError, formatPath, Path } from './diff-lite';
 import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
+import { isNegativeNan } from './utils';
 
 /**
  * Encodes a JavaScript leaf value as valid TOML, independent of the full
@@ -129,7 +130,10 @@ function encodeExponentFloat(value: number, existingRaw: string): string {
 }
 
 function encodeNonFinite(value: number): string {
-  if (Number.isNaN(value)) return 'nan';
+  // `-nan` is a distinct TOML spelling that round-trips, so the sign has to be
+  // written out; emitting a plain `nan` would make the value look changed again
+  // on the next call.
+  if (Number.isNaN(value)) return isNegativeNan(value) ? '-nan' : 'nan';
   return value > 0 ? 'inf' : '-inf';
 }
 

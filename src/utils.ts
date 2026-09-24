@@ -27,6 +27,18 @@ export function sameValue(a: any, b: any): boolean {
   return a === b && (typeof a !== 'number' || Object.is(a, b));
 }
 
+/**
+ * Detects a negative NaN through its IEEE 754 sign bit.
+ *
+ * Arithmetic cannot tell the two apart, but `-nan` is a distinct TOML spelling
+ * that round-trips, so the bit pattern is the only way to recognise it.
+ */
+export function isNegativeNan(value: number): boolean {
+  if (!Number.isNaN(value)) return false;
+  const view = new DataView(new Float64Array([value]).buffer);
+  return (view.getUint32(4, true) & 0x80000000) !== 0;
+}
+
 export function isString(value: any): value is string {
   return typeof value === 'string';
 }
