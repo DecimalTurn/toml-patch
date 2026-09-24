@@ -238,12 +238,6 @@ describe('edits', () => {
     expect(patch(existing, { s: 'a"b\\c\nd' })).toBe('s = "a\\"b\\\\c\\nd"\n');
   });
 
-  test('encodes non-finite numbers', () => {
-    expect(patch('x = 1.0\n', { x: Infinity })).toBe('x = inf\n');
-    expect(patch('x = 1.0\n', { x: -Infinity })).toBe('x = -inf\n');
-    expect(patch('x = 1.0\n', { x: NaN })).toBe('x = nan\n');
-  });
-
   test('classifies unsafe integer-valued numbers as floats', () => {
     const existing = 'count = 5\n';
     const updated = { count: 1e21 };

@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { parse } from '../';
 import patchFull from '../patch';
 import { patch as patchLite } from '../patch-lite-entry';
+import { LocalDate, LocalDateTime, OffsetDateTime } from '../parse-toml';
 
 /**
  * Tests that must behave identically for both the full `patch()` and the
@@ -19,6 +20,8 @@ import { patch as patchLite } from '../patch-lite-entry';
  *   underscore grouping)
  * - string format preservation (basic and literal, single-line and multiline)
  * - mandatory control-character escaping
+ * - date/time value edits
+ * - bigint and non-finite number handling
  */
 const implementations: Array<[string, (src: string, obj: any) => string]> = [
   ['full', patchFull],
@@ -837,5 +840,298 @@ describe.each(implementations)('Mandatory escape characters through patch (%s pa
     const patched = patch(existing, obj);
     expect(patched).toBe('msg = """back\\bspace"""\n');
     expect(parse(patched).msg).toEqual('back\x08space');
+  });
+});
+
+describe.each(implementations)('Date/time value edits (%s patch)', (_label, patch) => {
+  test('should patch date by increasing it by one day', () => {
+    const existing = dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-15T10:30:00Z
+
+    [settings]
+    enabled = true
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const currentDate = value.created_date as Date;
+    const nextDay = new Date(currentDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    value.created_date = nextDay;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Configuration with date
+    name = "Test App"
+    created_date = 2024-01-16T10:30:00Z
+
+    [settings]
+    enabled = true
+    ` + '\n');
+  });
+
+  test('should patch date field from example toml', () => {
+    const existing = dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-27T07:32:00Z # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const currentDob = value.owner.dob as Date;
+    const nextDay = new Date(currentDob);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    value.owner.dob = nextDay;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    title = "TOML Example"
+
+    [owner]
+    name = "Tom Preston-Werner"
+    dob = 1979-05-28T07:32:00Z # First class dates? Why not?
+
+    [database]
+    enabled = true
+    ` + '\n');
+  });
+
+  test('should patch date-only field by increasing it by one day', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-15
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const currentDate = value.start_date as Date;
+    const nextDayTime = currentDate.getTime() + 24 * 60 * 60 * 1000;
+    const nextDayStr = new Date(nextDayTime).toISOString().split('T')[0];
+    const nextDay = new LocalDate(nextDayStr);
+
+    value.start_date = nextDay;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_date = 2024-01-16
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch local datetime with T separator', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const currentDateTime = value.start_datetime as Date;
+    const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+    const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '');
+    const nextDay = new LocalDateTime(nextDayISO, false);
+
+    value.start_datetime = nextDay;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch local datetime with space separator', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const currentDateTime = value.start_datetime as Date;
+    const nextDayTime = currentDateTime.getTime() + 24 * 60 * 60 * 1000;
+    const nextDayISO = new Date(nextDayTime).toISOString().replace('Z', '').replace('T', ' ');
+    const nextDay = new LocalDateTime(nextDayISO, true);
+
+    value.start_datetime = nextDay;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch offset datetime with space separator', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00Z
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const newDateTime = new OffsetDateTime('2024-01-16 10:30:00Z', true);
+
+    value.start_datetime = newDateTime;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00Z
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch offset datetime with T separator and timezone offset', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00-07:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const newDateTime = new OffsetDateTime('2024-01-16T10:30:00-07:00', false);
+    value.start_datetime = newDateTime;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T10:30:00-07:00
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch offset datetime with space separator and timezone offset', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15 10:30:00+05:30
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const newDateTime = new OffsetDateTime('2024-01-16 10:30:00+05:30', true);
+    value.start_datetime = newDateTime;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16 10:30:00+05:30
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+
+  test('should patch offset datetime with milliseconds and preserve precision', () => {
+    const existing = dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-15T10:30:00.500Z
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n';
+
+    const value = parse(existing);
+
+    const newDateTime = new OffsetDateTime('2024-01-16T14:30:00.750Z', false);
+    value.start_datetime = newDateTime;
+
+    const patched = patch(existing, value);
+
+    expect(patched).toEqual(dedent`
+    # Event configuration
+    event_name = "Annual Conference"
+    start_datetime = 2024-01-16T14:30:00.750Z
+
+    [venue]
+    name = "Convention Center"
+    ` + '\n');
+  });
+});
+
+describe.each(implementations)('BigInt handling (%s patch)', (_label, patch) => {
+  test('should not throw on document containing integer outside safe range', () => {
+    const src = 'id = 9223372036854775807\n';
+    expect(() => patch(src, parse(src))).not.toThrow();
+  });
+
+  test('should not throw on unrelated edit with bigint in document', () => {
+    const src = 'id = 9223372036854775807\nname = "x"\n';
+    const o = parse(src);
+    o.name = 'y';
+    expect(() => patch(src, o)).not.toThrow();
+    const result = patch(src, o);
+    expect(result).toContain('name = "y"');
+    expect(result).toContain('id = 9223372036854775807');
+  });
+});
+
+describe.each(implementations)('Non-finite numbers (%s patch)', (_label, patch) => {
+  test('encodes non-finite numbers', () => {
+    expect(patch('x = 1.0\n', { x: Infinity })).toBe('x = inf\n');
+    expect(patch('x = 1.0\n', { x: -Infinity })).toBe('x = -inf\n');
+    expect(patch('x = 1.0\n', { x: NaN })).toBe('x = nan\n');
   });
 });
