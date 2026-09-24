@@ -643,8 +643,13 @@ describe.each(implementations)('Multiline string preservation (%s patch)', (_lab
     const patched = patch(existing, obj);
 
     expect(parse(patched)).toEqual(obj);
-    expect(patched).toEqual(
-      '[package]\nname = "example"\ndescription = """\none\\rtwo"""\nversion = "1.0.0"\n'
+    expect(patched).toEqual([
+      '[package]' + '\n' + 
+      'name = "example"' + '\n' +
+      'description = """' + '\n' +
+      'one\\rtwo"""' + '\n' +
+      'version = "1.0.0"' + '\n'
+    ].join(''),
     );
 
     // stringify() has no source to preserve, so it writes a basic string, and the
