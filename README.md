@@ -169,6 +169,7 @@ class TomlFormat {
   minimumDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
+  commentOwnership?: boolean
   multilineTable: boolean | number | 'auto' | 'parent'
   multilineArray: boolean | number | 'auto' | 'parent'
 

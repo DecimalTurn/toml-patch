@@ -822,6 +822,81 @@ describe('updateOrder option wiring (docs/PLAN-Update-Order.md)', () => {
   });
 });
 
+describe('commentOwnership option wiring (docs/PLAN-CommentOwnership-Option.md)', () => {
+  test('defaults to true when the option is unset', () => {
+    expect(TomlFormat.default().commentOwnership).toBe(true);
+    expect(new TomlFormat().commentOwnership).toBe(true);
+    expect(resolveTomlFormat({}, TomlFormat.default()).commentOwnership).toBe(true);
+  });
+
+  test('resolveTomlFormat threads commentOwnership through as the constructor\'s 15th positional argument', () => {
+    // Guards the hazard the plan calls out: a positional-argument mistake here would
+    // silently resolve to the WRONG option's value instead of commentOwnership's.
+    const fallback = TomlFormat.default();
+    expect(resolveTomlFormat({ commentOwnership: true }, fallback).commentOwnership).toBe(true);
+    expect(resolveTomlFormat({ commentOwnership: false }, fallback).commentOwnership).toBe(false);
+    expect(resolveTomlFormat({}, fallback).commentOwnership).toBe(fallback.commentOwnership);
+  });
+
+  test('resolveTomlFormat falls back to the fallback format\'s commentOwnership when unset', () => {
+    const fallback = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, false);
+    expect(fallback.commentOwnership).toBe(false);
+    expect(resolveTomlFormat({ inlineTableStart: 2 }, fallback).commentOwnership).toBe(false);
+  });
+
+  test('indentWidth still occupies the 11th positional constructor argument', () => {
+    // Appending commentOwnership must not shift indentWidth from position 11.
+    const format = new TomlFormat(
+      undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined,
+      4,               // indentWidth (11th)
+      'parent',        // multilineTable
+      false,           // multilineArray
+      undefined,       // escapeSequenceUpperCase
+      false            // commentOwnership
+    );
+    expect(format.indentWidth).toBe(4);
+    expect(format.multilineTable).toBe('parent');
+    expect(format.multilineArray).toBe(false);
+    expect(format.commentOwnership).toBe(false);
+    expect(format.updateOrder).toBe(false);
+  });
+
+  test('an already-constructed TomlFormat instance passes through resolveTomlFormat unchanged', () => {
+    const instance = new TomlFormat(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, false);
+    expect(resolveTomlFormat(instance, TomlFormat.default())).toBe(instance);
+  });
+
+  test('validateFormatObject accepts a boolean and rejects a non-boolean', () => {
+    expect(validateFormatObject({ commentOwnership: true })).toEqual({ commentOwnership: true });
+    expect(validateFormatObject({ commentOwnership: false })).toEqual({ commentOwnership: false });
+    expect(() => validateFormatObject({ commentOwnership: 'yes' })).toThrow(TypeError);
+    expect(() => validateFormatObject({ commentOwnership: 'yes' })).toThrow(/commentOwnership/);
+  });
+
+  test('autoDetectFormatWithCst always resolves commentOwnership to true', () => {
+    expect(autoDetectFormat('a = 1\nb = 2\n').commentOwnership).toBe(true);
+    expect(autoDetectFormat('[a]\nx = 1\n\n[b]\ny = 2\n').commentOwnership).toBe(true);
+  });
+
+  test('a plain patch() call with no format argument never warns about commentOwnership', () => {
+    // Regression guard: forgetting commentOwnership in validateFormatObject's schema
+    // would make it land in `unsupported` and warn on EVERY patch() call.
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    patch('a = 1\n', { a: 1, b: 2 });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test('stringify accepts the field and its output is byte-identical to omitting it', () => {
+    const without = stringify({ a: 1 });
+    const withTrue = stringify({ a: 1 }, { commentOwnership: true });
+    const withFalse = stringify({ a: 1 }, { commentOwnership: false });
+    expect(withTrue).toBe(without);
+    expect(withFalse).toBe(without);
+  });
+});
+
 // Before this moved into resolveTomlFormat, only patch() normalized newLine.
 // stringify() took the raw value, so `{ newLine: 'LF' }` wrote the literal text
 // "LF" between lines and `{ newLine: '\r' }` produced TOML that cannot parse,

@@ -18,6 +18,7 @@ class TomlFormat {
   leadingBom: boolean
   escapeSequenceUpperCase: boolean
   updateOrder?: boolean
+  commentOwnership?: boolean
   multilineTable: boolean | number | 'auto' | 'parent'
   multilineArray: boolean | number | 'auto' | 'parent'
 
@@ -444,6 +445,19 @@ key = "value"
 ```
 
 Some shapes are not reordered yet: the interiors of inline tables (`{ a = 1, b = 2 }`) and `[[array-of-tables]]` entries, dotted-key implicit tables, and documents where a table's sub-tables are non-contiguous (`[a]`, `[b]`, `[a.c]`). In each case, the affected entry is left where it was and `patch()` emits a `console.warn` naming what it could not place.
+
+### `commentOwnership`
+
+- **Type:** `boolean` (optional)
+- **Default:** `true`
+- **Description:** Whether `patch()` lets each removed or moved entry's owned comments travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed or inline-moved entry leaves its comments behind in its old position. Section-level reordering via `updateOrder` still carries a reordered section's comment run even when this is `false`.
+
+This option only affects `patch()` and is never auto-detected, always resolving to `true`.
+
+```js
+patch(existing, value, { commentOwnership: false });
+// a removed key leaves its leading comment block behind
+```
 
 ### `escapeSequenceUpperCase`
 

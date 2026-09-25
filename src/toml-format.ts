@@ -13,6 +13,7 @@ export const DEFAULT_INDENT_WIDTH = 2;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
 export const DEFAULT_UPDATE_ORDER = false;
+export const DEFAULT_COMMENT_OWNERSHIP = true;
 export const DEFAULT_MULTILINE_TABLE = 'auto';
 export const DEFAULT_MULTILINE_ARRAY = 'auto';
 export const DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE = true;
@@ -445,6 +446,7 @@ export function validateFormatObject(format: any): any {
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     updateOrder: isBool,
+    commentOwnership: isBool,
     multilineTable: isMultilineContainerMode,
     multilineArray: isMultilineContainerMode,
     escapeSequenceUpperCase: isBool,
@@ -518,6 +520,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.multilineTable ?? fallbackFormat.multilineTable,
         validatedFormat.multilineArray ?? fallbackFormat.multilineArray,
         validatedFormat.escapeSequenceUpperCase ?? fallbackFormat.escapeSequenceUpperCase,
+        validatedFormat.commentOwnership ?? fallbackFormat.commentOwnership,
       );
     }
   } else {
@@ -646,6 +649,22 @@ export class TomlFormat {
   updateOrder?: boolean;
 
   /**
+   * Whether `patch()` should let each entry's owned comments travel with it
+   * when an entry is removed or moved (see docs/CommentOwnership.md).
+   *
+   * On by default. With `commentOwnership: false`, removing or moving an entry
+   * leaves its comments behind to describe whatever ends up occupying that
+   * spot, which is the legacy behavior predating explicit comment ownership.
+   * Section-level reordering via `updateOrder` still carries a reordered
+   * section's contiguous comment run even when this is `false`.
+   *
+   * Not auto-detectable — the existing document's layout says nothing about
+   * the caller's intent, so `autoDetectFormatWithCst` always resolves this to
+   * `true`.
+   */
+  commentOwnership?: boolean;
+
+  /**
    * Whether newly generated inline tables should use multiline layout.
    *
    * `true` and `false` select a layout directly. A non-negative integer selects
@@ -688,7 +707,8 @@ export class TomlFormat {
     indentWidth?: number,
     multilineTable?: MultilineContainerMode | null,
     multilineArray?: MultilineContainerMode | null,
-    escapeSequenceUpperCase?: boolean
+    escapeSequenceUpperCase?: boolean,
+    commentOwnership?: boolean
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine == null ? DEFAULT_NEWLINE : normalizeNewLine(newLine);
@@ -705,6 +725,7 @@ export class TomlFormat {
     this.multilineTable = multilineTable ?? DEFAULT_MULTILINE_TABLE;
     this.multilineArray = multilineArray ?? DEFAULT_MULTILINE_ARRAY;
     this.escapeSequenceUpperCase = escapeSequenceUpperCase ?? DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE;
+    this.commentOwnership = commentOwnership ?? DEFAULT_COMMENT_OWNERSHIP;
   }
 
   /**
@@ -721,6 +742,7 @@ export class TomlFormat {
    *   - useTabsForIndentation: false
    *   - minimumDecimals: 0
    *   - updateOrder: false
+   *   - commentOwnership: true
    */
   static default(): TomlFormat {
     return new TomlFormat(
@@ -737,7 +759,8 @@ export class TomlFormat {
       DEFAULT_INDENT_WIDTH,
       DEFAULT_MULTILINE_TABLE,
       DEFAULT_MULTILINE_ARRAY,
-      DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE
+      DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE,
+      DEFAULT_COMMENT_OWNERSHIP
     );
   }
 
@@ -829,6 +852,10 @@ export class TomlFormat {
     // updateOrder uses default value (false) as well — the existing document's order says
     // nothing about the caller's intent, so this is never auto-detected.
     format.updateOrder = DEFAULT_UPDATE_ORDER;
+
+    // commentOwnership uses default value (true) as well — the existing document's layout
+    // says nothing about the caller's intent, so this is never auto-detected.
+    format.commentOwnership = DEFAULT_COMMENT_OWNERSHIP;
 
     // Multiline container layout is caller intent, so it is never auto-detected.
     format.multilineTable = DEFAULT_MULTILINE_TABLE;

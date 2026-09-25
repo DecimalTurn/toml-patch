@@ -445,8 +445,20 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
  * parser filed under the PRECEDING sibling table but which R5 assigns to
  * `member` instead. Falls back to a plain removal when `parent` isn't a
  * container the ownership model applies to (e.g. InlineTable/InlineArray).
+ *
+ * Passing `commentOwnership = false` skips the ownership model entirely and
+ * routes straight to the plain `remove()` primitive, leaving `member`'s owned
+ * comments behind (legacy behavior).
  */
-export function removeMember(root: Root, parent: TreeNode, member: TreeNode): void {
+export function removeMember(root: Root, parent: TreeNode, member: TreeNode, commentOwnership = true): void {
+  // `commentOwnership: false` restores the legacy pre-ownership behavior: the
+  // member is removed via the plain primitive and its owned comments are left
+  // behind to describe whatever ends up occupying that spot.
+  if (!commentOwnership) {
+    remove(root, parent, member);
+    return;
+  }
+
   if (isDocument(parent) && (isTable(member) || isTableArray(member))) {
     const index = (parent.items as TreeNode[]).indexOf(member);
     const previousSibling = index > 0 ? parent.items[index - 1] : undefined;
@@ -568,8 +580,13 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
  * comment(s) are detached before the move and re-attached afterward, based
  * on how far *that specific element* actually shifted — which may differ
  * from how far `node` itself moved, or be zero.
+ *
+ * Passing `commentOwnership = false` keeps the structural move machinery
+ * (offset flushing, tail realignment, anchored-descendant restoration) but
+ * skips only the comment detach/reattach steps, so any owned comments are
+ * left at their old absolute position (legacy behavior).
  */
-export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number): void {
+export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number, commentOwnership = true): void {
   let sharedLineContainerBeforeMove = false;
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
@@ -693,7 +710,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
             nodeInnerEnd = clonePosition(node.item.loc.end);
           }
           collectAnchored(isInlineItem(node) ? node.item : node, nodeOwnStart.line);
-          if (comments.length) {
+          if (commentOwnership && comments.length) {
             // Extend node's own loc to the full group span so the bare
             // remove()+insert() below accounts for the combined height —
             // matters for a leading, separate-line comment; a no-op for a
@@ -704,7 +721,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           }
         }
 
-        if (!comments.length) continue;
+        if (!commentOwnership || !comments.length) continue;
         detached.push({ owner: group.member, ownerOriginalStart: clonePosition(group.member.loc.start), comments });
         for (const comment of comments) {
           const idx = (hostContainer.items as TreeNode[]).indexOf(comment);
@@ -813,31 +830,33 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
-      for (const { owner, ownerOriginalStart, comments } of detached) {
-        let delta: { lines: number; columns: number };
-        if (owner === node) {
-          // node.loc is still the (possibly extended) relocated group span;
-          // derive the shift from that, then restore node's own bare span.
-          delta = {
-            lines: node.loc.start.line - ownerOriginalStart.line,
-            columns: node.loc.start.column - ownerOriginalStart.column
-          };
-          node.loc.start = { line: nodeOwnStart!.line + delta.lines, column: nodeOwnStart!.column + delta.columns };
-          node.loc.end = { line: nodeOwnEnd!.line + delta.lines, column: nodeOwnEnd!.column + delta.columns };
-        } else {
-          delta = {
-            lines: owner.loc.start.line - ownerOriginalStart.line,
-            columns: owner.loc.start.column - ownerOriginalStart.column
-          };
-        }
+      if (commentOwnership) {
+        for (const { owner, ownerOriginalStart, comments } of detached) {
+          let delta: { lines: number; columns: number };
+          if (owner === node) {
+            // node.loc is still the (possibly extended) relocated group span;
+            // derive the shift from that, then restore node's own bare span.
+            delta = {
+              lines: node.loc.start.line - ownerOriginalStart.line,
+              columns: node.loc.start.column - ownerOriginalStart.column
+            };
+            node.loc.start = { line: nodeOwnStart!.line + delta.lines, column: nodeOwnStart!.column + delta.columns };
+            node.loc.end = { line: nodeOwnEnd!.line + delta.lines, column: nodeOwnEnd!.column + delta.columns };
+          } else {
+            delta = {
+              lines: owner.loc.start.line - ownerOriginalStart.line,
+              columns: owner.loc.start.column - ownerOriginalStart.column
+            };
+          }
 
-        for (const comment of comments) {
-          shiftNode(comment, delta);
-          const insertAt = (hostContainer.items as TreeNode[]).findIndex(
-            item => item.loc.start.line > comment.loc.start.line
-          );
-          if (insertAt === -1) (hostContainer.items as TreeNode[]).push(comment);
-          else (hostContainer.items as TreeNode[]).splice(insertAt, 0, comment);
+          for (const comment of comments) {
+            shiftNode(comment, delta);
+            const insertAt = (hostContainer.items as TreeNode[]).findIndex(
+              item => item.loc.start.line > comment.loc.start.line
+            );
+            if (insertAt === -1) (hostContainer.items as TreeNode[]).push(comment);
+            else (hostContainer.items as TreeNode[]).splice(insertAt, 0, comment);
+          }
         }
       }
 

@@ -318,6 +318,25 @@ It does not yet apply to:
   t = { xs = [...] }
   ```
 
+## Disabling ownership (`commentOwnership: false`)
+
+Ownership is on by default. Passing `commentOwnership: false` to `patch()` restores the legacy
+pre-ownership behavior for the deletion and inline-move paths: a removed or moved entry leaves its
+owned comments in place instead of taking them along.
+
+The opt-out is bounded:
+
+- Deleted entries (`removeMember`) route to the plain removal primitive, which still applies its
+  own same-line trailing comment absorption. A leading own-line comment block is left behind.
+- Moved elements inside a multi-line array or inline table (`moveInlineElement`) keep the
+  structural move machinery but skip the comment detach/reattach steps, so a leading comment is
+  stranded at its old position rather than carried with the element.
+- Section-level reordering via `updateOrder` is untouched: with `updateOrder: true` and
+  `commentOwnership: false`, a reordered section still carries its contiguous comment run.
+  Non-carrying reorder is a separate, not-yet-implemented concern.
+
+The option is not auto-detectable; `autoDetectFormatWithCst` always resolves it to `true`.
+
 ## Implementation
 
 The model lives in `src/comment-ownership.ts`:

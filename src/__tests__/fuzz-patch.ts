@@ -378,6 +378,7 @@ export function randomTomlFormat(
   format.trailingComma = rng.chance(0.5);
   format.bracketSpacing = rng.chance(0.5);
   format.updateOrder = rng.chance(0.5);
+  format.commentOwnership = rng.chance(0.5);
 
   // trailingNewline: 0, 1, 2
   const tnRoll = rng.next();
