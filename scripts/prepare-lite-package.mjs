@@ -1,3 +1,12 @@
+/**
+ * Builds the standalone lite package: same package name and version, but with
+ * the edit-only build as its root export, published under the `lite` dist-tag.
+ *
+ * It deliberately ships no README. npm attaches the README found in the
+ * published directory, and a second introduction on the same package page
+ * would be more confusing than helpful: the main README already documents the
+ * lite build (install, signature, the operations it rejects).
+ */
 import {
   mkdirSync,
   readFileSync,
