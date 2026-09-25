@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { parse, patch, stringify } from '../';
 import { isNegativeNan, stableStringify } from '../utils';
 
@@ -43,19 +44,33 @@ test('the stable form keeps the sign of a NaN apart', () => {
  * finish; the loops below are only there to pin the read that carries it.
  */
 test('round-trips a negative NaN that came from a document', () => {
-  const document = 'temperature = -nan\nretries = 3\n';
+  const document = dedent`
+    temperature = -nan
+    retries = 3
+    ` + '\n';
 
   // Editing an unrelated key has to leave the sentinel alone.
   const config = parse(document) as any;
+  expect(isNegativeNan(config.temperature)).toBe(true);
+
   config.retries = 4;
-  expect(stringify(config)).toBe('temperature = -nan\nretries = 4\n');
-  expect(isNegativeNan(parse('temperature = -nan\n').temperature)).toBe(true);
+  expect(stringify(config)).toEqual(dedent`
+    temperature = -nan
+    retries = 4
+    ` + '\n');
 
   // Handing the parsed value to another document keeps the spelling too.
+  const target = dedent`
+    temperature = 0.0
+    retries = 1
+    ` + '\n';
+
   const next = parse(document) as any;
   next.retries = 1;
-  expect(patch('temperature = 0.0\nretries = 1\n', next))
-    .toBe('temperature = -nan\nretries = 1\n');
+  expect(patch(target, next)).toEqual(dedent`
+    temperature = -nan
+    retries = 1
+    ` + '\n');
 });
 
 test('keeps writing a negative NaN as -nan', () => {
