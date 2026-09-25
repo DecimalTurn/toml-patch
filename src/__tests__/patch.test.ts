@@ -5,6 +5,7 @@ import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-to
 import { example } from '../__fixtures__';
 import dedent from 'dedent';
 import { TomlFormat } from '../toml-format';
+import { isNegativeNan } from '../utils';
 
 test('it should apply edit to key-value', () => {
   const value = parse(example);
@@ -6350,11 +6351,8 @@ describe('identity round-trip normalizations', () => {
     const parsed = parse('a = -nan\n');
     expect(Number.isNaN(parsed.a)).toBe(true);
 
-    // Verify it's negative NaN by checking the IEEE 754 sign bit
-    const buf = new Float64Array([parsed.a]);
-    const view = new DataView(buf.buffer);
-    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
-    expect(highBits & 0x80000000).not.toBe(0); // sign bit set
+    // Verify it is negative NaN by checking the IEEE 754 sign bit
+    expect(isNegativeNan(parsed.a)).toBe(true);
 
     // And round-trip should preserve the `-nan` spelling
     const result = patch('a = -nan\n', parsed);

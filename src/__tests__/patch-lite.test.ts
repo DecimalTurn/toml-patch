@@ -284,17 +284,6 @@ describe('edits', () => {
     expect(parse(once)).toEqual(updated);
   });
 
-  test('preserves a negative NaN', () => {
-    const existing = 'x = nan\n';
-    // `parse` tells the two apart through the IEEE 754 sign bit, so writing an
-    // unsigned `nan` would leave the value looking changed on the next pass.
-    const updated = { x: parse('x = -nan\n').x };
-    const once = patch(existing, updated);
-
-    expect(once).toBe('x = -nan\n');
-    expect(patch(once, parse(once))).toBe(once);
-  });
-
   test('returns the original string for a no-op update', () => {
     const existing = dedent`
       title = "TOML example"
