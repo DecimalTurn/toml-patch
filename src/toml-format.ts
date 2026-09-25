@@ -684,7 +684,7 @@ export class TomlFormat {
     useTabsForIndentation?: boolean,
     minimumDecimals?: number,
     leadingBom?: boolean,
-      updateOrder?: boolean,
+    updateOrder?: boolean,
     indentWidth?: number,
     multilineTable?: MultilineContainerMode | null,
     multilineArray?: MultilineContainerMode | null,
