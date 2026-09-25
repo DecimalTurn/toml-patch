@@ -331,9 +331,10 @@ The opt-out is bounded:
 - Moved elements inside a multi-line array or inline table (`moveInlineElement`) keep the
   structural move machinery but skip the comment detach/reattach steps, so a leading comment is
   stranded at its old position rather than carried with the element.
-- Section-level reordering via `updateOrder` is untouched: with `updateOrder: true` and
-  `commentOwnership: false`, a reordered section still carries its contiguous comment run.
-  Non-carrying reorder is a separate, not-yet-implemented concern.
+- Section-level reordering via `updateOrder` is disabled: with `updateOrder: true` and
+  `commentOwnership: false`, the reorder is a no-op and keys keep their original order. Reordering
+  carries each entry's comments with it, so with ownership off there is no way to honor the
+  request without stranding comments away from their keys.
 
 The option is not auto-detectable; `autoDetectFormatWithCst` always resolves it to `true`.
 

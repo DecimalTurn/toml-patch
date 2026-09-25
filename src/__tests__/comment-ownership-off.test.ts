@@ -166,9 +166,10 @@ describe('commentOwnership: false on inline table element removal', () => {
 });
 
 describe('commentOwnership: false with updateOrder', () => {
-  test('a reordered key still carries its comment run (applyKeyOrderMoves stays ownership-aware)', () => {
-    // The opt-out targets only the deletion and inline-move paths. Section-level
-    // slot moves via updateOrder are untouched, so the comment still travels.
+  test('updateOrder has no effect: keys keep their original order and comments stay put', () => {
+    // Reordering carries each entry's owned comments with it, so with ownership
+    // off the reorder is a no-op rather than stranding comments away from their
+    // keys. Neither the key order nor any comment changes.
     const input = dedent`
       # leads a
       a = 1 # trail a
@@ -177,10 +178,6 @@ describe('commentOwnership: false with updateOrder', () => {
 
     const result = patch(input, { b: 2, a: 1 }, { updateOrder: true, commentOwnership: false });
 
-    expect(result).toEqual(dedent`
-      b = 2
-      # leads a
-      a = 1 # trail a
-    ` + '\n');
+    expect(result).toBe(input);
   });
 });

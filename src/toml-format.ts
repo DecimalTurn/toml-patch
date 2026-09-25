@@ -653,10 +653,10 @@ export class TomlFormat {
    * when an entry is removed or moved (see docs/CommentOwnership.md).
    *
    * On by default. With `commentOwnership: false`, removing or moving an entry
-   * leaves its comments behind to describe whatever ends up occupying that
-   * spot, which is the legacy behavior predating explicit comment ownership.
-   * Section-level reordering via `updateOrder` still carries a reordered
-   * section's contiguous comment run even when this is `false`.
+   * leaves its comments behind instead of taking them along. Section-level
+   * reordering via `updateOrder` is disabled entirely in that case: reordering
+   * carries each entry's comments with it, so with ownership off the reorder is
+   * a no-op and keys keep their original order.
    *
    * Not auto-detectable — the existing document's layout says nothing about
    * the caller's intent, so `autoDetectFormatWithCst` always resolves this to

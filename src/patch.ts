@@ -3980,7 +3980,13 @@ function applyChanges(
 
   // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
   // patched object's key order. Must run last — see the comment on objectMoves above.
-  applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+  //
+  // With `commentOwnership: false` the reorder is a no-op: reordering carries each entry's
+  // owned comments with it, which the opt-out forbids, and leaving comments stranded while
+  // their keys move would corrupt the comment-key association.
+  if (format.commentOwnership !== false) {
+    applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+  }
   if (objectMoves.length > 0) markDirty(original);
   if (replacedInlineArrays.size > 0) {
     applyWrites(original);

@@ -450,7 +450,7 @@ Some shapes are not reordered yet: the interiors of inline tables (`{ a = 1, b =
 
 - **Type:** `boolean` (optional)
 - **Default:** `true`
-- **Description:** Whether `patch()` lets each removed or moved entry's owned comments travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed or inline-moved entry leaves its comments behind in its old position. Section-level reordering via `updateOrder` still carries a reordered section's comment run even when this is `false`.
+- **Description:** Whether `patch()` lets each removed or moved entry's owned comments travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed or inline-moved entry leaves its comments behind in its old position. Section-level reordering via `updateOrder` is disabled in that case, so keys keep their original order.
 
 This option only affects `patch()` and is never auto-detected, always resolving to `true`.
 
