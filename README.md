@@ -16,6 +16,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
 
 - [Installation](#installation)
 - [API](#api)
+- [Patch-lite](#patch-lite)
 - [Comment ownership](#comment-ownership)
 - [Date/time handling and Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
@@ -31,6 +32,12 @@ toml-patch is dependency-free and can be installed via your favorite package man
 
 ```
 $ npm install --save @decimalturn/toml-patch
+```
+
+For the standalone lite distribution, install the `lite` npm dist-tag:
+
+```sh
+$ npm install --save @decimalturn/toml-patch@lite
 ```
 
 For browser usage, you can use unpkg:
@@ -58,6 +65,30 @@ const updated = patch(existing, {
   title: 'TOML example',
   owner: { name: 'Tim' }
 });
+```
+
+## Patch-lite
+
+The `patch-lite` subpath is a smaller, edit-only distribution for applications that only need to update existing TOML values, such as bumping a package version. It exposes the same `patch` name with a two-argument `(existing, updated)` signature:
+
+```js
+import { patch } from '@decimalturn/toml-patch/patch-lite';
+
+const existing = 'version = "1.0.0"\n';
+const updated = patch(existing, { version: '1.0.1' });
+// updated === 'version = "1.0.1"\n'
+```
+
+The lite function edits existing primitive values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, primitive/container type changes and unsupported value types throw before any output is produced. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
+
+Unlike the full `patch()`, the lite distribution performs no encoding validation on its output: it does not reject strings containing unpaired UTF-16 surrogates, which cannot be represented as valid TOML/UTF-8. Use the full `patch()` when this validation is required.
+
+The [Patch-lite guide](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Patch-Lite.md) lists every supported and rejected operation with its error code, the value-encoding rules that differ from the full `patch()`, and the measured size and throughput, so you can check whether the lite distribution covers your use case.
+
+The lite distribution is also published as a standalone package under the `lite` npm dist-tag:
+
+```sh
+npm install @decimalturn/toml-patch@lite
 ```
 
 ## Comment Ownership

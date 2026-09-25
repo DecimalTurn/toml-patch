@@ -138,11 +138,17 @@ describe('randomToml', () => {
   });
 
   test('should generate different node types', () => {
-    // Run many iterations and ensure we see variety
+    // Sample 100 unique seeds derived from a single random base, so each run
+    // explores a fresh seed range while a failure can still be reproduced from
+    // the reported base seed. Sampling 100 independent Date.now() seeds would
+    // collide in this fast loop (millisecond resolution) and only cover a
+    // handful of unique documents, which is what made this test flaky.
+    const seedCount = 100;
+    const baseSeed = Date.now();
     const foundTypes = new Set<string>();
 
-    for (let i = 0; i < 100; i++) {
-      const result = randomToml();
+    for (let i = 0; i < seedCount; i++) {
+      const result = randomToml({ seed: baseSeed + i });
       const toml = result.toml;
 
       if (toml.includes('"""')) foundTypes.add('ml-basic-string');
@@ -171,11 +177,16 @@ describe('randomToml', () => {
       if (toml.includes('#')) foundTypes.add('comment');
     }
 
-    // We should see at least these common types
-    expect(foundTypes.has('boolean')).toBe(true);
-    expect(foundTypes.has('datetime')).toBe(true);
-    expect(foundTypes.has('comment')).toBe(true);
-    expect(foundTypes.has('ml-basic-string')).toBe(true);
+    // We should see at least these common types. Assert once, naming every
+    // missing type and the scanned seed range, so a failure is self-explanatory
+    // and reproducible.
+    const requiredTypes = ['boolean', 'datetime', 'comment', 'ml-basic-string'];
+    const missingTypes = requiredTypes.filter(type => !foundTypes.has(type));
+    expect(
+      missingTypes,
+      `randomToml() never generated: ${missingTypes.join(', ')}. ` +
+        `Scanned seeds ${baseSeed}..${baseSeed + seedCount - 1}`
+    ).toEqual([]);
   });
 
   test('should return seed for reproducibility', () => {

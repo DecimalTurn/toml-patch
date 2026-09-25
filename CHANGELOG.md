@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
+- Patching: accept smol-toml date objects when patching and stringifying values. ([#309])
+- Formatting: Add `escapeSequenceUpperCase` option to `TomlFormat` to control the case of generated hex escape sequences. When patching, the case is auto-detected from the first hex escape in the document. ([#309])
+- Patching: keep the sign of a negative zero. Editing a value to `-0` writes it as `-0.0` instead of leaving the existing zero in place. ([#309])
+
 ### Changed
 
 - Stringify: Improve stringification performance for inline arrays and tables that fit on one line ([#314])
+
+### Fixed
+
+- Patching: preserve the number formatting of edited values. Floats with an explicit zero fraction keep their decimal places (`1.0` -> `2.0`, `1.00` -> `2.00`), exponent notation is kept when the source used it (`1.0e10` -> `1.0e11`), and floats with a non-zero fraction collapse to a plain integer when their value becomes whole (`1.5` -> `2`, `1.25e10` -> `1e11`). `minimumDecimals` still forces the requested decimal places. ([#309])
+- Patching: preserve underscore grouping in integer literals, counted from the right, when the value changes (`1_000_000` -> `10000` becomes `10_000`). ([#309])
+- Patching: preserve hexadecimal, octal and binary integer notation (`0x`, `0o`, `0b`) and the exponent marker case (`e` vs `E`) when editing numbers. ([#309])
+- Patching: fall back to a multiline literal (`'''...'''`) or a basic string when an edited literal string value cannot be written literally, instead of emitting TOML that the parser rejects. ([#309])
+- Patching: keep escape sequences that are string content intact when writing basic strings. A value holding text such as `\u000c` was written back as `\u000C`, changing the value, in both `patch()` and `stringify()`. ([#309])
+- Patching: escape a standalone carriage return written into a multiline basic string, instead of emitting a raw CR that the parser rejects when the document is read back. ([#309])
+- Patching: keep a leading newline in an edited multiline string. ([#309])
+- Patching: keep the raw form of `inf`, `nan` and `-0` when the edited value came from a document that used exponent notation. ([#309])
+- Escape sequences: do not take the document's escape sequence case from escaped content such as the text `\uabcd`. ([#309])
+- Patching: keep the sign of a negative NaN reliably. The sign was read through a typed array that occasionally loses it, so `patch()` or `stringify()` could write `nan` where the value was `-nan`. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
@@ -86,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: rename a segment of a dotted section key (e.g. `[a.b]` → `[x.b]`, `[a.b]` → `[a.y]`, `[a.b.c]` → `[a.x.c]`) instead of throwing. The Rename handler now falls back to key-prefix search and handles segment-count mismatches when the target is rendered as a plain nested key. ([#269])
 - Patching: avoid extra blank line when the first array-of-tables entry is converted to a table in-place during implicit parent materialisation. ([#271])
 - Stringify: prevent float-to-bigint type change on round-trip. Whole-number values exceeding `Number.MAX_SAFE_INTEGER` (e.g. `743000000000000000` from TOML `743e+15`) are now always emitted with a decimal point so they stay as `number` on re-parse instead of being promoted to `bigint`. ([#273])
-- Patching: modifying nested dotted-key values that change from a table to a scalar (e.g. `a.b.c = 1` → `a.b = 42` under `[a.b]`) no longer emits conflicting inline tables or misplaces the value. ([#274])
+- Patching: modifying nested dotted-key values that change from a table to a primitive (e.g. `a.b.c = 1` → `a.b = 42` under `[a.b]`) no longer emits conflicting inline tables or misplaces the value. ([#274])
 - Patching: adding a key to a nested table array element (e.g. `[[a.b]]`) no longer throws "Incompatible child type 'InlineItem'". ([#274])
 - Patching: Move entire AOT entry + owned comments as a unit during reorder so comments follow their entries when updateOrder is enabled.
 - Patching: tighten empty single-line inline tables and propagate to parent containers  ([#276])
@@ -127,9 +147,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: prevent whitespace errors when swaping keys between tables.
 - Patching: handle BigInt values in documents without throwing. ([#255])
 - Patching: handle commented multiline arrays correctly when adding keys or emptying them. ([#255])
-- Patching: fix wrong section nesting when replacing a table with a scalar value. ([#255])
+- Patching: fix wrong section nesting when replacing a table with a primitive value. ([#255])
 - Patching: preserve key with inline empty array when emptying an array-of-tables. ([#255])
-- Patching: fix `Node not found` errors on structural type replacements like nested table-to-scalar and AOT-to-scalar. ([#255])
+- Patching: fix `Node not found` errors on structural type replacements like nested table-to-primitive and AOT-to-primitive. ([#255])
 - Patching: fix remaining structural type replacement bugs — offset corruption when removing multiple sibling tables/AOTs, outer key loss when replacing a table/AOT with an inline object, and errors converting an array-of-tables to a plain array.
 - Patching: preserve `+nan` / `-nan` sign through parse and round-trip. ([#255])
 - Patching: keep a regenerated root key at root level when a section header survives alongside it — emptying an array-of-tables appended the key past the header, which silently reparented it into that section. ([#260])
@@ -174,7 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Patching: Correctly append to nested AOT (array of tables) ([#176]).
 - Patching: Fixed `findByPath` scanning in AOT scope to continue looking at sibling entries after a partial prefix match fails ([#176]).
-- Patching: Support replacement of a entire table section with a scalar value ([#176]).
+- Patching: Support replacement of a entire table section with a primitive value ([#176]).
 
 ## [1.2.0] - 2026-04-29
 
@@ -455,6 +475,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#297]: https://github.com/DecimalTurn/toml-patch/pull/297
 [#298]: https://github.com/DecimalTurn/toml-patch/pull/298
 [#303]: https://github.com/DecimalTurn/toml-patch/pull/303
+[#309]: https://github.com/DecimalTurn/toml-patch/pull/309
 [#311]: https://github.com/DecimalTurn/toml-patch/pull/311
 [#312]: https://github.com/DecimalTurn/toml-patch/pull/312
 [#313]: https://github.com/DecimalTurn/toml-patch/pull/313

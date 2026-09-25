@@ -56,7 +56,7 @@ function isDisallowedControl(code: number, mode: EscapeMode): boolean {
   );
 }
 
-function mandatoryEscaping(ch: string, mode: EscapeMode): string {
+function mandatoryEscaping(ch: string, mode: EscapeMode, escapeSequenceUpperCase: boolean): string {
   switch (ch) {
     case '\\':
       return '\\\\';
@@ -75,11 +75,30 @@ function mandatoryEscaping(ch: string, mode: EscapeMode): string {
     default: {
       const code = ch.charCodeAt(0);
       if (isDisallowedControl(code, mode)) {
-        return `\\u${code.toString(16).padStart(4, '0').toUpperCase()}`;
+        const hex = code.toString(16).padStart(4, '0');
+        return `\\u${escapeSequenceUpperCase ? hex.toUpperCase() : hex}`;
       }
       return ch;
     }
   }
+}
+
+/**
+ * Uppercases the hex digits of the `\uXXXX` escapes in string content that has
+ * already been escaped, for example `\u007f` to `\u007F`.
+ *
+ * Only escapes are rewritten. A `\uXXXX` that is content rather than an escape
+ * is preceded by an escaped backslash, so its run of backslashes has an even
+ * length and the sequence is left as written. Uppercasing those would change
+ * the value: a string holding the text `\u000c` must not come back as `\u000C`.
+ *
+ * @param escaped - Content that has already been escaped for a basic string.
+ * @returns The content with the hex digits of its escapes uppercased.
+ */
+export function upperCaseHexEscapes(escaped: string): string {
+  return escaped.replace(/(\\+)u([0-9a-f]{4})/g, (match, backslashes: string, hex: string) =>
+    backslashes.length % 2 === 1 ? `${backslashes}u${hex.toUpperCase()}` : match
+  );
 }
 
 /**
@@ -144,7 +163,8 @@ export function collectPreferredEscapes(existingRaw: string): Map<string, string
 function applyPreferredAndMandatoryEscapes(
   value: string,
   preferred: Map<string, string>,
-  mode: EscapeMode
+  mode: EscapeMode,
+  escapeSequenceUpperCase: boolean
 ): string {
   let escaped = '';
 
@@ -155,7 +175,7 @@ function applyPreferredAndMandatoryEscapes(
       continue;
     }
 
-    escaped += mandatoryEscaping(ch, mode);
+    escaped += mandatoryEscaping(ch, mode, escapeSequenceUpperCase);
   }
 
   return escaped;
@@ -166,23 +186,36 @@ function applyPreferredAndMandatoryEscapes(
  *
  * In `singleline-basic` mode, output is suitable for `"..."` strings.
  * In `multiline-basic` mode, output is suitable for `"""..."""` strings and additionally
- * protects embedded triple quotes.
+ * escapes standalone carriage returns and protects embedded triple quotes.
  *
  * @param value - Unescaped JS string value.
  * @param existingRaw - Existing TOML raw string used to infer preferred escapes.
  * @param mode - String rendering mode (`singleline-basic` or `multiline-basic`).
  * @returns Escaped TOML string content without surrounding delimiters.
  */
-export function escapeStringContent(value: string, existingRaw: string, mode: EscapeMode): string {
+export function escapeStringContent(
+  value: string,
+  existingRaw: string,
+  mode: EscapeMode,
+  escapeSequenceUpperCase = true
+): string {
   const preferred = collectPreferredEscapes(existingRaw);
 
   if (preferred.size === 0 && mode === 'singleline-basic') {
     const escaped = JSON.stringify(value).slice(1, -1);
     // JSON.stringify only escapes U+0000–U+001F, but TOML also forbids U+007F (DEL).
-    return escaped.replace(/\x7f/g, '\\u007F');
+    const withDel = escaped.replace(/\x7f/g, '\\u007f');
+    return escapeSequenceUpperCase ? upperCaseHexEscapes(withDel) : withDel;
   }
 
-  const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode);
+  const escaped = applyPreferredAndMandatoryEscapes(value, preferred, mode, escapeSequenceUpperCase);
 
-  return mode === 'multiline-basic' ? escaped.replace(/"""/g, '""\\"') : escaped;
+  if (mode !== 'multiline-basic') {
+    return escaped;
+  }
+
+  // A carriage return is only allowed in a multiline string as part of CRLF, so a
+  // standalone one is escaped rather than written out raw, which would produce a
+  // document that cannot be parsed back.
+  return escaped.replace(/\r(?!\n)/g, '\\r').replace(/"""/g, '""\\"');
 }

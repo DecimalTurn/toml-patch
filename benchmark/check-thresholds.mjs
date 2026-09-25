@@ -1,9 +1,10 @@
 /**
- * Shared performance gate for the benchmark harnesses.
+ * Shared gates for the benchmark harnesses.
  *
- * A run compares the current build with a reference implementation on every
- * fixture of an operation and reports a failure when the current build is more
- * than `maxSlowdown` times slower than the reference.
+ * The performance gate compares the current build with a reference
+ * implementation on every fixture of an operation and reports a failure when
+ * the current build is more than `maxSlowdown` times slower than the reference.
+ * The bundle size gate compares a measured bundle against an absolute budget.
  *
  * Suites and their budgets live together in benchmark/thresholds.toml:
  *
@@ -11,6 +12,10 @@
  *
  *   [fixtures.parse]
  *   maxSlowdown = 8
+ *
+ *   [bundle.patch-lite]
+ *   maxMinified = 48
+ *   maxGzipped = 14
  *
  * The `reference` key is optional and defaults to smol-toml.
  */
@@ -25,6 +30,29 @@ export const DEFAULT_THRESHOLDS_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
   'thresholds.toml'
 );
+
+/**
+ * @param {string} thresholdsPath Path of the thresholds TOML file.
+ * @returns {object | null} Parsed thresholds, or `null` when the file is absent.
+ */
+function readThresholds(thresholdsPath) {
+  if (!existsSync(thresholdsPath)) return null;
+  return parseToml(readFileSync(thresholdsPath, 'utf8'));
+}
+
+/**
+ * Resolves a suite name against the parsed thresholds. Dots walk into nested
+ * tables, so a section written as `[bundle.patch-lite]` is addressed as
+ * `bundle.patch-lite` just as `[fixtures]` is addressed as `fixtures`.
+ *
+ * @param {object | null} thresholds Parsed thresholds file.
+ * @param {string} suite Suite name.
+ * @returns {object} The suite table, or an empty object when it is absent.
+ */
+function readSuite(thresholds, suite) {
+  if (!thresholds) return {};
+  return suite.split('.').reduce((table, key) => table?.[key], thresholds) ?? {};
+}
 
 /**
  * @param {object} options
@@ -44,15 +72,14 @@ export function checkThresholds({
   operations,
   thresholdsPath = DEFAULT_THRESHOLDS_PATH,
 }) {
-  if (!existsSync(thresholdsPath)) {
+  const thresholds = readThresholds(thresholdsPath);
+  if (!thresholds) {
     console.log(`\nNo thresholds file at ${thresholdsPath}; skipping the performance gate.`);
     return false;
   }
-
-  const thresholds = parseToml(readFileSync(thresholdsPath, 'utf8'));
   const referenceName =
     typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
-  const suiteThresholds = thresholds[suite] ?? {};
+  const suiteThresholds = readSuite(thresholds, suite);
 
   console.log(`\nPerformance thresholds for ${suite} fixtures (max slowdown vs ${referenceName}):`);
 
@@ -94,6 +121,64 @@ export function checkThresholds({
     console.error('\n❌ Performance threshold crossed. See output above.');
   } else {
     console.log('\n✅ All performance thresholds met.');
+  }
+
+  return failed;
+}
+
+/**
+ * Bundle size gate for the bundle measurement scripts.
+ *
+ * Each bundle has a budget in the thresholds file, in kB (1 kB = 1024 bytes):
+ *
+ *   [bundle.patch-lite]
+ *   maxMinified = 48
+ *   maxGzipped = 14
+ *
+ * A budget key that is left out is not gated, and a bundle with no budget at all
+ * is measured without failing.
+ *
+ * @param {object} options
+ * @param {string} options.suite Bundle, addressing its table in the thresholds
+ *   file, for example `bundle.patch-lite`.
+ * @param {number} options.minifiedBytes Minified bundle size, in bytes.
+ * @param {number} options.gzippedBytes Minified and gzipped bundle size, in bytes.
+ * @param {string} [options.thresholdsPath] Path of the thresholds TOML file.
+ * @returns {boolean} `true` when a budget was exceeded.
+ */
+export function checkBundleThresholds({
+  suite,
+  minifiedBytes,
+  gzippedBytes,
+  thresholdsPath = DEFAULT_THRESHOLDS_PATH,
+}) {
+  const suiteThresholds = readSuite(readThresholds(thresholdsPath), suite);
+  const metrics = [
+    ['Minified', minifiedBytes, suiteThresholds.maxMinified],
+    ['Min + Gzipped', gzippedBytes, suiteThresholds.maxGzipped],
+  ].filter(([, , maxKb]) => typeof maxKb === 'number');
+
+  if (metrics.length === 0) {
+    console.log(`\nNo bundle budget for ${suite}; skipping the bundle size gate.`);
+    return false;
+  }
+
+  console.log(`\nBundle size budget for ${suite}:`);
+
+  let failed = false;
+
+  for (const [label, bytes, maxKb] of metrics) {
+    const kb = bytes / 1024;
+    const ok = kb <= maxKb;
+    if (!ok) failed = true;
+
+    console.log(`  ${ok ? '✅' : '❌'} ${label}: ${kb.toFixed(1)} kB (max ${maxKb} kB)`);
+  }
+
+  if (failed) {
+    console.error(`\n❌ ${suite} exceeded its size budget. See output above.`);
+  } else {
+    console.log(`\n✅ ${suite} is within its size budget.`);
   }
 
   return failed;

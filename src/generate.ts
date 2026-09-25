@@ -28,8 +28,9 @@ import { LocalDate, LocalTime } from './parse-toml';
 import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
-import { escapeStringContent } from './escape-preference';
-import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
+import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
+import { escapeStringContent, upperCaseHexEscapes } from './escape-preference';
+import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate, isNegativeNan } from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -44,8 +45,8 @@ export function generateDocument(): Document {
   };
 }
 
-export function generateTable(key: string[]): Table {
-  const table_key = generateTableKey(key);
+export function generateTable(key: string[], escapeSequenceUpperCase = true): Table {
+  const table_key = generateTableKey(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.Table,
@@ -55,8 +56,8 @@ export function generateTable(key: string[]): Table {
   };
 }
 
-export function generateTableKey(key: string[]): TableKey {
-  const raw = keyValueToRaw(key);
+export function generateTableKey(key: string[], escapeSequenceUpperCase = true): TableKey {
+  const raw = keyValueToRaw(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableKey,
@@ -76,8 +77,8 @@ export function generateTableKey(key: string[]): TableKey {
   };
 }
 
-export function generateTableArray(key: string[]): TableArray {
-  const table_array_key = generateTableArrayKey(key);
+export function generateTableArray(key: string[], escapeSequenceUpperCase = true): TableArray {
+  const table_array_key = generateTableArrayKey(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableArray,
@@ -87,8 +88,8 @@ export function generateTableArray(key: string[]): TableArray {
   };
 }
 
-export function generateTableArrayKey(key: string[]): TableArrayKey {
-  const raw = keyValueToRaw(key);
+export function generateTableArrayKey(key: string[], escapeSequenceUpperCase = true): TableArrayKey {
+  const raw = keyValueToRaw(key, escapeSequenceUpperCase);
 
   return {
     type: NodeType.TableArrayKey,
@@ -111,9 +112,10 @@ export function generateTableArrayKey(key: string[]): TableArrayKey {
 export function generateKeyValue(
   key: string[],
   value: Value,
-  shiftGeneratedMultilineEnd = false
+  shiftGeneratedMultilineEnd = false,
+  escapeSequenceUpperCase = true
 ): KeyValue {
-  const key_node = generateKey(key);
+  const key_node = generateKey(key, escapeSequenceUpperCase);
   const { column } = key_node.loc.end;
 
   const equals = column + 1;
@@ -143,23 +145,24 @@ export function generateKeyValue(
   };
 }
 
-function quoteTomlString(value: string): string {
+function quoteTomlString(value: string, escapeSequenceUpperCase = true): string {
   // JSON.stringify leaves U+007F as a raw character, but TOML requires it escaped.
-  return JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+  const withDel = JSON.stringify(value).replace(/\x7f/g, '\\u007f');
+  return escapeSequenceUpperCase ? upperCaseHexEscapes(withDel) : withDel;
 }
 
-function keyValueToRaw(value: string[]): string {
+function keyValueToRaw(value: string[], escapeSequenceUpperCase = true): string {
   return value.map(part => {
     // Keys are encoded too, so a lone surrogate is just as invalid here as in a value.
     // JSON.stringify escapes the offending unit, so the message stays printable rather than
     // carrying the raw unpaired surrogate into logs.
     assertNoLoneSurrogate(part, `Key ${JSON.stringify(part)}`);
-    return IS_BARE_KEY.test(part) ? part : quoteTomlString(part);
+    return IS_BARE_KEY.test(part) ? part : quoteTomlString(part, escapeSequenceUpperCase);
   }).join('.');
 }
 
-export function generateKey(value: string[]): Key {
-  const raw = keyValueToRaw(value);
+export function generateKey(value: string[], escapeSequenceUpperCase = true): Key {
+  const raw = keyValueToRaw(value, escapeSequenceUpperCase);
 
   return {
     type: NodeType.Key,
@@ -176,61 +179,62 @@ export function generateKey(value: string[]): Key {
  * @param existingRaw - The existing raw string to determine multiline format (optional).
  * @returns A new String node.
  */
-export function generateString(value: string, existingRaw?: string): String {
+export function generateString(value: string, existingRaw?: string, escapeSequenceUpperCase = true): String {
   // Single choke point for string values from both stringify and patch — reject unpaired
   // surrogates here rather than emitting a document that isn't valid UTF-8.
   assertNoLoneSurrogate(value, 'String value');
 
   if (!existingRaw) {
-    return generateBasicString(value);
+    return generateBasicString(value, undefined, escapeSequenceUpperCase);
   }
-  return generateStringKeepFormatting(value, existingRaw);
+  return generateStringKeepFormatting(value, existingRaw, escapeSequenceUpperCase);
 }
 
-function generateStringKeepFormatting(value: string, existingRaw: string): String {
+function generateStringKeepFormatting(value: string, existingRaw: string, escapeSequenceUpperCase: boolean): String {
   if (isBasicString(existingRaw)) {
-    return generateBasicString(value, existingRaw);
+    return generateBasicString(value, existingRaw, escapeSequenceUpperCase);
   }
 
   if (isLiteralString(existingRaw)) {
-    if (!value.includes("'")) {
+    // A literal string cannot escape anything, so the value has to be writable
+    // verbatim. Move up to MLLS when only the single-line form is ruled out and
+    // fall back to a basic string when the value cannot be literal at all.
+    if (canUseLiteralString(value)) {
       return generateLiteralString(value);
     }
-    // Value contains a single quote — single-line literal strings cannot contain '.
-    // Fall back to MLLS ('''value''') unless the value also contains ''', in which
-    // case we must use a basic string.
-    if (!value.includes("'''")) {
+    if (canUseMultilineLiteral(value)) {
       const existingValue = existingRaw.slice(1, -1);
       const multilineRaw = `'''${existingValue}'''`;
       return generateMultilineLiteralString(value, multilineRaw);
     }
-    return generateBasicString(value);
+    return generateBasicString(value, undefined, escapeSequenceUpperCase);
   }
 
   if (isMultilineLiteralString(existingRaw)) {
-    // Literal strings cannot contain ''' - fallback to basic multi-line string if needed
-    if (!value.includes("'''")) {
+    // Literal strings cannot hold ''' or a control character: fall back to a
+    // basic multi-line string when the value needs escaping.
+    if (canUseMultilineLiteral(value)) {
       return generateMultilineLiteralString(value, existingRaw);
     }
     const existingValue = existingRaw.slice(3, -3);
     const multilineRaw = `"""${existingValue}"""`;
-    return generateMultilineBasicString(value, multilineRaw);
+    return generateMultilineBasicString(value, multilineRaw, escapeSequenceUpperCase);
   }
 
   if (isMultilineBasicString(existingRaw)) {
-    return generateMultilineBasicString(value, existingRaw);
+    return generateMultilineBasicString(value, existingRaw, escapeSequenceUpperCase);
   }
 
   // existingRaw is misformatted. This should be impossible
   throw new Error(`Existing raw string value is not valid: ${existingRaw}`);
 }
 
-function generateBasicString(value: string, existingRaw?: string): String {
+function generateBasicString(value: string, existingRaw?: string, escapeSequenceUpperCase = true): String {
   let raw = '';
   if (!existingRaw) {
-    raw = quoteTomlString(value);
+    raw = quoteTomlString(value, escapeSequenceUpperCase);
   } else {
-    raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic')}"`;
+    raw = `"${escapeStringContent(value, existingRaw, 'singleline-basic', escapeSequenceUpperCase)}"`;
   }
    
   return {
@@ -264,14 +268,24 @@ function generateLiteralString(value: string): String {
   };
 }
 
-function generateMultilineBasicString(value: string, existingRaw: string): String {
-  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic');
+/**
+ * Returns the newline to write directly after a multiline delimiter.
+ *
+ * TOML drops a newline that immediately follows the opening delimiter, so a
+ * value that starts with one needs an extra, disposable newline in front of it
+ * to survive the round trip.
+ */
+function multilineLeadingNewLine(existingRaw: string, delimiter: string, content: string): string {
+  if (existingRaw.startsWith(delimiter + '\r\n')) return '\r\n';
+  if (existingRaw.startsWith(delimiter + '\n')) return '\n';
+  if (content.startsWith('\r\n')) return '\r\n';
+  return content.startsWith('\n') ? '\n' : '';
+}
 
-  const leadingNewLine = existingRaw.startsWith('"""\r\n')
-    ? '\r\n'
-    : existingRaw.startsWith('"""\n')
-    ? '\n'
-    : '';
+function generateMultilineBasicString(value: string, existingRaw: string, escapeSequenceUpperCase = true): String {
+  const escaped = escapeStringContent(value, existingRaw, 'multiline-basic', escapeSequenceUpperCase);
+
+  const leadingNewLine = multilineLeadingNewLine(existingRaw, '"""', escaped);
 
   let raw = '"""' + leadingNewLine + escaped + '"""';
 
@@ -298,11 +312,7 @@ function generateMultilineBasicString(value: string, existingRaw: string): Strin
 
 function generateMultilineLiteralString(value: string, existingRaw: string): String {
 
-  const leadingNewLine = existingRaw.startsWith("'''\r\n")
-    ? '\r\n'
-    : existingRaw.startsWith("'''\n")
-    ? '\n'
-    : '';
+  const leadingNewLine = multilineLeadingNewLine(existingRaw, "'''", value);
 
   const raw = "'''" + leadingNewLine + value + "'''";
   const endLocation = endlocation(raw);
@@ -353,11 +363,8 @@ export function generateFloat(value: number, minimumDecimals: number = 1): Float
   } else if (value === -Infinity) {
     raw = '-inf';
   } else if (Number.isNaN(value)) {
-    // Detect negative NaN via its IEEE 754 bit pattern
-    const buf = new Float64Array([value]);
-    const view = new DataView(buf.buffer);
-    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
-    const isNegative = (highBits & 0x80000000) !== 0;
+    // Detect a negative NaN through its IEEE 754 sign bit.
+    const isNegative = isNegativeNan(value);
     nanSign = isNegative ? '-' : undefined;
     raw = isNegative ? '-nan' : 'nan';
   } else if (Object.is(value, -0)) {

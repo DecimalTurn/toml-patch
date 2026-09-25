@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify, merge } from './utils';
+import { isObject, datesEqual, stableStringify, merge, sameValue, isNegativeNan } from './utils';
 import { Path } from './find-by-path';
 
 export enum ChangeType {
@@ -74,7 +74,7 @@ export interface DiffOptions {
 }
 
 export default function diff(before: any, after: any, path: Path = [], options: DiffOptions = {}): Change[] {
-  if (before === after || datesEqual(before, after)) {
+  if (sameValue(before, after) || datesEqual(before, after)) {
     return [];
   }
 
@@ -83,13 +83,7 @@ export default function diff(before: any, after: any, path: Path = [], options: 
   // from negative NaN to canonical NaN should trigger an edit.
   if (typeof before === 'number' && typeof after === 'number'
       && Number.isNaN(before) && Number.isNaN(after)) {
-    const bufBefore = new Float64Array([before]);
-    const bufAfter = new Float64Array([after]);
-    const viewBefore = new DataView(bufBefore.buffer);
-    const viewAfter = new DataView(bufAfter.buffer);
-    const signBefore = viewBefore.getUint32(4, true) & 0x80000000;
-    const signAfter = viewAfter.getUint32(4, true) & 0x80000000;
-    if (signBefore === signAfter) return [];
+    if (isNegativeNan(before) === isNegativeNan(after)) return [];
     // Sign differs — fall through to produce an Edit
   }
 

@@ -29,6 +29,37 @@ range a second time. Checking just the previously-failing seeds (via
 `fuzz-run.ts --seed <N> --to <N>`) is sufficient; a fresh full sweep only
 matters when you change core logic and want a broad regression signal.
 
+## Patch-lite
+
+`patch-lite` is edit-only, so its harness (`src/__tests__/fuzz-patch-lite.ts`)
+differs from the `patch` one:
+
+1. **Edits, not structural changes.** It mutates primitive leaves in place
+   (strings, booleans, numbers and bigints) and skips date/time values. It then
+   re-parses the output and checks it equals the edited object, and re-applies
+   the same edit to confirm the result is unchanged. Replacement values are
+   deliberately hostile: embedded quotes, backslashes, control characters,
+   astral characters, negative zero, non-finite numbers and out-of-safe-range
+   bigints.
+2. **Rejections.** For the same random document it applies structural mutations
+   (added and removed keys, a primitive replaced by a container, added array
+   elements, array reordering) and asserts each throws a `PatchLiteError`
+   rather than crashing or returning partial output.
+
+Sweep locally with:
+
+```powershell
+npx -y tsx src/__tests__/fuzz-patch-lite.ts --count 5000 --seed 0 --mutations 5
+```
+
+The committed suite (`src/__tests__/patch-lite.fuzz.test.ts`) runs a bounded
+seed range on every test run. Widen `SWEEP_SEED_COUNT` for more coverage, and
+add any seed a wider sweep surfaces to `historicalFuzzSeeds` so it stays pinned.
+
+`src/__tests__/roundtrip.parse-patch-lite.test.ts` complements the fuzzing with
+an identity round-trip and an all-leaves-edited round-trip over the same TOML
+corpus used by `roundtrip.parse-patch.test.ts`.
+
 ## Fixing the bugs discovered by the fuzzing suite
 
 When a seed fails, the first step is to create a reproduction of the TOML input

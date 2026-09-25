@@ -72,10 +72,10 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
       if ((node.value as InlineTable).items.length === 0) {
         insert(document, document, generateTable(node.key.value));
       } else {
-        insert(document, document, formatTable(node, format.bracketSpacing));
+        insert(document, document, formatTable(node, format.bracketSpacing, format.escapeSequenceUpperCase));
       }
     } else {
-      formatTableArray(node, format.bracketSpacing).forEach(table_array => {
+      formatTableArray(node, format.bracketSpacing, format.escapeSequenceUpperCase).forEach(table_array => {
         insert(document, document, table_array);
       });
     }
@@ -85,8 +85,8 @@ export function formatTopLevel(document: Document, format: TomlFormat): Document
   return document;
 }
 
-function formatTable(key_value: KeyValue, bracketSpacing: boolean): Table {
-  const table = generateTable(key_value.key.value);
+function formatTable(key_value: KeyValue, bracketSpacing: boolean, escapeSequenceUpperCase: boolean): Table {
+    const table = generateTable(key_value.key.value, escapeSequenceUpperCase);
   markStringifyRoot(table);
 
   for (const item of (key_value.value as InlineTable).items) {
@@ -98,12 +98,12 @@ function formatTable(key_value: KeyValue, bracketSpacing: boolean): Table {
   return table;
 }
 
-function formatTableArray(key_value: KeyValue, bracketSpacing: boolean): TableArray[] {
+function formatTableArray(key_value: KeyValue, bracketSpacing: boolean, escapeSequenceUpperCase: boolean): TableArray[] {
   const root = generateDocument();
   markStringifyRoot(root);
 
   for (const inline_array_item of (key_value.value as InlineArray).items) {
-    const table_array = generateTableArray(key_value.key.value);
+    const table_array = generateTableArray(key_value.key.value, escapeSequenceUpperCase);
     insert(root, root, table_array);
 
     for (const inline_table_item of (inline_array_item.item as InlineTable).items) {
@@ -344,7 +344,7 @@ export function formatNestedTablesMultiline(document: Document, format: TomlForm
       const depth = calculateTableDepth(item.key.value);
       if (depth < format.inlineTableStart) {
         // Convert to a separate table
-        const table = formatTable(item, format.bracketSpacing);
+        const table = formatTable(item, format.bracketSpacing, format.escapeSequenceUpperCase);
         remove(document, document, item);
         insert(document, document, table);
         
@@ -400,7 +400,7 @@ function processTableForNestedInlines(table: Table | TableArray, additionalTable
   // even after previous iterations call remove() — the KeyValue node itself
   // stays valid regardless of index shifts.
   for (const { item, nestedTableKey } of toExtract) {
-    const separateTable = generateTable(nestedTableKey);
+    const separateTable = generateTable(nestedTableKey, format.escapeSequenceUpperCase);
     markStringifyRoot(separateTable);
     const inlineTable = item.value as InlineTable;
 

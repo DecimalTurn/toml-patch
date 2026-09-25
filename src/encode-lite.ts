@@ -1,0 +1,244 @@
+import { isFloat as isFloatNode } from './cst';
+import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
+import { PatchLiteError, formatPath, Path } from './diff-lite';
+import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
+import { isNegativeNan } from './utils';
+
+/**
+ * Encodes a JavaScript leaf value as valid TOML, independent of the full
+ * formatting pipeline. Only the value span is produced; the surrounding key,
+ * equals sign, whitespace and comments are never regenerated.
+ */
+export function encodeValue(value: any, existingValue: any, path: Path): string {
+  const type = typeof value;
+
+  if (type === 'string') return encodeString(value, existingValue?.raw);
+  if (type === 'boolean') return value ? 'true' : 'false';
+  if (type === 'bigint') return value.toString();
+
+  if (type === 'number') {
+    if (!Number.isFinite(value)) return encodeNonFinite(value);
+    if (Number.isSafeInteger(value) && !Object.is(value, -0) && !isFloatNode(existingValue)) {
+      return encodeInteger(value, existingValue?.raw);
+    }
+    return encodeFloat(value, isFloatNode(existingValue) ? existingValue.raw : undefined);
+  }
+
+  if (value instanceof Date) {
+    return encodeDate(value, existingValue);
+  }
+
+  throw new PatchLiteError(
+    'UnsupportedValue',
+    path,
+    `Unsupported value type ${Object.prototype.toString.call(value)} at ${formatPath(path)}`
+  );
+}
+
+/**
+ * Encodes a Date as TOML while keeping the source value's formatting: date vs
+ * time vs datetime kind, fractional-digit count, space separator and offset
+ * style are all taken from the existing value's raw text, exactly as the full
+ * patch() does.
+ */
+function encodeDate(value: Date, existingValue: any): string {
+  const raw = existingValue?.raw;
+  const native = toTomlPatchDate(value);
+  if (typeof raw !== 'string') return native.toISOString();
+  return DateFormatHelper.createDateWithOriginalFormat(native, raw).toISOString();
+}
+
+/**
+ * Converts a smol-toml `TomlDate` to the matching toml-patch class. Duck-typed
+ * (the two packages have distinct class objects) and kept local so the lite
+ * bundle does not import the vendored smol-toml date module. The `.000` suffix
+ * smol-toml always writes for a zero fraction is dropped, so it does not leak
+ * into the output and the result matches the full patch() byte for byte.
+ */
+function toTomlPatchDate(value: Date): Date {
+  const v = value as any;
+  const isSmolTomlDate = typeof v.isDate === 'function' && typeof v.isTime === 'function';
+  if (!isSmolTomlDate) return value;
+
+  const canonical = value.toISOString().replace(/\.000(?=([Zz]|[+-]\d{2}:\d{2})$|$)/, '');
+  if (v.isDate()) return new LocalDate(canonical);
+  if (v.isTime()) return new LocalTime(canonical, canonical);
+  if (v.isLocal()) return new LocalDateTime(canonical, false);
+  return new OffsetDateTime(canonical, false);
+}
+
+/** Detects the radix and prefix of a prefixed integer literal (`0x`/`0o`/`0b`). */
+function integerRadixOf(raw: string): { radix: number; prefix: string } | undefined {
+  if (raw.startsWith('0x')) return { radix: 16, prefix: '0x' };
+  if (raw.startsWith('0o')) return { radix: 8, prefix: '0o' };
+  if (raw.startsWith('0b')) return { radix: 2, prefix: '0b' };
+  return undefined;
+}
+
+function encodeInteger(value: number, existingRaw?: string): string {
+  if (existingRaw) {
+    const radixInfo = integerRadixOf(existingRaw);
+    // TOML prefixed integers cannot carry a sign, so negative values fall
+    // back to plain decimal.
+    if (radixInfo && value >= 0) {
+      const uppercaseHex = radixInfo.radix === 16 && /[A-F]/.test(existingRaw);
+      let digits = value.toString(radixInfo.radix);
+      if (uppercaseHex) digits = digits.toUpperCase();
+      return radixInfo.prefix + digits;
+    }
+  }
+  return String(value);
+}
+
+function encodeFloat(value: number, existingRaw?: string): string {
+  if (Object.is(value, -0)) return '-0.0';
+
+  // Preserve exponent notation when the source used it (e.g. `1.0e10` ->
+  // `1.0e11`) rather than expanding into a long plain float.
+  if (existingRaw && /[eE]/.test(existingRaw)) {
+    return encodeExponentFloat(value, existingRaw);
+  }
+
+  const raw = String(value);
+  return /[.eE]/.test(raw) ? raw : `${raw}.0`;
+}
+
+/**
+ * Renders a value in exponent notation, matching an existing float's style:
+ * a TOML exponent (no leading `+`) and the mantissa's decimal-place count, but
+ * dropping a non-zero fraction once the new value becomes a whole number.
+ */
+function encodeExponentFloat(value: number, existingRaw: string): string {
+  const mantissaRaw = existingRaw.slice(0, existingRaw.search(/[eE]/));
+  const dotIndex = mantissaRaw.indexOf('.');
+  const fraction = dotIndex === -1 ? '' : mantissaRaw.slice(dotIndex + 1);
+  const isRound = !/[1-9]/.test(fraction);
+  const valueIsIntegral = Number.isInteger(value) && !Object.is(value, -0);
+
+  // Keep the original's decimal count only for an explicit "round" float; a
+  // non-zero fraction is insignificant once the new value becomes a whole number.
+  const minDecimals = valueIsIntegral ? (isRound ? fraction.length : 0) : 0;
+
+  const [mantissa, exponent] = value.toExponential().split(/[eE]/);
+  const mantissaDecimals = mantissa.includes('.') ? mantissa.length - mantissa.indexOf('.') - 1 : 0;
+  const decimals = Math.max(minDecimals, mantissaDecimals);
+  const renderedMantissa = decimals > 0
+    ? Number(mantissa).toFixed(decimals)
+    : String(Number(mantissa));
+  const uppercaseExponent = existingRaw.includes('E');
+  return `${renderedMantissa}${uppercaseExponent ? 'E' : 'e'}${exponent.replace(/^\+/, '')}`;
+}
+
+function encodeNonFinite(value: number): string {
+  // `-nan` is a distinct TOML spelling that round-trips, so the sign has to be
+  // written out; emitting a plain `nan` would make the value look changed again
+  // on the next call.
+  if (Number.isNaN(value)) return isNegativeNan(value) ? '-nan' : 'nan';
+  return value > 0 ? 'inf' : '-inf';
+}
+
+/**
+ * Encodes a string while preserving the source's literal style. A multiline
+ * literal (`'''`) keeps its delimiters and leading newline, and a single-line
+ * literal (`'`) stays single-quoted. Backslashes are left untouched because
+ * literal strings do not escape, matching the full patch(). A value that can no
+ * longer be written literally grows to a multiline literal where possible and
+ * falls back to a basic string otherwise.
+ */
+/**
+ * The newline to write directly after a multiline delimiter.
+ *
+ * TOML drops a newline that immediately follows the opening delimiter, so a
+ * value that starts with one needs an extra, disposable newline in front of it
+ * to survive the round trip.
+ */
+function multilineLeadingNewLine(existingRaw: string, delimiter: string, content: string): string {
+  if (existingRaw.startsWith(delimiter + '\r\n')) return '\r\n';
+  if (existingRaw.startsWith(delimiter + '\n')) return '\n';
+  if (content.startsWith('\r\n')) return '\r\n';
+  return content.startsWith('\n') ? '\n' : '';
+}
+
+function encodeString(value: string, existingRaw?: string): string {
+  if (existingRaw) {
+    if (existingRaw.startsWith("'''")) {
+      if (!canUseMultilineLiteral(value)) return encodeBasicString(value);
+      return "'''" + multilineLeadingNewLine(existingRaw, "'''", value) + value + "'''";
+    }
+    if (existingRaw.startsWith('"""')) {
+      return encodeMultilineBasicString(value, existingRaw);
+    }
+    if (existingRaw.startsWith("'")) {
+      if (canUseLiteralString(value)) return "'" + value + "'";
+      // Single quotes are non-negotiable but one of them is: a value holding an
+      // apostrophe or a newline moves up to a multiline literal.
+      if (canUseMultilineLiteral(value)) {
+        return "'''" + multilineLeadingNewLine(existingRaw, "'''", value) + value + "'''";
+      }
+    }
+  }
+  return encodeBasicString(value);
+}
+
+/**
+ * Encodes a value as a multiline basic string (`"""`), preserving the leading
+ * newline style of the source and escaping backslashes, control characters and
+ * embedded triple quotes, matching the full patch().
+ */
+function encodeMultilineBasicString(value: string, existingRaw: string): string {
+  const content = escapeMultilineBasicContent(value);
+  return '"""' + multilineLeadingNewLine(existingRaw, '"""', content) + content + '"""';
+}
+
+/**
+ * Escapes the content of a multiline basic string: backslashes are doubled,
+ * control characters are escaped, newlines stay literal (CR only as part of
+ * CRLF), and embedded `"""` is protected as `""\"`.
+ */
+function escapeMultilineBasicContent(value: string): string {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    const code = value.charCodeAt(i);
+    if (ch === '\\') out += '\\\\';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\n') out += '\n';
+    else if (ch === '\f') out += '\\f';
+    else if (ch === '\r') {
+      // A carriage return is only valid when part of CRLF; escape it otherwise.
+      out += value.charCodeAt(i + 1) === 0x0a ? '\r' : '\\r';
+    } else if (
+      (code >= 0x00 && code <= 0x07) ||
+      code === 0x0b ||
+      (code >= 0x0e && code <= 0x1f) ||
+      code === 0x7f
+    ) {
+      out += '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+    } else {
+      out += ch;
+    }
+  }
+  return out.replace(/"""/g, '""\\"');
+}
+
+function encodeBasicString(value: string): string {
+  let out = '"';
+
+  for (const ch of value) {
+    const code = ch.codePointAt(0)!;
+
+    if (ch === '"') out += '\\"';
+    else if (ch === '\\') out += '\\\\';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\f') out += '\\f';
+    else if (ch === '\r') out += '\\r';
+    else if (code < 0x20 || code === 0x7f) out += '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+    else out += ch;
+  }
+
+  out += '"';
+  return out;
+}

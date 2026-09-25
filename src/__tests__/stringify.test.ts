@@ -40,6 +40,38 @@ test('default-equivalent formats produce the same output as no format', () => {
   expect(stringify(value, TomlFormat.default())).toBe(noFormat);
 });
 
+test('escapeSequenceUpperCase controls the case of generated escape sequences', () => {
+  const value = { msg: 'del\x7Fchar' };
+
+  // Default: uppercase hex.
+  expect(stringify(value)).toBe('msg = "del\\u007Fchar"\n');
+
+  // Opt out for lowercase hex.
+  expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('msg = "del\\u007fchar"\n');
+});
+
+test('escapeSequenceUpperCase also applies to quoted keys', () => {
+  const value = { 'a\x7Fb': 1 };
+
+  expect(stringify(value)).toBe('"a\\u007Fb" = 1\n');
+  expect(stringify(value, { escapeSequenceUpperCase: false })).toBe('"a\\u007fb" = 1\n');
+});
+
+test('only escapes the library generates have their case changed', () => {
+  // The value is the literal text `\u000c`, not a form feed. The backslash is
+  // escaped, so the sequence is content and has to survive as written.
+  expect(stringify({ msg: '\\u000c' })).toBe('msg = "\\\\u000c"\n');
+  expect(stringify({ msg: '\\u000c' }, { escapeSequenceUpperCase: false })).toBe(
+    'msg = "\\\\u000c"\n'
+  );
+
+  // A vertical tab has to be escaped by the library, so it does follow the option.
+  expect(stringify({ msg: '\u000b' })).toBe('msg = "\\u000B"\n');
+  expect(stringify({ msg: '\u000b' }, { escapeSequenceUpperCase: false })).toBe(
+    'msg = "\\u000b"\n'
+  );
+});
+
 test('should stringify simple example', () => {
 
   //Stringify the object

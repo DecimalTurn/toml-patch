@@ -20,6 +20,8 @@ import {
   isInlineItem,
   isString,
   isComment,
+  isInteger as isIntegerNode,
+  Integer as IntegerNode,
   isFloat,
   Float as FloatNode,
   hasItem,
@@ -688,9 +690,9 @@ function coalesceStructuralReplacements(original: Document, updated_js: any, cha
   return result;
 }
 
-function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[]): string {
+function preserveEscapedKeyRaw(existingRaw: string, keyParts: string[], escapeSequenceUpperCase = true): string {
   return keyParts
-    .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic')}"`))
+    .map(part => (IS_BARE_KEY.test(part) ? part : `"${escapeStringContent(part, existingRaw, 'singleline-basic', escapeSequenceUpperCase)}"`))
     .join('.');
 }
 
@@ -784,17 +786,111 @@ function findDottedKeyStyle(root: Document, prefix: string[]): KeyValue | undefi
 }
 
 /**
+ * Analyzes an existing float's raw text: whether it uses exponent notation and
+ * whether its fractional part is all zeros (a "round" float such as `1.0`).
+ */
+function analyzeFloatStyle(raw: string): { hasExponent: boolean; fractionLength: number; isRound: boolean } {
+  const expIndex = raw.search(/[eE]/);
+  const mantissa = expIndex === -1 ? raw : raw.slice(0, expIndex);
+  const dotIndex = mantissa.indexOf('.');
+  const fraction = dotIndex === -1 ? '' : mantissa.slice(dotIndex + 1);
+  return {
+    hasExponent: expIndex !== -1,
+    fractionLength: fraction.length,
+    isRound: !/[1-9]/.test(fraction),
+  };
+}
+
+/** Counts the decimal places written in a float's raw text (before any exponent). */
+function decimalPlacesOfRaw(raw: string): number {
+  const expIndex = raw.search(/[eE]/);
+  const mantissa = expIndex === -1 ? raw : raw.slice(0, expIndex);
+  const dotIndex = mantissa.indexOf('.');
+  return dotIndex === -1 ? 0 : mantissa.length - dotIndex - 1;
+}
+
+/** Renders a value in TOML exponent notation (e.g. `1.0e11`) with at least `minimumDecimals` decimals. */
+function renderExponentNotation(value: number, minimumDecimals: number, uppercaseExponent = false): string {
+  const [mantissa, exponent] = value.toExponential().split(/[eE]/);
+  const decimals = Math.max(minimumDecimals, decimalPlacesOfRaw(mantissa));
+  const renderedMantissa = decimals > 0
+    ? Number(mantissa).toFixed(decimals)
+    : String(Number(mantissa));
+  return `${renderedMantissa}${uppercaseExponent ? 'E' : 'e'}${exponent.replace(/^\+/, '')}`;
+}
+
+/** Detects the radix and prefix of a prefixed integer literal (`0x`/`0o`/`0b`). */
+function integerRadixOf(raw: string): { radix: number; prefix: string } | undefined {
+  if (raw.startsWith('0x')) return { radix: 16, prefix: '0x' };
+  if (raw.startsWith('0o')) return { radix: 8, prefix: '0o' };
+  if (raw.startsWith('0b')) return { radix: 2, prefix: '0b' };
+  return undefined;
+}
+
+/** Extracts the underscore grouping period: the digit count of the rightmost group. */
+function underscorePeriodOf(raw: string): number | undefined {
+  let body = raw;
+  if (body.startsWith('+') || body.startsWith('-')) body = body.slice(1);
+  if (body.startsWith('0x') || body.startsWith('0o') || body.startsWith('0b')) body = body.slice(2);
+  const lastUnderscore = body.lastIndexOf('_');
+  return lastUnderscore === -1 ? undefined : body.length - lastUnderscore - 1;
+}
+
+/** Inserts an underscore every `period` digits, counted from the right. */
+function groupDigits(digits: string, period: number): string {
+  if (digits.length <= period) return digits;
+  let result = '';
+  let count = 0;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    result = digits[i] + result;
+    count++;
+    if (count === period && i > 0) {
+      result = '_' + result;
+      count = 0;
+    }
+  }
+  return result;
+}
+
+/** Renders an integer in the style of an existing integer literal (radix, digit case, grouping). */
+function renderIntegerLike(value: number | bigint, existingRaw: string): string | undefined {
+  const radixInfo = integerRadixOf(existingRaw);
+  const period = underscorePeriodOf(existingRaw);
+
+  if (radixInfo) {
+    // TOML prefixed integers (hex/octal/binary) cannot carry a sign, so a
+    // negative value cannot keep the original radix. Fall back to the default
+    // decimal rendering by returning undefined.
+    const negative = typeof value === 'bigint' ? value < 0n : value < 0;
+    if (negative) return undefined;
+
+    const uppercaseHex = radixInfo.radix === 16 && /[A-F]/.test(existingRaw);
+    let digits = value.toString(radixInfo.radix);
+    if (uppercaseHex) digits = digits.toUpperCase();
+    return radixInfo.prefix + (period ? groupDigits(digits, period) : digits);
+  }
+
+  if (period) {
+    const negative = typeof value === 'bigint' ? value < 0n : value < 0;
+    const abs = negative ? value.toString().slice(1) : value.toString();
+    return (negative ? '-' : '') + groupDigits(abs, period);
+  }
+
+  return undefined;
+}
+
+/**
  * Preserves formatting from the existing node when applying it to the replacement node.
  * This includes multiline string formats, trailing commas, DateTime formats, etc.
  * 
  * @param existing - The existing node with formatting to preserve
  * @param replacement - The replacement node to apply formatting to
  */
-function preserveFormatting(existing: Value, replacement: Value): void {
+function preserveFormatting(existing: Value, replacement: Value, escapeSequenceUpperCase = true): void {
   
   // Preserve string format (handles basic, literal, multiline in all variants)
   if (isString(existing) && isString(replacement)) {
-    const newString = generateString(replacement.value, existing.raw);
+    const newString = generateString(replacement.value, existing.raw, escapeSequenceUpperCase);
     replacement.raw = newString.raw;
     replacement.loc = newString.loc;
   }
@@ -853,7 +949,59 @@ function preserveFormatting(existing: Value, replacement: Value): void {
     }
     // If existing had no sign and replacement has no sign, leave as-is (nan)
   }
-  
+
+  // Preserve integer literal formatting (underscore grouping and radix prefix)
+  // when an integer is replaced by another integer. `1_000_000 -> 10000` keeps
+  // the grouping and becomes `10_000`; `0xFF -> 256` stays hexadecimal `0x100`.
+  if (isIntegerNode(existing) && replacement.type === NodeType.Integer) {
+    const existingInt = existing as IntegerNode;
+    const newRaw = renderIntegerLike(replacement.value, existingInt.raw);
+    if (newRaw !== undefined) {
+      const replacementInt = replacement as IntegerNode;
+      replacementInt.raw = newRaw;
+      replacementInt.loc.end.column = replacementInt.loc.start.column + newRaw.length;
+    }
+  }
+
+  // Preserve number formatting when replacing an existing float:
+  // - a "round" float (zero fraction, e.g. `1.0`, `1.00`, `1.0e10`) keeps its
+  //   decimal-place count when the new value is a whole number;
+  // - exponent notation is kept when the source used it, dropping a non-zero
+  //   fraction once the new value becomes a whole number (e.g. `1.25e10 -> 1e11`);
+  // - a fractional float without an exponent still collapses to an integer.
+  if (isFloat(existing) && (replacement.type === NodeType.Integer || replacement.type === NodeType.Float)) {
+    const existingFloat = existing as FloatNode;
+    const value = replacement.value;
+
+    if (typeof value === 'number') {
+      const { hasExponent, fractionLength, isRound } = analyzeFloatStyle(existingFloat.raw);
+      const valueIsIntegral = Number.isInteger(value) && !Object.is(value, -0);
+      const replacementDecimals = decimalPlacesOfRaw(replacement.raw);
+
+      let newRaw: string | undefined;
+      // `inf`, `nan` and `-0` carry no exponent component: their generated raw
+      // form already expresses the value, and rendering them as mantissa and
+      // exponent either throws (there is no exponent part to read) or drops the
+      // sign of the zero.
+      if (hasExponent && Number.isFinite(value) && !Object.is(value, -0)) {
+        const uppercaseExponent = existingFloat.raw.includes('E');
+        const minDecimals = valueIsIntegral
+          ? Math.max(isRound ? fractionLength : 0, replacementDecimals)
+          : replacementDecimals;
+        newRaw = renderExponentNotation(value, minDecimals, uppercaseExponent);
+      } else if (valueIsIntegral && isRound) {
+        newRaw = value.toFixed(Math.max(fractionLength, replacementDecimals));
+      }
+
+      if (newRaw !== undefined) {
+        const replacementFloat = replacement as unknown as FloatNode;
+        replacementFloat.type = NodeType.Float;
+        replacementFloat.raw = newRaw;
+        replacementFloat.loc.end.column = replacementFloat.loc.start.column + newRaw.length;
+      }
+    }
+  }
+
   // Preserve array trailing comma format
   if (isInlineArray(existing) && isInlineArray(replacement)) {
     const originalHadTrailingCommas = arrayHadTrailingCommas(existing);
@@ -1070,7 +1218,7 @@ function applyChanges(
 
     if (!changed) return entry;
 
-    const rebuilt = generateTableArray(entry.key.item.value);
+    const rebuilt = generateTableArray(entry.key.item.value, format.escapeSequenceUpperCase);
     for (const row of rows) insert(rebuilt, rebuilt, row);
     applyWrites(rebuilt);
     return rebuilt;
@@ -1204,7 +1352,7 @@ function applyChanges(
       if (jsValue !== undefined) {
         const freshValue = regenerateValue(jsValue, format);
         if (freshValue !== undefined) {
-          return generateKeyValue([...missing, ...child.key.value], freshValue);
+          return generateKeyValue([...missing, ...child.key.value], freshValue, false, format.escapeSequenceUpperCase);
         }
       }
     }
@@ -1333,7 +1481,7 @@ function applyChanges(
       }
     }
     if (isInlineTable(parent)) {
-      const keyValue = generateKeyValue((child.item as KeyValue).key.value, value);
+      const keyValue = generateKeyValue((child.item as KeyValue).key.value, value, false, format.escapeSequenceUpperCase);
       const regenerated = generateInlineItem(keyValue);
       regenerated.comma = child.comma;
       return regenerated;
@@ -1504,7 +1652,7 @@ function applyChanges(
         let jsValue: any = updated_js;
         for (const k of change.path) jsValue = jsValue?.[k];
         if (jsValue !== undefined) {
-          const freshTableArray = generateTableArray(tableArrayKey);
+          const freshTableArray = generateTableArray(tableArrayKey, format.escapeSequenceUpperCase);
           const entryDoc = parseJS(jsValue, format);
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
@@ -1523,7 +1671,7 @@ function applyChanges(
               const keyNode = holder.item;
               const fullKey = tableArrayKey.concat(keyNode.value);
               keyNode.value = fullKey;
-              keyNode.raw = generateKey(fullKey).raw;
+              keyNode.raw = generateKey(fullKey, format.escapeSequenceUpperCase).raw;
               keyNode.loc.start.column = holder.loc.start.column + 1;
               keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
               holder.loc.end.column = keyNode.loc.start.column + keyNode.raw.length + 1;
@@ -2075,7 +2223,7 @@ function applyChanges(
           }
         }
         
-        preserveFormatting(existing.value, replacement.value);
+        preserveFormatting(existing.value, replacement.value, format.escapeSequenceUpperCase);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);
         }
@@ -2095,7 +2243,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2196,7 +2344,7 @@ function applyChanges(
           );
           if (matchLen > 0 && matchLen < existingKeyValue.key.value.length) {
             existingKeyValue.key.value = existingKeyValue.key.value.slice(0, matchLen);
-            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value).raw;
+            existingKeyValue.key.raw = generateKey(existingKeyValue.key.value, format.escapeSequenceUpperCase).raw;
             const oldEndCol = existingKeyValue.key.loc.end.column;
             const newEndCol = existingKeyValue.key.loc.start.column + existingKeyValue.key.raw.length;
             const delta = newEndCol - oldEndCol;
@@ -2246,7 +2394,7 @@ function applyChanges(
           }
         }
 
-        preserveFormatting(existingKeyValue.value, replacement.value);
+        preserveFormatting(existingKeyValue.value, replacement.value, format.escapeSequenceUpperCase);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
@@ -2259,7 +2407,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2279,7 +2427,7 @@ function applyChanges(
           );
           if (matchLen > 0 && matchLen < existingKV.key.value.length) {
             existingKV.key.value = existingKV.key.value.slice(0, matchLen);
-            existingKV.key.raw = generateKey(existingKV.key.value).raw;
+            existingKV.key.raw = generateKey(existingKV.key.value, format.escapeSequenceUpperCase).raw;
             const oldEndCol = existingKV.key.loc.end.column;
             const newEndCol = existingKV.key.loc.start.column + existingKV.key.raw.length;
             const delta = newEndCol - oldEndCol;
@@ -2336,7 +2484,7 @@ function applyChanges(
         }
 
         // Preserve formatting and edit the value within
-        preserveFormatting(existingKV.value, replacement.item.value);
+        preserveFormatting(existingKV.value, replacement.item.value, format.escapeSequenceUpperCase);
         parent = existingKV;
         existing = existingKV.value;
         replacement = replacement.item.value;
@@ -2352,7 +2500,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
             }
           }
         }
@@ -2434,7 +2582,7 @@ function applyChanges(
                   removeMember(original, tableParent, existing);
                   commentEligibleNodes.add(freshKV);
                 } else {
-                  const newTable = generateTable(parentKey);
+                  const newTable = generateTable(parentKey, format.escapeSequenceUpperCase);
                   materialisedTables.add(newTable);
                   insert(original, newTable, freshKV, 0);
                   replace(original, tableParent, existing, newTable);
@@ -2582,7 +2730,7 @@ function applyChanges(
                 extendKeyWithParentAndReplace(freshKV, parentKey, existing, tableParent);
                 commentEligibleNodes.add(freshKV);
               } else {
-                const newTable = generateTable(parentKey);
+                const newTable = generateTable(parentKey, format.escapeSequenceUpperCase);
                 materialisedTables.add(newTable);
                 insert(original, newTable, freshKV, 0);
                 replace(original, tableParent, existing, newTable);
@@ -2631,7 +2779,7 @@ function applyChanges(
       // flag so the replacement doesn't introduce an unwanted trailing comma.
       if (isInlineItem(existing) && isInlineItem(replacement)) {
         if (isString(existing.item) && isString(replacement.item)) {
-          preserveFormatting(existing.item, replacement.item);
+          preserveFormatting(existing.item, replacement.item, format.escapeSequenceUpperCase);
           replacement.loc = {
             start: { ...replacement.item.loc.start },
             end: { ...replacement.item.loc.end }
@@ -2720,7 +2868,7 @@ function applyChanges(
                 // Rename the key in place (preserving original loc.start).
                 const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
                 aotKey.value = parentPath as string[];
-                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value);
+                aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value, format.escapeSequenceUpperCase);
                 aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
                 aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
                 // Shrink loc.end to the header-only span.
@@ -2766,7 +2914,7 @@ function applyChanges(
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
-                const emptyTable = generateTable(parentPath as string[]);
+                const emptyTable = generateTable(parentPath as string[], format.escapeSequenceUpperCase);
                 materialisedTables.add(emptyTable);
                 // The removals above already spliced the document items, so a
                 // stale index (e.g. the removed entry was the last item) must
@@ -2815,7 +2963,7 @@ function applyChanges(
                 let value: any = rawUpdated;
                 for (const k of change.path.slice(0, -1)) value = value?.[k];
                 if (isObject(value) && Object.keys(value).length === 0) {
-                  const emptyTable = generateTable(cstParentPath as string[]);
+                  const emptyTable = generateTable(cstParentPath as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   // Clamp to the post-removal items length — a stale last-item
                   // index inserts past the end and strands the generated
@@ -2916,7 +3064,7 @@ function applyChanges(
               const keyHolder = table.key;
               const key = hasItem(keyHolder) ? keyHolder.item : keyHolder;
               key.value = cstParentPath as string[];
-              key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+              key.raw = preserveEscapedKeyRaw(key.raw, key.value, format.escapeSequenceUpperCase);
               key.loc.end.column = key.loc.start.column + key.raw.length;
               keyHolder.loc.end.column = keyHolder.loc.start.column + key.raw.length + 2;
               // The body is gone — shrink table.loc to the header only.
@@ -3178,7 +3326,7 @@ function applyChanges(
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
-              const emptyTable = generateTable(cstParentKey as string[]);
+              const emptyTable = generateTable(cstParentKey as string[], format.escapeSequenceUpperCase);
               materialisedTables.add(emptyTable);
               // Insert at the original position so preceding comments
               // stay adjacent without a spurious blank line.  Clamp to the
@@ -3388,7 +3536,7 @@ function applyChanges(
                     : isTable(container)
                       ? (container as Table).key.item.value.concat(relativePrefix)
                       : relativePrefix;
-                  const emptyTable = generateTable(tableKey as string[]);
+                  const emptyTable = generateTable(tableKey as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
                   if (isAotEntry) {
@@ -3625,7 +3773,7 @@ function applyChanges(
           const segmentIndex = sourcePath.length - 1;
           const originalRaw = key.raw;
           key.value[segmentIndex] = change.to;
-          key.raw = preserveEscapedKeyRaw(key.raw, key.value);
+          key.raw = preserveEscapedKeyRaw(key.raw, key.value, format.escapeSequenceUpperCase);
           preserveDottedKeySpacing(key, originalRaw);
           key.loc.end.column = key.loc.start.column + key.raw.length;
           return; // skip the rest of rename logic for this change
@@ -3667,7 +3815,7 @@ function applyChanges(
           const segmentIndex = fullSourcePath.length - 1;
           const originalRaw = parentKey.raw;
           parentKey.value[segmentIndex] = change.to;
-          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value, format.escapeSequenceUpperCase);
           preserveDottedKeySpacing(parentKey, originalRaw);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           return;
@@ -3681,7 +3829,7 @@ function applyChanges(
             arraysEqual(parentKey.value, fullSourcePath.slice(fullSourcePath.length - parentKey.value.length))) {
           const oldKeyRaw = parentKey.raw;
           parentKey.value[parentKey.value.length - 1] = change.to;
-          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value);
+          parentKey.raw = preserveEscapedKeyRaw(parentKey.raw, parentKey.value, format.escapeSequenceUpperCase);
           parentKey.loc.end.column = parentKey.loc.start.column + parentKey.raw.length;
           // The `=` position lives on the KeyValue, not the Key, and the value
           // keeps its own columns.  A rename that GROWS the last segment widens
@@ -3716,7 +3864,7 @@ function applyChanges(
       // Preserve key escape style from the original key raw when renaming.
       // Example: if the original key used "\\u263A", keep that escape form
       // instead of normalizing to the raw character (☺).
-      replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value);
+      replacementKey.raw = preserveEscapedKeyRaw(parentKey.raw, replacementKey.value, format.escapeSequenceUpperCase);
       preserveDottedKeySpacing(replacementKey, parentKey.raw);
       replacementKey.loc.end.column = replacementKey.loc.start.column + replacementKey.raw.length;
 
@@ -4049,7 +4197,7 @@ function handleStructuralEdit(
               const oldRaw = row.key.raw;
               const dotted = tableKey.concat(row.key.value);
               row.key.value = dotted;
-              row.key.raw = generateKey(dotted).raw;
+              row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
               const delta = row.key.raw.length - oldRaw.length;
               row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
               row.equals += delta;
@@ -4525,7 +4673,7 @@ function convertNestedInlineTablesToMultiline(table: Table, original: Document, 
         // Only convert to separate table if depth is less than inlineTableStart
         if (depth < (format.inlineTableStart ?? 1) && format.inlineTableStart !== 0) {
           // Convert this inline table to a separate table section
-          const separateTable = generateTable(nestedTableKey);
+          const separateTable = generateTable(nestedTableKey, format.escapeSequenceUpperCase);
           
           // Move all items from the inline table to the separate table
           for (const inlineItem of item.value.items) {
@@ -4568,7 +4716,7 @@ function convertInlineTableToSeparateSection(child: KeyValue, parent: Table, ori
   // Convert the inline table to a separate table section
   const baseTableKey = parent.key.item.value; // Get the parent table's key path
   const nestedTableKey = [...baseTableKey, ...child.key.value]; // Combine with the new key
-  const separateTable = generateTable(nestedTableKey);
+  const separateTable = generateTable(nestedTableKey, format.escapeSequenceUpperCase);
   
   // We know child.value is an InlineTable from the calling context
   if (isInlineTable(child.value)) {

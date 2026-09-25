@@ -51,8 +51,9 @@ This command:
 - Creates TypeScript declaration files
 
 The build outputs are:
-- `dist/toml-patch.js` - ESM format (for Node.js and modern bundlers)
-- `dist/toml-patch.d.ts` - TypeScript type declarations
+- `dist/toml-patch.js` - canonical ESM entrypoint (for Node.js and modern bundlers)
+- `dist/toml-patch.d.ts` - canonical TypeScript type declarations
+- `dist/patch-lite.js` - lite version entry point
 
 ### Testing
 
@@ -127,6 +128,9 @@ pnpm run specs
 ```
 
 This runs tests against the official TOML spec test cases from the submodules.
+It covers both directions: every valid fixture is decoded and compared with its
+expected JSON, and every one is re-encoded to check that `stringify()` preserves
+the value, which is the same check `toml-test -encoder` performs in CI.
 
 ### Benchmarking
 
@@ -143,6 +147,10 @@ budgets in `benchmark/thresholds.toml`.
 To cover every fixture in both corpora, including the single-type and scaling
 documents the curated set leaves out, run `pnpm run bench:all`. Add `--list` to
 either command to print the fixtures without running them.
+
+Bundle sizes are gated the same way. `pnpm run bench:patch-lite` measures the
+full and lite bundles and exits non-zero when `[bundle.patch-lite]` in
+`benchmark/thresholds.toml` is exceeded.
 
 ### Complete Development Cycle
 

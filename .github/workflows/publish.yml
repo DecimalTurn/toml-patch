@@ -64,6 +64,22 @@ jobs:
         id: dev-publish
         run: npm publish ./dist/dev-package --tag dev --provenance --ignore-scripts
 
+      - name: Check lite package
+        id: lite-package-exists
+        if: steps.build.outcome == 'success'
+        # A rerun may reach this workflow after the lite version was published.
+        run: npm view @decimalturn/toml-patch@$(node -p "require('./package.json').version")-lite version
+        continue-on-error: true
+
+      - name: Prepare and test lite package
+        if: steps.build.outcome == 'success'
+        run: pnpm run test:lite
+
+      - name: Publish lite package
+        if: steps.build.outcome == 'success' && steps.lite-package-exists.outcome != 'success'
+        id: lite-publish
+        run: npm publish ./dist/lite --tag lite --provenance --ignore-scripts
+
       - name: Publish to npm
         id: pnpm-publish
         run: pnpm publish --provenance --no-git-checks
