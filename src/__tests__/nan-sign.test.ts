@@ -31,6 +31,33 @@ test('the stable form keeps the sign of a NaN apart', () => {
   expect(stableStringify(NEGATIVE_NAN)).not.toBe(stableStringify(NaN));
 });
 
+/**
+ * The ordinary way a negative NaN reaches the library: TOML spells NaN with an
+ * optional sign, so a document can legitimately say `-nan`, and that spelling
+ * has to survive being read and written back.
+ *
+ * This is the same promise the library already makes for `1.00`, `0x1F` or a
+ * literal string: a field that was not edited keeps the spelling it had, and a
+ * value handed to another document arrives as it was written. Nothing here
+ * manipulates bytes — the sign is carried by the parsed value from start to
+ * finish; the loops below are only there to pin the read that carries it.
+ */
+test('round-trips a negative NaN that came from a document', () => {
+  const document = 'temperature = -nan\nretries = 3\n';
+
+  // Editing an unrelated key has to leave the sentinel alone.
+  const config = parse(document) as any;
+  config.retries = 4;
+  expect(stringify(config)).toBe('temperature = -nan\nretries = 4\n');
+  expect(isNegativeNan(parse('temperature = -nan\n').temperature)).toBe(true);
+
+  // Handing the parsed value to another document keeps the spelling too.
+  const next = parse(document) as any;
+  next.retries = 1;
+  expect(patch('temperature = 0.0\nretries = 1\n', next))
+    .toBe('temperature = -nan\nretries = 1\n');
+});
+
 test('keeps writing a negative NaN as -nan', () => {
   const iterations = 4000;
   let stringifyMisses = 0;
