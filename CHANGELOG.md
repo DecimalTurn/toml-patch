@@ -26,11 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: fall back to a multiline literal (`'''...'''`) or a basic string when an edited literal string value cannot be written literally, instead of emitting TOML that the parser rejects. ([#309])
 - Patching: keep escape sequences that are string content intact when writing basic strings. A value holding text such as `\u000c` was written back as `\u000C`, changing the value, in both `patch()` and `stringify()`. ([#309])
 - Patching: escape a standalone carriage return written into a multiline basic string, instead of emitting a raw CR that the parser rejects when the document is read back. ([#309])
-- Patching: keep a leading newline in an edited multiline string. A value starting with a newline came back without it, because the newline directly after the opening delimiter is dropped when the document is read. ([#309])
-- Patching: keep the raw form of `inf`, `nan` and `-0` when the edited value came from a document that used exponent notation, instead of throwing or dropping the sign of the zero. ([#309])
-- Patch-lite: write a negative NaN as `-nan` instead of an unsigned `nan`, so the value stops looking changed on later calls. ([#309])
+- Patching: keep a leading newline in an edited multiline string. ([#309])
+- Patching: keep the raw form of `inf`, `nan` and `-0` when the edited value came from a document that used exponent notation. ([#309])
 - Escape sequences: do not take the document's escape sequence case from escaped content such as the text `\uabcd`. ([#309])
-- Formatting: apply `escapeSequenceUpperCase` to generated keys, not only to values. ([#309])
 
 ## [3.1.2] - 2026-09-22
 
