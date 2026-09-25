@@ -1,6 +1,6 @@
 import parseTOML from './parse-toml';
 import toJS from './to-js';
-import diffLite, { formatPath } from './diff-lite';
+import diffLite, { formatPath, PatchLiteError } from './diff-lite';
 import { encodeValue } from './encode-lite';
 import findByPath from './find-by-path';
 import { hasLeadingBom, UTF8_BOM } from './decode-utf8';
@@ -66,6 +66,19 @@ function valueAt(root: any, path: Path): any {
  * @returns A new TOML string with only the edited values replaced
  */
 export default function patchLite(existing: string, updated: any): string {
+  // The full API takes a format object as its third argument. This build has no
+  // formatting options, so dropping the argument silently would change the
+  // output without saying so. Using `arguments` rather than a rest parameter
+  // keeps the published two-argument signature, which already rejects the call
+  // in TypeScript; the check is for JavaScript callers.
+  if (arguments.length > 2 && arguments[2] !== undefined && arguments[2] !== null) {
+    throw new PatchLiteError(
+      'UnsupportedOption',
+      [],
+      'patch-lite does not support formatting options; use patch() from the main package'
+    );
+  }
+
   const hadBom = hasLeadingBom(existing);
   const source = hadBom ? existing.slice(1) : existing;
 

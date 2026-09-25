@@ -80,8 +80,8 @@ function patch(existing: string, updated: any): string
   want to write. Only keys present in `existing` are read.
 - Returns a new TOML string with only the edited value spans replaced.
 
-The full `patch()` has a third optional `format` parameter. `patch-lite` does not; a third argument
-is ignored.
+The full `patch()` has a third optional `format` parameter. `patch-lite` has no formatting options,
+so passing one throws a `PatchLiteError` with the code `UnsupportedOption` rather than ignoring it.
 
 ### What counts as an edit
 
@@ -118,6 +118,7 @@ document.
 | Changing a primitive to a table or array, or the reverse | `TypeChange` | `Cannot change a number to a table at a` |
 | Changing a date to a non-date, or the reverse | `TypeChange` | `Cannot change a date to a number at a` |
 | `undefined`, `null`, functions, symbols, unsupported objects | `UnsupportedValue` | `Unsupported value type undefined at a` |
+| Passing a `format` argument | `UnsupportedOption` | `patch-lite does not support formatting options` |
 
 ### Error contract
 
@@ -169,7 +170,7 @@ spans directly — back to front, so earlier offsets stay valid. Two consequence
 full `patch()` — `newLine`, `trailingNewline`, `trailingComma`, `indentWidth`, `multilineTable`,
 `multilineArray`, `bracketSpacing`, `escapeSequenceUpperCase`, `updateOrder` and the rest — is
 unavailable. The source's existing formatting is always preserved as-is. A third argument passed to
-`patch-lite` is silently ignored.
+`patch-lite` throws a `PatchLiteError` with the code `UnsupportedOption`.
 
 Object key order in `updated` is likewise ignored: edits are resolved by path, so you cannot use the
 order of your object to reorder the document.

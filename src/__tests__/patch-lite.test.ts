@@ -284,6 +284,23 @@ describe('edits', () => {
     expect(parse(once)).toEqual(updated);
   });
 
+  test('rejects a format argument instead of ignoring it', () => {
+    let error: any;
+    try {
+      (patch as any)('x = 1\n', { x: 2 }, { trailingComma: false });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(PatchLiteError);
+    expect(error.code).toBe('UnsupportedOption');
+    expect(error.message).toMatch(/does not support formatting options/);
+
+    // An empty third argument is still fine: wrappers pass one through.
+    expect((patch as any)('x = 1\n', { x: 2 }, undefined)).toBe('x = 2\n');
+    expect((patch as any)('x = 1\n', { x: 2 }, null)).toBe('x = 2\n');
+  });
+
   test('returns the original string for a no-op update', () => {
     const existing = dedent`
       title = "TOML example"

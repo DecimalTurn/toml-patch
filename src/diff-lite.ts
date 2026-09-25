@@ -23,7 +23,8 @@ export type PatchLiteErrorCode =
   | 'ArrayLengthChange'
   | 'ArrayReorder'
   | 'TypeChange'
-  | 'UnsupportedValue';
+  | 'UnsupportedValue'
+  | 'UnsupportedOption';
 
 export class PatchLiteError extends Error {
   readonly code: PatchLiteErrorCode;
