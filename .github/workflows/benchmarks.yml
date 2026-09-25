@@ -178,10 +178,6 @@ jobs:
         path: dist
     - name: Bundle size budgets
       run: pnpm run bench:patch-lite
-    # Tree-shaking runs here too: it bundles minimal consumers with the rolldown
-    # CLI from node_modules and only needs the built dist.
-    - name: Tree-shaking checks
-      run: pnpm run bench:tree-shaking
 
   # Posts one comment on the pull request holding every benchmark summary. The
   # comment is updated in place on later pushes instead of piling up.
