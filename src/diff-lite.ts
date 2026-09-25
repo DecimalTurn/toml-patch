@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify, sameValue } from './utils';
+import { isObject, datesEqual, stableStringify, sameValue, isNegativeNan } from './utils';
 
 /**
  * A path into a JavaScript object, mixing object keys and array indices.
@@ -63,11 +63,7 @@ function describe(value: any): string {
 }
 
 function sameNanSign(a: number, b: number): boolean {
-  const bufA = new Float64Array([a]);
-  const bufB = new Float64Array([b]);
-  const viewA = new DataView(bufA.buffer);
-  const viewB = new DataView(bufB.buffer);
-  return (viewA.getUint32(4, true) & 0x80000000) === (viewB.getUint32(4, true) & 0x80000000);
+  return isNegativeNan(a) === isNegativeNan(b);
 }
 
 /**

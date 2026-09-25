@@ -30,7 +30,7 @@ import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
 import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
 import { escapeStringContent, upperCaseHexEscapes } from './escape-preference';
-import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate } from './utils';
+import { isBasicString, isMultilineBasicString, isLiteralString, isMultilineLiteralString, temporalToTomlString, assertNoLoneSurrogate, isNegativeNan } from './utils';
 
 /**
  * Generates a new TOML document node.
@@ -363,11 +363,8 @@ export function generateFloat(value: number, minimumDecimals: number = 1): Float
   } else if (value === -Infinity) {
     raw = '-inf';
   } else if (Number.isNaN(value)) {
-    // Detect negative NaN via its IEEE 754 bit pattern
-    const buf = new Float64Array([value]);
-    const view = new DataView(buf.buffer);
-    const highBits = view.getUint32(4, true); // high 32 bits in little-endian
-    const isNegative = (highBits & 0x80000000) !== 0;
+    // Detect a negative NaN through its IEEE 754 sign bit.
+    const isNegative = isNegativeNan(value);
     nanSign = isNegative ? '-' : undefined;
     raw = isNegative ? '-nan' : 'nan';
   } else if (Object.is(value, -0)) {

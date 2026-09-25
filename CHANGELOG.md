@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patching: keep a leading newline in an edited multiline string. ([#309])
 - Patching: keep the raw form of `inf`, `nan` and `-0` when the edited value came from a document that used exponent notation. ([#309])
 - Escape sequences: do not take the document's escape sequence case from escaped content such as the text `\uabcd`. ([#309])
+- Patching: keep the sign of a negative NaN reliably. The sign was read through a typed array that occasionally loses it, so `patch()` or `stringify()` could write `nan` where the value was `-nan`. ([#309])
 
 ## [3.1.2] - 2026-09-22
 

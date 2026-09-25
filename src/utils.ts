@@ -27,6 +27,13 @@ export function sameValue(a: any, b: any): boolean {
   return a === b && (typeof a !== 'number' || Object.is(a, b));
 }
 
+// Scratch buffer for reading the sign bit of a number. The value has to be
+// written through DataView: `new Float64Array([value])` is not reliable for
+// this, because the engine occasionally canonicalises the NaN payload on the
+// way in, and a `-nan` then reads as positive (about one call in twenty
+// thousand, which is enough to make NaN handling intermittent).
+const signScratch = new DataView(new ArrayBuffer(8));
+
 /**
  * Detects a negative NaN through its IEEE 754 sign bit.
  *
@@ -35,8 +42,8 @@ export function sameValue(a: any, b: any): boolean {
  */
 export function isNegativeNan(value: number): boolean {
   if (!Number.isNaN(value)) return false;
-  const view = new DataView(new Float64Array([value]).buffer);
-  return (view.getUint32(4, true) & 0x80000000) !== 0;
+  signScratch.setFloat64(0, value, true);
+  return (signScratch.getUint32(4, true) & 0x80000000) !== 0;
 }
 
 export function isString(value: any): value is string {
@@ -247,9 +254,9 @@ export function stableStringify(object: any): string {
     // then diffs `inf` and `nan` as the same element and removes the wrong
     // one (fuzz seed 22629).  Tag them by their IEEE 754 sign bit so every
     // distinct non-finite number (including -NaN vs +NaN) stays unique.
-      const buf = new Float64Array([value]);
-    const view = new DataView(buf.buffer);
-    const sign = view.getUint32(4, true) & 0x80000000 ? '-' : '+';
+      const sign = Number.isNaN(value)
+        ? (isNegativeNan(value) ? '-' : '+')
+        : (value < 0 ? '-' : '+');
       output.push(`${sign}${String(value)}`);
     } else if (typeof value === 'number' && Object.is(value, -0)) {
       // JSON.stringify(-0) is "0", so negative zero would compare equal to a
