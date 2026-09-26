@@ -445,6 +445,112 @@ describe('R5 - comments the parser files under the previous table', () => {
   });
 });
 
+describe('a pinned block inside a table body is owned by that table', () => {
+  // A blank line before the next header severs the R2 link (R3), so the block is not
+  // owned by [b]. It is not ownerless though: it belongs to the [a] block, so it is
+  // removed with [a] and reordered with [a], while removing a row inside [a] leaves it.
+  // See docs/Comment-Ownership.md R3 and R5.
+  const pinned = dedent`
+    [a]
+    x = 1
+
+    # about b
+
+    [b]
+    y = 2
+  ` + '\n';
+
+  test('removes the pinned comment when its own table is removed', () => {
+    const value = parse(pinned);
+    delete value.a;
+
+    expect(patch(pinned, value)).toEqual(dedent`
+      [b]
+      y = 2
+    ` + '\n');
+  });
+
+  test('keeps the pinned comment when the following table is removed instead', () => {
+    const value = parse(pinned);
+    delete value.b;
+
+    expect(patch(pinned, value)).toEqual(dedent`
+      [a]
+      x = 1
+
+      # about b
+    ` + '\n');
+  });
+
+  test('leaves the pinned comment in place when a row inside its table is removed', () => {
+    const value = parse(pinned);
+    delete value.a.x;
+
+    expect(patch(pinned, value)).toEqual(dedent`
+      [a]
+
+      # about b
+
+      [b]
+      y = 2
+    ` + '\n');
+  });
+
+  test('carries the pinned comment along when its table is reordered', () => {
+    // A mid-document move, so "dumped at the end of the file" would be distinguishable
+    // from genuine ownership: the comment must land inside [a]'s new position, before [c].
+    const input = dedent`
+      [a]
+      x = 1
+
+      # about b
+
+      [b]
+      y = 2
+
+      [c]
+      z = 3
+    ` + '\n';
+
+    const result = patch(input, { b: { y: 2 }, a: { x: 1 }, c: { z: 3 } }, { updateOrder: true });
+
+    expect(result).toEqual(dedent`
+      [b]
+      y = 2
+
+      [a]
+      x = 1
+
+      # about b
+
+      [c]
+      z = 3
+    ` + '\n');
+  });
+
+  test('keeps a pinned comment that sits outside the table it precedes', () => {
+    const input = dedent`
+      # about a
+
+      [a]
+      x = 1
+
+      [b]
+      y = 2
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.a;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # about a
+
+      [b]
+      y = 2
+    ` + '\n');
+  });
+});
+
 describe('R6 - commented-out entries are not owned', () => {
   test('keeps a commented-out key above the deleted key', () => {
     const input = dedent`
