@@ -276,4 +276,150 @@ describe('multiline container formatting', () => {
       }
     ` + '\n');
   });
+
+  test('keeps a source array multiline, and its trailing comment, when compact layout is requested', () => {
+    // A compact mode only decides how a *generated* container is written. An
+    // array that already exists in the source keeps the layout it was written
+    // with, so the trailing comment stays on its element's row.
+    const source = dedent`
+      value = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n';
+    const value = { value: [1, 2, 3, 4] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      value = [
+          1, # First
+          2,
+          3,
+          4
+      ]
+    ` + '\n');
+  });
+
+  test('keeps a trailing comment on its element slot when that element changes', () => {
+    const source = dedent`
+      value = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n';
+    const value = { value: [9, 2, 3] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    // Ownership is positional here: the comment describes the first row, so it
+    // stays on that row even though the value it started above is gone.
+    expect(result).toBe(dedent`
+      value = [
+          9, # First
+          2,
+          3
+      ]
+    ` + '\n');
+  });
+
+  test('keeps a trailing comment on the closing row when the array shrinks to one element', () => {
+    const source = dedent`
+      value = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n';
+    const value = { value: [1] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    // The comment is still owned by the element, so it moves onto the element's
+    // row and the now-trailing comma in front of it is dropped.
+    expect(result).toBe(dedent`
+      value = [
+          1  # First
+      ]
+    ` + '\n');
+  });
+
+  test('hoists a trailing comment below an array generated on one line', () => {
+    // Replacing an inline table with an array changes the container kind, so the
+    // array is regenerated rather than patched in place. Compact layout puts it
+    // on one line, and a comment cannot live inside that line (it would comment
+    // out the closing bracket), so it is hoisted to the row below, keeping the
+    // column it held in the source.
+    const source = dedent`
+      value = {
+        a = 1, # First
+        b = 2
+      }
+    ` + '\n';
+    const value = { value: [1, 2, 3] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe('value = [ 1, 2, 3 ]\n' + '         # First\n');
+  });
+
+  test('renames the key of a commented array without compacting the array', () => {
+    // A rename is only inferred when the value is unchanged, and it edits the
+    // key in place. The array node is never touched, so the compact request has
+    // no effect on it and the comment keeps a row of its own to sit on.
+    const source = dedent`
+      value = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n';
+    const value = { renamed: [1, 2, 3] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe(dedent`
+      renamed = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n');
+  });
+
+  test('keeps a compact array comment outside the brackets through a rename', () => {
+    const source = dedent`
+      value = [ 1, 2 ] # First
+    ` + '\n';
+    const value = { renamed: [1, 2] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    // The comment trails the key-value, not an element, so it stays after the
+    // closing bracket instead of being pulled inside the array.
+    expect(result).toBe(dedent`
+      renamed = [ 1, 2 ] # First
+    ` + '\n');
+  });
+
+  test('compacts a changed array as remove plus add and drops the comment', () => {
+    // Changing the array breaks the rename inference: the diff reports a Remove
+    // and an Add. The new array is generated, and compact layout puts it on one
+    // line. The old comment cannot follow it there without commenting out the
+    // closing bracket, so it is dropped rather than inlined.
+    const source = dedent`
+      value = [
+          1, # First
+          2,
+          3
+      ]
+    ` + '\n';
+    const value = { renamed: [1, 2, 3, 4] };
+    const result = patch(source, value, { multilineArray: false });
+
+    expect(parse(result)).toEqual(value);
+    expect(result).toBe('renamed = [ 1, 2, 3, 4 ]\n');
+  });
 });
