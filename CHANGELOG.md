@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Packaging: the main package no longer ships the lite build or a `./patch-lite` subpath. `patch-lite` is published only under the `lite` npm dist-tag, whose root export is the lite build, so the import line is unchanged for either install.
+
 ## [3.2.0] - 2026-09-26
 
 ### Added

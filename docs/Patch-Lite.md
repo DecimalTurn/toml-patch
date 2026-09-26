@@ -8,8 +8,10 @@ It exists to answer one question: *do you only need to change values in a docume
 have?* If the answer is yes, `patch-lite` gives you the same guarantees as the full `patch()` for
 those edits at **26.7% of the minified size** and roughly **1.9x the throughput**.
 
+Install it from the `lite` npm dist-tag with `npm install --save @decimalturn/toml-patch@lite`:
+
 ```js
-import { patch } from '@decimalturn/toml-patch/patch-lite';
+import { patch } from '@decimalturn/toml-patch';
 
 const existing = 'version = "1.0.0"\n';
 patch(existing, { version: '1.0.1' });
@@ -43,26 +45,25 @@ patch(existing, { version: '1.0.1' });
 | Preserve line ending backslashes in multiline basic strings | ❌ | ✅ |
 
 If any item marked ❌ is a requirement, use the full `patch()` from the package root. The two
-share a call shape, so switching later is an import change — but see
+share a call shape, so switching later is an install change — but see
 [Switching from the full API](#switching-from-the-full-api) for the caveats.
 
 ## Installation and imports
 
-As a subpath of the main package:
-
-```js
-import { patch } from '@decimalturn/toml-patch/patch-lite';
-```
-
-As a standalone package published under the `lite` dist-tag:
+The main package ships the full API only, so the lite build comes from the `lite` npm dist-tag:
 
 ```sh
-npm install @decimalturn/toml-patch@lite
+npm install --save @decimalturn/toml-patch@lite
 ```
 
 ```js
 import { patch } from '@decimalturn/toml-patch';
 ```
+
+That is the same specifier the full package uses: the dist-tag tarball maps its root export to the
+lite build, so switching between the two is an install change, not a code change. The main package
+exposes no `patch-lite` subpath, so `import { patch } from '@decimalturn/toml-patch/patch-lite'`
+fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 Both expose exactly one name, `patch`. There is no `parse`, `stringify`, `parseDocument`,
 `TomlDocument`, `TomlFormat` or date class, and no exported error class. You must already have a
@@ -280,19 +281,18 @@ in `src/__tests__/roundtrip.parse-patch-lite.test.ts`. See
 
 ## Switching from the full API
 
-The call shape matches, so the change is usually just the import:
+The call shape and the import line are identical, so the change is only in what you install:
 
-```diff
--import { patch } from '@decimalturn/toml-patch';
-+import { patch } from '@decimalturn/toml-patch/patch-lite';
+```sh
+npm install --save @decimalturn/toml-patch@lite
 ```
 
 Before you switch, check for:
 
 1. **Structural edits.** Any add, remove, rename, reorder or type change now throws where it used to
    succeed.
-2. **A third `format` argument.** It is ignored, not rejected, so formatting expectations can fail
-   silently at runtime. Remove it or keep the full API.
+2. **A third `format` argument.** It now throws a `PatchLiteError` with the code
+   `UnsupportedOption` where the full API accepted it. Remove the argument, or keep the full API.
 3. **Multiline literal fallback.** When an edited `'''…'''` value can no longer be written
    literally, `patch-lite` emits a single-line basic string where the full `patch()` emits a
    multiline basic string.

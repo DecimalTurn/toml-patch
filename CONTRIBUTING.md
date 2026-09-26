@@ -53,7 +53,7 @@ This command:
 The build outputs are:
 - `dist/toml-patch.js` - canonical ESM entrypoint (for Node.js and modern bundlers)
 - `dist/toml-patch.d.ts` - canonical TypeScript type declarations
-- `dist/patch-lite.js` - lite version entry point
+- `dist/patch-lite.js` - lite version entry point, packaged separately by `pnpm run build:lite` and published under the `lite` npm dist-tag. It is not part of the main package tarball.
 
 ### Testing
 

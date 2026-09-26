@@ -87,10 +87,10 @@ owner.name = "Tim"
 
 ### `patch` (lite)
 
-The lite distribution exposes a reduced `patch(existing, updated)` that edits existing values only. Import it from the `patch-lite` subpath:
+The lite distribution exposes a reduced `patch(existing, updated)` that edits existing values only. It is not part of the main package: install it from the `lite` npm dist-tag (`npm install @decimalturn/toml-patch@lite`) and keep the same import:
 
 ```ts
-import { patch } from '@decimalturn/toml-patch/patch-lite';
+import { patch } from '@decimalturn/toml-patch';
 ```
 
 ```typescript
@@ -125,7 +125,7 @@ Use the full `patch()` API for additions, removals, moves, renames and advanced 
 #### Example
 
 ```js
-import { patch } from '@decimalturn/toml-patch/patch-lite';
+import { patch } from '@decimalturn/toml-patch';
 import { strict as assert } from 'assert';
 
 const existing = `

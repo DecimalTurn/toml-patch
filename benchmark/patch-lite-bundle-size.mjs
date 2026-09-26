@@ -1,5 +1,5 @@
 /**
- * Compare bundle sizes between the full toml-patch bundle and the patch-lite subpath export.
+ * Compare bundle sizes between the full toml-patch bundle and the lite distribution.
  *
  * The patch-lite budget lives in benchmark/thresholds.toml (`[bundle.patch-lite]`),
  * and the script exits non-zero when the bundle grows past it.

@@ -6,6 +6,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - tsdown@0.22.13
   - smol-toml@1.9.0
+  - '@decimalturn/toml-patch'
 
 overrides:
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/59
