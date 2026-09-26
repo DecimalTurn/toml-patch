@@ -124,7 +124,7 @@ To have it match the key order of the object you pass in, enable `updateOrder` i
 
 ## Date/Time Handling & Temporal
 
-TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
+TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly. Fractional seconds keep the source precision, sub-millisecond digits included.
 
 ### Enabling Temporal
 

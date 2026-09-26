@@ -98,7 +98,7 @@ before any output is produced.
 | `number` | Integers, floats, exponents, `inf`, `-inf`, `nan`, `-0`. Radix prefixes (`0x`, `0o`, `0b`) including digit case, and exponent notation including the `e`/`E` case, are preserved when the source used them. Underscore digit grouping is **not** preserved. |
 | `boolean` | |
 | `bigint` | |
-| `Date` | toml-patch's `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime` and duck-typed smol-toml `TomlDate` objects. The source value's kind (date / time / datetime / offset), separator, offset style and fractional-digit count are kept. |
+| `Date` | toml-patch's `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime` and duck-typed smol-toml `TomlDate` objects. The source value's kind (date / time / datetime / offset), separator, offset style and fractional-digit count are kept. A value whose fraction is only spelled differently (`.5` against `.500`) is not an edit, and an untouched value keeps all its source digits, including sub-millisecond ones. |
 | `Temporal` | **Not supported.** `Temporal.PlainDate` and friends are rejected with `TypeChange`. Convert to a `Date` subclass first, or use the full `patch()`. |
 
 Objects and arrays may appear in `updated` at a path where `existing` already holds a container, but

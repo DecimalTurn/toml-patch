@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal.
+
 ## [3.2.1] - 2026-09-26
 
 ### Changed

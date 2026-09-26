@@ -186,15 +186,32 @@ export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {
   return true;
 }
 
+/**
+ * Classifies a Date by the shape of its TOML rendering: date-only, time-only,
+ * local datetime or offset datetime. Derived from the rendered text so it works
+ * for toml-patch's own classes and duck-typed smol-toml `TomlDate` values
+ * alike, without importing the date module here.
+ */
+function dateKind(value: Date): 'date' | 'time' | 'datetime' | 'offset' {
+  const iso = value.toISOString();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return 'date';
+  if (/^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(iso)) return 'time';
+  if (/(?:[Zz]|[+-]\d{2}:\d{2})$/.test(iso)) return 'offset';
+  return 'datetime';
+}
+
 export function datesEqual(a: any, b: any): boolean {
   // Temporal objects: compare via toString(). Two ZonedDateTime values
   // with different IANA zones are NOT the same even if their offsets match.
   if (isTemporal(a) && isTemporal(b)) {
     return a.toString() === b.toString();
   }
-  // Custom Date subclasses: compare via toISOString()
+  // Custom Date subclasses: compare by instant and kind, never by rendered
+  // text. The same instant can be spelled `.5` or `.500`, and a source with
+  // sub-millisecond digits renders more digits than the equal Date holds, so a
+  // text comparison would report an edit for a value that did not change.
   if (isDate(a) && isDate(b)) {
-    return a.toISOString() === b.toISOString();
+    return a.getTime() === b.getTime() && dateKind(a) === dateKind(b);
   }
   return false;
 }

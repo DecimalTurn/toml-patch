@@ -21,13 +21,25 @@ function fmtParts(d: Date) {
   };
 }
 
-/** Format millisecond suffix (".123") preserving original precision, or "" if none needed. */
+/**
+ * Format the fractional-second suffix, preserving the original precision.
+ *
+ * TOML allows any number of fractional digits, but a `Date` only holds
+ * milliseconds. When the value's millisecond part still matches the leading
+ * digits of the source fraction, the whole source fraction is emitted, so
+ * sub-millisecond digits survive a parse → stringify round trip. Once the
+ * value holds a different millisecond, the source's digit count is kept but
+ * only the representable digits are written.
+ *
+ * Returns "" when the source had no fraction and the value has none either.
+ */
 function fmtMs(ms: number, origFmt: string, msRe: RegExp = /\.(\d+)\s*$/): string {
-  const hadMs = origFmt && origFmt.includes('.');
-  if (hadMs) {
+  if (origFmt && origFmt.includes('.')) {
     const m = origFmt.match(msRe);
-    const digits = m ? m[1].length : 3;
-    return '.' + String(ms).padStart(3, '0').slice(0, digits);
+    const digits = m ? m[1] : '000';
+    const current = String(ms).padStart(3, '0');
+    if (m && digits.startsWith(current)) return '.' + digits;
+    return '.' + current.slice(0, digits.length);
   }
   if (ms > 0) {
     return '.' + String(ms).padStart(3, '0').replace(/0+$/, '');
@@ -181,7 +193,7 @@ export class LocalDate extends Date {
 export class LocalTime extends Date {
   originalFormat: string;
   
-  constructor(value: string, originalFormat: string) {
+  constructor(value: string, originalFormat: string = value) {
     // Normalize time to include seconds if missing (TOML 1.1.0 allows optional seconds)
     let normalizedValue = value;
     if (!/:\d{2}:\d{2}/.test(value)) {

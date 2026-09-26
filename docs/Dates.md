@@ -15,6 +15,17 @@ By default (`temporal: false`), TOML date/time values are parsed into custom `Da
 
 Each class extends `Date`, so you can treat them as normal `Date` objects. When stringified back to TOML, each class serializes to the correct format automatically — a `LocalDate` never gains a time component, and an `OffsetDateTime` preserves its timezone offset.
 
+### Sub-millisecond precision
+
+A `Date` holds milliseconds, but TOML fractional seconds can carry any number of digits. The classes keep the source fraction, so the extra digits survive a round trip:
+
+```js
+stringify(parse('t = 07:32:00.123456\n'));
+// 't = 07:32:00.123456\n'
+```
+
+`patch()` leaves the digits alone when the value does not change, and a value that only differs in how its fraction is spelled (`.5` against `.500`) is not an edit. When the value does change, the source's digit count is kept and filled with the digits a `Date` can represent. With `temporal: true` the value is a Temporal object, which is not limited to milliseconds, so sub-millisecond digits survive edits too.
+
 ## Temporal API (opt-in)
 
 Set `temporal: true` in `ParseOptions` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead:
