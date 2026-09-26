@@ -20,9 +20,9 @@ We hope that these improvements can be incorporated upstream one day if the orig
 - [Comment ownership](#comment-ownership)
 - [Date/time handling and Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
-- [Changelog](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/CHANGELOG.md)
-- [Contributing](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/CONTRIBUTING.md)
-- [MIT License](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/LICENSE)
+- [Changelog](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/CHANGELOG.md)
+- [Contributing](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/CONTRIBUTING.md)
+- [MIT License](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/LICENSE)
 
 ## Installation
 
@@ -44,7 +44,7 @@ For browser usage, you can use unpkg:
 
 ```html
 <script type="module">
-  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch@v3.1.2/dist/toml-patch.js';
+  import * as TOML from 'https://unpkg.com/@decimalturn/toml-patch@v3.2.0/dist/toml-patch.js';
 </script>
 ```
 
@@ -53,7 +53,7 @@ For browser usage, you can use unpkg:
 overwrite(tomlString: string): void
 toml-patch provides a functional API for one-time operations and a document-oriented API for workflows that need multiple operations on the same TOML document.
 
-See the [API reference](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/API.md) for `patch`, `parse`, `stringify` and the `TomlDocument` class.
+See the [API reference](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/API.md) for `patch`, `parse`, `stringify` and the `TomlDocument` class.
 
 For a quick start, patch an existing TOML string like this:
 
@@ -83,7 +83,7 @@ The lite function edits existing primitive values only and preserves all source 
 
 Unlike the full `patch()`, the lite distribution performs no encoding validation on its output: it does not reject strings containing unpaired UTF-16 surrogates, which cannot be represented as valid TOML/UTF-8. Use the full `patch()` when this validation is required.
 
-The [Patch-lite guide](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Patch-Lite.md) lists every supported and rejected operation with its error code, the value-encoding rules that differ from the full `patch()`, and the measured size and throughput, so you can check whether the lite distribution covers your use case.
+The [Patch-lite guide](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/Patch-Lite.md) lists every supported and rejected operation with its error code, the value-encoding rules that differ from the full `patch()`, and the measured size and throughput, so you can check whether the lite distribution covers your use case.
 
 The lite distribution is also published as a standalone package under the `lite` npm dist-tag:
 
@@ -115,10 +115,10 @@ y = 2
 `);
 ```
 
-See the [comment ownership guide](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Comment-Ownership.md) for the full behavior, including how a blank line opts a comment out of ownership and current scope limitations.
+See the [comment ownership guide](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/Comment-Ownership.md) for the full behavior, including how a blank line opts a comment out of ownership and current scope limitations.
 
 Note that `patch()` does not reorder entries by default.
-To have it match the key order of the object you pass in, enable `updateOrder` in the [formatting options](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Formatting.md#updateorder).
+To have it match the key order of the object you pass in, enable `updateOrder` in the [formatting options](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/Formatting.md#updateorder).
 
 ## Date/Time Handling & Temporal
 
@@ -150,7 +150,7 @@ const obj2 = TOML.parse('d = 2024-01-15\n', { temporal: true });
 
 > **Note:** Only offset-based timezones (`+05:30`, `Z`) are supported in TOML. IANA timezone annotations (e.g., `[Asia/Kolkata]`) will throw an error.
 
-See the [date/time guide](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Dates.md) for details and examples.
+See the [date/time guide](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/Dates.md) for details and examples.
 
 ## Formatting
 
@@ -197,4 +197,4 @@ const toml = stringify({
 }, format);
 
 ```
-See the [formatting reference](https://github.com/DecimalTurn/toml-patch/blob/v3.1.2/docs/Formatting.md) for the complete list of options, auto-detection behavior, `updateOrder` and more examples.
+See the [formatting reference](https://github.com/DecimalTurn/toml-patch/blob/v3.2.0/docs/Formatting.md) for the complete list of options, auto-detection behavior, `updateOrder` and more examples.
