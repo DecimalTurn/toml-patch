@@ -38,6 +38,7 @@ function randomTomlFormat(rng: SeededRandom): Partial<TomlFormat> | undefined {
   format.trailingComma = rng.chance(0.5);
   format.bracketSpacing = rng.chance(0.5);
   format.updateOrder = rng.chance(0.5);
+  format.commentOwnership = rng.chance(0.5);
   const tnRoll = rng.next();
   if (tnRoll < 0.33) format.trailingNewline = 0;
   else if (tnRoll < 0.66) format.trailingNewline = 1;

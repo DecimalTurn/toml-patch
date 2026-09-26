@@ -2200,7 +2200,7 @@ function applyChanges(
                 if (siblingKey
                     && siblingKey.length >= truncatedPrefix.length
                     && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
-                  removeMember(original, containerParent, sibling);
+                  removeMember(original, containerParent, sibling, format.commentOwnership);
                 }
               }
             }
@@ -2219,7 +2219,7 @@ function applyChanges(
         // a block Table/TableArray — every value shape needs the sibling sweep.
         if (!keyTruncated && isKeyValue(replacement)) {
           if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing, format.commentOwnership);
           }
         }
         
@@ -2293,7 +2293,7 @@ function applyChanges(
                 if (siblingKey
                     && siblingKey.length >= truncatedPrefix.length
                     && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
-                  removeMember(original, containerParent, sibling);
+                  removeMember(original, containerParent, sibling, format.commentOwnership);
                 }
               }
             }
@@ -2306,7 +2306,7 @@ function applyChanges(
         // (leaf, array, inline table) must drop prefix-extending siblings.
         if (!keyTruncated && isKeyValue(replacement.item)) {
           if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
+            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing, format.commentOwnership);
           }
         }
 
@@ -2387,7 +2387,7 @@ function applyChanges(
                 if (siblingKey
                     && siblingKey.length >= truncatedPrefix.length
                     && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
-                  removeMember(original, scanParent, sibling);
+                  removeMember(original, scanParent, sibling, format.commentOwnership);
                 }
               }
             }
@@ -2476,7 +2476,7 @@ function applyChanges(
                 if (siblingKey
                     && siblingKey.length >= truncatedPrefix.length
                     && arraysEqual(siblingKey.slice(0, truncatedPrefix.length), truncatedPrefix)) {
-                  removeMember(original, scanParent, sibling);
+                  removeMember(original, scanParent, sibling, format.commentOwnership);
                 }
               }
             }
@@ -2536,7 +2536,7 @@ function applyChanges(
             const sectionedSiblings = findDocumentItemsByKeyPrefix(original, existingTableKey)
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of sectionedSiblings) {
-              removeMember(original, tableParent, sibling);
+              removeMember(original, tableParent, sibling, format.commentOwnership);
             }
           }
 
@@ -2579,7 +2579,7 @@ function applyChanges(
                   // freshKV's key is the single last segment; inside `[parentKey]`
                   // it lands as a plain child row.
                   insert(original, parentSection, freshKV, undefined);
-                  removeMember(original, tableParent, existing);
+                  removeMember(original, tableParent, existing, format.commentOwnership);
                   commentEligibleNodes.add(freshKV);
                 } else {
                   const newTable = generateTable(parentKey, format.escapeSequenceUpperCase);
@@ -2682,7 +2682,7 @@ function applyChanges(
             const siblingEntries = findDocumentItemsByKeyPrefix(original, existingAotKey)
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of siblingEntries) {
-              removeMember(original, original, sibling);
+              removeMember(original, original, sibling, format.commentOwnership);
             }
           }
 
@@ -2718,7 +2718,7 @@ function applyChanges(
                 } else {
                   insert(original, existingParentTable, freshKV, undefined);
                 }
-                removeMember(original, tableParent as Document, existing);
+                removeMember(original, tableParent as Document, existing, format.commentOwnership);
                 commentEligibleNodes.add(existingParentTable);
                 return; // handled; skip generic replace below
               }
@@ -2854,7 +2854,7 @@ function applyChanges(
                 const aotNode = first as TableArray;
                 const aotKeyHolder = aotNode.key;
                 while (aotNode.items.length > 0) {
-                  removeMember(original, aotNode, last(aotNode.items as TreeNode[])!);
+                  removeMember(original, aotNode, last(aotNode.items as TreeNode[])!, format.commentOwnership);
                 }
                 // The item removals above left pending line offsets on the
                 // entry's key.  Shrinking loc.end against pre-offset
@@ -2885,13 +2885,13 @@ function applyChanges(
           // it no longer matches change.path, so the loop naturally skips it.
           let entry: TreeNode | undefined;
           while ((entry = nextAotEntry())) {
-            removeMember(original, original, entry);
+            removeMember(original, original, entry, format.commentOwnership);
           }
           // [table] sections extending the same prefix belong to the removed
           // key too — deleting `""` must remove `["". "aV^16c`G"]` as well,
           // or the re-parse revives the key (fuzz seed 3463).
           for (const tableNode of findDocumentItemsByKeyPrefix(original, change.path).filter(isTable)) {
-            removeMember(original, original, tableNode);
+            removeMember(original, original, tableNode, format.commentOwnership);
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
@@ -2948,7 +2948,7 @@ function applyChanges(
           if (prefixNodes.length > 0) {
             const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
-              removeMember(original, original, prefixNode);
+              removeMember(original, original, prefixNode, format.commentOwnership);
             }
             // When the removed prefix items were the sole children of an
             // implicit parent (e.g. [mhv6z.hpd_iu9zs5."2<w"] removed at
@@ -3152,7 +3152,7 @@ function applyChanges(
               }
             }
             for (const sibling of toRemove) {
-              removeMember(original, parent, sibling);
+              removeMember(original, parent, sibling, format.commentOwnership);
             }
           }
         }
@@ -3184,7 +3184,7 @@ function applyChanges(
             }
           }
           for (const sibling of extending) {
-            removeMember(original, parent, sibling);
+            removeMember(original, parent, sibling, format.commentOwnership);
           }
         }
 
@@ -3210,12 +3210,12 @@ function applyChanges(
             }
           }
           for (const sibling of extending) {
-            removeMember(original, parent, sibling);
+            removeMember(original, parent, sibling, format.commentOwnership);
           }
         }
 
         if (!materialisedInPlace) {
-          removeMember(original, parent, node);
+          removeMember(original, parent, node, format.commentOwnership);
         }
 
         // Removing the LAST item of a single-line inline container while an
@@ -3609,7 +3609,7 @@ function applyChanges(
 
         const node = (parent as WithItems).items[change.from];
 
-        moveInlineElement(original, parent, node, change.to);
+        moveInlineElement(original, parent, node, change.to, format.commentOwnership);
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
@@ -3980,7 +3980,13 @@ function applyChanges(
 
   // updateOrder: reorder root key-values, section blocks, and table-body rows to match the
   // patched object's key order. Must run last — see the comment on objectMoves above.
-  applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+  //
+  // With `commentOwnership: false` the reorder is a no-op: reordering carries each entry's
+  // owned comments with it, which the opt-out forbids, and leaving comments stranded while
+  // their keys move would corrupt the comment-key association.
+  if (format.commentOwnership !== false) {
+    applyKeyOrderMoves(original, objectMoves, commentEligibleNodes);
+  }
   if (objectMoves.length > 0) markDirty(original);
   if (replacedInlineArrays.size > 0) {
     applyWrites(original);
@@ -4145,7 +4151,7 @@ function handleStructuralEdit(
         // inside the entry that start with the changed segment.
         const toRemove = findDocumentItemsByKeyPrefix(original, entryKey.concat(changedKey));
         for (const prefixNode of toRemove) {
-          removeMember(original, original, prefixNode);
+          removeMember(original, original, prefixNode, format.commentOwnership);
         }
         const entryItems = (entry as TableArray).items as TreeNode[];
         const inlineToRemove = entryItems.filter(item => {
@@ -4155,7 +4161,7 @@ function handleStructuralEdit(
             && arraysEqual(key.slice(0, changedKey.length), changedKey);
         });
         for (const item of inlineToRemove) {
-          removeMember(original, entry, item);
+          removeMember(original, entry, item, format.commentOwnership);
         }
 
         // Rebuild the tail of the path as a fresh KV (or KVs) and insert
@@ -4844,7 +4850,8 @@ function removeSiblingsExtendingPrefix(
   original: Document,
   container: Table | Document | TableArray,
   prefix: Array<string | number>,
-  keep: TreeNode
+  keep: TreeNode,
+  commentOwnership: boolean | undefined
 ): void {
   const parentItems = [...container.items] as Block[];
   for (let si = parentItems.length - 1; si >= 0; si--) {
@@ -4858,7 +4865,7 @@ function removeSiblingsExtendingPrefix(
     if (siblingKey
         && siblingKey.length > prefix.length
         && arraysEqual(siblingKey.slice(0, prefix.length), prefix)) {
-      removeMember(original, container, sibling);
+      removeMember(original, container, sibling, commentOwnership);
     }
   }
 }

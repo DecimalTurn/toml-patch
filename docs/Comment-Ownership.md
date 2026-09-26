@@ -144,18 +144,20 @@ x = 1
 y = 2
 ```
 
-Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
-`[b]` opts out as usual, and the comment then stays with `[a]`:
+Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. 
+
+A blank line before `[b]` means that `[b]` doesn't own the preceding comment and the comment then stays with `[a]`:
 
 ```toml
 [a]
 x = 1
 
-# about b
+# about a
 
 [b]
 y = 2
 ```
+In the configuration above, the deleting of `[a]` deletes the comment `# about a` because the comment lives inside the `[a]` block.
 
 ## R6 - **A dead-entry block is independent.**
 
@@ -317,6 +319,21 @@ It does not yet apply to:
   ```toml
   t = { xs = [...] }
   ```
+
+## Disabling leading ownership (`commentOwnership: false`)
+
+Ownership is on by default. Passing `commentOwnership: false` to `patch()` disables the *leading*
+and *cross-container* ownership rules — a removed entry leaves its own-line leading comment block
+behind instead of taking it along. Same-line trailing ownership (R1) always applies: it predates
+the option, and the writer relies on it, so a comment such as `x = 1 # note` still travels with
+`x` when `x` is removed.
+
+The opt-out is bounded:
+
+- Leading (R2) and cross-container (R5) comment blocks stop traveling: they are left in place.
+- Same-line trailing (R1) comments are unchanged: they still travel with their entry.
+
+The option is not auto-detectable; `autoDetectFormatWithCst` always resolves it to `true`.
 
 ## Implementation
 
