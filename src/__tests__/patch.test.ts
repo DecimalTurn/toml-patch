@@ -9523,3 +9523,89 @@ describe('escape sequence case', () => {
     expect(patched).toBe('msg = "\\u263a"\nother = "del\\u007fchar"\n');
   });
 });
+
+// A rename is inferred when one key disappears and another key appears holding an
+// equal value. The rename edits the key in place and never rebuilds the value, so the
+// value's shape should not matter. Scalars and arrays of scalars already work. These
+// container values all throw while the replacement key is resolved, which aborts the
+// whole patch instead of renaming the key. Each test is marked `.fails` until fixed.
+describe('renaming a key whose value is a container', () => {
+  test.fails('renames a key holding a single-line inline table', () => {
+    // Throws: Item not found in parent for replace
+    const source = 'holder = { a = 1 }\n';
+    const result = patch(source, { renamed: { a: 1 } });
+
+    expect(parse(result)).toEqual({ renamed: { a: 1 } });
+    expect(result).toBe('renamed = { a = 1 }\n');
+  });
+
+  test.fails('renames a key holding a multi-line inline table', () => {
+    // Throws: Item not found in parent for replace
+    const source = dedent`
+      holder = {
+        a = 1,
+        b = 2
+      }
+    ` + '\n';
+    const result = patch(source, { renamed: { a: 1, b: 2 } });
+
+    expect(parse(result)).toEqual({ renamed: { a: 1, b: 2 } });
+    expect(result).toBe(dedent`
+      renamed = {
+        a = 1,
+        b = 2
+      }
+    ` + '\n');
+  });
+
+  test.fails('renames a key holding a nested inline table', () => {
+    // Throws: Item not found in parent for replace
+    const source = 'holder = { inner = { a = 1 } }\n';
+    const result = patch(source, { renamed: { inner: { a: 1 } } });
+
+    expect(parse(result)).toEqual({ renamed: { inner: { a: 1 } } });
+    expect(result).toBe('renamed = { inner = { a = 1 } }\n');
+  });
+
+  test.fails('renames an inline-table-valued row inside a section', () => {
+    // Throws: Item not found in parent for replace
+    const source = dedent`
+      [t]
+      holder = { a = 1 }
+    ` + '\n';
+    const result = patch(source, { t: { renamed: { a: 1 } } });
+
+    expect(parse(result)).toEqual({ t: { renamed: { a: 1 } } });
+    expect(result).toBe(dedent`
+      [t]
+      renamed = { a = 1 }
+    ` + '\n');
+  });
+
+  test.fails('renames an inline-table-valued row inside an array of tables', () => {
+    // Throws: Item not found in parent for replace
+    const source = dedent`
+      [[t]]
+      holder = { a = 1 }
+    ` + '\n';
+    const result = patch(source, { t: [{ renamed: { a: 1 } }] });
+
+    expect(parse(result)).toEqual({ t: [{ renamed: { a: 1 } }] });
+    expect(result).toBe(dedent`
+      [[t]]
+      renamed = { a = 1 }
+    ` + '\n');
+  });
+
+  test.fails('renames a key holding an array of inline tables', () => {
+    // Throws: Node not found at renamed
+    // A rename inside a section already works, so the root-level key is the
+    // specific gap here. The inline array is preserved, it is not rewritten as
+    // [[renamed]] sections.
+    const source = 'holder = [{ a = 1 }, { a = 2 }]\n';
+    const result = patch(source, { renamed: [{ a: 1 }, { a: 2 }] });
+
+    expect(parse(result)).toEqual({ renamed: [{ a: 1 }, { a: 2 }] });
+    expect(result).toBe('renamed = [{ a = 1 }, { a = 2 }]\n');
+  });
+});
