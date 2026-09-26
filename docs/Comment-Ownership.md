@@ -144,18 +144,20 @@ x = 1
 y = 2
 ```
 
-Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
-`[b]` opts out as usual, and the comment then stays with `[a]`:
+Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. 
+
+A blank line before `[b]` means that `[b]` doesn't own the preceding comment and the comment then stays with `[a]`:
 
 ```toml
 [a]
 x = 1
 
-# about b
+# about a
 
 [b]
 y = 2
 ```
+In the configuration above, the deleting of `[a]` deletes the comment `# about a` because the comment lives inside the `[a]` block.
 
 ## R6 - **A dead-entry block is independent.**
 
@@ -318,23 +320,19 @@ It does not yet apply to:
   t = { xs = [...] }
   ```
 
-## Disabling ownership (`commentOwnership: false`)
+## Disabling leading ownership (`commentOwnership: false`)
 
-Ownership is on by default. Passing `commentOwnership: false` to `patch()` restores the legacy
-pre-ownership behavior for the deletion and inline-move paths: a removed or moved entry leaves its
-owned comments in place instead of taking them along.
+Ownership is on by default. Passing `commentOwnership: false` to `patch()` disables the *leading*
+and *cross-container* ownership rules — a removed entry leaves its own-line leading comment block
+behind instead of taking it along. Same-line trailing ownership (R1) always applies: it predates
+the option, and the writer relies on it, so a comment such as `x = 1 # note` still travels with
+`x` when `x` is removed.
 
 The opt-out is bounded:
 
-- Deleted entries (`removeMember`) route to the plain removal primitive, which still applies its
-  own same-line trailing comment absorption. A leading own-line comment block is left behind.
-- Moved elements inside a multi-line array or inline table (`moveInlineElement`) keep the
-  structural move machinery but skip the comment detach/reattach steps, so a leading comment is
-  stranded at its old position rather than carried with the element.
-- Section-level reordering via `updateOrder` is disabled: with `updateOrder: true` and
-  `commentOwnership: false`, the reorder is a no-op and keys keep their original order. Reordering
-  carries each entry's comments with it, so with ownership off there is no way to honor the
-  request without stranding comments away from their keys.
+- Leading (R2) and cross-container (R5) comment blocks stop traveling: they are left in place.
+- Same-line trailing (R1) comments are unchanged: they still travel with their entry.
+- Moves are unaffected: a Move never deletes an element, so its comments always travel with it.
 
 The option is not auto-detectable; `autoDetectFormatWithCst` always resolves it to `true`.
 

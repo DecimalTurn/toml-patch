@@ -446,27 +446,26 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
  * `member` instead. Falls back to a plain removal when `parent` isn't a
  * container the ownership model applies to (e.g. InlineTable/InlineArray).
  *
- * Passing `commentOwnership = false` skips the ownership model entirely and
- * routes straight to the plain `remove()` primitive, leaving `member`'s owned
- * comments behind (legacy behavior).
+ * Passing `commentOwnership = false` keeps leading (own-line) and
+ * cross-container comment blocks in place — only those stop traveling. Same-line
+ * trailing comments (R1) always travel with their member; that rule predates the
+ * option and is not optional.
  */
 export function removeMember(root: Root, parent: TreeNode, member: TreeNode, commentOwnership = true): void {
-  // `commentOwnership: false` restores the legacy pre-ownership behavior: the
-  // member is removed via the plain primitive and its owned comments are left
-  // behind to describe whatever ends up occupying that spot.
-  if (!commentOwnership) {
-    remove(root, parent, member);
-    return;
-  }
+  // Leading (R2) and cross-container (R5) ownership is the optional part this
+  // flag gates. Trailing (R1) ownership always applies.
+  const removeLeading = commentOwnership === true;
 
   if (isDocument(parent) && (isTable(member) || isTableArray(member))) {
-    const index = (parent.items as TreeNode[]).indexOf(member);
-    const previousSibling = index > 0 ? parent.items[index - 1] : undefined;
-    if (previousSibling && (isTable(previousSibling) || isTableArray(previousSibling))) {
-      const runItems = trailingOwnedRun(previousSibling, member);
-      if (runItems) {
-        for (const item of runItems) {
-          remove(root, previousSibling, item);
+    if (removeLeading) {
+      const index = (parent.items as TreeNode[]).indexOf(member);
+      const previousSibling = index > 0 ? parent.items[index - 1] : undefined;
+      if (previousSibling && (isTable(previousSibling) || isTableArray(previousSibling))) {
+        const runItems = trailingOwnedRun(previousSibling, member);
+        if (runItems) {
+          for (const item of runItems) {
+            remove(root, previousSibling, item);
+          }
         }
       }
     }
@@ -477,33 +476,27 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode, com
     if (group) {
       const memberIndex = group.items.indexOf(member);
 
-      // Leading comments and the member itself: every one of these occupies
-      // its own line(s) that the member's own span does not otherwise cover,
-      // so each is removed via the generic primitive, which computes real
-      // line/column offset accounting.
-      for (let i = 0; i <= memberIndex; i++) {
-        const item = group.items[i];
-        // A prior remove() call in this loop may already have absorbed a
-        // same-line trailing comment via its own single-comment logic —
-        // see the trailing-comments loop below for why that's fine.
-        if (!(parent.items as TreeNode[]).includes(item)) continue;
-        remove(root, parent, item);
+      // Leading (R2) comments: removed only in full-ownership mode.
+      if (removeLeading) {
+        for (let i = 0; i < memberIndex; i++) {
+          const item = group.items[i];
+          if (!(parent.items as TreeNode[]).includes(item)) continue;
+          remove(root, parent, item);
+        }
       }
 
-      // Trailing (R1) comments: by definition their start line
-      // is <= the member's own end line, so they sit *within* the span the
-      // member's removal above already accounted for (a same-line trailing
-      // comment, or one hoisted out of a multiline inline value). remove()'s
-      // own legacy same-line check may already have absorbed a simple
-      // trailing comment as a side effect of removing the member. Anything
-      // still present here is spliced out directly, with NO further offset —
-      // registering one would double-count a line height already removed.
+      // The member itself (absorbs a same-line trailing comment via the writer
+      // primitive), then any remaining trailing (R1) comments spliced directly.
+      if ((parent.items as TreeNode[]).includes(member)) {
+        remove(root, parent, member);
+      }
       for (let i = memberIndex + 1; i < group.items.length; i++) {
         const item = group.items[i];
         const idx = (parent.items as TreeNode[]).indexOf(item);
         if (idx < 0) continue;
         (parent.items as TreeNode[]).splice(idx, 1);
       }
+
       return;
     }
   }
@@ -513,46 +506,40 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode, com
     if (hostContainer) {
       const group = resolveInlineElementGroups(parent, hostContainer.items as TreeNode[]).find(s => s.member === member);
       if (group) {
-        const comments = group.items.filter(item => item !== member) as Comment[];
+        const memberIndex = group.items.indexOf(member);
+        const leading = group.items.slice(0, memberIndex) as Comment[];
+        const trailing = group.items.slice(memberIndex + 1) as Comment[];
 
-        // Every comment in this group is hoisted into hostContainer (the
-        // enclosing Document/Table) — a DIFFERENT array from the member's own
-        // `parent.items`, and NOT a sibling of it: hostContainer.items holds
-        // the KeyValue that owns `parent` as its value, so an offset
-        // registered there only ever affects that KeyValue's OWN siblings
-        // (e.g. a later root key), never the surviving rows still inside
-        // `parent` (a descendant of that KeyValue, not a sibling). Splicing
-        // the comments out directly here (zero offset — purely structural),
-        // then extending the member's own loc to cover their lines before
-        // removing IT, lets remove()'s existing target-selection (a
-        // preceding sibling row within `parent`, or an ENTER offset on
-        // `parent` itself when the member is first) correctly propagate ONE
-        // combined height reduction to both `parent`'s remaining rows and
-        // whatever comes after it — it only needs the full height, comments
-        // included, in a single call. `member` is being discarded regardless,
-        // so mutating its own loc here has no lasting effect.
-        for (const comment of comments) {
+        // Leading (R2) hoisted comments are removed only in full-ownership mode.
+        // Trailing (R1) comments always go with the member.
+        const toRemove: Comment[] = [...trailing];
+        if (removeLeading) toRemove.unshift(...leading);
+
+        // Splice the removed comments out of hostContainer (a DIFFERENT array
+        // from `parent.items`) — purely structural, zero line offset. Extend the
+        // member's own loc to cover the removed comments' lines plus its own, so
+        // a single remove() call propagates one combined height reduction.
+        for (const comment of toRemove) {
           const idx = (hostContainer.items as TreeNode[]).indexOf(comment);
           if (idx < 0) continue;
           (hostContainer.items as TreeNode[]).splice(idx, 1);
         }
 
-        if (comments.length) {
-          member.loc.start = group.items[0].loc.start;
-          member.loc.end = last(group.items)!.loc.end;
+        if (toRemove.length) {
+          const spanStart = removeLeading && leading.length
+            ? leading[0].loc.start
+            : member.loc.start;
+          const spanEnd = trailing.length
+            ? last(trailing)!.loc.end
+            : member.loc.end;
+          member.loc.start = spanStart;
+          member.loc.end = spanEnd;
         }
 
         remove(root, parent, member, hostContainer.items as TreeNode[]);
 
-        // Flush immediately, matching moveInlineElement's identical discipline (see
-        // its docstring): writer.remove()'s own orphaned-comment compensation above
-        // mutates surviving comments' `.loc` as a PRE-compensation for an offset that
-        // only actually resolves once applyWrites runs. If a SECOND removeMember (or
-        // moveInlineElement) call on this same container ran before that offset were
-        // resolved, resolveInlineElementGroups would read those pre-compensated,
-        // not-yet-restored positions as if they were final — misattributing or
-        // losing ownership. Flushing here keeps every subsequent call in this patch
-        // starting from a fully-resolved, non-stale state.
+        // Flush immediately so a subsequent removeMember/moveInlineElement call
+        // on the same container starts from resolved, non-stale positions.
         applyWrites(root);
         return;
       }
@@ -581,12 +568,11 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode, com
  * on how far *that specific element* actually shifted — which may differ
  * from how far `node` itself moved, or be zero.
  *
- * Passing `commentOwnership = false` keeps the structural move machinery
- * (offset flushing, tail realignment, anchored-descendant restoration) but
- * skips only the comment detach/reattach steps, so any owned comments are
- * left at their old absolute position (legacy behavior).
+ * A Move never deletes an element, so its comments always travel with it —
+ * this function ignores `commentOwnership`, which governs deletion only
+ * (see `removeMember`).
  */
-export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number, commentOwnership = true): void {
+export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number): void {
   let sharedLineContainerBeforeMove = false;
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
@@ -710,7 +696,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
             nodeInnerEnd = clonePosition(node.item.loc.end);
           }
           collectAnchored(isInlineItem(node) ? node.item : node, nodeOwnStart.line);
-          if (commentOwnership && comments.length) {
+          if (comments.length) {
             // Extend node's own loc to the full group span so the bare
             // remove()+insert() below accounts for the combined height —
             // matters for a leading, separate-line comment; a no-op for a
@@ -721,7 +707,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
           }
         }
 
-        if (!commentOwnership || !comments.length) continue;
+        if (!comments.length) continue;
         detached.push({ owner: group.member, ownerOriginalStart: clonePosition(group.member.loc.start), comments });
         for (const comment of comments) {
           const idx = (hostContainer.items as TreeNode[]).indexOf(comment);
@@ -830,33 +816,31 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
         }
       }
 
-      if (commentOwnership) {
-        for (const { owner, ownerOriginalStart, comments } of detached) {
-          let delta: { lines: number; columns: number };
-          if (owner === node) {
-            // node.loc is still the (possibly extended) relocated group span;
-            // derive the shift from that, then restore node's own bare span.
-            delta = {
-              lines: node.loc.start.line - ownerOriginalStart.line,
-              columns: node.loc.start.column - ownerOriginalStart.column
-            };
-            node.loc.start = { line: nodeOwnStart!.line + delta.lines, column: nodeOwnStart!.column + delta.columns };
-            node.loc.end = { line: nodeOwnEnd!.line + delta.lines, column: nodeOwnEnd!.column + delta.columns };
-          } else {
-            delta = {
-              lines: owner.loc.start.line - ownerOriginalStart.line,
-              columns: owner.loc.start.column - ownerOriginalStart.column
-            };
-          }
+      for (const { owner, ownerOriginalStart, comments } of detached) {
+        let delta: { lines: number; columns: number };
+        if (owner === node) {
+          // node.loc is still the (possibly extended) relocated group span;
+          // derive the shift from that, then restore node's own bare span.
+          delta = {
+            lines: node.loc.start.line - ownerOriginalStart.line,
+            columns: node.loc.start.column - ownerOriginalStart.column
+          };
+          node.loc.start = { line: nodeOwnStart!.line + delta.lines, column: nodeOwnStart!.column + delta.columns };
+          node.loc.end = { line: nodeOwnEnd!.line + delta.lines, column: nodeOwnEnd!.column + delta.columns };
+        } else {
+          delta = {
+            lines: owner.loc.start.line - ownerOriginalStart.line,
+            columns: owner.loc.start.column - ownerOriginalStart.column
+          };
+        }
 
-          for (const comment of comments) {
-            shiftNode(comment, delta);
-            const insertAt = (hostContainer.items as TreeNode[]).findIndex(
-              item => item.loc.start.line > comment.loc.start.line
-            );
-            if (insertAt === -1) (hostContainer.items as TreeNode[]).push(comment);
-            else (hostContainer.items as TreeNode[]).splice(insertAt, 0, comment);
-          }
+        for (const comment of comments) {
+          shiftNode(comment, delta);
+          const insertAt = (hostContainer.items as TreeNode[]).findIndex(
+            item => item.loc.start.line > comment.loc.start.line
+          );
+          if (insertAt === -1) (hostContainer.items as TreeNode[]).push(comment);
+          else (hostContainer.items as TreeNode[]).splice(insertAt, 0, comment);
         }
       }
 

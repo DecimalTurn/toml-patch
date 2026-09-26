@@ -18,6 +18,8 @@ export const DEFAULT_MULTILINE_TABLE = 'auto';
 export const DEFAULT_MULTILINE_ARRAY = 'auto';
 export const DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE = true;
 
+
+
 export type MultilineContainerMode = boolean | number | 'auto' | 'parent';
 
 // Detects if trailing commas are used in the existing TOML by examining the CST
@@ -649,18 +651,18 @@ export class TomlFormat {
   updateOrder?: boolean;
 
   /**
-   * Whether `patch()` should let each entry's owned comments travel with it
-   * when an entry is removed or moved (see docs/CommentOwnership.md).
+   * How much comment ownership `patch()` should apply (see
+   * docs/CommentOwnership.md).
    *
-   * On by default. With `commentOwnership: false`, removing or moving an entry
-   * leaves its comments behind instead of taking them along. Section-level
-   * reordering via `updateOrder` is disabled entirely in that case: reordering
-   * carries each entry's comments with it, so with ownership off the reorder is
-   * a no-op and keys keep their original order.
+   * - `true` (default): every comment owned by a removed or moved entry travels
+   *   with it — leading block, same-line trailing, and cross-container.
+   * - `false`: leading (own-line) and cross-container comment blocks stop
+   *   traveling — a removed entry leaves them behind. Same-line trailing
+   *   comments (`x = 1 # note`) always travel with their key (R1), which is not
+   *   optional.
    *
-   * Not auto-detectable — the existing document's layout says nothing about
-   * the caller's intent, so `autoDetectFormatWithCst` always resolves this to
-   * `true`.
+   * Not auto-detectable — the existing document's layout says nothing about the
+   * caller's intent, so `autoDetectFormatWithCst` always resolves this to `true`.
    */
   commentOwnership?: boolean;
 

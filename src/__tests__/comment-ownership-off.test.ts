@@ -1,11 +1,11 @@
 import dedent from 'dedent';
 import { parse, patch } from '../index';
 
-// Opt-out suite: `commentOwnership: false` disables comment ownership on the
-// deletion and inline-move paths. A removed or moved entry leaves its owned
-// comments behind to describe whatever ends up occupying that spot, which is
-// the legacy behavior predating explicit comment ownership.
-// See docs/PLAN-CommentOwnership-Option.md.
+// Opt-out suite: `commentOwnership: false` disables LEADING (R2) and
+// cross-container (R5) comment ownership. A removed entry leaves its own-line
+// leading comment block behind, but a same-line trailing comment (R1) still
+// travels with its key — R1 predates the option and is never optional.
+// See docs/Comment-Ownership.md.
 
 describe('commentOwnership: false on root key-value removal', () => {
   test('leaves a leading comment block behind when the key is removed', () => {
@@ -24,7 +24,7 @@ describe('commentOwnership: false on root key-value removal', () => {
     ` + '\n');
   });
 
-  test('a same-line trailing comment is still absorbed by the legacy remove path', () => {
+  test('still drops a same-line trailing comment (R1 always applies)', () => {
     const input = dedent`
       [database]
       server = "192.168.1.1"
@@ -35,8 +35,6 @@ describe('commentOwnership: false on root key-value removal', () => {
     const value = parse(input);
     delete value.database.enabled;
 
-    // Ownership off means the member is removed via the plain primitive, whose
-    // own same-line trailing comment absorption still drops the comment.
     expect(patch(input, value, { commentOwnership: false })).toEqual(dedent`
       [database]
       server = "192.168.1.1"
@@ -69,31 +67,30 @@ describe('commentOwnership: false on [table] removal', () => {
 });
 
 describe('commentOwnership: false on [[array-of-tables]] removal', () => {
-  test('leaves the entry comment behind when an entry is removed', () => {
+  test('leaves the entry\'s leading comment behind when an entry is removed', () => {
     const input = dedent`
+      # product list
       [[products]]
       name = "Hammer"
-      # used in the shop
-      sku = 738594937
 
       [[products]]
       name = "Nail"
-      sku = 284758393
     ` + '\n';
 
     const value = parse(input);
     value.products.splice(0, 1);
 
     expect(patch(input, value, { commentOwnership: false })).toEqual(dedent`
+      # product list
+
       [[products]]
       name = "Nail"
-      sku = 284758393
     ` + '\n');
   });
 });
 
 describe('commentOwnership: false on inline array element removal', () => {
-  test('leaves the removed element\'s own comment behind (middle element)', () => {
+  test('drops the removed element\'s same-line trailing comment (R1)', () => {
     const input = dedent`
       xs = [
         1, # one
@@ -115,7 +112,7 @@ describe('commentOwnership: false on inline array element removal', () => {
     ` + '\n');
   });
 
-  test('a leading comment on a MOVED element is left behind (the on-path case carries it)', () => {
+  test('a leading comment on a MOVED element still travels with it (moves always carry)', () => {
     const input = dedent`
       xs = [
         1,
@@ -129,13 +126,13 @@ describe('commentOwnership: false on inline array element removal', () => {
     const value = parse(input);
     value.xs = [2, 1, 3];
 
-    // Ownership on carries `# doc for two` with element 2 to the front; off
-    // leaves it stranded at its old position between the surviving elements.
+    // A Move never deletes an element, so its comments always travel with it —
+    // the option governs deletion only.
     expect(patch(input, value, { commentOwnership: false })).toBe(dedent`
       xs = [
+        # doc for two
         2,
         1,
-        # doc for two
         3,
       ]
       y = 9
@@ -144,7 +141,7 @@ describe('commentOwnership: false on inline array element removal', () => {
 });
 
 describe('commentOwnership: false on inline table element removal', () => {
-  test('leaves the removed row\'s comment behind', () => {
+  test('drops the removed row\'s trailing comment (R1)', () => {
     const input = dedent`
       t = {
         a = 1, # a comment
@@ -167,9 +164,9 @@ describe('commentOwnership: false on inline table element removal', () => {
 
 describe('commentOwnership: false with updateOrder', () => {
   test('updateOrder has no effect: keys keep their original order and comments stay put', () => {
-    // Reordering carries each entry's owned comments with it, so with ownership
-    // off the reorder is a no-op rather than stranding comments away from their
-    // keys. Neither the key order nor any comment changes.
+    // Reordering carries each entry's owned comments with it, so with leading
+    // ownership off the reorder is a no-op rather than stranding comments away
+    // from their keys.
     const input = dedent`
       # leads a
       a = 1 # trail a

@@ -450,13 +450,14 @@ Some shapes are not reordered yet: the interiors of inline tables (`{ a = 1, b =
 
 - **Type:** `boolean` (optional)
 - **Default:** `true`
-- **Description:** Whether `patch()` lets each removed or moved entry's owned comments travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed or inline-moved entry leaves its comments behind in its old position. Section-level reordering via `updateOrder` is disabled in that case, so keys keep their original order.
+- **Description:** Whether `patch()` lets each removed or moved entry's *leading* comment block travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed entry leaves its leading own-line comment block behind. A same-line trailing comment (`x = 1 # note`) always travels with its key — that rule is not optional.
 
 This option only affects `patch()` and is never auto-detected, always resolving to `true`.
 
 ```js
 patch(existing, value, { commentOwnership: false });
-// a removed key leaves its leading comment block behind
+// a removed key leaves its leading comment block behind;
+// a same-line trailing comment still goes with its key
 ```
 
 ### `escapeSequenceUpperCase`

@@ -3609,7 +3609,7 @@ function applyChanges(
 
         const node = (parent as WithItems).items[change.from];
 
-        moveInlineElement(original, parent, node, change.to, format.commentOwnership);
+        moveInlineElement(original, parent, node, change.to);
       } else {
         // TableArray sequence: the path refers to a collection of [[name]] entries
         // spread across Document.items (each at an indexed sub-path).
