@@ -332,7 +332,6 @@ The opt-out is bounded:
 
 - Leading (R2) and cross-container (R5) comment blocks stop traveling: they are left in place.
 - Same-line trailing (R1) comments are unchanged: they still travel with their entry.
-- Moves are unaffected: a Move never deletes an element, so its comments always travel with it.
 
 The option is not auto-detectable; `autoDetectFormatWithCst` always resolves it to `true`.
 

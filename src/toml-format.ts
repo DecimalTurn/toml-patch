@@ -657,9 +657,9 @@ export class TomlFormat {
    * - `true` (default): every comment owned by a removed or moved entry travels
    *   with it — leading block, same-line trailing, and cross-container.
    * - `false`: leading (own-line) and cross-container comment blocks stop
-   *   traveling — a removed entry leaves them behind. Same-line trailing
-   *   comments (`x = 1 # note`) always travel with their key (R1), which is not
-   *   optional.
+   *   traveling — a removed or moved entry leaves them behind. Same-line
+   *   trailing comments (`x = 1 # note`) always travel with their key (R1),
+   *   which is not optional.
    *
    * Not auto-detectable — the existing document's layout says nothing about the
    * caller's intent, so `autoDetectFormatWithCst` always resolves this to `true`.

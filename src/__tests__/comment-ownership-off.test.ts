@@ -112,7 +112,7 @@ describe('commentOwnership: false on inline array element removal', () => {
     ` + '\n');
   });
 
-  test('a leading comment on a MOVED element still travels with it (moves always carry)', () => {
+  test('a leading comment on a MOVED element is left behind (R2 off)', () => {
     const input = dedent`
       xs = [
         1,
@@ -126,13 +126,13 @@ describe('commentOwnership: false on inline array element removal', () => {
     const value = parse(input);
     value.xs = [2, 1, 3];
 
-    // A Move never deletes an element, so its comments always travel with it —
-    // the option governs deletion only.
+    // Leading (R2) ownership is off, so the leading block stays at its line
+    // while element 2 moves to the front.
     expect(patch(input, value, { commentOwnership: false })).toBe(dedent`
       xs = [
-        # doc for two
         2,
         1,
+        # doc for two
         3,
       ]
       y = 9

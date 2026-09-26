@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Formatting: Add `commentOwnership` option to `TomlFormat` for `patch()`, defaulting to `true`. Setting it to `false` stops a removed entry's leading (own-line) comment block and cross-container comments from traveling with it — they are left behind. Same-line trailing comments (`x = 1 # note`) always travel with their key. See [docs/Comment-Ownership.md](docs/Comment-Ownership.md).
+- Formatting: Add `commentOwnership` option to `TomlFormat` for `patch()`, defaulting to `true`. Setting it to `false` stops a removed or moved entry's leading (own-line) comment block and cross-container comments from traveling with it — they are left behind. Same-line trailing comments (`x = 1 # note`) always travel with their key. See [docs/Comment-Ownership.md](docs/Comment-Ownership.md).
 - Packaging: Ship an edit-only `patch-lite` distribution that updates existing values while preserving comments formatting. ([#309])
 - Patching: accept smol-toml date objects when patching and stringifying values. ([#309])
 - Formatting: Add `escapeSequenceUpperCase` option to `TomlFormat` to control the case of generated hex escape sequences. When patching, the case is auto-detected from the first hex escape in the document. ([#309])

@@ -450,7 +450,7 @@ Some shapes are not reordered yet: the interiors of inline tables (`{ a = 1, b =
 
 - **Type:** `boolean` (optional)
 - **Default:** `true`
-- **Description:** Whether `patch()` lets each removed or moved entry's *leading* comment block travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed entry leaves its leading own-line comment block behind. A same-line trailing comment (`x = 1 # note`) always travels with its key — that rule is not optional.
+- **Description:** Whether `patch()` lets each removed or moved entry's *leading* comment block travel with it (see [Comment ownership](CommentOwnership.md)). With `false`, a removed or moved entry leaves its leading own-line comment block behind. A same-line trailing comment (`x = 1 # note`) always travels with its key — that rule is not optional.
 
 This option only affects `patch()` and is never auto-detected, always resolving to `true`.
 

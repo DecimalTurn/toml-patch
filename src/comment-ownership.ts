@@ -568,11 +568,16 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode, com
  * on how far *that specific element* actually shifted — which may differ
  * from how far `node` itself moved, or be zero.
  *
- * A Move never deletes an element, so its comments always travel with it —
- * this function ignores `commentOwnership`, which governs deletion only
- * (see `removeMember`).
+ * Same-line trailing (R1) comments always travel. Leading (own-line) comments
+ * travel only when `commentOwnership` is `true`; with `false` they are left in
+ * place (the writer's orphaned-comment pre-compensation keeps them at their
+ * original line).
  */
-export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number): void {
+export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, toIndex: number, commentOwnership = true): void {
+  // Leading (own-line) comments travel only in full-ownership mode; trailing
+  // (R1) comments always travel.
+  const carryLeading = commentOwnership === true;
+
   let sharedLineContainerBeforeMove = false;
   if (isMultilineInlineContainer(parent) && isDocument(root)) {
     const hostContainer = findHostContainer(root, parent);
@@ -687,7 +692,17 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
 
       for (const group of groups) {
         if (group.kind !== 'member' || !group.member) continue;
-        const comments = group.items.filter(item => item !== group.member) as Comment[];
+        const memberIndex = group.items.indexOf(group.member);
+        const leadingComments = group.items.slice(0, memberIndex) as Comment[];
+        const trailingComments = group.items.slice(memberIndex + 1) as Comment[];
+
+        // Trailing (R1) comments always travel. Leading (R2) comments travel
+        // only in full-ownership mode; otherwise they stay in place, kept at
+        // their line by the writer's orphaned-comment pre-compensation, so
+        // they are deliberately NOT detached here.
+        const comments = carryLeading
+          ? [...leadingComments, ...trailingComments]
+          : trailingComments;
 
         if (group.member === node) {
           nodeOwnStart = clonePosition(node.loc.start);
