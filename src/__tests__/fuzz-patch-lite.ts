@@ -2,10 +2,12 @@
  * Patch-lite fuzz harness: generates random TOML, applies in-place leaf edits,
  * runs patch(), and verifies the result re-parses to the edited object.
  *
- * patch-lite only accepts edits to existing scalar values, so the harness
- * mutates scalar leaves (string, number, bigint, boolean) and skips date/time
- * values. A second harness checks that structural mutations always throw
- * PatchLiteError instead of crashing or returning partial output.
+ * patch-lite only accepts edits to existing leaf values, so the harness mutates
+ * scalar leaves (string, number, bigint, boolean) and date/time leaves. A
+ * scalar is replaced with a random scalar of any type; a date/time gets a new
+ * instant of the same TOML kind, keeping the source's separator, offset style
+ * and fractional-digit count. A second harness checks that structural mutations
+ * always throw PatchLiteError instead of crashing or returning partial output.
  *
  * Usage: npx tsx src/__tests__/fuzz-patch-lite.ts [--count N] [--seed SEED] [--mutations M]
  */
@@ -15,6 +17,7 @@ import { patch } from '../patch-lite-entry';
 import { PatchLiteError } from '../diff-lite';
 import { deepEqual } from './fuzz-patch';
 import { stableStringify } from '../utils';
+import { DateFormatHelper } from '../date-format';
 
 export type LitePath = Array<string | number>;
 
@@ -39,8 +42,8 @@ function isScalarLeaf(value: unknown): boolean {
 
 /**
  * Paths of every scalar leaf patch-lite can edit.
- * Date/time values are skipped: the replacement generator only produces
- * scalar values.
+ * Date/time leaves are collected separately by `collectDateLeaves`, because the
+ * scalar replacement generator cannot produce a same-kind date.
  */
 export function collectEditableLeaves(obj: unknown, prefix: LitePath = []): LitePath[] {
   if (prefix.length > 0 && isScalarLeaf(obj)) return [prefix];
@@ -57,6 +60,26 @@ export function collectEditableLeaves(obj: unknown, prefix: LitePath = []): Lite
   const paths: LitePath[] = [];
   for (const key of Object.keys(obj)) {
     paths.push(...collectEditableLeaves((obj as any)[key], prefix.concat(key)));
+  }
+  return paths;
+}
+
+/** Paths of every date/time leaf, which patch-lite edits with a same-kind value. */
+export function collectDateLeaves(obj: unknown, prefix: LitePath = []): LitePath[] {
+  if (prefix.length > 0 && obj instanceof Date) return [prefix];
+  if (obj == null || typeof obj !== 'object' || obj instanceof Date) return [];
+
+  if (Array.isArray(obj)) {
+    const paths: LitePath[] = [];
+    for (let index = 0; index < obj.length; index++) {
+      paths.push(...collectDateLeaves(obj[index], prefix.concat(index)));
+    }
+    return paths;
+  }
+
+  const paths: LitePath[] = [];
+  for (const key of Object.keys(obj)) {
+    paths.push(...collectDateLeaves((obj as any)[key], prefix.concat(key)));
   }
   return paths;
 }
@@ -133,6 +156,22 @@ function randomEditValue(rng: SeededRandom): unknown {
   return rng.chance(0.5) ? magnitude : -magnitude;
 }
 
+/**
+ * Builds a replacement date/time of the same TOML kind as the leaf it replaces.
+ * patch-lite rejects a kind change, so the new value keeps the source's class,
+ * separator, offset style and fractional-digit count while moving to a
+ * different instant. A date-only value moves by whole days so it stays
+ * date-only; a time or datetime moves by hours.
+ */
+function randomDateEditValue(value: Date, rng: SeededRandom): Date {
+  const raw = value.toISOString();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const deltaMs = dateOnly
+    ? rng.nextRange(1, 28) * 86_400_000
+    : rng.nextRange(1, 72) * 3_600_000;
+  return DateFormatHelper.createDateWithOriginalFormat(new Date(value.getTime() + deltaMs), raw);
+}
+
 // ─── Edit round-trip harness ─────────────────────────────────────────────
 
 function failed(
@@ -159,7 +198,8 @@ export function fuzzOneLite(seed: number, mutationCount: number): PatchLiteFuzzR
     }
 
     const leaves = collectEditableLeaves(original);
-    if (leaves.length === 0) return result;
+    const dateLeaves = collectDateLeaves(original);
+    if (leaves.length === 0 && dateLeaves.length === 0) return result;
 
     const rng = new SeededRandom(seed + mutationCount * 1000000);
     // Mutate the parsed object in place. patch-lite re-parses the source itself,
@@ -172,11 +212,19 @@ export function fuzzOneLite(seed: number, mutationCount: number): PatchLiteFuzzR
     let attempts = 0;
     while (editPaths.length < mutationCount && attempts < mutationCount * 20) {
       attempts++;
-      const path = rng.pick(leaves);
+      // Prefer dates when both kinds are available so the date path is not
+      // drowned out by documents that are mostly scalars.
+      const useDate = dateLeaves.length > 0 && (leaves.length === 0 || rng.chance(0.4));
+      const path = useDate ? rng.pick(dateLeaves) : rng.pick(leaves);
       const key = JSON.stringify(path);
       if (used.has(key)) continue;
       used.add(key);
-      setAt(updated, path, randomEditValue(rng));
+      const current = getAt(updated, path);
+      setAt(
+        updated,
+        path,
+        current instanceof Date ? randomDateEditValue(current, rng) : randomEditValue(rng)
+      );
       editPaths.push(path.join('.'));
     }
 

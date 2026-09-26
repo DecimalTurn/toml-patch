@@ -1,4 +1,5 @@
-import { fuzzOneLite, fuzzRejectsLite, PatchLiteFuzzResult } from './fuzz-patch-lite';
+import { collectDateLeaves, collectEditableLeaves, fuzzOneLite, fuzzRejectsLite, PatchLiteFuzzResult } from './fuzz-patch-lite';
+import { LocalDate, LocalTime } from '../date-format';
 
 // Seeds whose document is pinned to a fixed randomizer output. Adding a seed
 // here keeps that exact document in the committed suite; extend the range when
@@ -16,10 +17,23 @@ function expectOk(result: PatchLiteFuzzResult) {
   expect(result.status, result.error).toBe('ok');
 }
 
+describe('editable leaf discovery', () => {
+  test('date/time leaves are collected separately from scalar leaves', () => {
+    const obj = {
+      count: 1,
+      time: new LocalTime('07:32:00', '07:32:00'),
+      nested: [{ date: new LocalDate('1979-05-27') }]
+    };
+
+    expect(collectEditableLeaves(obj)).toEqual([['count']]);
+    expect(collectDateLeaves(obj)).toEqual([['time'], ['nested', 0, 'date']]);
+  });
+});
+
 test.each(sweepSeeds)('patch-lite fuzz seed %d round-trips its edits', (seed) => {
-  // Some random documents carry no editable scalar leaf (for example when every
-  // value is a date/time, which patch-lite rejects by design) and are skipped
-  // inside the harness; those still return 'ok'.
+  // Some random documents carry no editable leaf at all (for example every
+  // value is a table or array) and are skipped inside the harness; those still
+  // return 'ok'.
   expectOk(fuzzOneLite(seed, 5));
 });
 
