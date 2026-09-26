@@ -293,3 +293,174 @@ describe('round-trip with a smol-toml parsed object', () => {
     expect(smolDateIso(reparsed)).toEqual(smolDateIso(updated));
   });
 });
+
+/**
+ * Spellings smol-toml accepts but re-emits differently: sub-millisecond
+ * fractions (truncated to milliseconds by `TomlDate`), a space separator
+ * (re-emitted with `T`), lowercase `t`/`z`, explicit `+00:00`/`-00:00` offsets
+ * and TOML 1.1 `HH:MM` local times (re-emitted with seconds).
+ */
+const edgeSpellingsDoc = dedent`
+  z6 = 1979-05-27T07:32:00.123456Z
+  off1 = 1979-05-27T07:32:00.5-07:00
+  time6 = 07:32:00.123456
+  space = 1979-05-27 07:32:00
+  lower = 1979-05-27t07:32:00z
+  pluszero = 1979-05-27T07:32:00+00:00
+  minuszero = 1979-05-27T07:32:00-00:00
+  nano = 1979-05-27T07:32:00.999999999-07:00
+  timenosec = 07:32
+  version = "1.0.0"
+` + '\n';
+
+describe('smol-toml date spellings outside the canonical form', () => {
+  test('stringify canonicalises every spelling', () => {
+    expect(stringify(smolParse(edgeSpellingsDoc))).toEqual(dedent`
+      z6 = 1979-05-27T07:32:00.123Z
+      off1 = 1979-05-27T07:32:00.500-07:00
+      time6 = 07:32:00.123
+      space = 1979-05-27T07:32:00
+      lower = 1979-05-27T07:32:00Z
+      pluszero = 1979-05-27T07:32:00+00:00
+      minuszero = 1979-05-27T07:32:00-00:00
+      nano = 1979-05-27T07:32:00.999-07:00
+      timenosec = 07:32:00
+      version = "1.0.0"
+    ` + '\n');
+  });
+
+  test('patch returns the document byte-for-byte for an unedited object', () => {
+    expect(patch(edgeSpellingsDoc, smolParse(edgeSpellingsDoc))).toBe(edgeSpellingsDoc);
+  });
+
+  test('patch-lite returns the document byte-for-byte for an unedited object', () => {
+    expect(patchLite(edgeSpellingsDoc, smolParse(edgeSpellingsDoc))).toBe(edgeSpellingsDoc);
+  });
+
+  test('an unrelated edit leaves every date row verbatim', () => {
+    const updated = smolParse(edgeSpellingsDoc);
+    updated.version = '1.0.1';
+
+    expect(patch(edgeSpellingsDoc, updated)).toEqual(
+      edgeSpellingsDoc.replace('version = "1.0.0"', 'version = "1.0.1"')
+    );
+  });
+
+  test('edits keep the source separator, offset style and case', () => {
+    const updated = smolParse(edgeSpellingsDoc);
+    updated.space = new TomlDate('1984-02-14T09:15:30');
+    updated.lower = new TomlDate('1984-02-14T09:15:30Z');
+    updated.pluszero = new TomlDate('1984-02-14T09:15:30+00:00');
+    updated.minuszero = new TomlDate('1984-02-14T09:15:30-00:00');
+    updated.timenosec = new TomlDate('09:15:30');
+
+    expect(patch(edgeSpellingsDoc, updated)).toEqual(dedent`
+      z6 = 1979-05-27T07:32:00.123456Z
+      off1 = 1979-05-27T07:32:00.5-07:00
+      time6 = 07:32:00.123456
+      space = 1984-02-14 09:15:30
+      lower = 1984-02-14T09:15:30Z
+      pluszero = 1984-02-14T09:15:30+00:00
+      minuszero = 1984-02-14T09:15:30-00:00
+      nano = 1979-05-27T07:32:00.999999999-07:00
+      timenosec = 09:15:30
+      version = "1.0.0"
+    ` + '\n');
+  });
+
+  test('patch-lite keeps the source separator and digit count on edit', () => {
+    const updated = smolParse(edgeSpellingsDoc);
+    updated.space = new TomlDate('1984-02-14T09:15:30');
+    updated.off1 = new TomlDate('1984-02-14T09:15:30.5-07:00');
+
+    const out = patchLite(edgeSpellingsDoc, updated);
+    expect(out.split('\n').filter((line) => /^(space|off1) /.test(line))).toEqual([
+      'off1 = 1984-02-14T09:15:30.5-07:00',
+      'space = 1984-02-14 09:15:30'
+    ]);
+  });
+});
+
+/**
+ * smol-toml's other date mode: `useLegacyDate: false` returns Temporal objects
+ * instead of `TomlDate`. `patch()` auto-detects them; `patch-lite` documents
+ * Temporal as unsupported and must reject it rather than corrupt the document.
+ */
+const temporalDoc = dedent`
+  date = 1979-05-27
+  time = 07:32:00.123456
+  localDt = 1979-05-27T07:32:00.123456
+  offsetZ = 1979-05-27T07:32:00.123456789Z
+  offset = 1979-05-27T07:32:00.5-07:00
+  version = "1.0.0"
+` + '\n';
+
+const smolTemporal = () => smolParse(temporalDoc, { useLegacyDate: false });
+
+describe('smol-toml parsed with useLegacyDate: false (Temporal objects)', () => {
+  test('smol emits the documented Temporal types', () => {
+    const obj = smolTemporal();
+    expect(obj.date).toBeInstanceOf(Temporal.PlainDate);
+    expect(obj.time).toBeInstanceOf(Temporal.PlainTime);
+    expect(obj.localDt).toBeInstanceOf(Temporal.PlainDateTime);
+    expect(obj.offsetZ).toBeInstanceOf(Temporal.ZonedDateTime);
+    expect(obj.offset).toBeInstanceOf(Temporal.ZonedDateTime);
+  });
+
+  test('patch returns the document byte-for-byte for an unedited object', () => {
+    expect(patch(temporalDoc, smolTemporal())).toBe(temporalDoc);
+  });
+
+  test('an unrelated edit leaves every date row verbatim', () => {
+    const updated = smolTemporal();
+    updated.version = '1.0.1';
+
+    expect(patch(temporalDoc, updated)).toEqual(
+      temporalDoc.replace('version = "1.0.0"', 'version = "1.0.1"')
+    );
+  });
+
+  test('stringify keeps the Temporal sub-millisecond precision', () => {
+    expect(stringify(smolTemporal())).toEqual(dedent`
+      date = 1979-05-27
+      time = 07:32:00.123456
+      localDt = 1979-05-27T07:32:00.123456
+      offsetZ = 1979-05-27T07:32:00.123456789Z
+      offset = 1979-05-27T07:32:00.5-07:00
+      version = "1.0.0"
+    ` + '\n');
+  });
+
+  test('edits each Temporal kind', () => {
+    const plainDate = smolTemporal();
+    plainDate.date = Temporal.PlainDate.from('1984-02-14');
+    expect(patch(temporalDoc, plainDate)).toEqual(
+      temporalDoc.replace('date = 1979-05-27', 'date = 1984-02-14')
+    );
+
+    const plainTime = smolTemporal();
+    plainTime.time = Temporal.PlainTime.from('09:15:30');
+    expect(patch(temporalDoc, plainTime)).toEqual(
+      temporalDoc.replace('time = 07:32:00.123456', 'time = 09:15:30')
+    );
+
+    const plainDateTime = smolTemporal();
+    plainDateTime.localDt = Temporal.PlainDateTime.from('1984-02-14T09:15:30');
+    expect(patch(temporalDoc, plainDateTime)).toEqual(
+      temporalDoc.replace('localDt = 1979-05-27T07:32:00.123456', 'localDt = 1984-02-14T09:15:30')
+    );
+
+    const zoned = smolTemporal();
+    zoned.offsetZ = Temporal.ZonedDateTime.from('1984-02-14T09:15:30.5Z[+00:00]');
+    expect(patch(temporalDoc, zoned)).toEqual(
+      temporalDoc.replace('offsetZ = 1979-05-27T07:32:00.123456789Z', 'offsetZ = 1984-02-14T09:15:30.5Z')
+    );
+  });
+
+  test('patch-lite rejects Temporal values as documented', () => {
+    const updated = smolTemporal();
+    updated.version = '1.0.1';
+
+    expectLiteError(() => patchLite(temporalDoc, updated), 'TypeChange');
+  });
+});
