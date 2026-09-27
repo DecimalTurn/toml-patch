@@ -37,7 +37,7 @@ import {
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify, isDate, datesEqual } from './utils';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, hasTemporal, isObject, stableStringify, isDate, datesEqual } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn, perLine } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveGroups } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
@@ -404,14 +404,6 @@ function valuesEqualIterative(left: any, right: any): boolean {
     }
   }
   return true;
-}
-
-function hasTemporal(value: any, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (value == null || typeof value !== 'object') return false;
-  if (isTemporal(value)) return true;
-  if (seen.has(value)) return false;
-  seen.add(value);
-  return Object.values(value).some(child => hasTemporal(child, seen));
 }
 
 function compactSparseArrays(value: any): any {

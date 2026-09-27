@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify, sameValue, isNegativeNan } from './utils';
+import { isObject, isDate, isTemporal, datesEqual, stableStringify, sameValue, isNegativeNan } from './utils';
 
 /**
  * A path into a JavaScript object, mixing object keys and array indices.
@@ -58,13 +58,23 @@ function isSupportedLeaf(value: any): boolean {
 function describe(value: any): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
-  if (value instanceof Date) return 'date';
+  if (isDate(value) || isTemporal(value)) return 'date';
   const type = typeof value;
   return type === 'object' ? 'table' : type;
 }
 
 function sameNanSign(a: number, b: number): boolean {
   return isNegativeNan(a) === isNegativeNan(b);
+}
+
+/**
+ * A value the edit path writes as a TOML date/time. `patch-lite` accepts both
+ * the custom `Date` subclasses it parses and Temporal objects the caller
+ * supplies, and an edit may switch between them, so the diff groups both under
+ * one kind instead of treating the mix as a type change.
+ */
+function isDateLike(value: any): boolean {
+  return isDate(value) || isTemporal(value);
 }
 
 /**
@@ -121,11 +131,11 @@ export default function diffLite(before: any, after: any, path: Path = []): Edit
     );
   }
 
-  if (before instanceof Date && after instanceof Date) {
+  if (isDateLike(before) && isDateLike(after)) {
     return [{ type: 'Edit', path }];
   }
 
-  if (before instanceof Date || after instanceof Date) {
+  if (isDateLike(before) || isDateLike(after)) {
     throw new PatchLiteError(
       'TypeChange',
       path,

@@ -386,8 +386,8 @@ describe('smol-toml date spellings outside the canonical form', () => {
 
 /**
  * smol-toml's other date mode: `useLegacyDate: false` returns Temporal objects
- * instead of `TomlDate`. `patch()` auto-detects them; `patch-lite` documents
- * Temporal as unsupported and must reject it rather than corrupt the document.
+ * instead of `TomlDate`. Both `patch()` and `patch-lite()` auto-detect them and
+ * serialize each Temporal kind back to its TOML form.
  */
 const temporalDoc = dedent`
   date = 1979-05-27
@@ -460,10 +460,38 @@ describe('smol-toml parsed with useLegacyDate: false (Temporal objects)', () => 
     );
   });
 
-  test('patch-lite rejects Temporal values as documented', () => {
+  test('patch-lite treats unchanged Temporal values as no-ops', () => {
     const updated = smolTemporal();
     updated.version = '1.0.1';
 
-    expectLiteError(() => patchLite(temporalDoc, updated), 'TypeChange');
+    expect(patchLite(temporalDoc, updated)).toEqual(
+      temporalDoc.replace('version = "1.0.0"', 'version = "1.0.1"')
+    );
+  });
+
+  test('patch-lite edits each Temporal kind', () => {
+    const plainDate = smolTemporal();
+    plainDate.date = Temporal.PlainDate.from('1984-02-14');
+    expect(patchLite(temporalDoc, plainDate)).toEqual(
+      temporalDoc.replace('date = 1979-05-27', 'date = 1984-02-14')
+    );
+
+    const plainTime = smolTemporal();
+    plainTime.time = Temporal.PlainTime.from('09:15:30');
+    expect(patchLite(temporalDoc, plainTime)).toEqual(
+      temporalDoc.replace('time = 07:32:00.123456', 'time = 09:15:30')
+    );
+
+    const plainDateTime = smolTemporal();
+    plainDateTime.localDt = Temporal.PlainDateTime.from('1984-02-14T09:15:30');
+    expect(patchLite(temporalDoc, plainDateTime)).toEqual(
+      temporalDoc.replace('localDt = 1979-05-27T07:32:00.123456', 'localDt = 1984-02-14T09:15:30')
+    );
+
+    const zoned = smolTemporal();
+    zoned.offsetZ = Temporal.ZonedDateTime.from('1984-02-14T09:15:30.5Z[+00:00]');
+    expect(patchLite(temporalDoc, zoned)).toEqual(
+      temporalDoc.replace('offsetZ = 1979-05-27T07:32:00.123456789Z', 'offsetZ = 1984-02-14T09:15:30.5Z')
+    );
   });
 });

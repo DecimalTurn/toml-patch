@@ -24,4 +24,4 @@ maxSlowdown = 25
 # gated, and a bundle with no budget at all is measured without failing.
 [bundle.patch-lite]
 maxMinified = 48
-maxGzipped = 14
+maxGzipped = 15

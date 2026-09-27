@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Patching (lite): accept `Temporal` objects for date/time values, matching the full `patch()`. The temporal type decides the date/time kind and precision, and the source's separator and zero-offset spelling are kept. Requires `Temporal` at runtime, as `parse({ temporal: true })` does. ([#316])
 - Formatting: add a `minimumTimeDecimals` option for the fractional-second digits of date/time values. It is a floor, so digits are only ever added: `07:32:00` with `minimumTimeDecimals: 3` serializes as `07:32:00.000`, a time written without seconds gains `:00` before its fraction, a value that already wrote at least as many digits is left as it is, and a floor above them pads in zeros (`07:32:00.123456` with `minimumTimeDecimals: 9` becomes `07:32:00.123456000`). `patch()` pads a value it rewrites and leaves untouched rows byte-for-byte. ([#316])
 
 ### Fixed

@@ -2,7 +2,7 @@ import { isFloat as isFloatNode } from './cst';
 import { DateFormatHelper, LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
 import { PatchLiteError, formatPath, Path } from './diff-lite';
 import { canUseLiteralString, canUseMultilineLiteral } from './literal-string';
-import { isNegativeNan } from './utils';
+import { isNegativeNan, isTemporal, temporalToTomlString } from './utils';
 
 /**
  * Encodes a JavaScript leaf value as valid TOML, independent of the full
@@ -24,6 +24,10 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
     return encodeFloat(value, isFloatNode(existingValue) ? existingValue.raw : undefined);
   }
 
+  if (isTemporal(value)) {
+    return encodeTemporal(value, existingValue);
+  }
+
   if (value instanceof Date) {
     return encodeDate(value, existingValue);
   }
@@ -33,6 +37,29 @@ export function encodeValue(value: any, existingValue: any, path: Path): string 
     path,
     `Unsupported value type ${Object.prototype.toString.call(value)} at ${formatPath(path)}`
   );
+}
+
+/**
+ * Encodes a Temporal value as TOML. The Temporal type decides the kind and the
+ * precision (a `PlainDate` stays date-only and a `ZonedDateTime` keeps its
+ * offset and fraction), matching the full patch(). Only the source's separator
+ * style and its spelled-out zero offset (`+00:00`/`-00:00` against `Z`) are
+ * carried over, so an edit looks like the row it replaces.
+ */
+function encodeTemporal(value: any, existingValue: any): string {
+  let raw = temporalToTomlString(value);
+  const existingRaw = existingValue?.raw;
+
+  if (typeof existingRaw === 'string') {
+    // Keep the source's space separator when it used one.
+    if (existingRaw.includes(' ') && raw.includes('T')) raw = raw.replace('T', ' ');
+    // Keep a spelled-out zero offset when the source wrote it that way.
+    if (/(?:\+00:00|-00:00)/.test(existingRaw) && raw.endsWith('Z')) {
+      raw = raw.replace(/Z$/, existingRaw.match(/([+-]00:00)/)![1]);
+    }
+  }
+
+  return raw;
 }
 
 /**

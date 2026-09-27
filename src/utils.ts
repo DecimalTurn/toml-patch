@@ -133,6 +133,22 @@ export function temporalToTomlString(value: any): string {
   return raw;
 }
 
+/**
+ * True when `value`, or anything nested inside it, is a Temporal object.
+ *
+ * Both `patch()` and `patch-lite()` use this to decide whether to parse the
+ * existing document into Temporal objects: when the caller supplies Temporal
+ * values, the diff has to compare like with like, or an unchanged value would
+ * look like an edit. `seen` guards against circular structures.
+ */
+export function hasTemporal(value: any, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (value == null || typeof value !== 'object') return false;
+  if (isTemporal(value)) return true;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some((child) => hasTemporal(child, seen));
+}
+
 export function isObject(value: any): boolean {
   return value && typeof value === 'object' && !isDate(value) && !isTemporal(value) && !Array.isArray(value);
 }
