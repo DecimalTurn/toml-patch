@@ -9524,7 +9524,7 @@ describe('escape sequence case', () => {
 
 // A rename is inferred when one key disappears and another key appears holding an
 // equal value. The rename edits the key in place and never rebuilds the value, so the
-// value's shape should not matter. Scalars and arrays of scalars already work. These
+// value's shape should not matter. Primitives and arrays of primitives already work. These
 // container values all throw while the replacement key is resolved, which aborts the
 // whole patch instead of renaming the key. Each test is marked `.fails` until fixed.
 describe('renaming a key whose value is a container', () => {
