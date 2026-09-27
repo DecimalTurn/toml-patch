@@ -99,7 +99,7 @@ before any output is produced.
 | `boolean` | |
 | `bigint` | |
 | `Date` | toml-patch's `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime` and duck-typed smol-toml `TomlDate` objects. The source value's kind (date / time / datetime / offset), separator, offset style and fractional-digit count are kept. A value whose fraction is only spelled differently (`.5` against `.500`) is not an edit, and an untouched value keeps all its source digits, including sub-millisecond ones. |
-| `Temporal` | **Not supported.** `Temporal.PlainDate` and friends are rejected with `TypeChange`. Convert to a `Date` subclass first, or use the full `patch()`. |
+| `Temporal` | **Not supported.** `Temporal.PlainDate` and friends are rejected with `TypeChange`. Convert to a `Date` subclass first, or use the full `patch()`. Support for Temporal is planed for v4 (next major release), when Temporal becomes the default and the custom `Date` subclasses are dropped. |
 
 Objects and arrays may appear in `updated` at a path where `existing` already holds a container, but
 they are only traversed — the container type and shape must not change.
