@@ -29,18 +29,43 @@ range a second time. Checking just the previously-failing seeds (via
 `fuzz-run.ts --seed <N> --to <N>`) is sufficient; a fresh full sweep only
 matters when you change core logic and want a broad regression signal.
 
+## Date precision and the format surface (variant 4)
+
+`src/__tests__/fuzz-patch4.ts` targets the fraction formatting path, which the
+earlier variants could not reach:
+
+- the source fractions are rewritten down to one or two digits, the state where
+a truncating edit changes the value;
+- replacement dates carry a time of day and a random millisecond, and most
+mutations aim at date leaves;
+- the format options the earlier variants never set (`minimumTimeDecimals`,
+`escapeSequenceUpperCase`) are randomized too.
+
+Dates are compared by instant, so writing `09:15:30.7` where the value holds
+750 ms fails the round trip instead of passing as a formatting difference.
+
+```powershell
+npx -y tsx scripts/fuzz-run4.ts --seed 0 --to 2000 --mutations 3
+```
+
+`src/__tests__/fuzz4.test.ts` runs a bounded seed range on every test run.
+Distill a seed with `--variant 4`; the distiller compares dates by instant for
+this variant, so a fraction written with a different digit count is not
+mistaken for a failure.
+
 ## Patch-lite
 
 `patch-lite` is edit-only, so its harness (`src/__tests__/fuzz-patch-lite.ts`)
 differs from the `patch` one:
 
-1. **Edits, not structural changes.** It mutates primitive leaves in place
-   (strings, booleans, numbers and bigints) and skips date/time values. It then
+1. **Edits, not structural changes.** It mutates leaf values in place and then
    re-parses the output and checks it equals the edited object, and re-applies
-   the same edit to confirm the result is unchanged. Replacement values are
-   deliberately hostile: embedded quotes, backslashes, control characters,
-   astral characters, negative zero, non-finite numbers and out-of-safe-range
-   bigints.
+   the same edit to confirm the result is unchanged. Scalars are replaced with
+   deliberately hostile values: embedded quotes, backslashes, control
+   characters, astral characters, negative zero, non-finite numbers and
+   out-of-safe-range bigints. Date/time leaves get a new instant of the same
+   TOML kind, keeping the source's separator, offset style and fractional-digit
+   count.
 2. **Rejections.** For the same random document it applies structural mutations
    (added and removed keys, a primitive replaced by a container, added array
    elements, array reordering) and asserts each throws a `PatchLiteError`

@@ -245,7 +245,24 @@ function deepEqualWithFormat(a: unknown, b: unknown, fmt?: Partial<TomlFormat>):
 
 // ─── Random value generator for mutations ────────────────────────────────
 
-function randomMutationValue(rng: SeededRandom): JsonValue {
+/**
+ * A date with a time of day and a random millisecond. Whole-second values can
+ * never need more fractional digits than a source fraction wrote, so they
+ * cannot catch an edit that truncates the value.
+ */
+function randomSubSecondDate(rng: SeededRandom): Date {
+  return new Date(Date.UTC(
+    2000 + rng.nextRange(0, 49),
+    rng.nextRange(0, 11),
+    rng.nextRange(1, 28),
+    rng.nextRange(0, 23),
+    rng.nextRange(0, 59),
+    rng.nextRange(0, 59),
+    rng.nextRange(0, 999)
+  ));
+}
+
+function randomMutationValue(rng: SeededRandom, subSecondDates = false): JsonValue {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-';
   const roll = rng.next();
   if (roll < 0.20) {
@@ -257,26 +274,34 @@ function randomMutationValue(rng: SeededRandom): JsonValue {
   if (roll < 0.45) return rng.nextRange(-5000, 5000);
   if (roll < 0.60) return (rng.next() * 10000) - 5000;
   if (roll < 0.75) return rng.chance(0.5);
-  if (roll < 0.85) return new Date(Date.UTC(
-    2000 + rng.nextRange(0, 49),
-    rng.nextRange(0, 11),
-    rng.nextRange(1, 28)
-  ));
+  if (roll < 0.85) {
+    if (subSecondDates) return randomSubSecondDate(rng);
+    return new Date(Date.UTC(
+      2000 + rng.nextRange(0, 49),
+      rng.nextRange(0, 11),
+      rng.nextRange(1, 28)
+    ));
+  }
   if (roll < 0.95) {
     const len = rng.nextRange(0, 3);
-    return Array.from({ length: len }, () => randomMutationValue(rng));
+    return Array.from({ length: len }, () => randomMutationValue(rng, subSecondDates));
   }
   const keys = rng.nextRange(1, 3);
   const obj: any = {};
   for (let i = 0; i < keys; i++) {
-    obj['k' + rng.nextRange(0, 99)] = randomMutationValue(rng);
+    obj['k' + rng.nextRange(0, 99)] = randomMutationValue(rng, subSecondDates);
   }
   return obj;
 }
 
 // ─── Mutation generator ──────────────────────────────────────────────────
 
-export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutation | null {
+export function generateMutation(
+  obj: unknown,
+  rng: SeededRandom,
+  subSecondDates = false,
+  dateFocus = false
+): RandomMutation | null {
   const paths = collectPaths(obj);
 
   const mutablePaths = paths.filter(p => {
@@ -288,11 +313,26 @@ export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutatio
 
   if (mutablePaths.length === 0) return null;
 
-  const path = mutablePaths[rng.nextInt(mutablePaths.length)];
+  // Variant 4 spends most of its budget on date leaves. An untargeted draw
+  // reaches one rarely, and even then only one value in ten is a date, so the
+  // fraction path stayed untested no matter how many seeds were scanned.
+  let candidates = mutablePaths;
+  if (dateFocus && rng.chance(0.6)) {
+    const datePaths = mutablePaths.filter(p => getAt(obj, p) instanceof Date);
+    if (datePaths.length > 0) candidates = datePaths;
+  }
+
+  const path = candidates[rng.nextInt(candidates.length)];
   const parent = path.length > 0 ? getAt(obj, path.slice(0, -1)) : obj;
   const existing = getAt(obj, path);
   const isArrayParent = Array.isArray(parent);
   const key = path[path.length - 1];
+
+  if (dateFocus && existing instanceof Date) {
+    // Replace a date with another date: an added, removed or retyped key would
+    // not exercise the fraction at all.
+    return { path, kind: 'change-value', newValue: randomSubSecondDate(rng) };
+  }
 
   const roll = rng.next();
 
@@ -301,9 +341,9 @@ export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutatio
       return { path, kind: 'remove-array-item' };
     }
     if (roll < 0.6) {
-      return { path, kind: 'change-value', newValue: randomMutationValue(rng) };
+      return { path, kind: 'change-value', newValue: randomMutationValue(rng, subSecondDates) };
     }
-    return { path, kind: 'add-array-item', newValue: randomMutationValue(rng) };
+    return { path, kind: 'add-array-item', newValue: randomMutationValue(rng, subSecondDates) };
   }
 
   if (existing !== undefined && typeof existing === 'object' && !(existing instanceof Date) && roll < 0.1) {
@@ -314,12 +354,12 @@ export function generateMutation(obj: unknown, rng: SeededRandom): RandomMutatio
     return { path, kind: 'delete-key' };
   }
   if (existing !== undefined && roll < 0.4) {
-    return { path, kind: 'change-type', newValue: randomMutationValue(rng) };
+    return { path, kind: 'change-type', newValue: randomMutationValue(rng, subSecondDates) };
   }
   if (existing !== undefined) {
-    return { path, kind: 'change-value', newValue: randomMutationValue(rng) };
+    return { path, kind: 'change-value', newValue: randomMutationValue(rng, subSecondDates) };
   }
-  return { path, kind: 'add-key', newValue: randomMutationValue(rng) };
+  return { path, kind: 'add-key', newValue: randomMutationValue(rng, subSecondDates) };
 }
 
 export function applyMutation(obj: any, mutation: RandomMutation): void {
@@ -361,7 +401,8 @@ function addToArray(obj: any, path: (string | number)[], value: unknown): void {
 export function randomTomlFormat(
   rng: SeededRandom,
   randomizeIndentWidth = false,
-  randomizeMultiline = false
+  randomizeMultiline = false,
+  fullFormats = false
 ): Partial<TomlFormat> | undefined {
   // 50% chance: no format override (use library defaults)
   if (rng.chance(0.5)) return undefined;
@@ -402,7 +443,34 @@ export function randomTomlFormat(
     format.multilineArray = rng.pick(multilineModes);
   }
 
+  // Variant 4 only: the options variants 1-3 never set. Drawn after the shared
+  // options so a variant 1-3 format keeps consuming the same RNG sequence.
+  if (fullFormats) {
+    format.escapeSequenceUpperCase = rng.chance(0.5);
+    const mtdRoll = rng.next();
+    if (mtdRoll >= 0.5 && mtdRoll < 0.75) format.minimumTimeDecimals = 1;
+    else if (mtdRoll >= 0.75 && mtdRoll < 0.9) format.minimumTimeDecimals = 2;
+    else if (mtdRoll >= 0.9) format.minimumTimeDecimals = 3;
+    // else no floor: the option is left unset
+  }
+
   return format;
+}
+
+/**
+ * Rewrites every fractional second in the document down to one or two digits.
+ *
+ * Variant 4 needs sources that wrote fewer digits than a replacement value
+ * needs, because that is the state where a truncating edit changes the value.
+ * The generator only emits six-digit fractions, which are wide enough to write
+ * any millisecond exactly.
+ */
+export function shortenFractionalSeconds(source: string, rng: SeededRandom): string {
+  return source.replace(
+    /(\d{2}:\d{2}:\d{2})\.(\d{6})/g,
+    (_match: string, time: string, digits: string) =>
+      `${time}.${digits.slice(0, rng.nextRange(1, 2))}`
+  );
 }
 
 export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
@@ -429,19 +497,58 @@ export interface PatchFuzzResult {
   formatDesc?: string;
 }
 
+/**
+ * Recursively replaces CRLF with LF inside strings. A `newLine` format makes
+ * patch() normalise every line ending in the document, including multiline
+ * string content, so both sides are compared with one spelling.
+ */
+function normalizeNewlines(value: unknown, fmt?: Partial<TomlFormat>): unknown {
+  if (fmt?.newLine === undefined) return value;
+  if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
+  if (Array.isArray(value)) return value.map((item) => normalizeNewlines(item, fmt));
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      result[key] = normalizeNewlines((value as any)[key], fmt);
+    }
+    return result;
+  }
+  return value;
+}
+
+/**
+ * Switches used by the numbered fuzz variants. Every field defaults to the
+ * behaviour the earlier variants share, so enabling none of them keeps an
+ * existing variant on exactly the same RNG sequence and corpus.
+ */
+export interface FuzzOptions {
+  /** Replacement dates carry a time of day and a random millisecond. */
+  subSecondDates?: boolean;
+  /** Also randomize the format options the earlier variants never set. */
+  fullFormats?: boolean;
+  /** Rewrite source fractional seconds down to one or two digits. */
+  shortenFractions?: boolean;
+  /** Aim most mutations at date leaves, and always give them a date value. */
+  dateFocus?: boolean;
+}
+
 export function fuzzOne(
   seed: number,
   mutationCount: number,
   sourceTransform?: (source: string) => string,
   randomizeIndentWidth = false,
-  randomizeMultiline = false
+  randomizeMultiline = false,
+  options: FuzzOptions = {}
 ): PatchFuzzResult {
   const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
 
   try {
     // 1. Generate random TOML and parse it
     const generated = randomToml({ seed });
-    const source = sourceTransform ? sourceTransform(generated.toml) : generated.toml;
+    let source = sourceTransform ? sourceTransform(generated.toml) : generated.toml;
+    if (options.shortenFractions) {
+      source = shortenFractionalSeconds(source, new SeededRandom(seed + 700_000));
+    }
 
     let obj1: any;
     try {
@@ -455,7 +562,7 @@ export function fuzzOne(
 
     // 3. Generate random TomlFormat (deterministic from seed)
     const formatRng = new SeededRandom(seed + 500000);
-    const format = randomTomlFormat(formatRng, randomizeIndentWidth, randomizeMultiline);
+    const format = randomTomlFormat(formatRng, randomizeIndentWidth, randomizeMultiline, options.fullFormats);
     const formatDesc = describeFormat(format);
 
     // 4. Apply mutations using a seeded RNG (offset from doc seed
@@ -483,7 +590,7 @@ export function fuzzOne(
     let attempts = 0;
     while (applied < mutationCount && attempts < mutationCount * 5) {
       attempts++;
-      const mutation = generateMutation(obj2, mutationRng);
+      const mutation = generateMutation(obj2, mutationRng, options.subSecondDates, options.dateFocus);
       if (!mutation) break;
       if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
         const lastSeg = mutation.path[mutation.path.length - 1];
@@ -537,9 +644,16 @@ export function fuzzOne(
       return result;
     }
 
-    // 7. Compare — uses format-aware comparison so that
+    // 7. Compare. The shared path is format-aware so that
     // truncateZeroTimeInDates / minimumDecimals don't cause false positives.
-    if (!deepEqualWithFormat(obj2, reParsed, format)) {
+    // Dates instead compare by instant when replacement values can carry a
+    // fraction: the format-aware path renders dates back to text, which reports
+    // a difference between a value and the same instant written with a
+    // different number of fractional digits.
+    const equal = options.subSecondDates
+      ? deepEqual(normalizeNewlines(obj2, format), normalizeNewlines(reParsed, format))
+      : deepEqualWithFormat(obj2, reParsed, format);
+    if (!equal) {
       result.status = 'roundtrip-mismatch';
       result.error = 'Objects differ after patch round-trip';
       result.originalToml = source;
