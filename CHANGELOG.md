@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Formatting: add a `minimumTimeDecimals` option for the fractional-second digits of date/time values. `07:32:00` with `minimumTimeDecimals: 3` serializes as `07:32:00.000`, a time written without seconds gains `:00` before its fraction, and digits already written are never removed, so `07:32:00.123456` is left alone. `patch()` pads a value it rewrites and leaves untouched rows byte-for-byte. It is separate from `minimumDecimals`, which keeps applying to numbers only, so the two can be set independently.
+- Formatting: add a `minimumTimeDecimals` option for the fractional-second digits of date/time values. `07:32:00` with `minimumTimeDecimals: 3` serializes as `07:32:00.000`, a time written without seconds gains `:00` before its fraction, and digits already written are never removed, so `07:32:00.123456` is left alone. `patch()` pads a value it rewrites and leaves untouched rows byte-for-byte. It is separate from `minimumDecimals`, which keeps applying to numbers only, so the two can be set independently. ([#316])
 
 ### Fixed
 
-- Dates: an edited value is no longer rounded down to the source's fractional-digit count, which silently changed it. 750 ms written against a source of `07:32:00.5` became `09:15:30.7`, that is 700 ms. The source's digit count is now a floor, so the fraction widens to `.75` and the value survives. A source with wider padding still keeps it, so `.500` becomes `.750`.
-- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal.
+- Dates: an edited value is no longer rounded down to the source's fractional-digit count, which silently changed it. 750 ms written against a source of `07:32:00.5` became `09:15:30.7`, that is 700 ms. The source's digit count is now a floor, so the fraction widens to `.75` and the value survives. A source with wider padding still keeps it, so `.500` becomes `.750`. ([#316])
+- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal. ([#316])
 
 ## [3.2.1] - 2026-09-26
 
@@ -497,5 +497,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#312]: https://github.com/DecimalTurn/toml-patch/pull/312
 [#313]: https://github.com/DecimalTurn/toml-patch/pull/313
 [#314]: https://github.com/DecimalTurn/toml-patch/pull/314
+[#316]: https://github.com/DecimalTurn/toml-patch/pull/316
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
