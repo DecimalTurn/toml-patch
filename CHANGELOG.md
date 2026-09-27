@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-27
+
 ### Added
 
 - Patching (lite): accept `Temporal` objects for date/time values, matching the full `patch()`. The temporal type decides the date/time kind and precision, and the source's separator and zero-offset spelling are kept. Requires `Temporal` at runtime, as `parse({ temporal: true })` does. ([#316])
