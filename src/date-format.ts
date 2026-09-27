@@ -97,7 +97,7 @@ export class DateFormatHelper {
    * 
    * Format-specific behavior:
    * - Date-only: Returns a LocalDate constructed from the date part of newJSDate.
-   * - Time-only: Returns a LocalTime, either from newJSDate (if already LocalTime) or constructed from its time part.
+   * - Time-only: Returns a LocalTime built from newJSDate's time part, with the original's fractional digits.
    * - Local datetime: Returns a LocalDateTime, preserving the separator (T or space).
    * - Offset datetime: Returns an OffsetDateTime, reconstructing the date/time with the original offset and separator.
    * - Fallback: Returns newJSDate as-is.
@@ -129,16 +129,12 @@ export class DateFormatHelper {
       return new LocalDate(dateStr);
     } else if (DateFormatHelper.IS_TIME_ONLY.test(originalRaw)) {
       // Local time (time-only) - format: 10:30:00
-      // For time-only values, we need to handle this more carefully
-      // The newJSDate might be a LocalTime object itself
-      if (newJSDate instanceof LocalTime) {
-        // If the new date is already a LocalTime, use its toISOString
-        return newJSDate;
-      } else {
-        const p = fmtParts(newJSDate);
-        const msSuffix = fmtMs(p.ms, originalRaw);
-        return new LocalTime(`${p.hours}:${p.minutes}:${p.seconds}${msSuffix}`, originalRaw);
-      }
+      // Rebuilt from the source format like the other kinds: a value that is
+      // already a LocalTime still takes its fractional-digit count from the
+      // document, not from how the caller built the object.
+      const p = fmtParts(newJSDate);
+      const msSuffix = fmtMs(p.ms, originalRaw);
+      return new LocalTime(`${p.hours}:${p.minutes}:${p.seconds}${msSuffix}`, originalRaw);
     } else if (DateFormatHelper.IS_LOCAL_DATETIME_T.test(originalRaw)) {
       // Local datetime with T separator - format: 2024-01-15T10:30:00
       const p = fmtParts(newJSDate);

@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { parse, patch, stringify } from '../';
-import { LocalTime } from '../date-format';
+import { LocalDateTime, LocalTime, OffsetDateTime } from '../date-format';
 
 /**
  * A `Date` holds milliseconds, but TOML fractional seconds can carry any number
@@ -42,12 +42,60 @@ describe('sub-millisecond fractional seconds', () => {
     expect(patch(source, updated)).toBe(source);
   });
 
-  test('an edited value keeps the source fractional-digit count', () => {
-    const source = 'time = 07:32:00.123456\n';
-    const updated: any = parse(source);
-    updated.time = new LocalTime('09:15:30.5', '09:15:30.5');
+  test('an edited value takes the source fractional-digit count', () => {
+    // The new millisecond differs from the source's leading digits, so only the
+    // digits a Date holds can be written, capped at the source's count.
+    const cases: Array<[string, Date, string]> = [
+      [
+        'time = 07:32:00.123456\n',
+        new LocalTime('09:15:30.5', '09:15:30.5'),
+        'time = 09:15:30.500\n'
+      ],
+      [
+        'dt = 1979-05-27T07:32:00.123456\n',
+        new LocalDateTime('1999-01-01T00:00:00.5'),
+        'dt = 1999-01-01T00:00:00.500\n'
+      ],
+      [
+        'o = 1979-05-27T07:32:00.123456-07:00\n',
+        new OffsetDateTime('1999-01-01T00:00:00.5-07:00'),
+        'o = 1999-01-01T00:00:00.500-07:00\n'
+      ]
+    ];
 
-    expect(patch(source, updated)).toBe('time = 09:15:30.5\n');
+    for (const [source, replacement, expected] of cases) {
+      const updated: any = parse(source);
+      updated[Object.keys(updated)[0]] = replacement;
+      expect(patch(source, updated), source.trim()).toBe(expected);
+    }
+  });
+
+  test('an unchanged millisecond keeps the rest of the source fraction for every kind', () => {
+    // 123 is the source's leading three digits, so the remaining digits of the
+    // source fraction are kept. LocalTime must behave like the other classes.
+    const cases: Array<[string, Date, string]> = [
+      [
+        'time = 07:32:00.123456\n',
+        new LocalTime('09:15:30.123', '09:15:30.123'),
+        'time = 09:15:30.123456\n'
+      ],
+      [
+        'dt = 1979-05-27T07:32:00.123456\n',
+        new LocalDateTime('1999-01-01T00:00:00.123'),
+        'dt = 1999-01-01T00:00:00.123456\n'
+      ],
+      [
+        'o = 1979-05-27T07:32:00.123456-07:00\n',
+        new OffsetDateTime('1999-01-01T00:00:00.123-07:00'),
+        'o = 1999-01-01T00:00:00.123456-07:00\n'
+      ]
+    ];
+
+    for (const [source, replacement, expected] of cases) {
+      const updated: any = parse(source);
+      updated[Object.keys(updated)[0]] = replacement;
+      expect(patch(source, updated), source.trim()).toBe(expected);
+    }
   });
 
   test('Temporal objects keep the sub-millisecond digits', () => {

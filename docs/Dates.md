@@ -24,7 +24,7 @@ stringify(parse('t = 07:32:00.123456\n'));
 // 't = 07:32:00.123456\n'
 ```
 
-`patch()` leaves the digits alone when the value does not change, and a value that only differs in how its fraction is spelled (`.5` against `.500`) is not an edit. When the value does change, the source's digit count is kept and filled with the digits a `Date` can represent. With `temporal: true` the value is a Temporal object, which is not limited to milliseconds, so sub-millisecond digits survive edits too.
+`patch()` leaves the digits alone when the value does not change, and a value that only differs in how its fraction is spelled (`.5` against `.500`) is not an edit. When the value does change, the source's digit count is kept, capped at the three digits a `Date` can represent. A source written without a fraction stays without one unless the new value has a non-zero millisecond, which is then written in its minimal form (`09:15:30.5`). Every class behaves the same way, `LocalTime` included. With `temporal: true` the value is a Temporal object, which is not limited to milliseconds, so sub-millisecond digits survive edits too.
 
 ## Temporal API (opt-in)
 

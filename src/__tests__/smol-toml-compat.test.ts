@@ -84,8 +84,10 @@ describe('patch with a smol-toml parsed object', () => {
     const updated = smolParse(existing);
     updated.localTime = new TomlDate('07:32:00.5');
 
+    // The source wrote no fraction, so the new millisecond is written in its
+    // minimal form, exactly as a LocalDateTime edit with the same value does.
     expect(patch(existing, updated)).toEqual(dedent`
-      localTime = 07:32:00.500
+      localTime = 07:32:00.5
       version = "1.0.0"
     ` + '\n');
   });
