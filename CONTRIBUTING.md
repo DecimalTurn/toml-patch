@@ -96,6 +96,14 @@ To generate a distilled test for that `fuzz3` seed, use the variant 3 option:
 npx -y tsx scripts/distill-seed.ts --seed 2151 --variant 3 --out ./seed-2151.fuzz3.test.ts
 ```
 
+For a date-precision or format-option seed, the format is the input: check and
+distill it with variant 4.
+
+```powershell
+npx -y tsx scripts/fuzz-run4.ts --seed 10 --to 10 --mutations 3
+npx -y tsx scripts/distill-seed.ts --seed 10 --variant 4 --out ./seed-10.fuzz4.test.ts
+```
+
 To distill and append the test directly to `src/__tests__/patch.fuzz.test.ts`:
 
 ```powershell

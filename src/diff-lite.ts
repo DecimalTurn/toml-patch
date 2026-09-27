@@ -1,4 +1,4 @@
-import { isObject, datesEqual, stableStringify, sameValue, isNegativeNan } from './utils';
+import { isObject, isDate, isTemporal, datesEqual, stableStringify, sameValue, isNegativeNan } from './utils';
 
 /**
  * A path into a JavaScript object, mixing object keys and array indices.
@@ -58,7 +58,7 @@ function isSupportedLeaf(value: any): boolean {
 function describe(value: any): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
-  if (value instanceof Date) return 'date';
+  if (isDate(value) || isTemporal(value)) return 'date';
   const type = typeof value;
   return type === 'object' ? 'table' : type;
 }
@@ -68,28 +68,13 @@ function sameNanSign(a: number, b: number): boolean {
 }
 
 /**
- * Classifies a Date subclass by the shape of its TOML rendering, duck-typed so
- * the lite bundle needs neither toml-patch's nor smol-toml's date module. The
- * two packages have distinct class objects, so `instanceof` cannot be used to
- * recognise them anyway.
+ * A value the edit path writes as a TOML date/time. `patch-lite` accepts both
+ * the custom `Date` subclasses it parses and Temporal objects the caller
+ * supplies, and an edit may switch between them, so the diff groups both under
+ * one kind instead of treating the mix as a type change.
  */
-function dateKind(value: Date): 'date' | 'time' | 'datetime' | 'offset' {
-  const iso = value.toISOString();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return 'date';
-  if (/^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(iso)) return 'time';
-  if (/(?:[Zz]|[+-]\d{2}:\d{2})$/.test(iso)) return 'offset';
-  return 'datetime';
-}
-
-/**
- * Dates are unchanged when they hold the same instant and the same TOML kind.
- * Fractional seconds must not be compared by their rendered digit count:
- * smol-toml always writes three digits (`.250`, `.000`) while toml-patch keeps
- * the source precision (`.25`, or no suffix), so `getTime()` plus kind is used
- * instead of `toISOString()`.
- */
-function sameDateValue(a: Date, b: Date): boolean {
-  return a.getTime() === b.getTime() && dateKind(a) === dateKind(b);
+function isDateLike(value: any): boolean {
+  return isDate(value) || isTemporal(value);
 }
 
 /**
@@ -99,10 +84,6 @@ function sameDateValue(a: Date, b: Date): boolean {
  */
 export default function diffLite(before: any, after: any, path: Path = []): Edit[] {
   if (datesEqual(before, after)) return [];
-
-  if (before instanceof Date && after instanceof Date && sameDateValue(before, after)) {
-    return [];
-  }
 
   if (sameValue(before, after)) return [];
 
@@ -150,11 +131,11 @@ export default function diffLite(before: any, after: any, path: Path = []): Edit
     );
   }
 
-  if (before instanceof Date && after instanceof Date) {
+  if (isDateLike(before) && isDateLike(after)) {
     return [{ type: 'Edit', path }];
   }
 
-  if (before instanceof Date || after instanceof Date) {
+  if (isDateLike(before) || isDateLike(after)) {
     throw new PatchLiteError(
       'TypeChange',
       path,

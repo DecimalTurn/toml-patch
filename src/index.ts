@@ -27,6 +27,7 @@ function isDefaultFormat(fmt: TomlFormat): boolean {
     fmt.useTabsForIndentation === d.useTabsForIndentation &&
     fmt.indentWidth === d.indentWidth &&
     fmt.minimumDecimals === d.minimumDecimals &&
+    fmt.minimumTimeDecimals === d.minimumTimeDecimals &&
     fmt.leadingBom === d.leadingBom &&
     fmt.updateOrder === d.updateOrder &&
     fmt.multilineTable === d.multilineTable &&

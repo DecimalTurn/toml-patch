@@ -16,7 +16,7 @@ Rules are evaluated in precedence order.
 |---|---|
 | **R1** | [**Trailing ownership.**](#r1---trailing-ownership) A comment on the same line as the element that just ended is owned by that element. |
 | **R2** | [**Leading ownership.**](#r2---leading-ownership) A comment block whose last line is exactly one above the member below it is owned by that member. When the member is the last child of an implicit parent and its removal materialises the parent, the block transfers to the materialised parent header. |
-| **R3** | [**A blank line severs ownership.**](#r3---a-blank-line-severs-ownership) A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels. |
+| **R3** | [**A blank line severs ownership.**](#r3---a-blank-line-severs-ownership) A block separated from the member below it by one or more blank lines is independent (unowned), pinned to its position, never travels with a member. |
 | **R4** | [**Independent otherwise.**](#r4---independent-otherwise) A block with no member below it in the same container is pinned. |
 | **R5** | [**Cross-container ownership.**](#r5---cross-container-ownership) A trailing comment-block inside a `[table]` / `[[array]]` that R2 assigns to the following document-block is owned by that document-block. |
 | **R6** | [**A dead-entry block is independent.**](#r6---a-dead-entry-block-is-independent) A commented-out entry whose key differs from the member below it is pinned and break the ownership link in the comment-block; a matching key stays with the member. |
@@ -117,6 +117,11 @@ Key = "value2"
 Now there are two blocks. `# here is some information` is pinned by R3, and only the second block
 travels.
 
+A pinned block belongs to no member, so no member carries it when
+it is removed or reordered. However, it still shares the fate of the container it sits in. A pinned block
+inside a `[table]` body is owned by that table, so it is deleted along with the table and reordered
+along with it, even though no row inside could claim it. See [R5](#r5---cross-container-ownership).
+
 ## R4 - **Independent otherwise.**
 
 A block with no member below it in the same container is pinned:
@@ -145,7 +150,7 @@ y = 2
 ```
 
 Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
-`[b]` opts out as usual, and the comment then stays with `[a]`:
+`[b]` severs that link (R3), so the block belongs to `[a]` instead:
 
 ```toml
 [a]
@@ -156,6 +161,10 @@ x = 1
 [b]
 y = 2
 ```
+
+Removing `[b]` now leaves `# about b` in place, and removing `[a]` deletes it. Note what owns it: the
+`[a]` block itself, not any row inside it. Reordering `[a]` carries the comment along, while removing
+`a.x` on its own leaves it behind.
 
 ## R6 - **A dead-entry block is independent.**
 

@@ -15,6 +15,7 @@ class TomlFormat {
   useTabsForIndentation?: boolean
   indentWidth: number
   minimumDecimals?: number
+  minimumTimeDecimals?: number
   leadingBom: boolean
   escapeSequenceUpperCase: boolean
   updateOrder?: boolean
@@ -380,6 +381,32 @@ const format = TomlFormat.default();
 format.minimumDecimals = 0;  // { x: 1, y: 1.5 } -> { x = 1, y = 1.5 }
 format.minimumDecimals = 1;  // { x: 1, y: 1.5 } -> { x = 1.0, y = 1.5 }
 format.minimumDecimals = 2;  // { x: 1, y: 1.5 } -> { x = 1.00, y = 1.50 }
+```
+
+### `minimumTimeDecimals`
+
+- **Type:** `number` (optional)
+- **Default:** `0`
+- **Description:** The minimum number of fractional-second digits to write for date/time values. This is separate from `minimumDecimals`, which applies to numbers, so the two can be set independently. Not auto-detectable: set it explicitly.
+
+Padding only, never truncation: digits already written are kept, so a value with more digits is left alone. A date-only value carries no time and is unaffected, and a time written as `HH:MM` gains `:00` before its fraction.
+
+An edited value otherwise writes only the digits it needs, so it can narrow the fraction — this option is how a document asks for a wider one, the way `minimumDecimals` does for numbers.
+
+```js
+const format = TomlFormat.default();
+format.minimumTimeDecimals = 0;  // meeting = 09:30:00        (default)
+format.minimumTimeDecimals = 3;  // meeting = 09:30:00.000
+```
+
+`patch()` pads a value it rewrites and leaves untouched rows exactly as they are, the same way `minimumDecimals` behaves for floats:
+
+```js
+stringify(parse('meeting = 09:30:00\n'), { minimumTimeDecimals: 3 });
+// 'meeting = 09:30:00.000\n'
+
+stringify(parse('meeting = 09:30:00.123456\n'), { minimumTimeDecimals: 3 });
+// 'meeting = 09:30:00.123456\n' (already more digits than the floor)
 ```
 
 ### `updateOrder`

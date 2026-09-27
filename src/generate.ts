@@ -25,6 +25,7 @@ import {
 } from './cst';
 import { zero, cloneLocation, clonePosition, Position } from './location';
 import { LocalDate, LocalTime } from './parse-toml';
+import { padFractionalSeconds } from './date-format';
 import { shiftNode } from './writer';
 import { rebuildLineContinuation } from './line-ending-backslash';
 import { IS_BARE_KEY } from './tokenizer';
@@ -416,7 +417,7 @@ export function generateBoolean(value: boolean): Boolean {
   };
 }
 
-export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean = false): DateTime {
+export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean = false, minimumTimeDecimals: number = 0): DateTime {
   
     // Convert Date objects with zero time components to LocalDate
     // so they are serialized as date-only in TOML.
@@ -435,7 +436,7 @@ export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean =
   
   // Custom date classes have their own toISOString() implementations
   // that return the properly formatted strings for each TOML date/time type
-  const raw = value.toISOString();
+  const raw = padFractionalSeconds(value.toISOString(), minimumTimeDecimals);
 
   return {
     type: NodeType.DateTime,
@@ -460,7 +461,8 @@ export function generateDateTime(value: Date, truncateZeroTimeInDates: boolean =
  */
 export function generateTemporalDateTime(
   value: any,
-  truncateZeroTimeInDates: boolean = false
+  truncateZeroTimeInDates: boolean = false,
+  minimumTimeDecimals: number = 0
 ): DateTime {
   const constructorName: string = value.constructor?.name ?? '';
 
@@ -489,7 +491,7 @@ export function generateTemporalDateTime(
       }
       const plainDate = T.PlainDate.from(value.toString().split('T')[0]);
       if (plainDate.toString() + 'T00:00:00' === value.toString().slice(0, 19)) {
-        raw = temporalToTomlString(plainDate);
+        raw = padFractionalSeconds(temporalToTomlString(plainDate), minimumTimeDecimals);
         return {
           type: NodeType.DateTime,
           loc: { start: zero(), end: { line: 1, column: raw.length } },
@@ -506,6 +508,9 @@ export function generateTemporalDateTime(
     // Unknown Temporal type — fall back to temporalToTomlString()
     raw = temporalToTomlString(value);
   }
+
+  // A Temporal value carries its own precision, so this only ever pads.
+  raw = padFractionalSeconds(raw, minimumTimeDecimals);
 
   return {
     type: NodeType.DateTime,

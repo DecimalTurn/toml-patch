@@ -435,8 +435,8 @@ describe('TomlFormat comprehensive tests', () => {
   describe('autoDetectFormat comprehensive scenarios', () => {
     test('should never auto-detect updateOrder -- always resolves to false', () => {
       // The existing document's key order says nothing about the caller's intent, so this
-      // joins inlineTableStart/truncateZeroTimeInDates/minimumDecimals in the "caller must
-      // set explicitly" group (docs/PLAN-Update-Order.md).
+      // joins inlineTableStart/truncateZeroTimeInDates/minimumDecimals/minimumTimeDecimals
+      // in the "caller must set explicitly" group (docs/PLAN-Update-Order.md).
       expect(autoDetectFormat('a = 1\nb = 2\n').updateOrder).toBe(false);
       expect(autoDetectFormat('[a]\nx = 1\n\n[b]\ny = 2\n').updateOrder).toBe(false);
     });

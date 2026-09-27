@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { Temporal } from '@js-temporal/polyfill';
 import { parse } from '../';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from '../parse-toml';
 import { patch } from '../patch-lite-entry';
@@ -439,13 +440,15 @@ describe('date edits', () => {
     expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30Z\n');
   });
 
-  test('keeps the source precision when editing an offset datetime with a fraction', () => {
+  test('keeps the offset when editing an offset datetime with a fraction', () => {
     const existing = 'ts = 1979-05-27T07:32:00.25-07:00\n';
 
     const updated = parse(existing);
     updated.ts = new OffsetDateTime('1984-02-14T09:15:30.5-07:00', false);
 
-    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30.50-07:00\n');
+    // The source's two digits were significant, so the edit writes the single
+    // digit the new value needs while the offset survives.
+    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30.5-07:00\n');
   });
 
   test('edits a nested date value', () => {
@@ -455,6 +458,100 @@ describe('date edits', () => {
     updated.server.started = new LocalDate('1984-02-14');
 
     expect(patch(existing, updated)).toBe('server = { started = 1984-02-14 }\n');
+  });
+});
+
+describe('date edits with Temporal', () => {
+  test('edits a local date', () => {
+    const existing = 'date = 1979-05-27\n';
+
+    expect(patch(existing, { date: Temporal.PlainDate.from('1984-02-14') })).toBe('date = 1984-02-14\n');
+  });
+
+  test('edits a local time', () => {
+    const existing = 'time = 07:32:00\n';
+
+    expect(patch(existing, { time: Temporal.PlainTime.from('09:15:30') })).toBe('time = 09:15:30\n');
+  });
+
+  test('edits a local datetime', () => {
+    const existing = 'dt = 1979-05-27T07:32:00\n';
+
+    expect(patch(existing, { dt: Temporal.PlainDateTime.from('1984-02-14T09:15:30') })).toBe(
+      'dt = 1984-02-14T09:15:30\n'
+    );
+  });
+
+  test('edits an offset datetime and keeps its offset', () => {
+    const existing = 'ts = 1979-05-27T07:32:00+05:30\n';
+
+    expect(
+      patch(existing, { ts: Temporal.ZonedDateTime.from('1984-02-14T09:15:30+05:30[+05:30]') })
+    ).toBe('ts = 1984-02-14T09:15:30+05:30\n');
+  });
+
+  test('keeps a space separator and a spelled-out zero offset', () => {
+    const existing = 'ts = 1979-05-27 07:32:00+00:00\n';
+
+    expect(
+      patch(existing, { ts: Temporal.ZonedDateTime.from('1984-02-14T09:15:30Z[+00:00]') })
+    ).toBe('ts = 1984-02-14 09:15:30+00:00\n');
+  });
+
+  test('lets the Temporal type decide the kind, upgrading and downgrading the source', () => {
+    expect(patch('d = 1979-05-27\n', { d: Temporal.PlainDateTime.from('1984-02-14T09:15:30') })).toBe(
+      'd = 1984-02-14T09:15:30\n'
+    );
+    expect(patch('dt = 1979-05-27T07:32:00\n', { dt: Temporal.PlainDate.from('1984-02-14') })).toBe(
+      'dt = 1984-02-14\n'
+    );
+  });
+
+  test('returns the original string when the Temporal value did not change', () => {
+    const existing = 'date = 1979-05-27\ntime = 07:32:00.123456\n';
+
+    expect(
+      patch(existing, {
+        date: Temporal.PlainDate.from('1979-05-27'),
+        time: Temporal.PlainTime.from('07:32:00.123456')
+      })
+    ).toBe(existing);
+  });
+
+  test('accepts a Date subclass for one key while another key is Temporal', () => {
+    const existing = 'a = 1979-05-27\nb = 1979-05-27\n';
+
+    const updated = parse(existing);
+    updated.a = new LocalDate('1984-02-14');
+    updated.b = Temporal.PlainDate.from('1984-02-15');
+
+    expect(patch(existing, updated)).toBe('a = 1984-02-14\nb = 1984-02-15\n');
+  });
+
+  test('rejects a Temporal value replacing a non-date', () => {
+    expectPatchError(
+      () => patch('s = "hello"\n', { s: Temporal.PlainDate.from('1984-02-14') }),
+      'TypeChange'
+    );
+  });
+
+  test('rejects a non-date replacing a date, even with Temporal elsewhere in the object', () => {
+    expectPatchError(
+      () =>
+        patch('d = 1979-05-27\ns = "hello"\n', {
+          d: Temporal.PlainDate.from('1984-02-14'),
+          s: { nested: 1 }
+        }),
+      'TypeChange'
+    );
+  });
+
+  test('rejects a ZonedDateTime with an IANA timezone', () => {
+    expect(() =>
+      patch('z = 1979-05-27T07:32:00+05:30\n', {
+        z: Temporal.ZonedDateTime.from('1984-02-14T09:15:30+05:30[Asia/Kolkata]')
+      })
+    ).toThrow('cannot be represented in TOML');
   });
 });
 

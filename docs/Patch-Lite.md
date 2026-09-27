@@ -6,7 +6,7 @@ rename anything.
 
 It exists to answer one question: *do you only need to change values in a document you already
 have?* If the answer is yes, `patch-lite` gives you the same guarantees as the full `patch()` for
-those edits at **26.7% of the minified size** and roughly **1.9x the throughput**.
+those edits at **27.4% of the minified size** and roughly **1.9x the throughput**.
 
 Install it from the `lite` npm dist-tag with `npm install --save @decimalturn/toml-patch@lite`:
 
@@ -37,7 +37,7 @@ patch(existing, { version: '1.0.1' });
 | Choose formatting options (line endings, indentation, trailing commas) | ❌ | ✅ |
 | Control the case of generated escape sequences | ❌ | ✅ |
 | Reject strings with unpaired UTF-16 surrogates | ❌ | ✅ |
-| Use `Temporal` objects for date/time values | ❌ | ✅ |
+| Use `Temporal` objects for date/time values | ✅ | ✅ |
 | Use `parse()`, `stringify()` or the `TomlDocument` class | ❌ | ✅ |
 | Preserve underscore formatting of numbers | ❌ | ✅ |
 | Preserve comments alignment | ❌ | ✅ |
@@ -98,8 +98,8 @@ before any output is produced.
 | `number` | Integers, floats, exponents, `inf`, `-inf`, `nan`, `-0`. Radix prefixes (`0x`, `0o`, `0b`) including digit case, and exponent notation including the `e`/`E` case, are preserved when the source used them. Underscore digit grouping is **not** preserved. |
 | `boolean` | |
 | `bigint` | |
-| `Date` | toml-patch's `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime` and duck-typed smol-toml `TomlDate` objects. The source value's kind (date / time / datetime / offset), separator, offset style and fractional-digit count are kept. |
-| `Temporal` | **Not supported.** `Temporal.PlainDate` and friends are rejected with `TypeChange`. Convert to a `Date` subclass first, or use the full `patch()`. |
+| `Date` | toml-patch's `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime` and duck-typed smol-toml `TomlDate` objects. The source value's kind (date / time / datetime / offset), separator, offset style and fractional-digit count are kept. A value whose fraction is only spelled differently (`.5` against `.500`) is not an edit, and an untouched value keeps all its source digits, including sub-millisecond ones. |
+| `Temporal` | `Temporal.PlainDate`, `Temporal.PlainTime`, `Temporal.PlainDateTime` and `Temporal.ZonedDateTime`. The Temporal type decides the kind and the precision, so an edit can upgrade or downgrade the source row (a `PlainDate` replacing a datetime writes a date-only value). The source's separator and its spelled-out zero offset (`+00:00`/`-00:00` against `Z`) are kept. A `ZonedDateTime` carrying a named IANA timezone, or a non-ISO calendar annotation, throws because TOML cannot represent it. Requires `Temporal` to be available at runtime, as `parse({ temporal: true })` does. |
 
 Objects and arrays may appear in `updated` at a path where `existing` already holds a container, but
 they are only traversed — the container type and shape must not change.
@@ -251,11 +251,11 @@ Measured with `pnpm run bench:bundle-size` and `pnpm run bench:patch-lite`
 
 | Metric | full `patch()` | `patch-lite` | Difference |
 | --- | --- | --- | --- |
-| Minified | ~162.1 kB | ~43.3 kB | -118.8 kB (26.7% of full) |
-| Min + gzipped | ~50.0 kB | ~13.2 kB | -36.8 kB (26.4% of full) |
+| Minified | ~164.9 kB | ~45.2 kB | -119.7 kB (27.4% of full) |
+| Min + gzipped | ~50.6 kB | ~13.9 kB | -36.7 kB (27.5% of full) |
 | Runtime dependencies | 0 | 0 | — |
 
-`patch-lite` is held to a hard budget of 48 kB minified and 14 kB gzipped, recorded in
+`patch-lite` is held to a hard budget of 48 kB minified and 15 kB gzipped, recorded in
 `benchmark/thresholds.toml` alongside the performance budgets and enforced on every pull request by
 the `bundle-size` job in the benchmarks workflow.
 
@@ -298,5 +298,5 @@ Before you switch, check for:
    multiline basic string.
 4. **Document normalisation.** If you relied on `newLine` or `trailingNewline` to normalise output,
    `patch-lite` will not do it.
-5. **Temporal objects and unpaired surrogates.** Both are accepted by the full API in ways the lite
-   distribution is not.
+5. **Unpaired surrogates.** The full API rejects strings containing unpaired UTF-16 surrogates
+   where the lite distribution emits them as-is. Temporal objects are accepted by both.

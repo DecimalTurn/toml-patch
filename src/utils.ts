@@ -133,6 +133,22 @@ export function temporalToTomlString(value: any): string {
   return raw;
 }
 
+/**
+ * True when `value`, or anything nested inside it, is a Temporal object.
+ *
+ * Both `patch()` and `patch-lite()` use this to decide whether to parse the
+ * existing document into Temporal objects: when the caller supplies Temporal
+ * values, the diff has to compare like with like, or an unchanged value would
+ * look like an edit. `seen` guards against circular structures.
+ */
+export function hasTemporal(value: any, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (value == null || typeof value !== 'object') return false;
+  if (isTemporal(value)) return true;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some((child) => hasTemporal(child, seen));
+}
+
 export function isObject(value: any): boolean {
   return value && typeof value === 'object' && !isDate(value) && !isTemporal(value) && !Array.isArray(value);
 }
@@ -186,15 +202,65 @@ export function arraysEqual<TItem>(a: TItem[], b: TItem[]): boolean {
   return true;
 }
 
+/**
+ * Classifies a rendered date by its TOML shape: date-only, time-only, local
+ * datetime or offset datetime. Derived from the rendered text so it works for
+ * toml-patch's own classes and duck-typed smol-toml `TomlDate` values alike,
+ * without importing the date module here.
+ */
+function dateKind(iso: string): 'date' | 'time' | 'datetime' | 'offset' {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return 'date';
+  if (/^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(iso)) return 'time';
+  if (/(?:[Zz]|[+-]\d{2}:\d{2})$/.test(iso)) return 'offset';
+  return 'datetime';
+}
+
+/**
+ * Fractional-second digits of a rendered date/time with trailing zeros
+ * removed, so the same instant spelled `.5` and `.500` agrees.
+ */
+function fractionDigits(iso: string): string {
+  const match = iso.match(/\.(\d+)/);
+  return match ? match[1].replace(/0+$/, '') : '';
+}
+
+/** Fractional digits a millisecond count needs, without trailing zeros. */
+function exactMillisecondDigits(ms: number): number {
+  if (ms === 0) return 0;
+  return String(ms).padStart(3, '0').replace(/0+$/, '').length;
+}
+
+/**
+ * The digits a rendered date/time spells out beyond its millisecond part, or
+ * `undefined` when it only carries the three digits a `Date` holds. Only the
+ * former asserts a sub-millisecond instant; a millisecond-precision value is
+ * compatible with whatever fraction the document spelled.
+ */
+function subMillisecondDigits(value: Date, iso: string): string | undefined {
+  const digits = fractionDigits(iso);
+  return digits.length > exactMillisecondDigits(value.getUTCMilliseconds()) ? digits : undefined;
+}
+
 export function datesEqual(a: any, b: any): boolean {
   // Temporal objects: compare via toString(). Two ZonedDateTime values
   // with different IANA zones are NOT the same even if their offsets match.
   if (isTemporal(a) && isTemporal(b)) {
     return a.toString() === b.toString();
   }
-  // Custom Date subclasses: compare via toISOString()
+  // Custom Date subclasses: compare by instant, kind and sub-millisecond
+  // digits, never by rendered text as a whole. Trailing zeros are spelling
+  // only, so `.5` equals `.500`, and a millisecond-precision value matches any
+  // spelling of its instant. Two values that each spell out digits past the
+  // millisecond are different instants and must produce an edit.
   if (isDate(a) && isDate(b)) {
-    return a.toISOString() === b.toISOString();
+    if (a.getTime() !== b.getTime()) return false;
+    const isoA = a.toISOString();
+    const isoB = b.toISOString();
+    if (dateKind(isoA) !== dateKind(isoB)) return false;
+
+    const digitsA = subMillisecondDigits(a, isoA);
+    const digitsB = subMillisecondDigits(b, isoB);
+    return digitsA === undefined || digitsB === undefined || digitsA === digitsB;
   }
   return false;
 }

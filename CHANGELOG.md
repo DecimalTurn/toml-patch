@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Patching (lite): accept `Temporal` objects for date/time values, matching the full `patch()`. The temporal type decides the date/time kind and precision, and the source's separator and zero-offset spelling are kept. Requires `Temporal` at runtime, as `parse({ temporal: true })` does. ([#316])
+- Formatting: add a `minimumTimeDecimals` option for the fractional-second digits of date/time values. It is a floor, so digits are only ever added: `07:32:00` with `minimumTimeDecimals: 3` serializes as `07:32:00.000`, a time written without seconds gains `:00` before its fraction, a value that already wrote at least as many digits is left as it is, and a floor above them pads in zeros (`07:32:00.123456` with `minimumTimeDecimals: 9` becomes `07:32:00.123456000`). `patch()` pads a value it rewrites and leaves untouched rows byte-for-byte. ([#316])
+
+### Fixed
+
+- Dates: an edited value is no longer rounded down to the source's fractional-digit count, which silently changed it. 750 ms written against a source of `07:32:00.5` became `09:15:30.7`, that is 700 ms. The new value now writes the digits it needs, widened to the source's width when the source declared zeros there: `.5` becomes `.75`, `.500` becomes `.750` and `.500000` becomes `.750000`, while a source of `07:32:00.123456`, whose digits were all significant, becomes `09:15:30.5` instead of keeping a width the value cannot fill. ([#316])
+- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal, while an edit below the millisecond (`.123456` to `.123999`) is applied instead of being dropped. ([#316])
+
 ## [3.2.1] - 2026-09-26
 
 ### Changed
@@ -488,5 +498,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#312]: https://github.com/DecimalTurn/toml-patch/pull/312
 [#313]: https://github.com/DecimalTurn/toml-patch/pull/313
 [#314]: https://github.com/DecimalTurn/toml-patch/pull/314
+[#316]: https://github.com/DecimalTurn/toml-patch/pull/316
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903

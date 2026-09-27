@@ -87,7 +87,7 @@ const updated = patch(existing, { version: '1.0.1' });
 
 The dist-tag tarball maps its root export to the lite build, so there is no `patch-lite` subpath: `import { patch } from '@decimalturn/toml-patch/patch-lite'` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Switching between the two is an install change, never a code change.
 
-The lite function edits existing primitive values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, primitive/container type changes and unsupported value types throw before any output is produced. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
+The lite function edits existing primitive values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, primitive/container type changes and unsupported value types throw before any output is produced. Date/time values may be given as the custom `Date` subclasses or as `Temporal` objects; both are serialized into the existing row's shape. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
 
 Unlike the full `patch()`, the lite distribution performs no encoding validation on its output: it does not reject strings containing unpaired UTF-16 surrogates, which cannot be represented as valid TOML/UTF-8. Use the full `patch()` when this validation is required.
 
@@ -124,7 +124,7 @@ To have it match the key order of the object you pass in, enable `updateOrder` i
 
 ## Date/Time Handling & Temporal
 
-TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly.
+TOML date/time values are parsed into custom `Date` subclasses (`LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`) by default. Set `temporal: true` to receive [Temporal](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Temporal) objects instead. `stringify()` and `patch()` auto-detect Temporal objects and serialize them correctly. Fractional seconds keep the source precision, sub-millisecond digits included.
 
 ### Enabling Temporal
 
@@ -169,6 +169,7 @@ class TomlFormat {
   useTabsForIndentation?: boolean
   indentWidth: number
   minimumDecimals?: number
+  minimumTimeDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
   multilineTable: boolean | number | 'auto' | 'parent'

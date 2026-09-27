@@ -19,7 +19,7 @@ const output = arg('--out');
 const maxPasses = Number(arg('--passes', '4'));
 const variant = Number(arg('--variant', '1'));
 if (!Number.isInteger(seed) || !output) {
-  throw new Error('Usage: npx -y tsx scripts/distill-seed.ts --seed N --out path [--target path] [--variant 2|3]');
+  throw new Error('Usage: npx -y tsx scripts/distill-seed.ts --seed N --out path [--target path] [--variant 2|3|4]');
 }
 
 const importFromTarget = async (relativePath: string) => {
@@ -31,12 +31,18 @@ const fuzz = await importFromTarget('src/__tests__/fuzz-patch.ts');
 const api = await importFromTarget('src/index.ts');
 const fuzz2 = variant === 2 ? await importFromTarget('src/__tests__/fuzz-patch2.ts') : undefined;
 const fuzz3 = variant === 3 ? await importFromTarget('src/__tests__/fuzz-patch3.ts') : undefined;
+const fuzz4 = variant === 4 ? await importFromTarget('src/__tests__/fuzz-patch4.ts') : undefined;
 const { randomToml, SeededRandom } = randomizer;
 const { parse, patch } = api;
 const { generateMutation, applyMutation, deepClone, randomTomlFormat } = fuzz;
 
 const generated = randomToml({ seed });
-const generatedSource = variant === 2 ? fuzz2!.spaceDottedKeySeparators(generated.toml) : generated.toml;
+const generatedSource =
+  variant === 2
+    ? fuzz2!.spaceDottedKeySeparators(generated.toml)
+    : variant === 4
+      ? fuzz.shortenFractionalSeconds(generated.toml, new SeededRandom(seed + 700_000))
+      : generated.toml;
 const sourceObject = deepClone(parse(generatedSource));
 const mutationCount = 3;
 const mutationRng = new SeededRandom(seed + mutationCount * 1_000_000);
@@ -58,7 +64,7 @@ const isTableLike = (value: unknown) =>
 let attempts = 0;
 while (mutations.length < mutationCount && attempts < mutationCount * 5) {
   attempts++;
-  const mutation = generateMutation(mutationObject, mutationRng);
+  const mutation = generateMutation(mutationObject, mutationRng, variant === 4, variant === 4);
   if (!mutation) break;
   if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
     const last = mutation.path.at(-1);
@@ -71,15 +77,18 @@ while (mutations.length < mutationCount && attempts < mutationCount * 5) {
 }
 const format = randomTomlFormat(
   new SeededRandom(seed + 500_000),
-  variant === 2 || variant === 3,
-  variant === 2 || variant === 3
+  variant >= 2,
+  variant >= 2,
+  variant === 4
 );
 const targetStatus = (
   variant === 2
     ? fuzz2!.fuzzOne2(seed, mutationCount)
     : variant === 3
       ? fuzz3!.fuzzOne3(seed, mutationCount)
-      : fuzz.fuzzOne(seed, mutationCount)
+      : variant === 4
+        ? fuzz4!.fuzzOne4(seed, mutationCount)
+        : fuzz.fuzzOne(seed, mutationCount)
 ).status;
 
 function normalize(value: unknown): unknown {
@@ -90,7 +99,14 @@ function normalize(value: unknown): unknown {
     if (value === -Infinity) return '-Infinity';
     return value;
   }
-  if (value instanceof Date) return `Date:${value.constructor.name}:${value.getTime()}:${value.toISOString()}`;
+  if (value instanceof Date) {
+    // Variant 4 compares dates by instant, so the fractional spelling must not
+    // count as a difference: writing 750 ms as `.75` and reading back `.750` is
+    // a formatting choice, not a round-trip failure.
+    return variant === 4
+      ? `Date:${value.getTime()}`
+      : `Date:${value.constructor.name}:${value.getTime()}:${value.toISOString()}`;
+  }
   if (Array.isArray(value)) return value.map(normalize);
   if (value && typeof value === 'object') {
     const result: Record<string, unknown> = {};

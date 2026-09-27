@@ -1,5 +1,6 @@
 import parseTOML from './parse-toml';
 import toJS from './to-js';
+import { hasTemporal } from './utils';
 import diffLite, { formatPath, PatchLiteError } from './diff-lite';
 import { encodeValue } from './encode-lite';
 import findByPath from './find-by-path';
@@ -84,7 +85,14 @@ export default function patchLite(existing: string, updated: any): string {
 
   const items = Array.from(parseTOML(source));
   attachSources(items, source);
-  const existingJs = toJS(items, source, { integersAsBigInt: 'asNeeded', temporal: false });
+  // A Temporal value in `updated` has to be diffed against a Temporal value on
+  // the existing side, or an unchanged date would look like an edit and be
+  // rewritten. When the caller supplies any Temporal object, parse the whole
+  // document into Temporal objects, exactly as the full patch() does.
+  const existingJs = toJS(items, source, {
+    integersAsBigInt: 'asNeeded',
+    temporal: hasTemporal(updated)
+  });
 
   const changes = diffLite(existingJs, updated);
   if (changes.length === 0) return existing;

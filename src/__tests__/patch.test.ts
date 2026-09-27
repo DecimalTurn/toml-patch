@@ -6653,13 +6653,12 @@ describe('identity round-trip normalizations', () => {
  * their exact source text survives verbatim.
  *
  * Copying the parsed object (for example with `structuredClone`) strips the
- * custom date class. The copy still holds the same instant, but `patch()` can
- * no longer tell how the value was originally written, so it re-renders the
- * value and loses sub-millisecond precision. That loss is caused by the caller
- * manipulating the data outside the supported flow, so it is intentionally not
- * supported.
+ * custom date class. The copy still holds the same instant, and the source text
+ * is still available from the document, so `patch()` re-renders the value with
+ * the source's fractional-digit count and the microseconds survive. Only
+ * changing the value itself can lose the digits a `Date` cannot hold.
  */
-describe.skip('untouched date/time value in a copied input object', () => {
+describe('untouched date/time value in a copied input object', () => {
   test('an untouched time keeps its microseconds when only the version changes', () => {
     const original = dedent`
       build_time = 17:13:19.580912
@@ -6676,7 +6675,6 @@ describe.skip('untouched date/time value in a copied input object', () => {
     );
 
     // Only `version` changed, so every other character must survive.
-    // Today this returns `build_time = 17:13:19.580` (microseconds gone).
     expect(patch(original, updated)).toBe(dedent`
       build_time = 17:13:19.580912
       version = "1.0.1"
@@ -9526,7 +9524,7 @@ describe('escape sequence case', () => {
 
 // A rename is inferred when one key disappears and another key appears holding an
 // equal value. The rename edits the key in place and never rebuilds the value, so the
-// value's shape should not matter. Scalars and arrays of scalars already work. These
+// value's shape should not matter. Primitives and arrays of primitives already work. These
 // container values all throw while the replacement key is resolved, which aborts the
 // whole patch instead of renaming the key. Each test is marked `.fails` until fixed.
 describe('renaming a key whose value is a container', () => {

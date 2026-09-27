@@ -16,7 +16,7 @@ const passes = arg('--passes', '4');
 
 if (!seed || !Number.isInteger(Number(seed))) {
   throw new Error(
-    'Usage: npx -y tsx scripts/distill-and-append-seed.ts --seed N [--variant 3] [--passes N]'
+    'Usage: npx -y tsx scripts/distill-and-append-seed.ts --seed N [--variant 2|3|4] [--passes N]'
   );
 }
 

@@ -11,6 +11,7 @@ export const DEFAULT_TRUNCATE_ZERO_TIME_IN_DATES = false;
 export const DEFAULT_USE_TABS_FOR_INDENTATION = false;
 export const DEFAULT_INDENT_WIDTH = 2;
 export const DEFAULT_MINIMUM_DECIMALS = 0;
+export const DEFAULT_MINIMUM_TIME_DECIMALS = 0;
 export const DEFAULT_LEADING_BOM = false;
 export const DEFAULT_UPDATE_ORDER = false;
 export const DEFAULT_MULTILINE_TABLE = 'auto';
@@ -444,6 +445,8 @@ export function validateFormatObject(format: any): any {
       ? null : `expected positive integer or undefined, got ${typeof v}`,
     minimumDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
       ? null : `expected non-negative integer or undefined, got ${typeof v}`,
+    minimumTimeDecimals: v => v == null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)
+      ? null : `expected non-negative integer or undefined, got ${typeof v}`,
     updateOrder: isBool,
     multilineTable: isMultilineContainerMode,
     multilineArray: isMultilineContainerMode,
@@ -518,6 +521,7 @@ export function resolveTomlFormat(format: Partial<TomlFormat> | TomlFormat | und
         validatedFormat.multilineTable ?? fallbackFormat.multilineTable,
         validatedFormat.multilineArray ?? fallbackFormat.multilineArray,
         validatedFormat.escapeSequenceUpperCase ?? fallbackFormat.escapeSequenceUpperCase,
+        validatedFormat.minimumTimeDecimals ?? fallbackFormat.minimumTimeDecimals,
       );
     }
   } else {
@@ -630,6 +634,23 @@ export class TomlFormat {
   minimumDecimals?: number;
 
   /**
+   * The minimum number of fractional-second digits to write for date/time values.
+   *
+   * When greater than 0, a time or datetime is padded with zeros to reach the specified digit
+   * count, and a time written as `HH:MM` gains `:00` before its fraction. Digits already written
+   * are never removed, so a value with more digits keeps them, and a date-only value is
+   * unaffected because it carries no time. This is separate from `minimumDecimals`, which
+   * applies to numbers, so the two can be set independently.
+   *
+   * Not auto-detectable — caller must set explicitly.
+   *
+   * @example
+   * - 0: t = 07:32:00  (default)
+   * - 3: t = 07:32:00.000
+   */
+  minimumTimeDecimals?: number;
+
+  /**
    * Whether `patch()` should reorder root key-values, `[table]`/`[[array]]` section blocks,
    * and rows inside table bodies to match the key order of the JS object passed to `patch()`,
    * carrying each entry's owned comments along with it (see docs/CommentOwnership.md).
@@ -688,7 +709,8 @@ export class TomlFormat {
     indentWidth?: number,
     multilineTable?: MultilineContainerMode | null,
     multilineArray?: MultilineContainerMode | null,
-    escapeSequenceUpperCase?: boolean
+    escapeSequenceUpperCase?: boolean,
+    minimumTimeDecimals?: number
   ) {
     // Use provided values or fall back to defaults
     this.newLine = newLine == null ? DEFAULT_NEWLINE : normalizeNewLine(newLine);
@@ -700,6 +722,7 @@ export class TomlFormat {
     this.useTabsForIndentation = useTabsForIndentation ?? DEFAULT_USE_TABS_FOR_INDENTATION;
     this.indentWidth = this.useTabsForIndentation ? 1 : indentWidth ?? DEFAULT_INDENT_WIDTH;
     this.minimumDecimals = minimumDecimals ?? DEFAULT_MINIMUM_DECIMALS;
+    this.minimumTimeDecimals = minimumTimeDecimals ?? DEFAULT_MINIMUM_TIME_DECIMALS;
     this.leadingBom = leadingBom ?? DEFAULT_LEADING_BOM;
     this.updateOrder = updateOrder ?? DEFAULT_UPDATE_ORDER;
     this.multilineTable = multilineTable ?? DEFAULT_MULTILINE_TABLE;
@@ -720,6 +743,7 @@ export class TomlFormat {
    *   - truncateZeroTimeInDates: false
    *   - useTabsForIndentation: false
    *   - minimumDecimals: 0
+   *   - minimumTimeDecimals: 0
    *   - updateOrder: false
    */
   static default(): TomlFormat {
@@ -737,7 +761,8 @@ export class TomlFormat {
       DEFAULT_INDENT_WIDTH,
       DEFAULT_MULTILINE_TABLE,
       DEFAULT_MULTILINE_ARRAY,
-      DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE
+      DEFAULT_ESCAPE_SEQUENCE_UPPER_CASE,
+      DEFAULT_MINIMUM_TIME_DECIMALS
     );
   }
 
@@ -825,6 +850,9 @@ export class TomlFormat {
 
     // minimumDecimals uses default value (0) — caller must set explicitly
     format.minimumDecimals = DEFAULT_MINIMUM_DECIMALS;
+
+    // minimumTimeDecimals uses default value (0) too — caller must set explicitly
+    format.minimumTimeDecimals = DEFAULT_MINIMUM_TIME_DECIMALS;
 
     // updateOrder uses default value (false) as well — the existing document's order says
     // nothing about the caller's intent, so this is never auto-detected.

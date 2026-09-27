@@ -150,15 +150,15 @@ function walkValue(
   } else if (isBoolean(value)) {
     return generateBoolean(value);
   } else if (isTemporal(value)) {
-    return generateTemporalDateTime(value, format.truncateZeroTimeInDates);
+    return generateTemporalDateTime(value, format.truncateZeroTimeInDates, format.minimumTimeDecimals ?? 0);
   } else if (isSmolTomlDate(value)) {
     // smol-toml's TomlDate renders zero fractions as `.000`, which would not
     // compare equal to a value parsed from TOML without a fraction. Convert to
     // the matching toml-patch class first so stringify and patching emit the
     // canonical form.
-    return generateDateTime(smolTomlDateToNative(value), format.truncateZeroTimeInDates);
+    return generateDateTime(smolTomlDateToNative(value), format.truncateZeroTimeInDates, format.minimumTimeDecimals ?? 0);
   } else if (isDate(value)) {
-    return generateDateTime(value, format.truncateZeroTimeInDates);
+    return generateDateTime(value, format.truncateZeroTimeInDates, format.minimumTimeDecimals ?? 0);
   } else if (Array.isArray(value)) {
     return walkInlineArray(value, format, depth, parentIsMultiline);
   } else {
