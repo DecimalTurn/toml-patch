@@ -22,24 +22,36 @@ function fmtParts(d: Date) {
 }
 
 /**
+ * Number of fractional digits needed to write a millisecond count exactly,
+ * without trailing zeros. `750` needs two, `500` needs one and `0` needs none.
+ */
+function exactFractionDigits(ms: number): number {
+  if (ms === 0) return 0;
+  return String(ms).padStart(3, '0').replace(/0+$/, '').length;
+}
+
+/**
  * Format the fractional-second suffix, preserving the original precision.
  *
  * TOML allows any number of fractional digits, but a `Date` only holds
  * milliseconds. When the value's millisecond part still matches the leading
  * digits of the source fraction, the whole source fraction is emitted, so
- * sub-millisecond digits survive a parse → stringify round trip. Once the
- * value holds a different millisecond, the source's digit count is kept but
- * only the representable digits are written.
+ * sub-millisecond digits survive a parse → stringify round trip.
+ *
+ * Otherwise the source's digit count is a floor, never a limit: a source that
+ * wrote `.5` and now holds 750 ms must widen to `.75`, because slicing to one
+ * digit would write `.7` and silently change the value to 700 ms. The source's
+ * wider padding is still kept, so `.500` becomes `.750` and not `.75`.
  *
  * Returns "" when the source had no fraction and the value has none either.
  */
 function fmtMs(ms: number, origFmt: string, msRe: RegExp = /\.(\d+)\s*$/): string {
   if (origFmt && origFmt.includes('.')) {
     const m = origFmt.match(msRe);
-    const digits = m ? m[1] : '000';
+    const sourceDigits = m ? m[1].length : 3;
     const current = String(ms).padStart(3, '0');
-    if (m && digits.startsWith(current)) return '.' + digits;
-    return '.' + current.slice(0, digits.length);
+    if (m && m[1].startsWith(current)) return '.' + m[1];
+    return '.' + current.slice(0, Math.max(sourceDigits, exactFractionDigits(ms)));
   }
   if (ms > 0) {
     return '.' + String(ms).padStart(3, '0').replace(/0+$/, '');

@@ -98,6 +98,50 @@ describe('sub-millisecond fractional seconds', () => {
     }
   });
 
+  test('an edited value widens the fraction instead of losing digits', () => {
+    // 750 ms cannot be written with the single digit the source used, so the
+    // fraction widens. Slicing to one digit would write `.7`, silently turning
+    // the value into 700 ms.
+    const cases: Array<[string, Date, string]> = [
+      ['t = 07:32:00.5\n', new LocalTime('09:15:30.750', '09:15:30.750'), 't = 09:15:30.75\n'],
+      ['t = 07:32:00.50\n', new LocalTime('09:15:30.789', '09:15:30.789'), 't = 09:15:30.789\n'],
+      // The source's wider padding is kept, so this one stays three digits.
+      ['t = 07:32:00.500\n', new LocalTime('09:15:30.750', '09:15:30.750'), 't = 09:15:30.750\n'],
+      [
+        'dt = 1979-05-27T07:32:00.5\n',
+        new LocalDateTime('1999-01-01T00:00:00.750'),
+        'dt = 1999-01-01T00:00:00.75\n'
+      ],
+      [
+        'spaced = 1979-05-27 07:32:00.5\n',
+        new LocalDateTime('1999-01-01 00:00:00.750', true),
+        'spaced = 1999-01-01 00:00:00.75\n'
+      ],
+      [
+        'o = 1979-05-27T07:32:00.5Z\n',
+        new OffsetDateTime('1999-01-01T00:00:00.750Z'),
+        'o = 1999-01-01T00:00:00.75Z\n'
+      ]
+    ];
+
+    for (const [source, replacement, expected] of cases) {
+      const updated: any = parse(source);
+      updated[Object.keys(updated)[0]] = replacement;
+      expect(patch(source, updated), source.trim()).toBe(expected);
+    }
+  });
+
+  test('a widened fraction re-parses to the requested instant', () => {
+    const source = 't = 07:32:00.5\n';
+    const updated: any = parse(source);
+    updated.t = new LocalTime('09:15:30.750', '09:15:30.750');
+
+    const reparsed: any = parse(patch(source, updated));
+
+    expect(reparsed.t.getUTCMilliseconds()).toBe(750);
+    expect(reparsed.t.getTime()).toBe(updated.t.getTime());
+  });
+
   test('Temporal objects keep the sub-millisecond digits', () => {
     const obj = parse(doc, { temporal: true });
 
@@ -107,7 +151,6 @@ describe('sub-millisecond fractional seconds', () => {
     expect(String(obj.utc)).toBe('1979-05-27T07:32:00.123456+00:00[+00:00]');
     expect(String(obj.offset)).toBe('1979-05-27T07:32:00.123456789+02:00[+02:00]');
   });
-
   test('Temporal values round-trip to the canonical text', () => {
     // Temporal has no space separator, so the spaced source is normalized to
     // `T`; every other row keeps its original spelling and full fraction.
