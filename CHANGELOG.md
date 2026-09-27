@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Formatting: add a `minimumTimeDecimals` option for the fractional-second digits of date/time values. `07:32:00` with `minimumTimeDecimals: 3` serializes as `07:32:00.000`, a time written without seconds gains `:00` before its fraction, and digits already written are never removed, so `07:32:00.123456` is left alone. `patch()` pads a value it rewrites and leaves untouched rows byte-for-byte. It is separate from `minimumDecimals`, which keeps applying to numbers only, so the two can be set independently.
+
 ### Fixed
 
 - Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal.

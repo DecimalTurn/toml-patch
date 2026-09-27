@@ -169,6 +169,7 @@ class TomlFormat {
   useTabsForIndentation?: boolean
   indentWidth: number
   minimumDecimals?: number
+  minimumTimeDecimals?: number
   leadingBom: boolean
   updateOrder?: boolean
   multilineTable: boolean | number | 'auto' | 'parent'

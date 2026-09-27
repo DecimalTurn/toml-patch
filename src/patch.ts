@@ -46,7 +46,7 @@ import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
 import { arrayHadTrailingCommas, tableHadTrailingCommas, postInlineItemRemovalAdjustment, calculateTableDepth, normalizeGeneratedInlineContainerRows, normalizeInlineContainerRows } from './formatter';
-import { DateFormatHelper } from './date-format';
+import { DateFormatHelper, padFractionalSeconds } from './date-format';
 import {
   getInlineInsertColumnDelta,
   normalizeInlineCommentAlignmentInString,
@@ -886,7 +886,12 @@ function renderIntegerLike(value: number | bigint, existingRaw: string): string 
  * @param existing - The existing node with formatting to preserve
  * @param replacement - The replacement node to apply formatting to
  */
-function preserveFormatting(existing: Value, replacement: Value, escapeSequenceUpperCase = true): void {
+function preserveFormatting(
+  existing: Value,
+  replacement: Value,
+  escapeSequenceUpperCase = true,
+  minimumTimeDecimals = 0
+): void {
   
   // Preserve string format (handles basic, literal, multiline in all variants)
   if (isString(existing) && isString(replacement)) {
@@ -913,6 +918,9 @@ function preserveFormatting(existing: Value, replacement: Value, escapeSequenceU
         const offset = originalRaw.match(/([+-]00:00)/)![1];
         raw = raw.replace(/Z$/, offset);
       }
+      // minimumTimeDecimals is a floor on the written digits, and a Temporal
+      // value carries its own precision, so this only ever pads.
+      raw = padFractionalSeconds(raw, minimumTimeDecimals);
       replacement.raw = raw;
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
       // Keep the Temporal object as the value — it will serialize correctly.
@@ -929,9 +937,10 @@ function preserveFormatting(existing: Value, replacement: Value, escapeSequenceU
       // Create a new date with the original format preserved
       const formattedDate = DateFormatHelper.createDateWithOriginalFormat(newValue, originalRaw);
 
-      // Update the replacement with the properly formatted date
+      // Update the replacement with the properly formatted date. The
+      // minimumTimeDecimals floor pads the fraction, never removes source digits.
       replacement.value = formattedDate;
-      replacement.raw = formattedDate.toISOString();
+      replacement.raw = padFractionalSeconds(formattedDate.toISOString(), minimumTimeDecimals);
       replacement.loc.end.column = replacement.loc.start.column + replacement.raw.length;
     }
   }
@@ -2223,7 +2232,7 @@ function applyChanges(
           }
         }
         
-        preserveFormatting(existing.value, replacement.value, format.escapeSequenceUpperCase);
+        preserveFormatting(existing.value, replacement.value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);
         }
@@ -2243,7 +2252,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
             }
           }
         }
@@ -2394,7 +2403,7 @@ function applyChanges(
           }
         }
 
-        preserveFormatting(existingKeyValue.value, replacement.value, format.escapeSequenceUpperCase);
+        preserveFormatting(existingKeyValue.value, replacement.value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
         parent = existingKeyValue;
         existing = existingKeyValue.value;
         replacement = replacement.value;
@@ -2407,7 +2416,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
             }
           }
         }
@@ -2484,7 +2493,7 @@ function applyChanges(
         }
 
         // Preserve formatting and edit the value within
-        preserveFormatting(existingKV.value, replacement.item.value, format.escapeSequenceUpperCase);
+        preserveFormatting(existingKV.value, replacement.item.value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
         parent = existingKV;
         existing = existingKV.value;
         replacement = replacement.item.value;
@@ -2500,7 +2509,7 @@ function applyChanges(
             const freshValue = regenerateValue(jsValue, format);
             if (freshValue !== undefined) {
               replacement = freshValue;
-              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase);
+              preserveFormatting(existing as Value, replacement as Value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
             }
           }
         }
@@ -2779,7 +2788,7 @@ function applyChanges(
       // flag so the replacement doesn't introduce an unwanted trailing comma.
       if (isInlineItem(existing) && isInlineItem(replacement)) {
         if (isString(existing.item) && isString(replacement.item)) {
-          preserveFormatting(existing.item, replacement.item, format.escapeSequenceUpperCase);
+          preserveFormatting(existing.item, replacement.item, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
           replacement.loc = {
             start: { ...replacement.item.loc.start },
             end: { ...replacement.item.loc.end }

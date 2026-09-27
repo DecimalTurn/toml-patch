@@ -55,6 +55,31 @@ function parseOffsetMinutes(offset: string): number {
   return sign * (parseInt(h) * 60 + parseInt(m));
 }
 
+/**
+ * Pads the fractional seconds of a rendered TOML date/time so at least
+ * `minimumTimeDecimals` digits are written.
+ *
+ * This is the `TomlFormat.minimumTimeDecimals` floor. It is separate from
+ * `minimumDecimals`, which applies to numbers. Padding only: digits already
+ * written are kept, so the represented value never changes. A date-only value
+ * carries no time and is returned unchanged, and a non-positive count is a
+ * no-op.
+ *
+ * TOML 1.1 allows the seconds to be omitted, so a value written as `HH:MM`
+ * gains `:00` before its fraction.
+ */
+export function padFractionalSeconds(raw: string, minimumTimeDecimals: number): string {
+  if (minimumTimeDecimals <= 0) return raw;
+  return raw.replace(
+    /(\d{2}:\d{2})(?::(\d{2}))?(?:\.(\d+))?/,
+    (whole: string, hourMinute: string, seconds?: string, fraction?: string) => {
+      const written = fraction ?? '';
+      if (written.length >= minimumTimeDecimals) return whole;
+      return `${hourMinute}:${seconds ?? '00'}.${written.padEnd(minimumTimeDecimals, '0')}`;
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 /**
