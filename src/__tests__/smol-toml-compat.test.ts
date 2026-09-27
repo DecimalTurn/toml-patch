@@ -160,7 +160,7 @@ describe('patch with a smol-toml parsed object', () => {
     ` + '\n');
   });
 
-  test('keeps the source precision when editing an offset datetime with a fraction', () => {
+  test('keeps the offset when editing an offset datetime with a fraction', () => {
     const existing = dedent`
       offset = 1979-05-27T07:32:00.25-07:00
       version = "1.0.0"
@@ -169,9 +169,10 @@ describe('patch with a smol-toml parsed object', () => {
     const updated = smolParse(existing);
     updated.offset = new TomlDate('1984-02-14T09:15:30.5-07:00');
 
-    // The source wrote two fractional digits, so the edit keeps two digits.
+    // The source's two digits were significant, so the edit writes the single
+    // digit the new value needs while the offset survives.
     expect(patch(existing, updated)).toEqual(dedent`
-      offset = 1984-02-14T09:15:30.50-07:00
+      offset = 1984-02-14T09:15:30.5-07:00
       version = "1.0.0"
     ` + '\n');
   });
@@ -235,7 +236,7 @@ describe('patch-lite with a smol-toml parsed object', () => {
       [
         'offsetMinus = 1979-05-27T07:32:00.25-07:00\n',
         '1984-02-14T09:15:30.5-07:00',
-        'offsetMinus = 1984-02-14T09:15:30.50-07:00\n'
+        'offsetMinus = 1984-02-14T09:15:30.5-07:00\n'
       ]
     ];
 

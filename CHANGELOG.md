@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Dates: an edited value is no longer rounded down to the source's fractional-digit count, which silently changed it. 750 ms written against a source of `07:32:00.5` became `09:15:30.7`, that is 700 ms. The source's digit count is now a floor, so the fraction widens to `.75` and the value survives. A source with wider padding still keeps it, so `.500` becomes `.750`. ([#316])
-- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal. ([#316])
+- Dates: an edited value is no longer rounded down to the source's fractional-digit count, which silently changed it. 750 ms written against a source of `07:32:00.5` became `09:15:30.7`, that is 700 ms. The new value now writes the digits it needs, widened to the source's width when the source declared zeros there: `.5` becomes `.75`, `.500` becomes `.750` and `.500000` becomes `.750000`, while a source of `07:32:00.123456`, whose digits were all significant, becomes `09:15:30.5` instead of keeping a width the value cannot fill. ([#316])
+- Dates: preserve sub-millisecond fractional seconds. `parse()` → `stringify()` keeps every source digit (`07:32:00.123456` stays six digits), `temporal: true` returns the full precision, and patching an untouched value no longer shortens it to milliseconds. A source value and an updated value that only differ in how the fraction is spelled (`.5` against `.500`) count as equal, while an edit below the millisecond (`.123456` to `.123999`) is applied instead of being dropped. ([#316])
 
 ## [3.2.1] - 2026-09-26
 

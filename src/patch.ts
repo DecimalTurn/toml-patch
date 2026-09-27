@@ -37,7 +37,7 @@ import {
 } from './cst';
 import diff, { Change, ChangeType, Move, isAdd, isEdit, isRemove, isMove, isRename } from './diff';
 import findByPath, { tryFindByPath, findParent, Path } from './find-by-path';
-import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify } from './utils';
+import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, isObject, stableStringify, isDate, datesEqual } from './utils';
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn, perLine } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveGroups } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
@@ -377,8 +377,11 @@ function valuesEqualIterative(left: any, right: any): boolean {
       return false;
     }
     if (Object.is(a, b)) continue;
-    if (a instanceof Date && b instanceof Date) {
-      if (a.getTime() !== b.getTime()) return false;
+    if (isDate(a) && isDate(b)) {
+      // Not a plain `getTime()` comparison: two sub-millisecond spellings of
+      // the same millisecond are different instants, and skipping them here
+      // would drop the edit before the diff ever sees it.
+      if (!datesEqual(a, b)) return false;
       continue;
     }
     if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;

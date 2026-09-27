@@ -1,4 +1,4 @@
-import { DateFormatHelper, LocalDate, LocalDateTime } from '../date-format';
+import { DateFormatHelper, LocalDate, LocalDateTime, LocalTime } from '../date-format';
 
 describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', () => {
   
@@ -82,6 +82,38 @@ describe('DateFormatHelper.createDateWithOriginalFormat millisecond precision', 
       .toBe('14:15:00.750');
     expect(DateFormatHelper.createDateWithOriginalFormat(time, '10:30:00.5').toISOString())
       .toBe('14:15:00.75');
+  });
+
+  test('should write the digits the new value needs when the source had significant ones', () => {
+    // 500 ms needs one digit, and the source's six were all significant, so the
+    // fraction is not padded out to the old width.
+    const time = new Date('1970-01-01T14:15:00.500Z');
+
+    expect(DateFormatHelper.createDateWithOriginalFormat(time, '10:30:00.123456').toISOString())
+      .toBe('14:15:00.5');
+  });
+
+  test('should keep a width the source declared with zeros', () => {
+    // 500 ms fills one digit and the source's other five are zeros, so the
+    // document asked for six and keeps them.
+    const time = new Date('1970-01-01T14:15:00.750Z');
+
+    expect(DateFormatHelper.createDateWithOriginalFormat(time, '10:30:00.500000').toISOString())
+      .toBe('14:15:00.750000');
+  });
+
+  test('should take the fraction a replacement spells out itself', () => {
+    // The replacement carries sub-millisecond digits, so it is a different
+    // value from the source even though both are 123 ms to `getTime()`.
+    const requested = new LocalTime('10:30:00.123999');
+
+    expect(DateFormatHelper.createDateWithOriginalFormat(requested, '10:30:00.123456').toISOString())
+      .toBe('10:30:00.123999');
+    // A millisecond-precision replacement keeps the source's spelling instead.
+    const milliseconds = new Date('1970-01-01T10:30:00.123Z');
+
+    expect(DateFormatHelper.createDateWithOriginalFormat(milliseconds, '10:30:00.123456').toISOString())
+      .toBe('10:30:00.123456');
   });
 
   test('should widen an offset datetime fraction without dropping the offset', () => {

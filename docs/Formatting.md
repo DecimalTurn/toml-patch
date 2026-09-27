@@ -391,6 +391,8 @@ format.minimumDecimals = 2;  // { x: 1, y: 1.5 } -> { x = 1.00, y = 1.50 }
 
 Padding only, never truncation: digits already written are kept, so a value with more digits is left alone. A date-only value carries no time and is unaffected, and a time written as `HH:MM` gains `:00` before its fraction.
 
+An edited value otherwise writes only the digits it needs, so it can narrow the fraction — this option is how a document asks for a wider one, the way `minimumDecimals` does for numbers.
+
 ```js
 const format = TomlFormat.default();
 format.minimumTimeDecimals = 0;  // meeting = 09:30:00        (default)

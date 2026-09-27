@@ -439,13 +439,15 @@ describe('date edits', () => {
     expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30Z\n');
   });
 
-  test('keeps the source precision when editing an offset datetime with a fraction', () => {
+  test('keeps the offset when editing an offset datetime with a fraction', () => {
     const existing = 'ts = 1979-05-27T07:32:00.25-07:00\n';
 
     const updated = parse(existing);
     updated.ts = new OffsetDateTime('1984-02-14T09:15:30.5-07:00', false);
 
-    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30.50-07:00\n');
+    // The source's two digits were significant, so the edit writes the single
+    // digit the new value needs while the offset survives.
+    expect(patch(existing, updated)).toBe('ts = 1984-02-14T09:15:30.5-07:00\n');
   });
 
   test('edits a nested date value', () => {

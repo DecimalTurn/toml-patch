@@ -42,24 +42,24 @@ describe('sub-millisecond fractional seconds', () => {
     expect(patch(source, updated)).toBe(source);
   });
 
-  test('an edited value takes the source fractional-digit count', () => {
-    // The new millisecond differs from the source's leading digits, so only the
-    // digits a Date holds can be written, capped at the source's count.
+  test('an edited value drops significant digits the new value cannot fill', () => {
+    // Every digit of the source was significant, so the new value writes only
+    // the digits it needs rather than padding itself out to the old width.
     const cases: Array<[string, Date, string]> = [
       [
         'time = 07:32:00.123456\n',
         new LocalTime('09:15:30.5', '09:15:30.5'),
-        'time = 09:15:30.500\n'
+        'time = 09:15:30.5\n'
       ],
       [
         'dt = 1979-05-27T07:32:00.123456\n',
         new LocalDateTime('1999-01-01T00:00:00.5'),
-        'dt = 1999-01-01T00:00:00.500\n'
+        'dt = 1999-01-01T00:00:00.5\n'
       ],
       [
         'o = 1979-05-27T07:32:00.123456-07:00\n',
         new OffsetDateTime('1999-01-01T00:00:00.5-07:00'),
-        'o = 1999-01-01T00:00:00.500-07:00\n'
+        'o = 1999-01-01T00:00:00.5-07:00\n'
       ]
     ];
 
@@ -68,6 +68,80 @@ describe('sub-millisecond fractional seconds', () => {
       updated[Object.keys(updated)[0]] = replacement;
       expect(patch(source, updated), source.trim()).toBe(expected);
     }
+  });
+
+  test('an edited value keeps a width the source declared with zeros', () => {
+    // The digits past the source's own significant ones were zeros, so the
+    // document asked for that width and keeps it. `07:32:00.500` and
+    // `07:32:00.123000` both stay six digits wide.
+    const cases: Array<[string, Date, string]> = [
+      [
+        't = 07:32:00.500000\n',
+        new LocalTime('09:15:30.750', '09:15:30.750'),
+        't = 09:15:30.750000\n'
+      ],
+      [
+        't = 07:32:00.123000\n',
+        new LocalTime('09:15:30.750', '09:15:30.750'),
+        't = 09:15:30.750000\n'
+      ],
+      ['t = 07:32:00.000\n', new LocalTime('09:15:30.750', '09:15:30.750'), 't = 09:15:30.750\n'],
+      // A whole second keeps the declared width, and drops a fraction the
+      // source never padded. This is what `1.0` -> `2.0` and `1.5` -> `2` do
+      // for numbers.
+      ['t = 07:32:00.500\n', new LocalTime('09:15:30', '09:15:30'), 't = 09:15:30.000\n'],
+      ['t = 07:32:00.5\n', new LocalTime('09:15:30', '09:15:30'), 't = 09:15:30\n']
+    ];
+
+    for (const [source, replacement, expected] of cases) {
+      const updated: any = parse(source);
+      updated[Object.keys(updated)[0]] = replacement;
+      expect(patch(source, updated), source.trim()).toBe(expected);
+    }
+  });
+
+  test('a sub-millisecond edit is applied for every kind', () => {
+    // `.123999` and `.123456` are both 123 ms to a Date, so the digits are the
+    // only record of the difference between the two values.
+    const cases: Array<[string, Date, string]> = [
+      [
+        'time = 07:32:00.123456\n',
+        new LocalTime('07:32:00.123999'),
+        'time = 07:32:00.123999\n'
+      ],
+      [
+        'dt = 1979-05-27T07:32:00.123456\n',
+        new LocalDateTime('1979-05-27T07:32:00.123999'),
+        'dt = 1979-05-27T07:32:00.123999\n'
+      ],
+      [
+        'spaced = 1979-05-27 07:32:00.123456\n',
+        new LocalDateTime('1979-05-27 07:32:00.123999', true),
+        'spaced = 1979-05-27 07:32:00.123999\n'
+      ],
+      [
+        'utc = 1979-05-27T07:32:00.123456Z\n',
+        new OffsetDateTime('1979-05-27T07:32:00.123999Z'),
+        'utc = 1979-05-27T07:32:00.123999Z\n'
+      ]
+    ];
+
+    for (const [source, replacement, expected] of cases) {
+      const updated: any = parse(source);
+      updated[Object.keys(updated)[0]] = replacement;
+      expect(patch(source, updated), source.trim()).toBe(expected);
+    }
+  });
+
+  test('a value that only carries milliseconds leaves the source fraction alone', () => {
+    // A Date cannot express the sub-millisecond digits, so a replacement that
+    // does not spell them out is the source's instant rather than an edit. Only
+    // a value that writes its own digits past the millisecond counts as one.
+    const source = 'utc = 1979-05-27T07:32:00.123456Z\n';
+    const updated: any = parse(source);
+    updated.utc = new Date('1979-05-27T07:32:00.123Z');
+
+    expect(patch(source, updated)).toBe(source);
   });
 
   test('an unchanged millisecond keeps the rest of the source fraction for every kind', () => {
