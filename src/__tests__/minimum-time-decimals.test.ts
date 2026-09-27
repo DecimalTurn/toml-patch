@@ -11,6 +11,12 @@ describe('padFractionalSeconds', () => {
 
   test('never removes digits already written', () => {
     expect(padFractionalSeconds('07:32:00.123456', 3)).toBe('07:32:00.123456');
+    expect(padFractionalSeconds('07:32:00.123456', 6)).toBe('07:32:00.123456');
+  });
+
+  test('pads a value that wrote fewer digits than the floor', () => {
+    expect(padFractionalSeconds('07:32:00.123456', 7)).toBe('07:32:00.1234560');
+    expect(padFractionalSeconds('07:32:00.123456', 9)).toBe('07:32:00.123456000');
   });
 
   test('pads before the offset', () => {
@@ -51,6 +57,21 @@ describe('minimumTimeDecimals on dates', () => {
       spaced = 1979-05-27 07:32:00.500
       utc = 1979-05-27T07:32:00.000Z
       offset = 1979-05-27T07:32:00.500-07:00
+      date = 1979-05-27
+    ` + '\n');
+  });
+
+  test('stringify pads a floor above the digits a value already wrote', () => {
+    // Six digits is not a ceiling: the floor is written out in full, which only
+    // ever adds zeros.
+    expect(stringify(parse(doc), { minimumTimeDecimals: 9 })).toEqual(dedent`
+      time = 07:32:00.000000000
+      short = 07:32:00.500000000
+      long = 07:32:00.123456000
+      dt = 1979-05-27T07:32:00.000000000
+      spaced = 1979-05-27 07:32:00.500000000
+      utc = 1979-05-27T07:32:00.000000000Z
+      offset = 1979-05-27T07:32:00.500000000-07:00
       date = 1979-05-27
     ` + '\n');
   });
@@ -104,6 +125,24 @@ describe('minimumTimeDecimals on dates', () => {
     updated.t = Temporal.PlainTime.from('09:15:30');
 
     expect(patch(existing, updated, { minimumTimeDecimals: 2 })).toBe('t = 09:15:30.00\n');
+  });
+
+  test('patch pads past the digits an edited value wrote', () => {
+    // The edit writes no fraction of its own, and the floor still fills it out.
+    const whole = 't = 07:32:00.123456\n';
+    const edited = parse(whole);
+    edited.t = new LocalTime('09:15:30', '09:15:30');
+
+    expect(patch(whole, edited, { minimumTimeDecimals: 9 })).toBe('t = 09:15:30.000000000\n');
+
+    // Temporal carries its own precision, and the floor pads that too.
+    const fractional = 'dt = 1979-05-27T07:32:00.5\n';
+    const withTemporal = parse(fractional);
+    withTemporal.dt = Temporal.PlainDateTime.from('1979-05-27T07:32:00.75');
+
+    expect(patch(fractional, withTemporal, { minimumTimeDecimals: 9 })).toBe(
+      'dt = 1979-05-27T07:32:00.750000000\n'
+    );
   });
 
   test('a source with more digits than the option keeps them', () => {
