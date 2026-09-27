@@ -117,8 +117,8 @@ Key = "value2"
 Now there are two blocks. `# here is some information` is pinned by R3, and only the second block
 travels.
 
-Pinning is relative to a *member*. A pinned block belongs to no member, so no member carries it when
-it is removed or reordered. It still shares the fate of the container it sits in. A pinned block
+A pinned block belongs to no member, so no member carries it when
+it is removed or reordered. However, it still shares the fate of the container it sits in. A pinned block
 inside a `[table]` body is owned by that table, so it is deleted along with the table and reordered
 along with it, even though no row inside could claim it. See [R5](#r5---cross-container-ownership).
 
