@@ -17,6 +17,16 @@
  *   maxMinified = 48
  *   maxGzipped = 14
  *
+ * An operation may also carry a `perFixture` table overriding `maxSlowdown` for
+ * a single fixture. A fixture without an entry of its own falls back to the
+ * operation budget, and a fixture with no budget at all is not gated:
+ *
+ *   [fixtures.stringify]
+ *   maxSlowdown = 25
+ *
+ *   [fixtures.stringify.perFixture]
+ *   "0A-spec-01-example-v0.4.0" = 32
+ *
  * The `reference` key is optional and defaults to smol-toml.
  */
 
@@ -86,8 +96,15 @@ export function checkThresholds({
   let failed = false;
 
   for (const { name, fixtures, hzFor } of operations) {
-    const maxSlowdown = suiteThresholds[name]?.maxSlowdown;
-    if (typeof maxSlowdown !== 'number') continue;
+    const operationThresholds = suiteThresholds[name] ?? {};
+    const defaultMaxSlowdown = operationThresholds.maxSlowdown;
+    const perFixture = operationThresholds.perFixture ?? {};
+    // A fixture budget of its own is enough to gate the operation, even when
+    // there is no operation-wide budget to fall back on.
+    const hasBudget =
+      typeof defaultMaxSlowdown === 'number' ||
+      Object.values(perFixture).some((value) => typeof value === 'number');
+    if (!hasBudget) continue;
 
     // Runs restricted to a subset of implementations have no reference to
     // compare against, so the gate has to sit that operation out.
@@ -97,6 +114,10 @@ export function checkThresholds({
     }
 
     for (const fixture of fixtures) {
+      const maxSlowdown =
+        typeof perFixture[fixture] === 'number' ? perFixture[fixture] : defaultMaxSlowdown;
+      if (typeof maxSlowdown !== 'number') continue;
+
       const current = hzFor(currentName, fixture);
       const reference = hzFor(referenceName, fixture);
 

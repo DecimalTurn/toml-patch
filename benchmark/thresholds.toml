@@ -19,6 +19,15 @@ maxSlowdown = 8
 [fixtures.stringify]
 maxSlowdown = 25
 
+# The iarna spec example is the smallest mixed-type document in the curated set,
+# so its stringify time is mostly the fixed per-document overhead and its ratio
+# moves more between runners than the other two fixtures. Two CI runs measuring
+# the same pair of builds put it at 18.3x and 25.2x, which leaves the shared 25x
+# budget no room for that spread. The iarna corpus had its own 32x stringify
+# budget before the corpora were merged into this file.
+[fixtures.stringify.perFixture]
+"0A-spec-01-example-v0.4.0" = 32
+
 # Bundle size budgets, in kB (1 kB = 1024 bytes). The bundle measurement scripts
 # fail when a bundle grows past its budget. A budget key that is left out is not
 # gated, and a bundle with no budget at all is measured without failing.
