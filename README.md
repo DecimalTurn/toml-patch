@@ -132,7 +132,7 @@ The `temporal: true` option requires `Temporal` to be available in the runtime:
 
 | Runtime | How to enable |
 |---|---|
-| **Node.js 26+** | Built-in — enable with `temporal: true` |
+| **Node.js 26+** | Built-in (no config needed) |
 | **Node.js 20–24** | `node --harmony-temporal` flag |
 | **Node.js 14–26** | [@js-temporal/polyfill](https://www.npmjs.com/package/@js-temporal/polyfill) |
 
