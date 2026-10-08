@@ -76,7 +76,7 @@ import { stringify, patch } from '@decimalturn/toml-patch';
 
 stringify({
   start: Temporal.PlainDate.from('2024-01-15'),
-  due: Temporal.ZonedDateTime.from('2024-12-31T23:59:59Z[UTC]')
+  due: Temporal.ZonedDateTime.from('2024-12-31T23:59:59+00:00[+00:00]')
 });
 // start = 2024-01-15
 // due = 2024-12-31T23:59:59Z
