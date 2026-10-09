@@ -173,6 +173,28 @@ describe('ParseError messages', () => {
     }).toThrow(/Underscore must be between digits/);
   });
 
+  test.each([
+    'a = 1e++2',
+    'a = 1e+-2',
+    'a = 1.5e++3',
+    'a = [1e++2]',
+    'a = { y = -1e--5 }',
+    'a = 1e--2'
+  ])('should reject multiple signs in an exponent: %s', toml => {
+    expect(() => {
+      Array.from(parseTOML(toml));
+    }).toThrow(/Invalid float/);
+  });
+
+  test('should parse a single signed exponent correctly', () => {
+    expect(Array.from(parseTOML('a = 1e+2'))[0]).toMatchObject({
+      value: expect.objectContaining({ value: 100 })
+    });
+    expect(Array.from(parseTOML('a = 1e-2'))[0]).toMatchObject({
+      value: expect.objectContaining({ value: 0.01 })
+    });
+  });
+
   test('should show correct error for hexadecimal with sign', () => {
     expect(() => {
       Array.from(parseTOML('a = +0x1A'));
