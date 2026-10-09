@@ -23,3 +23,5 @@ playwright-report/
 # Ignore worktrees (embedded git repos)
 worktrees/
 submodules/confbox.worktrees/
+docs/dependents.json
+docs/dependents.md
