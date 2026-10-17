@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. Dropping the second `[[route]]` from a document whose entries each own a `[route.args]` section used to strip `[route.args]` from every remaining entry; only the removed entry's own sub-tables, those between its header and the next `[[route]]`, are removed now.
+- Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. Dropping the second `[[route]]` from a document whose entries each own a `[route.args]` section used to strip `[route.args]` from every remaining entry; only the removed entry's own sub-tables are removed now: those between its header and the next entry of the same array or of an ancestor array, so removing a `[[group.route]]` entry also leaves the next `[[group]]`'s `[group.route.args]` alone.
 
 ## [3.3.0] - 2026-09-27
 

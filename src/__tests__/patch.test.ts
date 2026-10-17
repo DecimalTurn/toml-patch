@@ -2124,6 +2124,27 @@ test('should remove one table array entry and keep the sub-tables of the others'
   }
 });
 
+test('should remove a nested table array entry and keep the next parent entry\'s sub-tables', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+    [[group.route]]
+    id = "b"
+
+    [[group]]
+    id = "g1"
+    [group.route.args]
+    x = 1
+  ` + '\n';
+
+  const updated = parse(existing) as { group: { route: object[] }[] };
+  updated.group[0].route.splice(1, 1);
+
+  expect(parse(patch(existing, updated))).toEqual(updated);
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"

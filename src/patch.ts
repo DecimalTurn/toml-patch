@@ -3201,14 +3201,17 @@ function applyChanges(
           const siblings = (parent as { items: TreeNode[] }).items;
           const extending: TreeNode[] = [];
           // A sub-table belongs to the nearest [[x]] entry above it, so an
-          // entry owns only the siblings between it and the next [[x]].
+          // entry owns only the siblings up to the next entry of its own
+          // array or of an ancestor array ([[x]] ends an [[x.y]] entry too).
           const aotEntry = isTableArray(node);
           const ownStart = siblings.indexOf(node);
           let ownEnd = siblings.length;
           if (aotEntry) {
             for (let i = ownStart + 1; i < siblings.length; i++) {
               const s = siblings[i];
-              if (isTableArray(s) && arraysEqual(s.key.item.value, key)) {
+              if (!isTableArray(s)) continue;
+              const sKey = s.key.item.value;
+              if (sKey.length <= key.length && arraysEqual(sKey, key.slice(0, sKey.length))) {
                 ownEnd = i;
                 break;
               }
