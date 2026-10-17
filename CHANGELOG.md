@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tooling: `scripts/check-overrides.mjs` reads pnpm 12 lockfiles again. pnpm 12 writes an environment document, with its own `snapshots`, ahead of the main lockfile document, so parsing the file as a single YAML document failed and every override was reported as "Could not check".
+
 ## [3.3.0] - 2026-09-27
 
 ### Added
