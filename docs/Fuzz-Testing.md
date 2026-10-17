@@ -53,6 +53,26 @@ Distill a seed with `--variant 4`; the distiller compares dates by instant for
 this variant, so a fraction written with a different digit count is not
 mistaken for a failure.
 
+## Structure-first AOT fuzzing (variant 5)
+
+`src/__tests__/fuzz-patch5.ts` uses a different generation algorithm instead
+of extending the general randomizer. It builds an abstract document from
+multiple AOT families, randomly varies parent-key depth and entry counts, and
+places entry-owned tables and nested AOTs between unrelated sections. It then
+mutates the parsed AOT arrays, forcing the first mutation to remove an entry.
+This targets ownership boundaries such as `[route.args]` after `[[route]]` and
+`[group.route.args]` after a later `[[group]]` entry.
+
+Run the focused corpus with:
+
+```powershell
+pnpm run fuzz5
+```
+
+The default is one structural mutation per seed so a failure identifies the
+entry-removal operation. Passing `--mutations 3` to `scripts/fuzz-run5.ts`
+adds AOT insertion and entry-edit mutations for broader exploratory sweeps.
+
 ## Patch-lite
 
 `patch-lite` is edit-only, so its harness (`src/__tests__/fuzz-patch-lite.ts`)

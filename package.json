@@ -64,6 +64,7 @@
     "fuzz2": "npx -y tsx scripts/fuzz-run2.ts --seed 0 --to 9999 --mutations 3",
     "fuzz3": "npx -y tsx scripts/fuzz-run3.ts --seed 0 --to 9999 --mutations 3",
     "fuzz4": "npx -y tsx scripts/fuzz-run4.ts --seed 0 --to 9999 --mutations 3",
+    "fuzz5": "npx -y tsx scripts/fuzz-run5.ts --seed 0 --to 9999 --mutations 1 --progress 100",
     "bench:bundle-size": "node benchmark/bundle-size.mjs",
     "bench:parse": "node benchmark/parse-benchmark.mjs",
     "bench:stringify": "node benchmark/stringify-benchmark.mjs",
