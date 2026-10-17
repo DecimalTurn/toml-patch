@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. Dropping the second `[[route]]` from a document whose entries each own a `[route.args]` section used to strip `[route.args]` from every remaining entry; only the removed entry's own sub-tables, those between its header and the next `[[route]]`, are removed now.
+
 ## [3.3.0] - 2026-09-27
 
 ### Added

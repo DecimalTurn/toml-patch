@@ -3200,8 +3200,23 @@ function applyChanges(
           const key = (node as Table | TableArray).key.item.value;
           const siblings = (parent as { items: TreeNode[] }).items;
           const extending: TreeNode[] = [];
-          for (const sibling of siblings) {
+          // A sub-table belongs to the nearest [[x]] entry above it, so an
+          // entry owns only the siblings between it and the next [[x]].
+          const aotEntry = isTableArray(node);
+          const ownStart = siblings.indexOf(node);
+          let ownEnd = siblings.length;
+          if (aotEntry) {
+            for (let i = ownStart + 1; i < siblings.length; i++) {
+              const s = siblings[i];
+              if (isTableArray(s) && arraysEqual(s.key.item.value, key)) {
+                ownEnd = i;
+                break;
+              }
+            }
+          }
+          for (const [index, sibling] of siblings.entries()) {
             if (sibling === node) continue;
+            if (aotEntry && (index < ownStart || index >= ownEnd)) continue;
             const siblingKey = isKeyValue(sibling)
               ? sibling.key.value
               : isTable(sibling) || isTableArray(sibling)

@@ -2098,6 +2098,32 @@ test('should remove table array and preserve leading KV', () => {
   expect(patched).not.toContain('name');
 });
 
+test('should remove one table array entry and keep the sub-tables of the others', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+
+    [[route]]
+    id = "c"
+    [route.args]
+    z = 3
+  ` + '\n';
+
+  for (const removed of [0, 1, 2]) {
+    const updated = parse(existing) as { route: object[] };
+    updated.route.splice(removed, 1);
+
+    expect(parse(patch(existing, updated))).toEqual(updated);
+  }
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"
