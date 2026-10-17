@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. Dropping the second `[[route]]` from a document whose entries each own a `[route.args]` section used to strip `[route.args]` from every remaining entry; only the removed entry's own sub-tables are removed now: those between its header and the next entry of the same array or of an ancestor array, so removing a `[[group.route]]` entry also leaves the next `[[group]]`'s `[group.route.args]` alone.
+- Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. ([#321])
 
 ## [3.3.0] - 2026-09-27
 
@@ -505,5 +505,6 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#313]: https://github.com/DecimalTurn/toml-patch/pull/313
 [#314]: https://github.com/DecimalTurn/toml-patch/pull/314
 [#316]: https://github.com/DecimalTurn/toml-patch/pull/316
+[#321]: https://github.com/DecimalTurn/toml-patch/pull/321
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
