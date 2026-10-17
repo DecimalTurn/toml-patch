@@ -2120,7 +2120,45 @@ test('should remove one table array entry and keep the sub-tables of the others'
     const updated = parse(existing) as { route: object[] };
     updated.route.splice(removed, 1);
 
-    expect(parse(patch(existing, updated))).toEqual(updated);
+    const patched = patch(existing, updated);
+    const expected = [
+      dedent`
+        [[route]]
+        id = "b"
+        [route.args]
+        y = 2
+
+        [[route]]
+        id = "c"
+        [route.args]
+        z = 3
+      ` + '\n',
+      dedent`
+        [[route]]
+        id = "a"
+        [route.args]
+        x = 1
+
+        [[route]]
+        id = "c"
+        [route.args]
+        z = 3
+      ` + '\n',
+      dedent`
+        [[route]]
+        id = "a"
+        [route.args]
+        x = 1
+
+        [[route]]
+        id = "b"
+        [route.args]
+        y = 2
+      ` + '\n',
+    ];
+
+    expect(patched).toBe(expected[removed]);
+    expect(parse(patched)).toEqual(updated);
   }
 });
 
@@ -2141,8 +2179,21 @@ test('should remove a nested table array entry and keep the next parent entry\'s
 
   const updated = parse(existing) as { group: { route: object[] }[] };
   updated.group[0].route.splice(1, 1);
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
 
-  expect(parse(patch(existing, updated))).toEqual(updated);
+    [[group]]
+    id = "g1"
+    [group.route.args]
+    x = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
 });
 
 test('should remove leading KV and preserve table array', () => {
