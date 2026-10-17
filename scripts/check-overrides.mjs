@@ -6,7 +6,7 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { load as yamlLoad, dump as yamlDump } from 'js-yaml';
+import { load as yamlLoad, loadAll as yamlLoadAll, dump as yamlDump } from 'js-yaml';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -48,6 +48,7 @@ function compareVersions(a, b) {
 // ── Main ─────────────────────────────────────────────────────────────
 
 const originalYaml = readFileSync(workspacePath, 'utf8');
+const originalLockfile = readFileSync(lockfilePath, 'utf8');
 const workspace = yamlLoad(originalYaml);
 const overrides = workspace.overrides || {};
 
@@ -60,63 +61,68 @@ console.log(`Checking ${Object.keys(overrides).length} overrides...\n`);
 
 const results = [];
 
-for (const [pkg, constraint] of Object.entries(overrides)) {
-  const minSafe = extractMinVersion(constraint);
-  if (!minSafe) {
-    results.push({ pkg, constraint, status: 'SKIP', reason: `Could not extract min version from "${constraint}"` });
-    continue;
-  }
+try {
+  for (const [pkg, constraint] of Object.entries(overrides)) {
+    const minSafe = extractMinVersion(constraint);
+    if (!minSafe) {
+      results.push({ pkg, constraint, status: 'SKIP', reason: `Could not extract min version from "${constraint}"` });
+      continue;
+    }
 
-  // Create modified workspace without this override
-  const modified = yamlLoad(originalYaml);
-  delete modified.overrides[pkg];
-  if (Object.keys(modified.overrides).length === 0) {
-    delete modified.overrides;
-  }
-  writeFileSync(workspacePath, yamlDump(modified, { lineWidth: -1, noCompatMode: true }), 'utf8');
+    // Create modified workspace without this override
+    const modified = yamlLoad(originalYaml);
+    delete modified.overrides[pkg];
+    if (Object.keys(modified.overrides).length === 0) {
+      delete modified.overrides;
+    }
+    writeFileSync(workspacePath, yamlDump(modified, { lineWidth: -1, noCompatMode: true }), 'utf8');
 
-  // Resolve without this override
-  let resolvedVersion;
-  try {
-    execSync('pnpm install --lockfile-only --no-optional', {
-      cwd: root,
-      stdio: 'pipe',
-      timeout: 60_000,
-    });
-  } catch (e) {
-    results.push({ pkg, constraint, minSafe, status: 'ERROR', reason: `pnpm install failed: ${e.stderr?.toString() || e.message}` });
+    // Resolve without this override
+    let resolvedVersion;
+    try {
+      execSync('pnpm install --lockfile-only --no-optional', {
+        cwd: root,
+        stdio: 'pipe',
+        timeout: 60_000,
+      });
+    } catch (e) {
+      results.push({ pkg, constraint, minSafe, status: 'ERROR', reason: `pnpm install failed: ${e.stderr?.toString() || e.message}` });
+      writeFileSync(workspacePath, originalYaml, 'utf8');
+      continue;
+    }
+
+    // Read resolved version from the new lockfile
+    try {
+      // pnpm 12 writes an environment document, with its own snapshots, ahead of the main lockfile document.
+      const lockfile = yamlLoadAll(readFileSync(lockfilePath, 'utf8'))
+        .reverse()
+        .find(doc => doc?.snapshots) || {};
+      const snapshots = lockfile.snapshots || {};
+      const snapshotKey = Object.keys(snapshots).find(k => k.startsWith(pkg + '@') || k.startsWith(pkg + '/'));
+      // snapshot keys are `name@version` (unscoped) or `@scope/name@version` (scoped).
+      // Greedy match up to the last '@' to extract version.
+      resolvedVersion = snapshotKey ? snapshotKey.replace(/.*@/, '') : null;
+    } catch (e) {
+      results.push({ pkg, constraint, minSafe, status: 'ERROR', reason: `Could not parse lockfile: ${e.message}` });
+      writeFileSync(workspacePath, originalYaml, 'utf8');
+      continue;
+    }
+
+    // Restore workspace file immediately
     writeFileSync(workspacePath, originalYaml, 'utf8');
-    continue;
-  }
 
-  // Read resolved version from the new lockfile
-  try {
-    const lockfile = yamlLoad(readFileSync(lockfilePath, 'utf8'));
-    const snapshots = lockfile.snapshots || {};
-    const snapshotKey = Object.keys(snapshots).find(k => k.startsWith(pkg + '@') || k.startsWith(pkg + '/'));
-    // snapshot keys are `name@version` (unscoped) or `@scope/name@version` (scoped).
-    // Greedy match up to the last '@' to extract version.
-    resolvedVersion = snapshotKey ? snapshotKey.replace(/.*@/, '') : null;
-  } catch (e) {
-    results.push({ pkg, constraint, minSafe, status: 'ERROR', reason: `Could not parse lockfile: ${e.message}` });
-    writeFileSync(workspacePath, originalYaml, 'utf8');
-    continue;
-  }
+    if (!resolvedVersion) {
+      results.push({ pkg, constraint, minSafe, status: 'NOT_FOUND', reason: 'Package not present in resolved snapshots without override' });
+      continue;
+    }
 
-  // Restore workspace file immediately (lockfile will be restored at the end)
+    const needed = compareVersions(resolvedVersion, minSafe) < 0;
+    results.push({ pkg, constraint, minSafe, resolvedWithoutOverride: resolvedVersion, needed, status: needed ? 'NEEDED' : 'STALE' });
+  }
+} finally {
   writeFileSync(workspacePath, originalYaml, 'utf8');
-
-  if (!resolvedVersion) {
-    results.push({ pkg, constraint, minSafe, status: 'NOT_FOUND', reason: 'Package not present in resolved snapshots without override' });
-    continue;
-  }
-
-  const needed = compareVersions(resolvedVersion, minSafe) < 0;
-  results.push({ pkg, constraint, minSafe, resolvedWithoutOverride: resolvedVersion, needed, status: needed ? 'NEEDED' : 'STALE' });
+  writeFileSync(lockfilePath, originalLockfile, 'utf8');
 }
-
-// Restore lockfile to its original state
-execSync('pnpm install --lockfile-only --no-optional', { cwd: root, stdio: 'pipe' });
 
 // ── Report ───────────────────────────────────────────────────────────
 

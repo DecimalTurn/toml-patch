@@ -1,0 +1,110 @@
+name: Check Overrides
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Protect dependency installation
+        uses: socketdev/action@ba6decc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          mode: firewall
+          firewall-version: latest
+
+      - name: Install
+        run: sfw pnpm install --frozen-lockfile
+
+      - name: Check overrides
+        id: check
+        shell: bash
+        env:
+          CI: false
+        run: |
+          set +e
+          pnpm run check-overrides 2>&1 | tee override-report.txt
+          status=${PIPESTATUS[0]}
+
+          if grep -Eq '^Summary: [0-9]+ needed, [1-9][0-9]* stale,' override-report.txt; then
+            echo "has_stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^Summary:' override-report.txt; then
+            echo "has_summary=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_summary=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update stale overrides issue
+        if: steps.check.outputs.has_stale == 'true'
+        uses: actions/github-script@v8
+        env:
+          REPORT_PATH: override-report.txt
+        with:
+          script: |
+            const fs = require('node:fs');
+            const title = 'Stale pnpm overrides detected';
+            const report = fs.readFileSync(process.env.REPORT_PATH, 'utf8').trim();
+            const body = [
+              'The scheduled override check found stale entries in `pnpm-workspace.yaml`.',
+              '',
+              '```text',
+              report,
+              '```',
+              '',
+              `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const existing = issues.find(issue => !issue.pull_request && issue.title === title);
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+                state: 'open',
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }
+
+      - name: Fail on checker errors
+        if: steps.check.outputs.has_summary != 'true' || (steps.check.outputs.exit_code != '0' && steps.check.outputs.has_stale != 'true')
+        run: exit 1
