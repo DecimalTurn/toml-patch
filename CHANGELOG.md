@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-10-17
+
 ### Fixed
 
 - Patching: removing one `[[table]]` entry no longer deletes the sub-tables of the other entries. ([#321])
