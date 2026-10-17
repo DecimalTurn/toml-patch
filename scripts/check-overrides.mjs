@@ -6,7 +6,7 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { load as yamlLoad, dump as yamlDump } from 'js-yaml';
+import { load as yamlLoad, loadAll as yamlLoadAll, dump as yamlDump } from 'js-yaml';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -91,7 +91,8 @@ for (const [pkg, constraint] of Object.entries(overrides)) {
 
   // Read resolved version from the new lockfile
   try {
-    const lockfile = yamlLoad(readFileSync(lockfilePath, 'utf8'));
+    // pnpm 12 writes an environment document, with its own snapshots, ahead of the main lockfile document.
+    const lockfile = yamlLoadAll(readFileSync(lockfilePath, 'utf8')).findLast(doc => doc?.snapshots) || {};
     const snapshots = lockfile.snapshots || {};
     const snapshotKey = Object.keys(snapshots).find(k => k.startsWith(pkg + '@') || k.startsWith(pkg + '/'));
     // snapshot keys are `name@version` (unscoped) or `@scope/name@version` (scoped).
