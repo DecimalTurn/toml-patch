@@ -29,6 +29,105 @@ range a second time. Checking just the previously-failing seeds (via
 `fuzz-run.ts --seed <N> --to <N>`) is sufficient; a fresh full sweep only
 matters when you change core logic and want a broad regression signal.
 
+## Fuzz suite variants
+
+The numbered suites are complementary layers, not strictly cumulative
+versions. Variant 1 is the original general harness. Variants 2, 3 and 4 reuse the general harness in
+`src/__tests__/fuzz-patch.ts` and change the generated source, mutations or
+format options. Variant 5 uses its own structure-first generator because the
+general randomizer rarely creates the AOT ownership layouts it targets.
+
+### Variant 1: general patch fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch1.ts`, backed by
+  `src/__tests__/fuzz-patch.ts`
+- **Runner:** `scripts/fuzz-run1.ts`, `pnpm run fuzz1`
+- **Purpose:** Establish the broad baseline. It generates deterministic TOML
+  with the shared randomizer, applies random additions deletions value changes
+  type changes and array mutations, then checks that the patched output parses
+  back to the mutated object.
+- **Why it exists:** This is the general regression net and the source of the
+  shared mutation and comparison helpers used by variants 2 through 4.
+
+### Variant 2: spaced dotted keys
+
+- **Implementation:** `src/__tests__/fuzz-patch2.ts`
+- **Runner:** `scripts/fuzz-run2.ts`, `pnpm run fuzz2`
+- **Purpose:** Reuses the baseline corpus but inserts whitespace around
+  tokenizer-recognized dotted-key separators, such as `a . b = 1` and
+  `[a . b]`.
+- **Why it exists:** Dotted-key whitespace is syntactically insignificant but
+  structurally important to a formatting-preserving patcher. The variant
+  catches code that assumes compact `a.b` spelling or mistakes dots inside
+  quoted keys strings dates or comments for separators.
+
+### Variant 3: indentation and multiline layout
+
+- **Implementation:** `src/__tests__/fuzz-patch3.ts`
+- **Runner:** `scripts/fuzz-run3.ts`, `pnpm run fuzz3`
+- **Purpose:** Reuses the baseline corpus while randomizing indentation width
+  and multiline table or array formatting.
+- **Why it exists:** The baseline mostly exercises compact output. This
+  variant targets row alignment closing delimiters generated indentation and
+  edits that move content across multiline containers.
+
+### Variant 4: date precision and full formatting options
+
+- **Implementation:** `src/__tests__/fuzz-patch4.ts`
+- **Runner:** `scripts/fuzz-run4.ts`, `pnpm run fuzz4`
+- **Purpose:** Rewrites source fractions to one or two digits, generates
+  replacement dates with random milliseconds and enables the format options
+  omitted by earlier variants, including `minimumTimeDecimals` and
+  `escapeSequenceUpperCase`.
+- **Why it exists:** Earlier mutations commonly used whole-second dates or
+  source fractions wide enough to hide precision loss. Variant 4 creates the
+  narrower-source and sub-second-replacement combination that exposes date
+  truncation, then compares dates by instant rather than by spelling.
+- **Coverage boundary:** It keeps the general random document generator. It
+  does not deliberately create specialized AOT ownership topologies.
+
+### Variant 5: structure-first AOT fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch5.ts`
+- **Runner:** `scripts/fuzz-run5.ts`, `pnpm run fuzz5`
+- **Purpose:** Builds TOML from an abstract AOT model instead of relying on the
+  general randomizer. It varies AOT family count parent-key depth entry count
+  entry-owned sub-tables nested AOTs and unrelated sections between entries.
+  The first mutation removes an AOT entry so each seed exercises an ownership
+  boundary.
+- **Why it exists:** The general randomizer can produce AOT nodes but rarely
+  produces repeated entries with document-level sub-tables scoped to each
+  entry. That missing shape allowed the AOT sub-table deletion bug to escape
+  broad fuzz sweeps.
+- **Coverage boundary:** Variant 5 is intentionally AOT-focused. It currently
+  does not provide variant 4's date precision and full format randomization.
+  Its default is one structural mutation so a failure identifies the entry
+  removal operation. Passing `--mutations 3` enables broader AOT insertion and
+  entry-edit exploration.
+
+### Patch-lite fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch-lite.ts`
+- **Runner:** `src/__tests__/fuzz-patch-lite.ts` and
+  `src/__tests__/patch-lite.fuzz.test.ts`
+- **Purpose:** Exercises the separate `patch-lite` contract. It edits existing
+  scalar and date leaves with hostile values and verifies round trips. A
+  companion rejection pass checks that unsupported structural changes raise
+  `PatchLiteError` rather than partially modifying the document.
+- **Why it exists:** `patch-lite` intentionally supports a narrower operation
+  set than full `patch()`, so its valid edits and expected failures need a
+  separate oracle and mutation policy.
+
+### Choosing a variant
+
+Use variant 1 for broad general coverage, variant 2 for dotted-key spacing,
+variant 3 for layout and multiline behavior, variant 4 for date and format
+precision and variant 5 for AOT ownership boundaries. A future variant should
+prefer composing a new structure generator or mutation strategy with the
+shared format-aware harness rather than silently replacing another variant's
+coverage. In particular, variant 5 is an AOT topology mode, not a replacement
+for variant 4.
+
 ## Date precision and the format surface (variant 4)
 
 `src/__tests__/fuzz-patch4.ts` targets the fraction formatting path, which the
