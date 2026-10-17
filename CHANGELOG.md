@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies: drop the `pnpm-workspace.yaml` overrides that no longer change anything. Without them, brace-expansion, picomatch, js-yaml, shell-quote and postcss resolve at or above each override's floor, and sigstore and tar are no longer in the tree. Also remove the deprecated `@types/dedent` stub (dedent ships its own types) and refresh the lockfile within the existing ranges.
+
 ## [3.3.0] - 2026-09-27
 
 ### Added
