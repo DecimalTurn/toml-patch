@@ -4655,27 +4655,25 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, Path>
         continue;
       }
 
-      // An AOT declared inside an explicit [table] (e.g. `[["".b.c]]` under
-      // `[""]`) must be re-materialised inside that table with a RELATIVE
-      // key (`b.c = []`).  Materialising it as a root dotted key `"".b.c = []`
-      // defines `""` as an implicit table and collides with the surviving
-      // `[""]` header on re-parse ("Implicit table already defined", fuzz
-      // seed 67221).
-      let hostTable: Table | undefined;
+      // An AOT declared inside an explicit [table] or a TableArray entry must
+      // be re-materialised inside that host with a RELATIVE key. Materialising
+      // it as a root dotted key can define an implicit table that collides with
+      // a surviving section header on re-parse.
+      let hostContainer: Table | TableArray | undefined;
       for (let len = path.length - 1; len >= 1; len--) {
         const ancestor = tryFindByPath(doc, path.slice(0, len));
-        if (ancestor && isTable(ancestor)) {
-          hostTable = ancestor;
+        if (ancestor && (isTable(ancestor) || isTableArray(ancestor))) {
+          hostContainer = ancestor;
           break;
         }
       }
-      if (hostTable) {
+      if (hostContainer) {
         const stringPath = path.filter((segment): segment is string => typeof segment === 'string');
-        const relativeKey = stringPath.slice(hostTable.key.item.value.length);
+        const relativeKey = stringPath.slice(hostContainer.key.item.value.length);
         const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
         const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
         applyWrites(doc);
-        insert(doc, hostTable, emptyKV);
+        insert(doc, hostContainer, emptyKV);
         continue;
       }
     }
