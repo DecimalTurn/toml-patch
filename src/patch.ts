@@ -3135,7 +3135,9 @@ function applyChanges(
             : undefined;
         if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
           const containerAbsLen = nodeAbsolutePath.length - removePrefixKv.key.value.length;
-          const relativePrefix = change.path.slice(containerAbsLen) as Path;
+          const relativePrefix = change.path
+            .filter((segment): segment is string => typeof segment === 'string')
+            .slice(containerAbsLen) as Path;
           if (relativePrefix.length > 0 && relativePrefix.length < removePrefixKv.key.value.length) {
             const siblings = (parent as { items: TreeNode[] }).items;
             // Collect matches first, then remove by identity: removeMember
