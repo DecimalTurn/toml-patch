@@ -3203,15 +3203,31 @@ function applyChanges(
           // A sub-table belongs to the nearest [[x]] entry above it, so an
           // entry owns only the siblings up to the next entry of its own
           // array or of an ancestor array ([[x]] ends an [[x.y]] entry too).
-          const aotEntry = isTableArray(node);
-          const ownStart = siblings.indexOf(node);
+          const nodeIndex = siblings.indexOf(node);
+          let aotOwner: TableArray | undefined;
+          if (isTableArray(node)) {
+            aotOwner = node;
+          } else {
+            for (let i = nodeIndex - 1; i >= 0; i--) {
+              const sibling = siblings[i];
+              if (!isTableArray(sibling)) continue;
+              const siblingKey = sibling.key.item.value;
+              if (key.length > siblingKey.length && arraysEqual(key.slice(0, siblingKey.length), siblingKey)) {
+                aotOwner = sibling;
+                break;
+              }
+            }
+          }
+          const aotEntry = aotOwner !== undefined;
+          const ownStart = aotOwner ? siblings.indexOf(aotOwner) : nodeIndex;
           let ownEnd = siblings.length;
           if (aotEntry) {
+            const ownerKey = aotOwner!.key.item.value;
             for (let i = ownStart + 1; i < siblings.length; i++) {
               const s = siblings[i];
               if (!isTableArray(s)) continue;
               const sKey = s.key.item.value;
-              if (sKey.length <= key.length && arraysEqual(sKey, key.slice(0, sKey.length))) {
+              if (sKey.length <= ownerKey.length && arraysEqual(sKey, ownerKey.slice(0, sKey.length))) {
                 ownEnd = i;
                 break;
               }
