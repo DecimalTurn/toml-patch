@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: prevent applying change in wrong location for nested table-array entries when removing sub-tables, resolving nested AOT paths and materialising emptied arrays.
+
 ## [3.3.1] - 2026-10-17
 
 ### Fixed
