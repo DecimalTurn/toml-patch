@@ -147,7 +147,7 @@ function findByPathInAotScope(
   // start with the AOT entry key and match the remaining path.
   const indexes: { [key: string]: number } = {};
 
-  for (const item of scopedItems) {
+  for (const [itemIndex, item] of scopedItems.entries()) {
     let key: Path = [];
 
     if (isTable(item)) {
@@ -180,12 +180,12 @@ function findByPathInAotScope(
         }
 
         const nestedScopeEnd = scopedItems.findIndex((sibling, siblingIndex) =>
-          siblingIndex > scopedItems.indexOf(item) &&
+          siblingIndex > itemIndex &&
           isTableArray(sibling) &&
           arraysEqual((sibling as TableArray).key.item.value, (item as TableArray).key.item.value)
         );
         const nestedScopedItems = scopedItems.slice(
-          scopedItems.indexOf(item) + 1,
+          itemIndex + 1,
           nestedScopeEnd === -1 ? scopedItems.length : nestedScopeEnd
         );
         return findByPathInAotScope(
