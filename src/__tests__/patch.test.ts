@@ -2196,6 +2196,119 @@ test('should remove a nested table array entry and keep the next parent entry\'s
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should remove a sub-table from one table array entry and keep deeper sub-tables of other entries', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as { route: { id: string; args?: object }[] };
+  delete updated.route[1].args;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should remove a sub-table from one nested table array entry and keep the others', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+
+    [[group.route]]
+    id = "a"
+    [group.route.args]
+    x = 1
+    y = 2
+
+    [[group.route]]
+    id = "b"
+    [group.route.args]
+    x = 3
+    y = 4
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route: { id: string; args?: { x?: number; y: number } }[] }[];
+  };
+  delete updated.group[0].route[0].args!.x;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+
+    [[group.route]]
+    id = "a"
+    [group.route.args]
+    y = 2
+
+    [[group.route]]
+    id = "b"
+    [group.route.args]
+    x = 3
+    y = 4
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should empty a nested table array on the second parent entry without corrupting the first', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as { group: { id: string; route: object[] }[] };
+  updated.group[1].route = [];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    route = []
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"
