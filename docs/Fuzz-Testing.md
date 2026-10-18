@@ -128,6 +128,31 @@ shared format-aware harness rather than silently replacing another variant's
 coverage. In particular, variant 5 is an AOT topology mode, not a replacement
 for variant 4.
 
+### Composable profiles
+
+The shared lifecycle is exposed by `runFuzz` in
+`src/__tests__/fuzz-patch.ts`. Profiles in `src/__tests__/fuzz-profiles.ts`
+combine generators transforms mutation strategies format generators and
+comparators without duplicating patch and round-trip handling:
+
+- `aot`: the structure-first generator with one forced AOT removal;
+- `aot-format`: AOT topology with randomized layout and full format options;
+- `aot-general`: AOT topology with the general random mutation strategy;
+- `general-format`: the general generator with variant 4 date and format policies.
+
+Inspect a profile with its generator metadata and resolved result:
+
+```powershell
+npx -y tsx src/__tests__/inspect-fuzz-seed.ts 17 --profile aot-format --mutations 1
+```
+
+For a failing AOT profile, write a `.fails` scaffold that replays the
+strategy's serialized paths and values:
+
+```powershell
+npx -y tsx scripts/distill-profile.ts --seed <N> --profile aot --out src/__tests__/distilled-aot.test.ts
+```
+
 ## Date precision and the format surface (variant 4)
 
 `src/__tests__/fuzz-patch4.ts` targets the fraction formatting path, which the

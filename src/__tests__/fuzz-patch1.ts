@@ -5,10 +5,10 @@
  * harness. The implementation remains in fuzz-patch.ts because variants 2-4
  * reuse its shared helpers.
  */
-import { fuzzOne, type PatchFuzzResult } from './fuzz-patch';
+import { runFuzz, type PatchFuzzResult } from './fuzz-patch';
 
 export function fuzzOne1(seed: number, mutationCount: number): PatchFuzzResult {
-  return fuzzOne(seed, mutationCount);
+  return runFuzz(seed, { mutationCount, variant: '1', profile: 'general' });
 }
 
 function main(): void {

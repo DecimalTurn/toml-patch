@@ -5,9 +5,17 @@
  * document model. It deliberately creates repeated entries, entry-owned
  * sub-tables and nested AOTs, then mutates the parsed arrays.
  */
-import { parse, patch } from '../';
 import { SeededRandom } from './randomizer';
-import { deepClone, deepEqual, type PatchFuzzResult } from './fuzz-patch';
+import {
+  deepClone,
+  deepEqual,
+  runFuzz,
+  type FuzzContext,
+  type GeneratedSource,
+  type MutationPlan,
+  type MutationStrategy,
+  type PatchFuzzResult
+} from './fuzz-patch';
 
 interface AotArrayPath {
   path: (string | number)[];
@@ -128,6 +136,13 @@ function generateDocument(seed: number): GeneratedAotDocument {
   return { source: `${blocks.join('\n\n')}\n` };
 }
 
+export function generateAotSource({ seed }: Pick<FuzzContext, 'seed'>): GeneratedSource {
+  return {
+    ...generateDocument(seed),
+    description: 'structure-first AOT generator'
+  };
+}
+
 function getAt(object: any, path: (string | number)[]): any {
   let value = object;
   for (const segment of path) value = value?.[segment];
@@ -148,7 +163,7 @@ function objectArrays(object: any, prefix: (string | number)[] = []): AotArrayPa
   return Object.keys(object).flatMap((key) => objectArrays(object[key], [...prefix, key]));
 }
 
-function mutateAot(object: any, rng: SeededRandom, first: boolean): string | undefined {
+function mutateAot(object: any, rng: SeededRandom, first: boolean): MutationPlan | undefined {
   const arrays = objectArrays(object).filter(({ path }) => {
     const value = getAt(object, path);
     return Array.isArray(value) && value.length > (first ? 1 : 0);
@@ -160,63 +175,55 @@ function mutateAot(object: any, rng: SeededRandom, first: boolean): string | und
   if (first || rng.chance(0.55)) {
     const index = rng.nextInt(array.length);
     array.splice(index, 1);
-    return `remove-array-item at ${[...selected.path, index].join('.')}`;
+    return { kind: 'remove-array-item', path: [...selected.path, index] };
   }
 
   if (rng.chance(0.5)) {
     const copy = deepClone(array[rng.nextInt(array.length)]);
     if (copy && typeof copy === 'object' && !Array.isArray(copy)) {
       (copy as any).added = integer(rng);
-      array.splice(rng.nextInt(array.length + 1), 0, copy);
-      return `add-array-item at ${selected.path.join('.')}`;
+      const index = rng.nextInt(array.length + 1);
+      array.splice(index, 0, copy);
+      return { kind: 'add-array-item', path: [...selected.path, index], newValue: copy };
     }
   }
 
-  const entry = array[rng.nextInt(array.length)] as Record<string, unknown>;
-  entry.edited = integer(rng);
-  return `edit-entry at ${selected.path.join('.')}`;
+  const index = rng.nextInt(array.length);
+  const value = integer(rng);
+  const entry = array[index] as Record<string, unknown>;
+  entry.edited = value;
+  return {
+    kind: 'change-value',
+    path: [...selected.path, index, 'edited'],
+    newValue: value
+  };
 }
 
-export function fuzzOne5(seed: number, mutationCount: number): PatchFuzzResult {
-  const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
-
-  try {
-    const generated = generateDocument(seed);
-    const original = parse(generated.source) as any;
-    const updated = deepClone(original) as any;
-    const mutationDescs: string[] = [];
-
-    for (let mutation = 0; mutation < mutationCount; mutation++) {
-      const description = mutateAot(updated, new SeededRandom(seed + mutation * 100003 + 17), mutation === 0);
-      if (!description) break;
-      mutationDescs.push(description);
-    }
-
-    if (mutationDescs.length === 0) return result;
-
-    const patchedToml = patch(generated.source, updated);
-    const reparsed = parse(patchedToml);
-    if (!deepEqual(reparsed, updated)) {
-      return {
-        ...result,
-        status: 'roundtrip-mismatch',
-        error: 'Objects differ after patch round-trip',
-        originalToml: generated.source,
-        patchedToml,
-        modifiedObj: updated,
-        reParsedObj: reparsed,
-        mutationDescs,
-      };
-    }
-
-    return { ...result, mutationDescs };
-  } catch (error) {
-    return {
-      ...result,
-      status: 'patch-fail',
-      error: error instanceof Error ? error.message : String(error),
-    };
+export const aotMutationStrategy: MutationStrategy = ({ updated, context }) => {
+  const mutationDescs: string[] = [];
+  const mutationPlans: MutationPlan[] = [];
+  for (let mutation = 0; mutation < context.mutationCount; mutation++) {
+    const plan = mutateAot(
+      updated,
+      new SeededRandom(context.seed + mutation * 100003 + 17),
+      mutation === 0
+    );
+    if (!plan) break;
+    mutationDescs.push(`${plan.kind} at ${plan.path.join('.')}`);
+    mutationPlans.push(plan);
   }
+  return { updated, descriptions: mutationDescs, plans: mutationPlans };
+};
+
+export function fuzzOne5(seed: number, mutationCount: number): PatchFuzzResult {
+  return runFuzz(seed, {
+    mutationCount,
+    generateSource: generateAotSource,
+    mutate: aotMutationStrategy,
+    compare: deepEqual,
+    variant: '5',
+    profile: 'aot'
+  });
 }
 
 if (import.meta.main) {
