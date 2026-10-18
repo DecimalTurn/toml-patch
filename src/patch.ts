@@ -1076,10 +1076,10 @@ function applyChanges(
   indentWidthExplicit = false,
   trailingCommaExplicit = true
 ): Document {
-  // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
-  // the dotted name for de-duplication, but carrying the path segments — a nested key like
-  // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
-  const emptiedAotKeys = new Map<string, string[]>();
+  // Track AOT paths whose entries were all removed so we can insert empty arrays. The full
+  // path keeps separate parent AOT entries distinct, while a nested key like [[a.b]] still
+  // carries enough information to be re-materialised as `a.b = []`.
+  const emptiedAotKeys = new Map<string, Path>();
 
   // Tables materialised in-place during this patch (R2 extension).  After
   // applyWrites, fix up their line position to remove spurious blank lines
@@ -2902,8 +2902,8 @@ function applyChanges(
           // "Emptied to []" and "deleted outright" both arrive here as a Remove of every
           // entry; re-materialising unconditionally put back a key the caller had deleted.
           if (tryFindByPath(updated, change.path)) {
-            const aotPath = change.path as string[];
-            emptiedAotKeys.set(aotPath.join('.'), aotPath);
+            const aotPath = change.path;
+            emptiedAotKeys.set(stableStringify(aotPath), aotPath);
           }
 
           // When the AOT entries were the sole children of an implicit parent
@@ -3616,11 +3616,10 @@ function applyChanges(
         // Track AOT keys whose entries may have been fully removed — again only when the
         // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
         if (isTableArray(node)) {
-          const aotKey = (node as TableArray).key.item.value;
           const aotPath = change.path.slice(0, -1);
           const stillExists = tryFindByPath(original, aotPath.concat(0));
           if (!stillExists && tryFindByPath(updated, aotPath)) {
-            emptiedAotKeys.set(aotKey.join('.'), aotKey);
+            emptiedAotKeys.set(stableStringify(aotPath), aotPath);
           }
         }
       }
@@ -4624,7 +4623,7 @@ function cleanupOrphanedComments(doc: Document): void {
  * Replaces emptied TableArrays with inline empty array key-values so that
  * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
  */
-function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, string[]>, format: TomlFormat): void {
+function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, Path>, format: TomlFormat): void {
   if (emptiedKeys.size === 0) return;
 
   for (const path of emptiedKeys.values()) {
@@ -4634,9 +4633,14 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // as an implicit table and collides with the surviving `[[""]]` header on
     // re-parse ("Implicit table already defined", fuzz seed 62163).
     if (path.length > 1) {
-      const parentEntry = tryFindByPath(doc, (path.slice(0, -1) as Path).concat([0]));
+      const parentPath = path.slice(0, -1) as Path;
+      const parentEntryPath = typeof parentPath[parentPath.length - 1] === 'number'
+        ? parentPath
+        : parentPath.concat([0]);
+      const parentEntry = tryFindByPath(doc, parentEntryPath);
       if (parentEntry && isTableArray(parentEntry)) {
         const lastSegment = path[path.length - 1];
+        if (typeof lastSegment !== 'string') continue;
         const emptyArrayDoc = parseJS({ [lastSegment]: [] }, format);
         const emptyKV = generateKeyValue([lastSegment], (emptyArrayDoc.items[0] as KeyValue).value);
         // The removal that emptied the array left pending line offsets on the
@@ -4662,7 +4666,8 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
         }
       }
       if (hostTable) {
-        const relativeKey = path.slice(hostTable.key.item.value.length);
+        const relativeKey = path.slice(hostTable.key.item.value.length)
+          .filter((segment): segment is string => typeof segment === 'string');
         const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
         const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
         applyWrites(doc);
@@ -4674,8 +4679,9 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
     // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
     // root key literally named `a.b` instead of `b` nested under `a`.
-    const emptyArrayDoc = parseJS({ [path[path.length - 1]]: [] }, format);
-    const emptyKV = generateKeyValue(path, (emptyArrayDoc.items[0] as KeyValue).value);
+  const keyPath = path.filter((segment): segment is string => typeof segment === 'string');
+  const emptyArrayDoc = parseJS({ [keyPath[keyPath.length - 1]]: [] }, format);
+  const emptyKV = generateKeyValue(keyPath, (emptyArrayDoc.items[0] as KeyValue).value);
     // The removal that emptied the array left pending line offsets on the
     // preceding siblings.  Inserting against their pre-offset locs and only
     // then resolving drags the new KV up past line 1 — a negative render
