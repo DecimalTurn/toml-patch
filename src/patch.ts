@@ -4666,8 +4666,8 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, Path>
         }
       }
       if (hostTable) {
-        const relativeKey = path.slice(hostTable.key.item.value.length)
-          .filter((segment): segment is string => typeof segment === 'string');
+        const stringPath = path.filter((segment): segment is string => typeof segment === 'string');
+        const relativeKey = stringPath.slice(hostTable.key.item.value.length);
         const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
         const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
         applyWrites(doc);
@@ -4679,9 +4679,9 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, Path>
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
     // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
     // root key literally named `a.b` instead of `b` nested under `a`.
-  const keyPath = path.filter((segment): segment is string => typeof segment === 'string');
-  const emptyArrayDoc = parseJS({ [keyPath[keyPath.length - 1]]: [] }, format);
-  const emptyKV = generateKeyValue(keyPath, (emptyArrayDoc.items[0] as KeyValue).value);
+    const keyPath = path.filter((segment): segment is string => typeof segment === 'string');
+    const emptyArrayDoc = parseJS({ [keyPath[keyPath.length - 1]]: [] }, format);
+    const emptyKV = generateKeyValue(keyPath, (emptyArrayDoc.items[0] as KeyValue).value);
     // The removal that emptied the array left pending line offsets on the
     // preceding siblings.  Inserting against their pre-offset locs and only
     // then resolving drags the new KV up past line 1 — a negative render

@@ -2309,6 +2309,34 @@ test('should empty a nested table array on the second parent entry without corru
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should restore an emptied nested table array relative to its explicit host table', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [group.meta]
+    name = "m0"
+    [[group.meta.route]]
+    id = "a"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; meta: { name: string; route: object[] } }[];
+  };
+  updated.group[0].meta.route = [];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [group.meta]
+    name = "m0"
+    route = []
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"
