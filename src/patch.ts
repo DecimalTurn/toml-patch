@@ -2887,15 +2887,18 @@ function applyChanges(
 
           // Remove remaining AOT entries.  If the first was converted in place
           // it no longer matches change.path, so the loop naturally skips it.
+          const cstPath = stripAotEntryIndices(original, change.path);
           let entry: TreeNode | undefined;
           while ((entry = nextAotEntry())) {
+            if (isTableArray(entry)) {
+              const ownedItems = findAotEntryScopeItems(original, entry)
+                .filter(item => isTable(item) || isTableArray(item))
+                .filter(item => keyStartsWith(itemKey(item), cstPath));
+              for (const ownedItem of ownedItems) {
+                removeMember(original, original, ownedItem);
+              }
+            }
             removeMember(original, original, entry);
-          }
-          // [table] sections extending the same prefix belong to the removed
-          // key too — deleting `""` must remove `["". "aV^16c`G"]` as well,
-          // or the re-parse revives the key (fuzz seed 3463).
-          for (const tableNode of findDocumentItemsByKeyPrefix(original, change.path).filter(isTable)) {
-            removeMember(original, original, tableNode);
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
@@ -2948,7 +2951,8 @@ function applyChanges(
           // `delete obj[""][0]["-vX`"]` has path `["", 0, "-vX`"]` but the
           // CST sub-table is keyed `["", "-vX`"]` (fuzz seed 1428499).
           const cstPath = stripAotEntryIndices(original, change.path);
-          const prefixNodes = findDocumentItemsByKeyPrefix(original, cstPath);
+          const owner = findAotEntryForPath(original, change.path);
+          const prefixNodes = findAotScopedDocumentItems(original, cstPath, owner);
           if (prefixNodes.length > 0) {
             const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
@@ -2960,7 +2964,7 @@ function applyChanges(
             // parent as an empty table so the key isn't dropped (seed 176).
             if (cstPath.length > 1 && rawUpdated !== undefined) {
               const cstParentPath = cstPath.slice(0, -1);
-              const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath);
+              const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
               if (remainingSiblings.length === 0) {
                 // `rawUpdated` is the JS object, so walk the ORIGINAL
                 // (indexed) path — not the index-stripped CST path.
@@ -4850,6 +4854,56 @@ function findDocumentItemsByKeyPrefix(
     }
   }
   return matchingNodes;
+}
+
+function itemKey(item: Block): string[] | undefined {
+  if (isKeyValue(item)) return item.key.value;
+  if (isTable(item) || isTableArray(item)) return item.key.item.value;
+  return undefined;
+}
+
+function keyStartsWith(key: string[] | undefined, prefix: Path): boolean {
+  return key !== undefined &&
+    prefix.every((segment, index) => typeof segment === 'string' && key[index] === segment);
+}
+
+function findAotEntryScopeItems(document: Document, entry: TableArray): Block[] {
+  const items = document.items as Block[];
+  const start = items.indexOf(entry);
+  if (start < 0) return [];
+
+  const entryKey = entry.key.item.value;
+  let end = items.length;
+  for (let index = start + 1; index < items.length; index++) {
+    const sibling = items[index];
+    if (!isTableArray(sibling)) continue;
+    const siblingKey = sibling.key.item.value;
+    if (siblingKey.length <= entryKey.length && arraysEqual(siblingKey, entryKey.slice(0, siblingKey.length))) {
+      end = index;
+      break;
+    }
+  }
+  return items.slice(start + 1, end);
+}
+
+function findAotEntryForPath(document: Document, path: Path): TableArray | undefined {
+  for (let index = path.length - 1; index >= 0; index--) {
+    if (typeof path[index] !== 'number') continue;
+    const candidate = tryFindByPath(document, path.slice(0, index + 1));
+    if (candidate && isTableArray(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function findAotScopedDocumentItems(
+  document: Document,
+  pathPrefix: Path,
+  owner: TableArray | undefined
+): Block[] {
+  const matchingNodes = findDocumentItemsByKeyPrefix(document, pathPrefix);
+  if (!owner) return matchingNodes;
+  const scopedItems = new Set(findAotEntryScopeItems(document, owner));
+  return matchingNodes.filter(item => scopedItems.has(item));
 }
 
 /**
