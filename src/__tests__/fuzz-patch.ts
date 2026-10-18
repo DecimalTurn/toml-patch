@@ -586,7 +586,7 @@ export interface FuzzOptions {
   dateFocus?: boolean;
 }
 
-function defaultGenerateSource({ seed }: Pick<FuzzContext, 'seed'>): GeneratedSource {
+export function generateDefaultSource({ seed }: Pick<FuzzContext, 'seed'>): GeneratedSource {
   const generated = randomToml({ seed });
   return {
     source: generated.toml,
@@ -681,7 +681,7 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
   };
 
   try {
-    const generated = (config.generateSource ?? defaultGenerateSource)({ seed, mutationCount });
+    const generated = (config.generateSource ?? generateDefaultSource)({ seed, mutationCount });
     const context: FuzzContext = {
       seed,
       mutationCount,
@@ -702,7 +702,7 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
     }
 
     const updated = deepClone(original) as any;
-    const format = config.generateFormat?.(context);
+    const format = (config.generateFormat ?? createFormatGenerator(false, false, false))(context);
     const formatDesc = describeFormat(format);
     const mutationRun = (config.mutate ?? defaultMutationStrategy)({ original, updated, context });
     if (mutationRun.descriptions.length === 0) {

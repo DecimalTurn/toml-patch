@@ -23,6 +23,7 @@ export function profileConfig(profile: FuzzProfile, mutationCount: number): Fuzz
       return {
         mutationCount,
         generateSource: generateAotSource,
+        generateFormat: () => undefined,
         mutate: aotMutationStrategy,
         compare: deepEqual,
         variant: '5',
@@ -42,6 +43,7 @@ export function profileConfig(profile: FuzzProfile, mutationCount: number): Fuzz
       return {
         mutationCount,
         generateSource: generateAotSource,
+        generateFormat: () => undefined,
         mutate: createDefaultMutationStrategy(),
         variant: '5',
         profile
