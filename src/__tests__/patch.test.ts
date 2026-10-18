@@ -2337,6 +2337,137 @@ test('should restore an emptied nested table array relative to its explicit host
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should remove a nested table array and its sub-tables from one parent entry while keeping the others', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+    [group.route.args]
+    x = 1
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "b"
+    [group.route.args]
+    y = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route?: object[] }[];
+  };
+  delete updated.group[1].route;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+    [group.route.args]
+    x = 1
+
+    [[group]]
+    id = "g1"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should remove an implicit intermediate sub-table from one table array entry without deleting it from other entries', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args?: { deep?: { k: string } } }[];
+  };
+  delete updated.route[1].args;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should restore an emptied nested table array under an implicit intermediate table inside a table array entry', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.meta.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.meta.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; meta: { route: object[] } }[];
+  };
+  updated.group[0].meta.route = [];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    meta.route = []
+
+    [[group]]
+    id = "g1"
+    [[group.meta.route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should remove all sibling dotted keys when deleting a dotted prefix inside a table array sub-table', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [group.sub]
+    a.b = 1
+    a.c = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; sub: { a?: { b: number; c: number } } }[];
+  };
+  delete updated.group[0].sub.a;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [group.sub]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"
