@@ -2888,6 +2888,7 @@ function applyChanges(
           // Remove remaining AOT entries.  If the first was converted in place
           // it no longer matches change.path, so the loop naturally skips it.
           const cstPath = stripAotEntryIndices(original, change.path);
+          const indexedOwner = findAotEntryForPath(original, change.path);
           let entry: TreeNode | undefined;
           while ((entry = nextAotEntry())) {
             if (isTableArray(entry)) {
@@ -2899,6 +2900,13 @@ function applyChanges(
               }
             }
             removeMember(original, original, entry);
+          }
+          // For an unindexed root-level removal, extending tables can precede
+          // the AOT entries and must still be removed with the shared prefix.
+          if (!indexedOwner) {
+            for (const tableNode of findDocumentItemsByKeyPrefix(original, cstPath).filter(isTable)) {
+              removeMember(original, original, tableNode);
+            }
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
@@ -3134,7 +3142,10 @@ function applyChanges(
             ? node.item as KeyValue
             : undefined;
         if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
-          const containerAbsLen = nodeAbsolutePath.length - removePrefixKv.key.value.length;
+          const stringNodePath = nodeAbsolutePath.filter(
+            (segment): segment is string => typeof segment === 'string'
+          );
+          const containerAbsLen = stringNodePath.length - removePrefixKv.key.value.length;
           const relativePrefix = change.path
             .filter((segment): segment is string => typeof segment === 'string')
             .slice(containerAbsLen) as Path;
