@@ -2162,7 +2162,7 @@ test('should remove one table array entry and keep the sub-tables of the others'
   }
 });
 
-test.fails('should not emit a duplicate table header when removing the only nested table array of a table array entry', () => {
+test('should not emit a duplicate table header when removing the only nested table array of a table array entry', () => {
   const existing = dedent`
     [[route]]
     [[route.step]]
@@ -2700,7 +2700,7 @@ test('should replace a sub-table with a scalar within the owning table array ent
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace an implicit sub-table with a scalar within the owning table array entry without deleting other entries\' sub-tables', () => {
+test('should replace an implicit sub-table with a scalar within the owning table array entry without deleting other entries\' sub-tables', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -2776,7 +2776,7 @@ test('should replace a deeper sub-table with a scalar within the owning table ar
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace a nested table array with a static array on one parent entry without corrupting other entries', () => {
+test('should replace a nested table array with a static array on one parent entry without corrupting other entries', () => {
   const existing = dedent`
     [[group]]
     id = "g0"
@@ -2803,7 +2803,7 @@ test.fails('should replace a nested table array with a static array on one paren
 
     [[group]]
     id = "g1"
-    route = ["b"]
+    route = [ "b" ]
   ` + '\n';
 
   expect(patched).toBe(expected);

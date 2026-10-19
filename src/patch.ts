@@ -2684,6 +2684,7 @@ function applyChanges(
           // (fuzz seed 6803): the path prefix can prefix-match an unrelated
           // earlier dotted key-value.
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+          const aotOwner = findAotEntryForPath(original, navPath);
 
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
@@ -2703,7 +2704,9 @@ function applyChanges(
             // re-define the key on re-parse and fail with "Cannot add to
             // static array" (fuzz seed 1285105).  Match them by key prefix,
             // not just exact key equality.
-            const siblingEntries = findDocumentItemsByKeyPrefix(original, existingAotKey)
+            const siblingEntries = (aotOwner
+              ? findAotScopedDocumentItems(original, existingAotKey, aotOwner)
+              : findDocumentItemsByKeyPrefix(original, existingAotKey))
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of siblingEntries) {
               removeMember(original, original, sibling);
@@ -2711,6 +2714,13 @@ function applyChanges(
           }
 
           if (parentKey.length > 0) {
+            if (aotOwner && arraysEqual(parentKey, aotOwner.key.item.value)) {
+              removeMember(original, tableParent, existing);
+              insert(original, aotOwner, freshKV, undefined);
+              commentEligibleNodes.add(freshKV);
+              return;
+            }
+
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
             // when `jsValue` is an object or an array of objects.  Emitting it
             // with only the last key segment under a `[parentKey]` header
@@ -2875,7 +2885,8 @@ function applyChanges(
               s !== first &&
               !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, stripAotEntryIndices(original, change.path)))
             );
-            if (otherSiblings.length === 0) {
+            if (otherSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
@@ -2952,7 +2963,8 @@ function applyChanges(
             const cstParentPath = stripAotEntryIndices(original, parentPath);
             const owner = findAotEntryForPath(original, change.path);
             const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
-            if (remainingSiblings.length === 0) {
+            if (remainingSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
@@ -3015,7 +3027,8 @@ function applyChanges(
             if (cstPath.length > 1 && rawUpdated !== undefined) {
               const cstParentPath = cstPath.slice(0, -1);
               const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
-              if (remainingSiblings.length === 0) {
+              if (remainingSiblings.length === 0 &&
+                  !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
                 // `rawUpdated` is the JS object, so walk the ORIGINAL
                 // (indexed) path — not the index-stripped CST path.
                 let value: any = rawUpdated;
@@ -4249,85 +4262,93 @@ function handleStructuralEdit(
   // (fuzz seed 6409).  Handle it inside the entry instead: drop the old
   // sub-entries and insert a fresh key-value for the changed segment.
   {
-    const aotIndexPos = change.path.findIndex(seg => typeof seg === 'number');
-    if (aotIndexPos > 0 && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
-      const entry = tryFindByPath(original, change.path.slice(0, aotIndexPos + 1));
-      if (entry && isTableArray(entry)) {
-        const entryKey = (entry as TableArray).key.item.value;
-        const changedKey = change.path.slice(aotIndexPos + 1) as string[];
-
-        // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
-        // (the previous object value's children), and any dotted-key rows
-        // inside the entry that start with the changed segment.
-        const toRemove = findDocumentItemsByKeyPrefix(original, entryKey.concat(changedKey));
-        for (const prefixNode of toRemove) {
-          removeMember(original, original, prefixNode);
-        }
-        const entryItems = (entry as TableArray).items as TreeNode[];
-        const inlineToRemove = entryItems.filter(item => {
-          const key = isKeyValue(item) ? item.key.value : undefined;
-          return key
-            && key.length > changedKey.length
-            && arraysEqual(key.slice(0, changedKey.length), changedKey);
-        });
-        for (const item of inlineToRemove) {
-          removeMember(original, entry, item);
-        }
-
-        // Rebuild the tail of the path as a fresh KV (or KVs) and insert
-        // into the entry.
-        let tail: any = jsValue;
-        for (let k = change.path.length - 1; k > aotIndexPos; k--) {
-          tail = { [change.path[k]]: tail };
-        }
-        const tailDoc = parseJS(tail, format);
-        const tailToml = toTOML(tailDoc.items, format);
-        const tailCst = Array.from(parseTOML(tailToml));
-
-        const upsertEntryKeyValue = (kv: KeyValue): void => {
-          const existingRow = (entry as TableArray).items.find(row =>
-            isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
-          );
-          if (existingRow) {
-            replace(original, entry as TableArray, existingRow, kv);
-          } else {
-            insert(original, entry, kv, undefined);
-          }
-        };
-
-        for (const item of tailCst) {
-          if (isKeyValue(item)) {
-            upsertEntryKeyValue(item);
-            continue;
-          }
-
-          // parseJS may materialize the replacement tail as a Table section
-          // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
-          // edit scoped to a specific AOT entry, flatten section rows back to
-          // dotted KVs relative to that entry (fuzz seed 1657445).
-          if (isTable(item)) {
-            const tableKey = (item as Table).key.item.value;
-            for (const row of (item as Table).items as TreeNode[]) {
-              if (!isKeyValue(row)) continue;
-
-              const oldRaw = row.key.raw;
-              const dotted = tableKey.concat(row.key.value);
-              row.key.value = dotted;
-              row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
-              const delta = row.key.raw.length - oldRaw.length;
-              row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
-              row.equals += delta;
-              shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
-              if (row.loc.end.line === row.loc.start.line) {
-                row.loc.end.column += delta;
-              }
-
-              upsertEntryKeyValue(row);
-            }
-          }
-        }
-        return;
+    let aotIndexPos = -1;
+    let entry: TableArray | undefined;
+    for (let index = change.path.length - 1; index > 0; index--) {
+      if (typeof change.path[index] !== 'number') continue;
+      const candidate = tryFindByPath(original, change.path.slice(0, index + 1));
+      if (candidate && isTableArray(candidate)) {
+        aotIndexPos = index;
+        entry = candidate;
+        break;
       }
+    }
+    if (aotIndexPos > 0 && entry && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
+      const aotEntry = entry;
+      const entryKey = aotEntry.key.item.value;
+      const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+
+      // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
+      // (the previous object value's children), and any dotted-key rows
+      // inside the entry that start with the changed segment.
+      const toRemove = findAotScopedDocumentItems(original, entryKey.concat(changedKey), aotEntry);
+      for (const prefixNode of toRemove) {
+        removeMember(original, original, prefixNode);
+      }
+      const entryItems = aotEntry.items as TreeNode[];
+      const inlineToRemove = entryItems.filter(item => {
+        const key = isKeyValue(item) ? item.key.value : undefined;
+        return key
+          && key.length > changedKey.length
+          && arraysEqual(key.slice(0, changedKey.length), changedKey);
+      });
+      for (const item of inlineToRemove) {
+        removeMember(original, aotEntry, item);
+      }
+
+      // Rebuild the tail of the path as a fresh KV (or KVs) and insert
+      // into the entry.
+      let tail: any = jsValue;
+      for (let k = change.path.length - 1; k > aotIndexPos; k--) {
+        tail = { [change.path[k]]: tail };
+      }
+      const tailDoc = parseJS(tail, format);
+      const tailToml = toTOML(tailDoc.items, format);
+      const tailCst = Array.from(parseTOML(tailToml));
+
+      const upsertEntryKeyValue = (kv: KeyValue): void => {
+        const existingRow = aotEntry.items.find(row =>
+          isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
+        );
+        if (existingRow) {
+          replace(original, aotEntry, existingRow, kv);
+        } else {
+          insert(original, aotEntry, kv, undefined);
+        }
+      };
+
+      for (const item of tailCst) {
+        if (isKeyValue(item)) {
+          upsertEntryKeyValue(item);
+          continue;
+        }
+
+        // parseJS may materialize the replacement tail as a Table section
+        // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
+        // edit scoped to a specific AOT entry, flatten section rows back to
+        // dotted KVs relative to that entry (fuzz seed 1657445).
+        if (isTable(item)) {
+          const tableKey = (item as Table).key.item.value;
+          for (const row of (item as Table).items as TreeNode[]) {
+            if (!isKeyValue(row)) continue;
+
+            const oldRaw = row.key.raw;
+            const dotted = tableKey.concat(row.key.value);
+            row.key.value = dotted;
+            row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
+            const delta = row.key.raw.length - oldRaw.length;
+            row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+            row.equals += delta;
+            shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+            if (row.loc.end.line === row.loc.start.line) {
+              row.loc.end.column += delta;
+            }
+
+            upsertEntryKeyValue(row);
+          }
+        }
+      }
+      return;
     }
   }
 
