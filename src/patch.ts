@@ -2846,9 +2846,14 @@ function applyChanges(
           let materialiseAotInPlace = false;
           if (change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
-            const allSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            const cstParentPath = stripAotEntryIndices(original, parentPath);
+            const owner = findAotEntryForPath(original, change.path);
+            const allSiblings = owner
+              ? findAotScopedDocumentItems(original, cstParentPath, owner)
+              : findDocumentItemsByKeyPrefix(original, cstParentPath);
             const otherSiblings = allSiblings.filter(s =>
-              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, change.path))
+              s !== first &&
+              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, stripAotEntryIndices(original, change.path)))
             );
             if (otherSiblings.length === 0) {
               let value: any = rawUpdated;
@@ -2871,7 +2876,7 @@ function applyChanges(
                 (aotKeyHolder as any).type = NodeType.TableKey;
                 // Rename the key in place (preserving original loc.start).
                 const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
-                aotKey.value = parentPath as string[];
+                aotKey.value = cstParentPath as string[];
                 aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value, format.escapeSequenceUpperCase);
                 aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
                 aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
@@ -3064,7 +3069,10 @@ function applyChanges(
           // sibling scan and in-place key rename must use the CST key, else
           // the index leaks into the header `["".0.fv]` (fuzz seed 1020868).
           const cstParentPath = (node as Table).key.item.value.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath)
+          const owner = findAotEntryForPath(original, change.path);
+          const remainingSiblings = (owner
+            ? findAotScopedDocumentItems(original, cstParentPath, owner)
+            : findDocumentItemsByKeyPrefix(original, cstParentPath))
             .filter(s => s !== node);
           if (remainingSiblings.length === 0) {
             let value: any = rawUpdated;
@@ -3266,6 +3274,22 @@ function applyChanges(
           }
           for (const sibling of extending) {
             removeMember(original, parent, sibling);
+          }
+        }
+
+        // A dotted key inside an AOT entry can prefix-match the removed path
+        // while deeper sub-tables for the same path remain as document-level
+        // siblings.  Remove those sections from the owning entry's scope too.
+        if (removePrefixKv && nodeAbsolutePath) {
+          const owner = isTableArray(parent) ? parent : findAotEntryForPath(original, change.path);
+          if (owner) {
+            const cstPrefix = stripAotEntryIndices(original, change.path);
+            const scopedSections = findAotScopedDocumentItems(original, cstPrefix, owner)
+              .filter(item => item !== node && (isTable(item) || isTableArray(item)))
+              .filter(item => keyStartsWith(itemKey(item), cstPrefix));
+            for (const section of scopedSections) {
+              removeMember(original, original, section);
+            }
           }
         }
 
