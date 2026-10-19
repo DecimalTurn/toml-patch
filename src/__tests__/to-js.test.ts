@@ -102,6 +102,57 @@ t = { a.b = 1, a.b.c = 2 }
 `;
 
 describe('validation', () => {
+  test('allows the same explicit sub-table path in separate table-array entries', () => {
+    const src = `
+      [[route]]
+      [route.args]
+      x = 1
+
+      [[route]]
+      args.y = 2
+    `;
+
+    expect(toJS(parseTOML(src))).toEqual({
+      route: [
+        { args: { x: 1 } },
+        { args: { y: 2 } }
+      ]
+    });
+  });
+
+  test('allows repeated explicit sub-table paths across nested table-array entries', () => {
+    const src = `
+      [[group]]
+      [[group.route]]
+      [group.route.args]
+      x = 1
+
+      [[group]]
+      [[group.route]]
+      [group.route.args]
+      y = 2
+    `;
+
+    expect(toJS(parseTOML(src))).toEqual({
+      group: [
+        { route: [{ args: { x: 1 } }] },
+        { route: [{ args: { y: 2 } }] }
+      ]
+    });
+  });
+
+  test('still rejects dotted keys that extend an explicit table outside table arrays', () => {
+    const src = `
+      [a.b.c]
+      value = 1
+
+      [a]
+      b.c.extra = 2
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Cannot extend explicit table a\.b\.c with dotted keys/);
+  });
+
   test("it shouldn't allow writing to the same key multiple times", () => {
     expect(() => toJS(parseTOML(multiple_keys))).toThrow(
       /Value already defined for a\.e/
