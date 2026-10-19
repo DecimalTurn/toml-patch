@@ -2555,11 +2555,17 @@ function applyChanges(
           // but a scalar replacement belongs in the owning entry's items. Keep
           // the replacement scoped to that entry instead of binding it to the
           // preceding AOT entry on re-parse.
-          if (aotOwner && arraysEqual(parentKey, aotOwner.key.item.value)) {
-            removeMember(original, tableParent, existing);
-            insert(original, aotOwner, freshKV, undefined);
-            commentEligibleNodes.add(freshKV);
-            return;
+          if (aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+            const scalarParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
+              ? aotOwner
+              : findAotScopedDocumentItems(original, parentKey, aotOwner)
+                .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
+            if (scalarParent) {
+              removeMember(original, tableParent, existing);
+              insert(original, scalarParent, freshKV, undefined);
+              commentEligibleNodes.add(freshKV);
+              return;
+            }
           }
 
           if (parentKey.length > 0) {
@@ -2943,27 +2949,44 @@ function applyChanges(
           if (!materialiseAotInPlace &&
               change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
-            const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            const cstParentPath = stripAotEntryIndices(original, parentPath);
+            const owner = findAotEntryForPath(original, change.path);
+            const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
             if (remainingSiblings.length === 0) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
-                const emptyTable = generateTable(parentPath as string[], format.escapeSequenceUpperCase);
+                const emptyTable = generateTable(cstParentPath as string[], format.escapeSequenceUpperCase);
                 materialisedTables.add(emptyTable);
                 // The removals above already spliced the document items, so a
                 // stale index (e.g. the removed entry was the last item) must
                 // be clamped — inserting past the end leaves the generated
                 // header at its (1,0) origin, corrupting line 1 (fuzz seed
                 // 11605).
-                const insertIdx = firstIndex >= 0
-                  ? Math.min(firstIndex, original.items.length)
-                  : original.items.length;
+                const ownerIndex = owner && keyStartsWith(cstParentPath as string[], owner.key.item.value)
+                  ? (original.items as TreeNode[]).indexOf(owner)
+                  : -1;
+                const insertIdx = ownerIndex >= 0
+                  ? ownerIndex + 1
+                  : firstIndex >= 0
+                    ? Math.min(firstIndex, original.items.length)
+                    : original.items.length;
                 // Same pending-offset hazard as the implicit-key branch
                 // below: insert after the removals are resolved so the new
                 // header can't absorb the document's enter offset (fuzz
                 // seed 1172).
                 applyWrites(original);
                 insert(original, original, emptyTable, insertIdx);
+                if (ownerIndex >= 0) {
+                  applyWrites(original);
+                  const owner = original.items[ownerIndex];
+                  const gap = emptyTable.loc.start.line - owner.loc.end.line - 1;
+                  if (gap > 0) {
+                    for (const item of (original.items as TreeNode[]).slice(ownerIndex + 1)) {
+                      shiftNode(item, { lines: -gap, columns: 0 });
+                    }
+                  }
+                }
               }
             }
           }
@@ -3088,7 +3111,8 @@ function applyChanges(
             ? findAotScopedDocumentItems(original, cstParentPath, owner)
             : findDocumentItemsByKeyPrefix(original, cstParentPath))
             .filter(s => s !== node);
-          if (remainingSiblings.length === 0) {
+          if (remainingSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
