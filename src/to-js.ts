@@ -116,16 +116,17 @@ export default function toJS(
 ): any {
   const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   const result = blank();
-  const tables = new Map<string, object | undefined>();
+  const tableScopes: Array<{ key: string[]; explicitTables: Set<string> }> = [
+    { key: [], explicitTables: new Set() }
+  ];
   const table_arrays: Set<string> = new Set();
   const defined: Set<string> = new Set();
   const implicit_tables: Set<string> = new Set();
   const inline_tables: Set<string> = new Set();
-  const aotScopes: Array<{ key: string[]; entry: object }> = [];
   let active: any = result;
   let active_path: string[] = [];
 
-  const state = { tables, table_arrays, defined, implicit_tables, inline_tables };
+  const state = { tableScopes, table_arrays, defined, implicit_tables, inline_tables };
 
   // Specialized inline walk — only visits Table, TableArray, and KeyValue.
   // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
@@ -159,18 +160,17 @@ export default function toJS(
 
   function handleTable(node: Table) {
     const key = node.key.item.value;
-    retainAotScopes(key);
-    const aotOwner = aotScopes[aotScopes.length - 1]?.entry;
+    retainTableScopes(key);
     try {
-      validateKey(result, [], key, node.type, state, aotOwner);
+      validateKey(result, [], key, node.type, state);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
     }
 
-    const joined_key = encodeKey(key);
-    tables.set(joined_key, aotOwner);
-    defined.add(joined_key);
+    const encodedKey = encodeKey(key);
+    tableScopes[tableScopes.length - 1].explicitTables.add(encodedKey);
+    defined.add(encodedKey);
 
     active = ensureTable(result, key);
     active_path = key;
@@ -178,11 +178,10 @@ export default function toJS(
 
   function handleTableArray(node: TableArray) {
     const key = node.key.item.value;
-    retainAotScopes(key);
-    const aotOwner = aotScopes[aotScopes.length - 1]?.entry;
+    retainTableScopes(key);
 
     try {
-      validateKey(result, [], key, node.type, state, aotOwner);
+      validateKey(result, [], key, node.type, state);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
@@ -194,20 +193,23 @@ export default function toJS(
 
     active = ensureTableArray(result, key);
     active_path = key;
-    aotScopes.push({ key, entry: active });
+    tableScopes.push({ key, explicitTables: new Set() });
   }
 
-  function retainAotScopes(key: string[]) {
-    const parents = aotScopes.filter(scope =>
-      scope.key.length < key.length && scope.key.every((segment, index) => key[index] === segment)
-    );
-    aotScopes.splice(0, aotScopes.length, ...parents);
+  function retainTableScopes(key: string[]) {
+    while (tableScopes.length > 1) {
+      const scopeKey = tableScopes[tableScopes.length - 1].key;
+      const isDescendant = scopeKey.length < key.length
+        && scopeKey.every((segment, index) => key[index] === segment);
+      if (isDescendant) break;
+      tableScopes.pop();
+    }
   }
 
   function handleKeyValue(node: KeyValue) {
     const key = node.key.value;
     try {
-      validateKey(active, active_path, key, node.type, state, aotScopes[aotScopes.length - 1]?.entry);
+      validateKey(active, active_path, key, node.type, state);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
@@ -347,13 +349,12 @@ function validateKey(
   key: string[],
   type: NodeType.Table | NodeType.TableArray | NodeType.KeyValue,
   state: {
-    tables: Map<string, object | undefined>;
+    tableScopes: Array<{ key: string[]; explicitTables: Set<string> }>;
     table_arrays: Set<string>;
     defined: Set<string>;
     implicit_tables: Set<string>;
     inline_tables: Set<string>;
-  },
-  aotOwner?: object
+  }
 ) {
   // Pre-compute candidate key strings incrementally to avoid repeated
   // prefix.concat(key.slice(0, i)) + join allocations.  Two representations
@@ -436,7 +437,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.tables.has(encoded[i - 1]) && state.tables.get(encoded[i - 1]) === aotOwner) {
+      if (state.tableScopes[state.tableScopes.length - 1].explicitTables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }
