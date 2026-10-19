@@ -2530,6 +2530,7 @@ function applyChanges(
           // value instead of swapping the table (fuzz seed 6803).  Prefer the
           // node's actual structural container.
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+          const aotOwner = findAotEntryForPath(original, change.path);
 
           // The table's key can be a strict prefix of OTHER document sections
           // (e.g. `[""]` collapsing to a scalar while `["".hv8lx]` is also a
@@ -2537,7 +2538,9 @@ function applyChanges(
           // re-define the key on re-parse and fail with "Value already defined"
           // (fuzz seed 22772).  Remove them before the table becomes a scalar.
           if (isDocument(tableParent)) {
-            const sectionedSiblings = findDocumentItemsByKeyPrefix(original, existingTableKey)
+            const sectionedSiblings = (aotOwner
+              ? findAotScopedDocumentItems(original, existingTableKey, aotOwner)
+              : findDocumentItemsByKeyPrefix(original, existingTableKey))
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of sectionedSiblings) {
               removeMember(original, tableParent, sibling);
@@ -2547,6 +2550,17 @@ function applyChanges(
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
+
+          // Sub-tables of a table-array entry are document siblings in the CST,
+          // but a scalar replacement belongs in the owning entry's items. Keep
+          // the replacement scoped to that entry instead of binding it to the
+          // preceding AOT entry on re-parse.
+          if (aotOwner && arraysEqual(parentKey, aotOwner.key.item.value)) {
+            removeMember(original, tableParent, existing);
+            insert(original, aotOwner, freshKV, undefined);
+            commentEligibleNodes.add(freshKV);
+            return;
+          }
 
           if (parentKey.length > 0) {
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
