@@ -1726,6 +1726,13 @@ function applyChanges(
             let lastSubTable = index - 1;
             for (let i = index; i < document.items.length; i++) {
               const item = document.items[i];
+              if (isTableArray(item)) {
+                const itemKey = (item as TableArray).key.item.value;
+                if (itemKey.length < aotKey.length
+                    && arraysEqual(aotKey.slice(0, itemKey.length), itemKey)) {
+                  break;
+                }
+              }
               const key = isTable(item) || isTableArray(item)
                 ? (item as Table | TableArray).key.item.value
                 : undefined;
@@ -2714,11 +2721,17 @@ function applyChanges(
           }
 
           if (parentKey.length > 0) {
-            if (aotOwner && arraysEqual(parentKey, aotOwner.key.item.value)) {
-              removeMember(original, tableParent, existing);
-              insert(original, aotOwner, freshKV, undefined);
-              commentEligibleNodes.add(freshKV);
-              return;
+            if (aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+              const replacementParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
+                ? aotOwner
+                : findAotScopedDocumentItems(original, parentKey, aotOwner)
+                  .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
+              if (replacementParent) {
+                removeMember(original, tableParent, existing);
+                insert(original, replacementParent, freshKV, undefined);
+                commentEligibleNodes.add(freshKV);
+                return;
+              }
             }
 
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
@@ -3581,9 +3594,10 @@ function applyChanges(
               const isAotEntry = isTableArray(container);
               let docSiblings: TreeNode[] = [];
               if (isAotEntry && remaining.length === 0) {
-                docSiblings = findDocumentItemsByKeyPrefix(
+                docSiblings = findAotScopedDocumentItems(
                   original,
-                  (container as TableArray).key.item.value.concat(relativePrefix)
+                  (container as TableArray).key.item.value.concat(relativePrefix),
+                  container as TableArray
                 );
               }
               // When the removed dotted key sits directly inside an explicit
@@ -4329,6 +4343,24 @@ function handleStructuralEdit(
         // dotted KVs relative to that entry (fuzz seed 1657445).
         if (isTable(item)) {
           const tableKey = (item as Table).key.item.value;
+          const fullTableKey = entryKey.concat(tableKey);
+          const explicitParent = findAotScopedDocumentItems(original, fullTableKey, aotEntry)
+            .find(candidate => isTable(candidate)
+              && arraysEqual((candidate as Table).key.item.value, fullTableKey)) as Table | undefined;
+          if (explicitParent) {
+            for (const row of (item as Table).items as TreeNode[]) {
+              if (!isKeyValue(row)) continue;
+              const existingRow = explicitParent.items.find(candidate =>
+                isKeyValue(candidate) && arraysEqual(candidate.key.value, row.key.value)
+              );
+              if (existingRow) {
+                replace(original, explicitParent, existingRow, row);
+              } else {
+                insert(original, explicitParent, row, undefined);
+              }
+            }
+            continue;
+          }
           for (const row of (item as Table).items as TreeNode[]) {
             if (!isKeyValue(row)) continue;
 

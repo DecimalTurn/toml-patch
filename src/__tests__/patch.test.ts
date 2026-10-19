@@ -2191,7 +2191,7 @@ test('should not emit a duplicate table header when removing the only nested tab
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace a nested table array under a sub-table with a static array on one parent entry', () => {
+test('should replace a nested table array under a sub-table with a static array on one parent entry', () => {
   const existing = dedent`
     [[group]]
     id = "g0"
@@ -2239,6 +2239,7 @@ test('should remove a nested table array entry and keep the next parent entry\'s
     id = "g0"
     [[group.route]]
     id = "a"
+
     [[group.route]]
     id = "b"
 
@@ -2568,7 +2569,7 @@ test('should remove all sibling dotted keys when deleting a dotted prefix inside
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should materialise an emptied dotted-key sub-table on one table array entry when another entry has a sub-table section', () => {
+test('should materialise an emptied dotted-key sub-table on one table array entry when another entry has a sub-table section', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -2594,6 +2595,7 @@ test.fails('should materialise an emptied dotted-key sub-table on one table arra
 
     [[route]]
     id = "b"
+
     [route.args]
   ` + '\n';
 
@@ -2851,7 +2853,7 @@ test('should replace a deeper sub-table with a scalar within the owning table ar
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace an implicit deeper sub-table with a scalar inside an explicit parent sub-table of a table array entry', () => {
+test('should replace an implicit deeper sub-table with a scalar inside an explicit parent sub-table of a table array entry', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -2927,7 +2929,7 @@ test('should replace a nested table array with a static array on one parent entr
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should append a nested table array entry before later parent entries with sub-tables', () => {
+test('should append a nested table array entry before later parent entries with sub-tables', () => {
   const existing = dedent`
     [[group]]
     id = "g0"
@@ -2951,6 +2953,7 @@ test.fails('should append a nested table array entry before later parent entries
     id = "g0"
     [[group.route]]
     id = "a"
+
     [[group.route]]
     id = "b"
 
