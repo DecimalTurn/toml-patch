@@ -2468,6 +2468,144 @@ test('should remove all sibling dotted keys when deleting a dotted prefix inside
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should materialise an emptied parent sub-table on one table array entry even when other entries still have deeper sub-tables', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { deep?: { k: string } } }[];
+  };
+  delete updated.route[1].args.deep;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should materialise an emptied implicit parent table without leaking the entry index when deleting a nested table array', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.meta.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.meta.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; meta: { route?: object[] } }[];
+  };
+  delete updated.group[1].meta.route;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.meta.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [group.meta]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should remove both dotted keys and deeper sub-tables when deleting a sub-table from one table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    args.x = 1
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    args.x = 2
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args?: { x: number; deep: { k: string } } }[];
+  };
+  delete updated.route[0].args;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+
+    [[route]]
+    id = "b"
+    args.x = 2
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace a sub-table with a scalar within the owning table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    value = "a"
+
+    [[route]]
+    id = "b"
+    [route.args]
+    value = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { value: string } | string }[];
+  };
+  updated.route[1].args = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    value = "a"
+
+    [[route]]
+    id = "b"
+    args = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove leading KV and preserve table array', () => {
   const existing = dedent`
     title = "Project"
