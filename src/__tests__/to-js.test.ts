@@ -141,6 +141,61 @@ describe('validation', () => {
     });
   });
 
+  test('allows repeated explicit paths in sibling nested table-array entries', () => {
+    const src = `
+      [[group]]
+      [[group.route]]
+      [group.route.args]
+      x = 1
+
+      [[group.route]]
+      [group.route.args]
+      y = 2
+    `;
+
+    expect(toJS(parseTOML(src))).toEqual({
+      group: [{
+        route: [
+          { args: { x: 1 } },
+          { args: { y: 2 } }
+        ]
+      }]
+    });
+  });
+
+  test('allows repeated explicit paths across three AOT levels after an unrelated AOT', () => {
+    const src = `
+      [[tenant]]
+      id = "t0"
+      [[tenant.group]]
+      id = "g0"
+      [[tenant.group.route]]
+      id = "r0"
+      [tenant.group.route.args]
+      value = "first"
+
+      [[audit]]
+      event = "checkpoint"
+
+      [[tenant]]
+      id = "t1"
+      [[tenant.group]]
+      id = "g1"
+      [[tenant.group.route]]
+      id = "r1"
+      [tenant.group.route.args]
+      value = "second"
+    `;
+
+    expect(toJS(parseTOML(src))).toEqual({
+      tenant: [
+        { id: 't0', group: [{ id: 'g0', route: [{ id: 'r0', args: { value: 'first' } }] }] },
+        { id: 't1', group: [{ id: 'g1', route: [{ id: 'r1', args: { value: 'second' } }] }] }
+      ],
+      audit: [{ event: 'checkpoint' }]
+    });
+  });
+
   test('still rejects dotted keys that extend an explicit table outside table arrays', () => {
     const src = `
       [a.b.c]
@@ -151,6 +206,23 @@ describe('validation', () => {
     `;
 
     expect(() => toJS(parseTOML(src))).toThrow(/Cannot extend explicit table a\.b\.c with dotted keys/);
+  });
+
+  test.fails('rejects extending an explicit sub-table after an unrelated table header', () => {
+    const src = `
+      [[group]]
+      [[group.route]]
+      [group.route.args.deep]
+      value = 1
+
+      [[other]]
+      value = 2
+
+      [group.route.args]
+      deep.extra = 3
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Cannot extend explicit table group\.route\.args\.deep with dotted keys/);
   });
 
   test("it shouldn't allow writing to the same key multiple times", () => {
