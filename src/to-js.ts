@@ -116,8 +116,7 @@ export default function toJS(
 ): any {
   const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   const result = blank();
-  const tables: Set<string> = new Set();
-  const tableScopes = new Map<string, object | undefined>();
+  const tables = new Map<string, object | undefined>();
   const table_arrays: Set<string> = new Set();
   const defined: Set<string> = new Set();
   const implicit_tables: Set<string> = new Set();
@@ -126,7 +125,7 @@ export default function toJS(
   let active: any = result;
   let active_path: string[] = [];
 
-  const state = { tables, tableScopes, table_arrays, defined, implicit_tables, inline_tables };
+  const state = { tables, table_arrays, defined, implicit_tables, inline_tables };
 
   // Specialized inline walk — only visits Table, TableArray, and KeyValue.
   // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
@@ -170,8 +169,7 @@ export default function toJS(
     }
 
     const joined_key = encodeKey(key);
-    tables.add(joined_key);
-    tableScopes.set(joined_key, aotOwner);
+    tables.set(joined_key, aotOwner);
     defined.add(joined_key);
 
     active = ensureTable(result, key);
@@ -349,8 +347,7 @@ function validateKey(
   key: string[],
   type: NodeType.Table | NodeType.TableArray | NodeType.KeyValue,
   state: {
-    tables: Set<string>;
-    tableScopes: Map<string, object | undefined>;
+    tables: Map<string, object | undefined>;
     table_arrays: Set<string>;
     defined: Set<string>;
     implicit_tables: Set<string>;
@@ -439,7 +436,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.tables.has(encoded[i - 1]) && state.tableScopes.get(encoded[i - 1]) === aotOwner) {
+      if (state.tables.has(encoded[i - 1]) && state.tables.get(encoded[i - 1]) === aotOwner) {
         throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }
