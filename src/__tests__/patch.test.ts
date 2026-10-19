@@ -2191,6 +2191,48 @@ test('should not emit a duplicate table header when removing the only nested tab
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should replace a nested table array under a sub-table with a static array on one parent entry', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [group.meta]
+    name = "m0"
+    [[group.meta.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [group.meta]
+    name = "m1"
+    [[group.meta.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; meta: { name: string; route: { id: string }[] | string[] } }[];
+  };
+  updated.group[1].meta.route = ['b'];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [group.meta]
+    name = "m0"
+    [[group.meta.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [group.meta]
+    name = "m1"
+    route = [ "b" ]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove a nested table array entry and keep the next parent entry\'s sub-tables', () => {
   const existing = dedent`
     [[group]]
@@ -2526,6 +2568,39 @@ test('should remove all sibling dotted keys when deleting a dotted prefix inside
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should materialise an emptied dotted-key sub-table on one table array entry when another entry has a sub-table section', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    args.y = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { x?: number; y?: number } }[];
+  };
+  delete updated.route[1].args.y;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [route.args]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should materialise an emptied parent sub-table on one table array entry even when other entries still have deeper sub-tables', () => {
   const existing = dedent`
     [[route]]
@@ -2776,6 +2851,48 @@ test('should replace a deeper sub-table with a scalar within the owning table ar
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should replace an implicit deeper sub-table with a scalar inside an explicit parent sub-table of a table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+    [route.args.deep.leaf]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+    [route.args.deep.leaf]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { x?: number; y?: number; deep: { leaf: { k: string } } | string } }[];
+  };
+  updated.route[1].args.deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+    [route.args.deep.leaf]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+    deep = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should replace a nested table array with a static array on one parent entry without corrupting other entries', () => {
   const existing = dedent`
     [[group]]
@@ -2804,6 +2921,43 @@ test('should replace a nested table array with a static array on one parent entr
     [[group]]
     id = "g1"
     route = [ "b" ]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test.fails('should append a nested table array entry before later parent entries with sub-tables', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [group.route.args]
+    x = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route?: { id: string }[]; }[];
+  };
+  updated.group[0].route!.push({ id: 'b' });
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+    [[group.route]]
+    id = "b"
+
+    [[group]]
+    id = "g1"
+    [group.route.args]
+    x = 1
   ` + '\n';
 
   expect(patched).toBe(expected);
