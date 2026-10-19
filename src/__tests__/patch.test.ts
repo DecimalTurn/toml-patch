@@ -2162,6 +2162,35 @@ test('should remove one table array entry and keep the sub-tables of the others'
   }
 });
 
+test.fails('should not emit a duplicate table header when removing the only nested table array of a table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    [[route.step]]
+    id = "a"
+
+    [[route]]
+    [[route.step]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { step?: { id: string }[] }[];
+  };
+  delete updated.route[1].step;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    [[route.step]]
+    id = "a"
+
+    [[route]]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove a nested table array entry and keep the next parent entry\'s sub-tables', () => {
   const existing = dedent`
     [[group]]
@@ -2671,6 +2700,40 @@ test('should replace a sub-table with a scalar within the owning table array ent
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should replace an implicit sub-table with a scalar within the owning table array entry without deleting other entries\' sub-tables', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { deep: { k: string } } | string }[];
+  };
+  updated.route[1].args = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    args = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should replace a deeper sub-table with a scalar within the owning table array entry', () => {
   const existing = dedent`
     [[route]]
@@ -2707,6 +2770,40 @@ test('should replace a deeper sub-table with a scalar within the owning table ar
     [route.args]
     y = 2
     deep = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test.fails('should replace a nested table array with a static array on one parent entry without corrupting other entries', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route: { id: string }[] | string[] }[];
+  };
+  updated.group[1].route = ['b'];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+
+    [[group]]
+    id = "g1"
+    route = ["b"]
   ` + '\n';
 
   expect(patched).toBe(expected);
