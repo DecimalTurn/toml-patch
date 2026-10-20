@@ -218,7 +218,7 @@ function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: 
  * `[[x]]` header). This function promotes those trailing comments to Document-level
  * siblings so that resolveGroups can assign them to the correct entry.
  */
-function normalizeAotEntryComments(doc: Document): void {
+function normalizeAotEntryComments(doc: Document, ancestorBoundariesOnly = false): void {
   const items = doc.items as TreeNode[];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -241,7 +241,9 @@ function normalizeAotEntryComments(doc: Document): void {
       if (nextItem && isTableArray(nextItem)) {
         const thisKey = (item as Table | TableArray).key.item.value;
         const nextKey = (nextItem as TableArray).key.item.value;
-        if (arraysEqual(thisKey, nextKey.slice(0, thisKey.length))) {
+        const isDescendantBoundary = arraysEqual(thisKey, nextKey.slice(0, thisKey.length));
+        const isAncestorBoundary = arraysEqual(nextKey, thisKey.slice(0, nextKey.length));
+        if (ancestorBoundariesOnly ? isAncestorBoundary : isDescendantBoundary) {
           // Promote trailing comments to Document level
           const comments = containerItems.splice(commentStart);
           const nextIdx = items.indexOf(nextItem);
@@ -1816,6 +1818,10 @@ function applyChanges(
         : undefined;
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+        if (is_table_array && !isInteger(last(parent_path))) {
+          normalizeAotEntryComments(original, true);
+        }
+
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = trailingCommaForAddedItem(
