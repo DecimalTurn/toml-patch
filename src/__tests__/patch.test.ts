@@ -3028,7 +3028,7 @@ test('should replace an implicit deeper sub-table with a scalar inside an explic
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace an implicit sub-table with a scalar inside a two-level explicit parent sub-table of a table array entry', () => {
+test('should replace an implicit sub-table with a scalar inside a two-level explicit parent sub-table of a table array entry', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -3107,7 +3107,7 @@ test('should replace a nested table array with a static array on one parent entr
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should replace a sub-table with a nested table array within the owning table array entry', () => {
+test('should replace a sub-table with a nested table array within the owning table array entry', () => {
   const existing = dedent`
     [[route]]
     id = "a"

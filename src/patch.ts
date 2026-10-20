@@ -2568,7 +2568,7 @@ function applyChanges(
           // but a scalar replacement belongs in the owning entry's items. Keep
           // the replacement scoped to that entry instead of binding it to the
           // preceding AOT entry on re-parse.
-          if (aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+          if (isKeyValue(freshKV) && aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
             const scalarParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
               ? aotOwner
               : findAotScopedDocumentItems(original, parentKey, aotOwner)
@@ -2727,7 +2727,7 @@ function applyChanges(
           }
 
           if (parentKey.length > 0) {
-            if (aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+            if (isKeyValue(freshKV) && aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
               const replacementParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
                 ? aotOwner
                 : findAotScopedDocumentItems(original, parentKey, aotOwner)
@@ -4314,6 +4314,7 @@ function handleStructuralEdit(
       const aotEntry = entry;
       const entryKey = aotEntry.key.item.value;
       const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+      const fullChangedKey = entryKey.concat(changedKey);
 
       // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
       // (the previous object value's children), and any dotted-key rows
@@ -4331,6 +4332,47 @@ function handleStructuralEdit(
       });
       for (const item of inlineToRemove) {
         removeMember(original, aotEntry, item);
+      }
+
+      if (changedKey.length > 1) {
+        let explicitParent: Table | undefined;
+        for (let keyLength = fullChangedKey.length - 1; keyLength > entryKey.length; keyLength--) {
+          const parentKey = fullChangedKey.slice(0, keyLength);
+          explicitParent = findAotScopedDocumentItems(original, parentKey, aotEntry)
+            .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
+          if (explicitParent) break;
+        }
+
+        if (explicitParent) {
+          const relativeKey = fullChangedKey.slice(explicitParent.key.item.value.length);
+          if (relativeKey.length === 1) {
+            const replacementDoc = parseJS({ [relativeKey[0]]: jsValue }, format);
+            const replacementToml = toTOML(replacementDoc.items, format);
+            const replacementItems = Array.from(parseTOML(replacementToml));
+            const replacementRow = replacementItems.length === 1 && isKeyValue(replacementItems[0])
+              ? replacementItems[0]
+              : undefined;
+
+            if (replacementRow) {
+              const oldRows = (explicitParent.items as TreeNode[]).filter((item): item is KeyValue =>
+                isKeyValue(item)
+                && item.key.value.length >= relativeKey.length
+                && arraysEqual(item.key.value.slice(0, relativeKey.length), relativeKey)
+              );
+              const exactRow = oldRows.find(item => arraysEqual(item.key.value, relativeKey));
+              for (const oldRow of oldRows) {
+                if (oldRow !== exactRow) removeMember(original, explicitParent, oldRow);
+              }
+              if (exactRow) {
+                replace(original, explicitParent, exactRow, replacementRow);
+              } else {
+                insert(original, explicitParent, replacementRow, undefined);
+              }
+              commentEligibleNodes.add(replacementRow);
+              return;
+            }
+          }
+        }
       }
 
       // Rebuild the tail of the path as a fresh KV (or KVs) and insert
@@ -4401,6 +4443,27 @@ function handleStructuralEdit(
 
             upsertEntryKeyValue(row);
           }
+        }
+
+        if (isTableArray(item)) {
+          const section = item as TableArray;
+          const keyNode = section.key.item;
+          const oldRaw = keyNode.raw;
+          const dotted = entryKey.concat(keyNode.value);
+          keyNode.value = dotted;
+          keyNode.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
+          const delta = keyNode.raw.length - oldRaw.length;
+          keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
+          if (section.key.loc.end.line === section.key.loc.start.line) {
+            section.key.loc.end.column += delta;
+          }
+
+          const scope = findAotEntryScopeItems(original, aotEntry);
+          const lastScopeItem = scope[scope.length - 1];
+          const ownerIndex = original.items.indexOf(aotEntry);
+          const insertIndex = lastScopeItem ? original.items.indexOf(lastScopeItem) + 1 : ownerIndex + 1;
+          insert(original, original, section, insertIndex);
+          commentEligibleNodes.add(section);
         }
       }
       return;
