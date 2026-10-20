@@ -160,7 +160,6 @@ export default function toJS(
 
   function handleTable(node: Table) {
     const key = node.key.item.value;
-    retainTableScopes(key);
     try {
       validateKey(result, [], key, node.type, state);
     } catch (err) {
@@ -169,7 +168,7 @@ export default function toJS(
     }
 
     const encodedKey = encodeKey(key);
-    tableScopes[tableScopes.length - 1].explicitTables.add(encodedKey);
+  tableScopeForPath(key).explicitTables.add(encodedKey);
     defined.add(encodedKey);
 
     active = ensureTable(result, key);
@@ -178,7 +177,6 @@ export default function toJS(
 
   function handleTableArray(node: TableArray) {
     const key = node.key.item.value;
-    retainTableScopes(key);
 
     try {
       validateKey(result, [], key, node.type, state);
@@ -193,23 +191,30 @@ export default function toJS(
 
     active = ensureTableArray(result, key);
     active_path = key;
+    for (let index = tableScopes.length - 1; index > 0; index--) {
+      if (isPathPrefix(key, tableScopes[index].key)) {
+        tableScopes.splice(index, 1);
+      }
+    }
     tableScopes.push({ key, explicitTables: new Set() });
   }
 
-  function retainTableScopes(key: string[]) {
-    while (tableScopes.length > 1) {
-      const scopeKey = tableScopes[tableScopes.length - 1].key;
-      const isDescendant = scopeKey.length < key.length
-        && scopeKey.every((segment, index) => key[index] === segment);
-      if (isDescendant) break;
-      tableScopes.pop();
+  function tableScopeForPath(key: string[]) {
+    for (let index = tableScopes.length - 1; index > 0; index--) {
+      if (isPathPrefix(tableScopes[index].key, key)) return tableScopes[index];
     }
+    return tableScopes[0];
+  }
+
+  function isPathPrefix(prefix: string[], key: string[]) {
+    return prefix.length <= key.length
+      && prefix.every((segment, index) => key[index] === segment);
   }
 
   function handleKeyValue(node: KeyValue) {
     const key = node.key.value;
     try {
-      validateKey(active, active_path, key, node.type, state);
+      validateKey(active, active_path, key, node.type, state, tableScopeForPath(active_path.concat(key)));
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
@@ -354,7 +359,8 @@ function validateKey(
     defined: Set<string>;
     implicit_tables: Set<string>;
     inline_tables: Set<string>;
-  }
+  },
+  keyTableScope?: { key: string[]; explicitTables: Set<string> }
 ) {
   // Pre-compute candidate key strings incrementally to avoid repeated
   // prefix.concat(key.slice(0, i)) + join allocations.  Two representations
@@ -437,7 +443,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.tableScopes[state.tableScopes.length - 1].explicitTables.has(encoded[i - 1])) {
+      if (keyTableScope?.explicitTables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }

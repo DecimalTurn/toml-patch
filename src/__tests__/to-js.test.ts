@@ -208,7 +208,7 @@ describe('validation', () => {
     expect(() => toJS(parseTOML(src))).toThrow(/Cannot extend explicit table a\.b\.c with dotted keys/);
   });
 
-  test.fails('rejects extending an explicit sub-table after an unrelated table header', () => {
+  test('rejects extending an explicit sub-table after an unrelated table header', () => {
     const src = `
       [[group]]
       [[group.route]]
