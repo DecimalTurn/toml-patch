@@ -2233,6 +2233,58 @@ test('should replace a nested table array under a sub-table with a static array 
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should scope a nested AOT replacement to the nearest owner across three AOT levels', () => {
+  const existing = dedent`
+    [[org]]
+    id = "o0"
+    [[org.team]]
+    id = "t0"
+    [[org.team.route]]
+    id = "r0"
+
+    [[org.team]]
+    id = "t1"
+    [[org.team.route]]
+    id = "r1"
+
+    [[org]]
+    id = "o1"
+    [[org.team]]
+    id = "t2"
+    [[org.team.route]]
+    id = "r2"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    org: { id: string; team: { id: string; route: { id: string }[] | string[] }[] }[];
+  };
+  updated.org[0].team[1].route = ['r1'];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[org]]
+    id = "o0"
+    [[org.team]]
+    id = "t0"
+    [[org.team.route]]
+    id = "r0"
+
+    [[org.team]]
+    id = "t1"
+    route = [ "r1" ]
+
+    [[org]]
+    id = "o1"
+    [[org.team]]
+    id = "t2"
+    [[org.team.route]]
+    id = "r2"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should remove a nested table array entry and keep the next parent entry\'s sub-tables', () => {
   const existing = dedent`
     [[group]]
@@ -2262,6 +2314,57 @@ test('should remove a nested table array entry and keep the next parent entry\'s
     id = "g1"
     [group.route.args]
     x = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should remove one nested AOT entry without removing an interleaved sibling AOT', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "a"
+    [group.route.args]
+    x = 1
+
+    [[group.audit]]
+    id = "audit0"
+
+    [[group.route]]
+    id = "b"
+    [group.route.args]
+    x = 2
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "c"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route: { id: string; args?: { x: number } }[]; audit?: { id: string }[] }[];
+  };
+  updated.group[0].route.splice(0, 1);
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+
+    [[group.audit]]
+    id = "audit0"
+
+    [[group.route]]
+    id = "b"
+    [group.route.args]
+    x = 2
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "c"
   ` + '\n';
 
   expect(patched).toBe(expected);
@@ -2961,6 +3064,51 @@ test('should append a nested table array entry before later parent entries with 
     id = "g1"
     [group.route.args]
     x = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should append multiple nested AOT entries without displacing comments on adjacent entries', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    # existing route
+    [[group.route]]
+    id = "a"
+
+    # following parent
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: { id: string; route: { id: string }[] }[];
+  };
+  updated.group[0].route.push({ id: 'c' }, { id: 'd' });
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    # existing route
+    [[group.route]]
+    id = "a"
+
+    [[group.route]]
+    id = "c"
+
+    [[group.route]]
+    id = "d"
+
+    # following parent
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "b"
   ` + '\n';
 
   expect(patched).toBe(expected);
