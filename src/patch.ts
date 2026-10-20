@@ -3621,7 +3621,7 @@ function applyChanges(
               if (remaining.length === 0 && docSiblings.length === 0 && !containerAlreadyIsParent) {
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];
-                if (isObject(value) && Object.keys(value).length === 0) {
+                if (isObject(value) && Object.keys(value).every(key => value[key] === undefined)) {
                   if (isInlineTable(container)) {
                     // Emptied dotted prefix inside an inline table: re-emit it
                     // as `prefix = {}` at the removed item's position, keeping
@@ -3678,14 +3678,31 @@ function applyChanges(
                     }
                     return;
                   }
+                  // A dotted-key parent inside a block table remains a value
+                  // in that table, so preserve it as an empty inline table.
+                  // Explicit table sections are handled above and remain
+                  // headers when their contents are removed.
+                  if (isTable(container) || isTableArray(container)) {
+                    const freshKey = relativePrefix
+                      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+                      .join('.');
+                    const freshKv = Array.from(parseTOML(`${freshKey} = {}`))[0];
+                    if (isKeyValue(freshKv)) {
+                      applyWrites(original);
+                      const insertIndex = containerItemIndex >= 0
+                        ? Math.min(containerItemIndex, container.items.length)
+                        : container.items.length;
+                      const leadingLines = container.items.length === 0 && isTable(container) ? 0 : undefined;
+                      insert(original, container, freshKv, insertIndex, undefined, undefined, leadingLines);
+                    }
+                    return;
+                  }
+
                   // Table key: container key + relative prefix.  For a root
-                  // KV that's just the relative prefix; for an AOT entry the
-                  // numeric index is NOT part of the key.
+                  // KV that's just the relative prefix.
                   const tableKey = isAotEntry
                     ? (container as TableArray).key.item.value.concat(relativePrefix)
-                    : isTable(container)
-                      ? (container as Table).key.item.value.concat(relativePrefix)
-                      : relativePrefix;
+                    : relativePrefix;
                   const emptyTable = generateTable(tableKey as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;

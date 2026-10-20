@@ -184,12 +184,9 @@ test('replacing an object in a nested multiline array preserves trailing sibling
     `);
   });
 
-  test('appending an AOT entry skips the previous entry sub-tables (seed 21525)', () => {
-    // Deleting the last key of a dotted key (`vyujik.bwe`) empties `vyujik`
-    // to `{}` and materialises `[a.vyujik]` as a document-level sub-table of
-    // entry 0.  Appending entry 1 must land AFTER that sub-table, or the
-    // new [[a]] header cuts in front of it and the re-parse reassigns
-    // vyujik to the new entry.
+  test('appending an AOT entry keeps an emptied dotted-key parent in the previous entry (seed 21525)', () => {
+    // Deleting the last key of a dotted key (`vyujik.bwe`) leaves `vyujik = {}`
+    // inside entry 0. The following [[a]] entry must not absorb or replace it.
     const src = dedent`
       [[a]]
       vyujik.bwe = 1
@@ -201,9 +198,7 @@ test('replacing an object in a nested multiline array preserves trailing sibling
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
       [[a]]
-
-      [a.vyujik]
-
+      vyujik = {}
       [[a]]
       k93 = true
     `);

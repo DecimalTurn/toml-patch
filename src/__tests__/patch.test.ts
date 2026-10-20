@@ -2672,7 +2672,7 @@ test('should remove all sibling dotted keys when deleting a dotted prefix inside
   expect(parse(patched)).toEqual(updated);
 });
 
-test('should materialise an emptied dotted-key sub-table on one table array entry when another entry has a sub-table section', () => {
+test('should materialise an emptied dotted-key sub-table inline when another entry has an explicit table section', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -2698,15 +2698,14 @@ test('should materialise an emptied dotted-key sub-table on one table array entr
 
     [[route]]
     id = "b"
-
-    [route.args]
+    args = {}
   ` + '\n';
 
   expect(patched).toBe(expected);
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should materialise an emptied dotted-key sub-table on one table array entry when an earlier entry uses dotted keys', () => {
+test('should materialise an emptied dotted-key sub-table as an inline table when an earlier entry uses dotted keys', () => {
   const existing = dedent`
     [[route]]
     id = "a"
@@ -2730,8 +2729,7 @@ test.fails('should materialise an emptied dotted-key sub-table on one table arra
 
     [[route]]
     id = "b"
-
-    [route.args]
+    args = {}
   ` + '\n';
 
   expect(patched).toBe(expected);
@@ -8977,7 +8975,7 @@ describe('wasEmptied compensation — multiple tables', () => {
   // segment higher) and the handler previously unwrapped its Integer value
   // as the parent — crashing with "Unsupported parent type 'Integer' for
   // remove".  The KV must be removed from the AOT entry and the emptied
-  // parent materialised as a sub-table inside the entry's scope.
+  // parent preserved as an inline table inside the entry.
   test('delete last segment of dotted key inside AOT entry (seed 20)', () => {
     const src = dedent`
       [["7<L:".b32uvhdz]]
@@ -8989,15 +8987,12 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(parse(result)).toEqual(obj);
     expect(result).toEqual(dedent`
       [["7<L:".b32uvhdz]]
-
-      ["7<L:".b32uvhdz.z0ncoh.y]
+      z0ncoh.y = {}
       ` + '\n');
   });
 
-  // Materialisation scope for the same operation: the emptied parent must
-  // be materialised as a sub-table of the SAME AOT entry — relative to the
-  // entry key (no numeric index in the key), inserted before the next
-  // entry so it doesn't leak into a later entry's scope.
+  // The emptied dotted parent must remain inline in the SAME AOT entry and
+  // not leak into the following entry.
   test('materialised dotted parent stays in the AOT entry scope', () => {
     const src = dedent`
       [["7<L:".b32uvhdz]]
@@ -9014,8 +9009,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual(dedent`
       [["7<L:".b32uvhdz]]
       n = 1
-
-      ["7<L:".b32uvhdz.z0ncoh.y]
+      z0ncoh.y = {}
 
       [["7<L:".b32uvhdz]]
       n = 2
@@ -9969,11 +9963,10 @@ describe('wasEmptied compensation — multiple tables', () => {
     expect(result).toEqual(dedent`
       [kx5z9sjjgp.".(o<1RF&v".mia_m]
       g5yv2z2."(X" = 821968
+      dykv = {}
       d4jl5.mi = 521_854
       vsqdcqeko.k3i5l."" = true
       v.lw85f.vrxc00y = -54296.21447
-
-      [kx5z9sjjgp.".(o<1RF&v".mia_m.dykv]
     ` + '\n');
   });
 
@@ -10102,7 +10095,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     delete obj.y[0].sl4['m{sHnZ'].vk.dj8es9;
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toEqual('[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\n\n[y.sl4."m{sHnZ".vk]\n');
+    expect(result).toEqual('[[y]]\nyzi0qn8 = 1\n[y.sl4."m{sHnZ"]\ng81y7_x4 = 16:26:24\nvk = {}\n');
   });
 
   test('truncating an empty-string dotted key inside an inline table drops extending sibling rows (seeds 11480, 11799)', () => {
