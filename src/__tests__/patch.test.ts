@@ -2706,6 +2706,38 @@ test('should materialise an emptied dotted-key sub-table on one table array entr
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should materialise an emptied dotted-key sub-table on one table array entry when an earlier entry uses dotted keys', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    args.x = 1
+
+    [[route]]
+    id = "b"
+    args.y = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { x?: number; y?: number } }[];
+  };
+  delete updated.route[1].args.y;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    args.x = 1
+
+    [[route]]
+    id = "b"
+
+    [route.args]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should materialise an emptied parent sub-table on one table array entry even when other entries still have deeper sub-tables', () => {
   const existing = dedent`
     [[route]]
@@ -2998,6 +3030,51 @@ test('should replace an implicit deeper sub-table with a scalar inside an explic
   expect(parse(patched)).toEqual(updated);
 });
 
+test.fails('should replace an implicit sub-table with a scalar inside a two-level explicit parent sub-table of a table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    x = 1
+    [route.args.deep.sub.leaf]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    y = 2
+    [route.args.deep.sub.leaf]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: {
+      id: string;
+      args: { deep: { x?: number; y?: number; sub: { leaf: { k: string } } | string } };
+    }[];
+  };
+  updated.route[1].args.deep.sub = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    x = 1
+    [route.args.deep.sub.leaf]
+    k = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    y = 2
+    sub = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should replace a nested table array with a static array on one parent entry without corrupting other entries', () => {
   const existing = dedent`
     [[group]]
@@ -3026,6 +3103,41 @@ test('should replace a nested table array with a static array on one parent entr
     [[group]]
     id = "g1"
     route = [ "b" ]
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test.fails('should replace a sub-table with a nested table array within the owning table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { x?: number; y?: number } | { k: string }[] }[];
+  };
+  updated.route[1].args = [{ k: 'b' }];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [[route.args]]
+    k = "b"
   ` + '\n';
 
   expect(patched).toBe(expected);
@@ -4021,6 +4133,46 @@ describe('undefined handling in patch', () => {
       [owner]
       ` + '\n');
   });
+
+  test('should leave an empty table header when its only key is deleted', () => {
+    const existing = dedent`
+      title = "hello"
+
+      [owner]
+      name = "Tom"
+      ` + '\n';
+
+    const obj = parse(existing);
+    delete obj.owner.name;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "hello"
+
+      [owner]
+      ` + '\n');
+  });
+
+  test('should leave an empty inline table when all dotted keys are set to undefined', () => {
+    const existing = dedent`
+      title = "hello"
+
+      [owner]
+      name.first = "Tom"
+      name.last = "Doe"
+      ` + '\n';
+
+    const obj = parse(existing);
+    obj.owner.name.first = undefined;
+    obj.owner.name.last = undefined;
+
+    expect(patch(existing, obj)).toEqual(dedent`
+      title = "hello"
+
+      [owner]
+      name = {}
+      ` + '\n');
+  });
+
 
   // The same principle as the test above — an emptied table survives as a header — but the
   // parent here is *implicit*: `[a.b]` declares `a` only by virtue of `b` existing under it.
@@ -7887,7 +8039,15 @@ describe('float exponent notation round-trip', () => {
     obj.products[0].sku = 999;
 
     const result = patch(src, obj);
-    expect(result).toContain('sku = 999');
+    expect(result).toEqual(dedent`
+      [[products]]
+      name = "Hammer"
+      sku = 999
+
+      [[products]]
+      name = "Nail"
+      sku = 456
+    ` + '\n');
     expect(() => parse(result)).not.toThrow();
   });
 
@@ -10048,17 +10208,36 @@ describe('wasEmptied compensation — multiple tables', () => {
     // trigger line and never reached the tail rows, which slid up over the
     // earlier rows; two emptied-parent materialisations in one batch then
     // mispositioned the rows after the second replacement.
-    const src = `fo2i.X.bp-nt = { j620-i."6/A8b" = '''
-abc
-def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
-`;
+    const src = dedent`
+      fo2i.X.bp-nt = { j620-i."6/A8b" = '''
+      abc
+      def''', r9cq39r657."@#ft7" = 96909, ZilE9tvZ = 1 }
+    ` + '\n';
     const obj = parse(src) as any;
     delete obj['fo2i'].X['bp-nt']['j620-i']['6/A8b'];
     delete obj['fo2i'].X['bp-nt'].r9cq39r657['@#ft7'];
     const result = patch(src, obj);
     expect(parse(result)).toEqual(obj);
-    expect(result).toEqual(`fo2i.X.bp-nt = { j620-i = {}, r9cq39r657 = {}, ZilE9tvZ = 1 }
-`);
+    expect(result).toEqual(dedent`
+      fo2i.X.bp-nt = { j620-i = {}, r9cq39r657 = {}, ZilE9tvZ = 1 }
+    ` + '\n');
+  });
+
+  test('distilled regression for seed 14262 keeps siblings aligned after two dotted-parent removals', () => {
+    const src = dedent`
+      values = { first.leaf = '''
+      a
+      b''', second.leaf = 1, tail = 2 }
+    `;
+    const obj = parse(src) as any;
+    delete obj.values.first.leaf;
+    delete obj.values.second.leaf;
+
+    const result = patch(src, obj);
+    expect(parse(result)).toEqual(obj);
+    expect(result).toEqual(dedent`
+      values = { first = {}, second = {}, tail = 2 }
+    `);
   });
 
   test('replacing a multiline array element keeps moved inline-table row separators (seed 16552)', () => {
