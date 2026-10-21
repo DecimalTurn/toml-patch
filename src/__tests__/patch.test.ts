@@ -4131,6 +4131,96 @@ test('should replace a dotted object inside an inline table array element in a t
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should replace an implicit table two levels below an explicit sub-table in a table array entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.cfg]
+    mode = "a"
+    [route.cfg.args.deep.leaf]
+    id = "a"
+    [route.cfg.args.other]
+    z = 1
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{
+      id: string;
+      cfg?: { mode: string; args: { deep: { leaf: { id: string } } | string; other: { z: number } } };
+    }>;
+  };
+  updated.route[0].cfg!.args.deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.cfg]
+    mode = "a"
+    args.deep = "none"
+    [route.cfg.args.other]
+    z = 1
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace an implicit table with an object two levels below an explicit parent table', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route.args.deep.leaf]
+    id = "a"
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: {
+      id: string;
+      args: { deep: { leaf: { id: string } } | { level: number }; other: { z: number } };
+    };
+  };
+  updated.route.args.deep = { level: 2 };
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [route]
+    id = "a"
+    args.deep = { level = 2 }
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace an implicit table when only deeper sibling headers exist', () => {
+  const existing = dedent`
+    [route.args.deep.leaf]
+    id = "a"
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { args: { deep: { leaf: { id: string } } | string; other: { z: number } } };
+  };
+  updated.route.args.deep = 'none';
+
+  const patched = patch(existing, updated);
+
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should delete an explicit nested sub-table from one table array entry while retaining the other', () => {
   const existing = dedent`
     [[route]]
