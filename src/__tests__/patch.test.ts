@@ -3142,6 +3142,153 @@ test('should replace a sub-table with a nested table array within the owning tab
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should replace a sub-table with multiple nested table array entries without displacing the next parent entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [route.args]
+    y = 2
+
+    [[route]]
+    id = "c"
+    [route.args]
+    z = 3
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { x?: number; y?: number; z?: number } | { k: string }[] }[];
+  };
+  updated.route[1].args = [{ k: 'b1' }, { k: 'b2' }];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args]
+    x = 1
+
+    [[route]]
+    id = "b"
+    [[route.args]]
+    k = "b1"
+
+    [[route.args]]
+    k = "b2"
+
+    [[route]]
+    id = "c"
+    [route.args]
+    z = 3
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test.fails('should preserve the full explicit parent path when replacing a nested sub-table with a table array', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    base = "a"
+    [route.args.deep.items.leaf]
+    id = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    base = "b"
+    [route.args.deep.items.leaf]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: {
+      id: string;
+      args: { deep: { base: string; items: { leaf: { id: string } } | { k: string }[] } };
+    }[];
+  };
+  updated.route[1].args.deep.items = [{ k: 'b' }];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.args.deep]
+    base = "a"
+    [route.args.deep.items.leaf]
+    id = "a"
+
+    [[route]]
+    id = "b"
+    [route.args.deep]
+    base = "b"
+    [[route.args.deep.items]]
+    k = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace an implicit sub-table within a nested table array owner without changing other owners', () => {
+  const existing = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "r0"
+    [group.route.args.deep]
+    value = "a"
+    [group.route.args.deep.sub.leaf]
+    k = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "r1"
+    [group.route.args.deep]
+    value = "b"
+    [group.route.args.deep.sub.leaf]
+    k = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    group: {
+      id: string;
+      route: { id: string; args: { deep: { value: string; sub: { leaf: { k: string } } | string } } }[];
+    }[];
+  };
+  updated.group[1].route[0].args.deep.sub = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[group]]
+    id = "g0"
+    [[group.route]]
+    id = "r0"
+    [group.route.args.deep]
+    value = "a"
+    [group.route.args.deep.sub.leaf]
+    k = "a"
+
+    [[group]]
+    id = "g1"
+    [[group.route]]
+    id = "r1"
+    [group.route.args.deep]
+    value = "b"
+    sub = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should append a nested table array entry before later parent entries with sub-tables', () => {
   const existing = dedent`
     [[group]]
