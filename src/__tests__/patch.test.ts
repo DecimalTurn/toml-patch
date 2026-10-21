@@ -4228,6 +4228,468 @@ test('should replace an implicit table when only deeper sibling headers exist', 
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should replace an implicit table two levels below an explicit sub-table in the second table array entry only', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.cfg]
+    mode = "a"
+    [route.cfg.args.deep.leaf]
+    id = "a"
+    [route.cfg.args.other]
+    z = 1
+
+    [[route]]
+    id = "b"
+    [route.cfg]
+    mode = "b"
+    [route.cfg.args.deep.leaf]
+    id = "b"
+    [route.cfg.args.other]
+    z = 2
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{
+      id: string;
+      cfg: { mode: string; args: { deep: { leaf: { id: string } } | string; other: { z: number } } };
+    }>;
+  };
+  updated.route[1].cfg.args.deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [route.cfg]
+    mode = "a"
+    [route.cfg.args.deep.leaf]
+    id = "a"
+    [route.cfg.args.other]
+    z = 1
+
+    [[route]]
+    id = "b"
+    [route.cfg]
+    mode = "b"
+    args.deep = "none"
+    [route.cfg.args.other]
+    z = 2
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should keep a multiline inline table aligned when it replaces an implicit table two levels below its parent', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route.args.deep.leaf]
+    id = "a"
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: {
+      id: string;
+      args: { deep: { leaf: { id: string } } | { level: number; mode: string }; other: { z: number } };
+    };
+  };
+  updated.route.args.deep = { level: 2, mode: 'x' };
+
+  const patched = patch(existing, updated, { multilineTable: true });
+  const expected = dedent`
+    [route]
+    id = "a"
+    args.deep = {
+      level = 2,
+      mode = "x"
+    }
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should quote a dotted segment in a replacement row two levels below its parent', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route."my.args".deep.leaf]
+    id = "a"
+    [route."my.args".other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; 'my.args': { deep: { leaf: { id: string } } | string; other: { z: number } } };
+  };
+  updated.route['my.args'].deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [route]
+    id = "a"
+    "my.args".deep = "none"
+    [route."my.args".other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should quote a dotted segment in a root replacement row when only deeper sibling headers exist', () => {
+  const existing = dedent`
+    ["my.route".args.deep.leaf]
+    id = "a"
+    ["my.route".args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    'my.route': { args: { deep: { leaf: { id: string } } | string; other: { z: number } } };
+  };
+  updated['my.route'].args.deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    "my.route".args.deep = "none"
+
+    ["my.route".args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should keep the next header comment when a replacement row lands at the end of its parent table', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route.args.deep.leaf]
+    id = "a"
+    # about other
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { deep: { leaf: { id: string } } | string; other: { z: number } } };
+  };
+  updated.route.args.deep = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [route]
+    id = "a"
+    args.deep = "none"
+    # about other
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace two implicit tables two levels below the same parent in one patch', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route.args.deep.leaf]
+    id = "a"
+    [route.args.wide.leaf]
+    id = "a"
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: {
+      id: string;
+      args: { deep: { leaf: { id: string } } | string; wide: { leaf: { id: string } } | number; other: { z: number } };
+    };
+  };
+  updated.route.args.deep = 'none';
+  updated.route.args.wide = 2;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [route]
+    id = "a"
+    args.deep = "none"
+    args.wide = 2
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace an implicit table and delete its sibling header in one patch', () => {
+  const existing = dedent`
+    [route]
+    id = "a"
+    [route.args.deep.leaf]
+    id = "a"
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: { id: string; args: { deep: { leaf: { id: string } } | string; other?: { z: number } } };
+  };
+  updated.route.args.deep = 'none';
+  delete updated.route.args.other;
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [route]
+    id = "a"
+    args.deep = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace a sub-table of the last table array entry when an unrelated table sits between them', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [[route]]
+    id = "b"
+    [settings]
+    mode = "x"
+    [route.meta]
+    tag = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{ id: string; meta?: { tag: string } | string }>;
+    settings: { mode: string };
+  };
+  updated.route[1].meta = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [[route]]
+    id = "b"
+    meta = "none"
+    [settings]
+    mode = "x"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace a sub-table with a scalar three table array levels deep', () => {
+  const existing = dedent`
+    [[org]]
+    name = "o"
+    [[org.team]]
+    name = "t0"
+    [[org.team]]
+    name = "t1"
+    [[org.team.member]]
+    name = "m0"
+    [org.team.member.role]
+    title = "dev"
+    [org.team.member.role.scope]
+    level = 1
+    [[org.team.member]]
+    name = "m1"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    org: Array<{
+      name: string;
+      team: Array<{
+        name: string;
+        member?: Array<{ name: string; role?: { title: string; scope: { level: number } } | string }>;
+      }>;
+    }>;
+  };
+  updated.org[0].team[1].member![0].role = 'lead';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[org]]
+    name = "o"
+    [[org.team]]
+    name = "t0"
+    [[org.team]]
+    name = "t1"
+    [[org.team.member]]
+    name = "m0"
+    role = "lead"
+    [[org.team.member]]
+    name = "m1"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace an implicit table below an explicit sub-table three table array levels deep', () => {
+  const existing = dedent`
+    [[org]]
+    [[org.team]]
+    [[org.team.member]]
+    name = "m0"
+    [org.team.member.role]
+    title = "dev"
+    [org.team.member.role.scope.area]
+    x = 1
+    [org.team.member.role.scope.other]
+    y = 2
+    [[org.team.member]]
+    name = "m1"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    org: Array<{
+      team: Array<{
+        member: Array<{
+          name: string;
+          role?: { title: string; scope: { area: { x: number } | string; other: { y: number } } };
+        }>;
+      }>;
+    }>;
+  };
+  updated.org[0].team[0].member[0].role!.scope.area = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[org]]
+    [[org.team]]
+    [[org.team.member]]
+    name = "m0"
+    [org.team.member.role]
+    title = "dev"
+    [org.team.member.role.scope]
+    area = "none"
+    [org.team.member.role.scope.other]
+    y = 2
+    [[org.team.member]]
+    name = "m1"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should apply different structural replacements to two table array entries in one patch', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.items.leaf]
+    id = "a"
+    [route.meta]
+    tag = "a"
+    [[route]]
+    id = "b"
+    [route.items.leaf]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{ id: string; items: { leaf: { id: string } } | { k: string }[] | string; meta?: { tag: string } }>;
+  };
+  updated.route[0].items = [{ k: 'a' }];
+  updated.route[1].items = 'none';
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [[route.items]]
+    k = "a"
+    [route.meta]
+    tag = "a"
+    [[route]]
+    id = "b"
+    items = "none"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should replace a nested table array in an entry with an empty array', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [[route.steps]]
+    n = 1
+    [[route.steps]]
+    n = 2
+    [route.meta]
+    tag = "a"
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{ id: string; steps?: { n: number }[]; meta?: { tag: string } }>;
+  };
+  updated.route[0].steps = [];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    steps = []
+    [route.meta]
+    tag = "a"
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
+test('should add a nested object below an implicit parent whose sibling header survives in an entry', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.args.other]
+    z = 1
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{ id: string; args?: { other: { z: number }; deep?: { level: { n: number } } } }>;
+  };
+  updated.route[0].args!.deep = { level: { n: 1 } };
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    args.deep = { level = { n = 1 } }
+    [route.args.other]
+    z = 1
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(patched).toBe(expected);
+  expect(parse(patched)).toEqual(updated);
+});
+
 test('should keep the leading comment of a sibling header when replacing the sub-table above it', () => {
   const existing = dedent`
     [[route]]
@@ -4268,6 +4730,62 @@ test('should keep the leading comment of a sibling header when replacing the sub
 });
 
 describe('sub-table replacement known issues', () => {
+  // See https://github.com/DecimalTurn/toml-patch/issues/331
+  test.skip('replaces a table defined by both dotted keys and a deeper header in a parent table', () => {
+    // Fails the re-parse with "Value already defined for route.deep": the
+    // dotted row becomes `deep = "none"` but [route.deep.leaf] survives. The
+    // same shape at the document root is handled.
+    const existing = dedent`
+      [route]
+      deep.x = 1
+      [route.deep.leaf]
+      id = "a"
+    ` + '\n';
+
+    const updated = parse(existing) as { route: { deep: { x: number; leaf: { id: string } } | string } };
+    updated.route.deep = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [route]
+      deep = "none"
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+  test.skip('replaces a table defined by both dotted keys and a deeper header in a table array entry', () => {
+    // Fails the re-parse with "Value already defined for route.args": the
+    // dotted row becomes `args = "none"` but [route.args.deep] survives.
+    const existing = dedent`
+      [[route]]
+      id = "a"
+      args.x = 1
+      [route.args.deep]
+      y = 2
+      [[route]]
+      id = "b"
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: Array<{ id: string; args?: { x: number; deep: { y: number } } | string }>;
+    };
+    updated.route[0].args = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [[route]]
+      id = "a"
+      args = "none"
+      [[route]]
+      id = "b"
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
   // See https://github.com/DecimalTurn/toml-patch/issues/330
   test.skip('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
     // Documents a feature not implemented yet: keeping the document's blank-line
