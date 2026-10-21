@@ -4377,9 +4377,14 @@ function handleStructuralEdit(
 
       // Rebuild the tail of the path as a fresh KV (or KVs) and insert
       // into the entry.
-      let tail: any = jsValue;
-      for (let k = change.path.length - 1; k > aotIndexPos; k--) {
-        tail = { [change.path[k]]: tail };
+      let tail: any;
+      if (Array.isArray(jsValue) && jsValue.length > 0 && jsValue.every(isObject)) {
+        tail = { [changedKey[changedKey.length - 1]]: jsValue };
+      } else {
+        tail = jsValue;
+        for (let k = change.path.length - 1; k > aotIndexPos; k--) {
+          tail = { [change.path[k]]: tail };
+        }
       }
       const tailDoc = parseJS(tail, format);
       const tailToml = toTOML(tailDoc.items, format);
@@ -4449,7 +4454,7 @@ function handleStructuralEdit(
           const section = item as TableArray;
           const keyNode = section.key.item;
           const oldRaw = keyNode.raw;
-          const dotted = entryKey.concat(keyNode.value);
+          const dotted = entryKey.concat(changedKey.slice(0, -1), keyNode.value);
           keyNode.value = dotted;
           keyNode.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
           const delta = keyNode.raw.length - oldRaw.length;
@@ -4462,7 +4467,7 @@ function handleStructuralEdit(
           const lastScopeItem = scope[scope.length - 1];
           const ownerIndex = original.items.indexOf(aotEntry);
           const insertIndex = lastScopeItem ? original.items.indexOf(lastScopeItem) + 1 : ownerIndex + 1;
-          insert(original, original, section, insertIndex);
+          insert(original, original, section, insertIndex, undefined, undefined, 1);
           commentEligibleNodes.add(section);
         }
       }

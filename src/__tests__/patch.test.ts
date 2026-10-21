@@ -3190,7 +3190,7 @@ test('should replace a sub-table with multiple nested table array entries withou
   expect(parse(patched)).toEqual(updated);
 });
 
-test.fails('should preserve the full explicit parent path when replacing a nested sub-table with a table array', () => {
+test('should preserve the full explicit parent path when replacing a nested sub-table with a table array', () => {
   const existing = dedent`
     [[route]]
     id = "a"
