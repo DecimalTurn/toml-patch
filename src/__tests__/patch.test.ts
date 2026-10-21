@@ -4217,7 +4217,14 @@ test('should replace an implicit table when only deeper sibling headers exist', 
   updated.route.args.deep = 'none';
 
   const patched = patch(existing, updated);
+  const expected = dedent`
+    route.args.deep = "none"
 
+    [route.args.other]
+    z = 1
+  ` + '\n';
+
+  expect(patched).toBe(expected);
   expect(parse(patched)).toEqual(updated);
 });
 

@@ -4341,8 +4341,8 @@ function handleStructuralEdit(
         const explicitParent = findDeepestExplicitTable(original, fullChangedKey, entryKey.length, aotEntry);
         if (explicitParent) {
           const relativeKey = fullChangedKey.slice(explicitParent.key.item.value.length);
-          const replacementRow = relativeKey.length === 1 && !isTableArrayValue(jsValue)
-            ? generateExplicitParentRow(relativeKey[0], jsValue, format)
+          const replacementRow = !isTableArrayValue(jsValue)
+            ? generateExplicitParentRow(relativeKey, jsValue, format)
             : undefined;
           if (replacementRow) {
             upsertExplicitParentRow(original, explicitParent, relativeKey, replacementRow);
@@ -4414,19 +4414,7 @@ function handleStructuralEdit(
           }
           for (const row of (item as Table).items as TreeNode[]) {
             if (!isKeyValue(row)) continue;
-
-            const oldRaw = row.key.raw;
-            const dotted = tableKey.concat(row.key.value);
-            row.key.value = dotted;
-            row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
-            const delta = row.key.raw.length - oldRaw.length;
-            row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
-            row.equals += delta;
-            shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
-            if (row.loc.end.line === row.loc.start.line) {
-              row.loc.end.column += delta;
-            }
-
+            rekeyKeyValue(row, tableKey.concat(row.key.value), format);
             upsertEntryKeyValue(row);
           }
         }
@@ -4453,6 +4441,9 @@ function handleStructuralEdit(
     if (explicitParent && replaceBelowExplicitTable(
       original, explicitParent, changedKey, jsValue, format, commentEligibleNodes
     )) {
+      return;
+    }
+    if (!explicitParent && replaceAsRootDottedRow(original, changedKey, jsValue, format, commentEligibleNodes)) {
       return;
     }
   }
@@ -5133,12 +5124,35 @@ function findDeepestExplicitTable(
  * Renders `key = value` as a single row for an explicit parent table.  An
  * object value must stay one row: at the default inlineTableStart parseJS
  * would emit it as a `[key]` section, which can't be placed inside the parent.
+ * A multi-segment key becomes a dotted row (`args.deep = …`): the
+ * intermediate tables are implicit, and nesting them as `args = { deep = … }`
+ * would close `args` to any surviving `[parent.args.other]` header.
  */
-function generateExplicitParentRow(key: string, value: any, format: TomlFormat): KeyValue | undefined {
+function generateExplicitParentRow(key: string[], value: any, format: TomlFormat): KeyValue | undefined {
   const inlineFormat = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
-  const rowDoc = parseJS({ [key]: value }, inlineFormat);
+  const rowDoc = parseJS({ [key[key.length - 1]]: value }, inlineFormat);
   const rowItems = Array.from(parseTOML(toTOML(rowDoc.items, format)));
-  return rowItems.length === 1 && isKeyValue(rowItems[0]) ? rowItems[0] : undefined;
+  if (rowItems.length !== 1 || !isKeyValue(rowItems[0])) return undefined;
+  const row = rowItems[0];
+  if (key.length > 1) rekeyKeyValue(row, key, format);
+  return row;
+}
+
+/**
+ * Rewrites a freshly parsed row's key to `key`, shifting the value along so
+ * its locations still line up with the new key's width.
+ */
+function rekeyKeyValue(row: KeyValue, key: string[], format: TomlFormat): void {
+  const oldRaw = row.key.raw;
+  row.key.value = key;
+  row.key.raw = generateKey(key, format.escapeSequenceUpperCase).raw;
+  const delta = row.key.raw.length - oldRaw.length;
+  row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+  row.equals += delta;
+  shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+  if (row.loc.end.line === row.loc.start.line) {
+    row.loc.end.column += delta;
+  }
 }
 
 /**
@@ -5247,14 +5261,51 @@ function replaceBelowExplicitTable(
     return true;
   }
 
-  if (relativeKey.length !== 1) return false;
-  const row = generateExplicitParentRow(relativeKey[0], jsValue, format);
+  const row = generateExplicitParentRow(relativeKey, jsValue, format);
   if (!row) return false;
 
   for (const node of findDocumentItemsByKeyPrefix(document, fullKey)) {
     removeMember(document, document, node);
   }
   upsertExplicitParentRow(document, parent, relativeKey, row);
+  commentEligibleNodes.add(row);
+  return true;
+}
+
+/**
+ * Replaces the value at `key` with a root dotted row when no explicit table
+ * owns it but a surviving header still extends one of its implicit
+ * intermediate tables (`[route.args.other]` beside `route.args.deep`): the
+ * generic rebuild would emit `[route]` + `args = { … }`, which that header
+ * can't extend.  Returns false when nothing would collide.
+ */
+function replaceAsRootDottedRow(
+  document: Document,
+  key: string[],
+  jsValue: any,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  if (key.length < 3 || isTableArrayValue(jsValue)) return false;
+
+  const intermediateKey = key.slice(0, 2);
+  const extendsIntermediate = (document.items as Block[]).some(item => {
+    const sectionKey = isTable(item) || isTableArray(item) ? item.key.item.value : undefined;
+    return keyStartsWith(sectionKey, intermediateKey) && !keyStartsWith(sectionKey, key);
+  });
+  if (!extendsIntermediate) return false;
+
+  const row = generateExplicitParentRow(key, jsValue, format);
+  if (!row) return false;
+
+  for (const node of findDocumentItemsByKeyPrefix(document, key)) {
+    removeMember(document, document, node);
+  }
+  // See the generic rebuild: flush the removals before positioning against
+  // a surviving header.
+  const insertIndex = rootKeyValueInsertIndex(document);
+  if (insertIndex !== undefined) applyWrites(document);
+  insert(document, document, row, insertIndex);
   commentEligibleNodes.add(row);
   return true;
 }
