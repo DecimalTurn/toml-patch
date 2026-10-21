@@ -4221,6 +4221,69 @@ test('should replace an implicit table when only deeper sibling headers exist', 
   expect(parse(patched)).toEqual(updated);
 });
 
+describe('sub-table replacement known issues', () => {
+  test.fails('keeps the leading comment of a sibling header when replacing the sub-table above it', () => {
+    // The comment is parsed as a trailing item of [route.items.leaf], so it is
+    // dropped together with that table (a plain delete loses it the same way).
+    const existing = dedent`
+      [[route]]
+      id = "a"
+      [route.items.leaf]
+      id = "a"
+
+      # meta for a
+      [route.meta]
+      tag = "a"
+
+      [[route]]
+      id = "b"
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: Array<{ id: string; items?: { leaf: { id: string } } | { k: string }[]; meta?: { tag: string } }>;
+    };
+    updated.route[0].items = [{ k: 'a1' }];
+
+    const patched = patch(existing, updated);
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toContain('# meta for a\n[route.meta]');
+  });
+
+  test.fails('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
+    // Replacing [route.limits.burst] packs the entries together, but replacing
+    // [route.limits] itself leaves a blank line between them.
+    const existing = dedent`
+      [[route]]
+      path = "/a"
+      [route.limits]
+      rate = 1
+      [route.meta]
+      tag = "a"
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: Array<{ path: string; limits: { rate: number } | { rate: number }[]; meta: { tag: string } }>;
+    };
+    updated.route[0].limits = [{ rate: 1 }, { rate: 2 }];
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [[route]]
+      path = "/a"
+      [[route.limits]]
+      rate = 1
+      [[route.limits]]
+      rate = 2
+      [route.meta]
+      tag = "a"
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+});
+
 test('should delete an explicit nested sub-table from one table array entry while retaining the other', () => {
   const existing = dedent`
     [[route]]
