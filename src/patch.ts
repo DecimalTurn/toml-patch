@@ -4320,6 +4320,9 @@ function handleStructuralEdit(
       // (the previous object value's children), and any dotted-key rows
       // inside the entry that start with the changed segment.
       const toRemove = findAotScopedDocumentItems(original, entryKey.concat(changedKey), aotEntry);
+      // Remember where the old sub-entries sat so a replacement [[section]]
+      // takes their place rather than drifting below later siblings.
+      const removedIndex = toRemove.length > 0 ? original.items.indexOf(toRemove[0]) : -1;
       for (const prefixNode of toRemove) {
         removeMember(original, original, prefixNode);
       }
@@ -4346,7 +4349,15 @@ function handleStructuralEdit(
         if (explicitParent) {
           const relativeKey = fullChangedKey.slice(explicitParent.key.item.value.length);
           if (relativeKey.length === 1) {
-            const replacementDoc = parseJS({ [relativeKey[0]]: jsValue }, format);
+            // An object value must stay a single row under the explicit
+            // parent; at the default inlineTableStart parseJS would emit it
+            // as a `[key]` section, which can't be placed inside the parent.
+            // Arrays of tables still go through the [[section]] path below.
+            const isTableArrayValue = Array.isArray(jsValue) && jsValue.length > 0 && jsValue.every(isObject);
+            const replacementFormat = isTableArrayValue
+              ? format
+              : resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+            const replacementDoc = parseJS({ [relativeKey[0]]: jsValue }, replacementFormat);
             const replacementToml = toTOML(replacementDoc.items, format);
             const replacementItems = Array.from(parseTOML(replacementToml));
             const replacementRow = replacementItems.length === 1 && isKeyValue(replacementItems[0])
@@ -4389,6 +4400,22 @@ function handleStructuralEdit(
       const tailDoc = parseJS(tail, format);
       const tailToml = toTOML(tailDoc.items, format);
       const tailCst = Array.from(parseTOML(tailToml));
+
+      // Without a removed sub-entry to replace, append after the entry's own
+      // sections only: the scope also spans unrelated tables (e.g. a later
+      // `[settings]`), and a [[section]] placed after those would read as
+      // belonging to them.
+      let sectionInsertIndex = removedIndex;
+      if (sectionInsertIndex < 0) {
+        sectionInsertIndex = original.items.indexOf(aotEntry) + 1;
+        for (const scopeItem of findAotEntryScopeItems(original, aotEntry)) {
+          const scopeKey = isTable(scopeItem) || isTableArray(scopeItem)
+            ? scopeItem.key.item.value
+            : undefined;
+          if (!keyStartsWith(scopeKey, entryKey)) break;
+          sectionInsertIndex = original.items.indexOf(scopeItem) + 1;
+        }
+      }
 
       const upsertEntryKeyValue = (kv: KeyValue): void => {
         const existingRow = aotEntry.items.find(row =>
@@ -4463,11 +4490,8 @@ function handleStructuralEdit(
             section.key.loc.end.column += delta;
           }
 
-          const scope = findAotEntryScopeItems(original, aotEntry);
-          const lastScopeItem = scope[scope.length - 1];
-          const ownerIndex = original.items.indexOf(aotEntry);
-          const insertIndex = lastScopeItem ? original.items.indexOf(lastScopeItem) + 1 : ownerIndex + 1;
-          insert(original, original, section, insertIndex, undefined, undefined, 1);
+          insert(original, original, section, sectionInsertIndex, undefined, undefined, 1);
+          sectionInsertIndex++;
           commentEligibleNodes.add(section);
         }
       }
