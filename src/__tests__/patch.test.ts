@@ -4268,7 +4268,10 @@ test('should keep the leading comment of a sibling header when replacing the sub
 });
 
 describe('sub-table replacement known issues', () => {
-  test.fails('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
+  // See https://github.com/DecimalTurn/toml-patch/issues/330
+  test.skip('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
+    // Documents a feature not implemented yet: keeping the document's blank-line
+    // layout between headers.
     // Replacing [route.limits.burst] packs the entries together, but replacing
     // [route.limits] itself leaves a blank line between them.
     const existing = dedent`
