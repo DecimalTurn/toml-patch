@@ -4252,9 +4252,22 @@ describe('sub-table replacement known issues', () => {
     updated.route[0].items = [{ k: 'a1' }];
 
     const patched = patch(existing, updated);
+    const expected = dedent`
+      [[route]]
+      id = "a"
+      [[route.items]]
+      k = "a1"
+
+      # meta for a
+      [route.meta]
+      tag = "a"
+
+      [[route]]
+      id = "b"
+    ` + '\n';
 
     expect(parse(patched)).toEqual(updated);
-    expect(patched).toContain('# meta for a\n[route.meta]');
+    expect(patched).toEqual(expected);
   });
 
   test.fails('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
