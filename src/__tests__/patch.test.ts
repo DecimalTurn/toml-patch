@@ -4228,48 +4228,46 @@ test('should replace an implicit table when only deeper sibling headers exist', 
   expect(parse(patched)).toEqual(updated);
 });
 
+test('should keep the leading comment of a sibling header when replacing the sub-table above it', () => {
+  const existing = dedent`
+    [[route]]
+    id = "a"
+    [route.items.leaf]
+    id = "a"
+
+    # meta for a
+    [route.meta]
+    tag = "a"
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  const updated = parse(existing) as {
+    route: Array<{ id: string; items?: { leaf: { id: string } } | { k: string }[]; meta?: { tag: string } }>;
+  };
+  updated.route[0].items = [{ k: 'a1' }];
+
+  const patched = patch(existing, updated);
+  const expected = dedent`
+    [[route]]
+    id = "a"
+    [[route.items]]
+    k = "a1"
+
+    # meta for a
+    [route.meta]
+    tag = "a"
+
+    [[route]]
+    id = "b"
+  ` + '\n';
+
+  expect(parse(patched)).toEqual(updated);
+  expect(patched).toEqual(expected);
+});
+
 describe('sub-table replacement known issues', () => {
-  test.fails('keeps the leading comment of a sibling header when replacing the sub-table above it', () => {
-    // The comment is parsed as a trailing item of [route.items.leaf], so it is
-    // dropped together with that table (a plain delete loses it the same way).
-    const existing = dedent`
-      [[route]]
-      id = "a"
-      [route.items.leaf]
-      id = "a"
-
-      # meta for a
-      [route.meta]
-      tag = "a"
-
-      [[route]]
-      id = "b"
-    ` + '\n';
-
-    const updated = parse(existing) as {
-      route: Array<{ id: string; items?: { leaf: { id: string } } | { k: string }[]; meta?: { tag: string } }>;
-    };
-    updated.route[0].items = [{ k: 'a1' }];
-
-    const patched = patch(existing, updated);
-    const expected = dedent`
-      [[route]]
-      id = "a"
-      [[route.items]]
-      k = "a1"
-
-      # meta for a
-      [route.meta]
-      tag = "a"
-
-      [[route]]
-      id = "b"
-    ` + '\n';
-
-    expect(parse(patched)).toEqual(updated);
-    expect(patched).toEqual(expected);
-  });
-
   test.fails('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
     // Replacing [route.limits.burst] packs the entries together, but replacing
     // [route.limits] itself leaves a blank line between them.

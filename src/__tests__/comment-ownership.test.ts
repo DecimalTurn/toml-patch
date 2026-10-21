@@ -443,6 +443,52 @@ describe('R5 - comments the parser files under the previous table', () => {
       # end of a
     ` + '\n');
   });
+
+  test('keeps the next section\'s leading comment when the previous section is deleted', () => {
+    const input = dedent`
+      [a]
+      x = 1
+      # section about b
+      [b]
+      z = 3
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.a;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # section about b
+      [b]
+      z = 3
+    ` + '\n');
+  });
+
+  test('keeps the following section\'s comment while removing the deleted section\'s own', () => {
+    const input = dedent`
+      [a]
+      x = 1
+
+      # section about b
+      [b]
+      y = 2
+      # section about c
+      [c]
+      z = 3
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.b;
+
+    expect(patch(input, value)).toEqual(dedent`
+      [a]
+      x = 1
+
+      # section about c
+      [c]
+      z = 3
+    ` + '\n');
+  });
+
 });
 
 describe('a pinned block inside a table body is owned by that table', () => {
