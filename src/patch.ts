@@ -4338,50 +4338,16 @@ function handleStructuralEdit(
       }
 
       if (changedKey.length > 1) {
-        let explicitParent: Table | undefined;
-        for (let keyLength = fullChangedKey.length - 1; keyLength > entryKey.length; keyLength--) {
-          const parentKey = fullChangedKey.slice(0, keyLength);
-          explicitParent = findAotScopedDocumentItems(original, parentKey, aotEntry)
-            .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
-          if (explicitParent) break;
-        }
-
+        const explicitParent = findDeepestExplicitTable(original, fullChangedKey, entryKey.length, aotEntry);
         if (explicitParent) {
           const relativeKey = fullChangedKey.slice(explicitParent.key.item.value.length);
-          if (relativeKey.length === 1) {
-            // An object value must stay a single row under the explicit
-            // parent; at the default inlineTableStart parseJS would emit it
-            // as a `[key]` section, which can't be placed inside the parent.
-            // Arrays of tables still go through the [[section]] path below.
-            const isTableArrayValue = Array.isArray(jsValue) && jsValue.length > 0 && jsValue.every(isObject);
-            const replacementFormat = isTableArrayValue
-              ? format
-              : resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
-            const replacementDoc = parseJS({ [relativeKey[0]]: jsValue }, replacementFormat);
-            const replacementToml = toTOML(replacementDoc.items, format);
-            const replacementItems = Array.from(parseTOML(replacementToml));
-            const replacementRow = replacementItems.length === 1 && isKeyValue(replacementItems[0])
-              ? replacementItems[0]
-              : undefined;
-
-            if (replacementRow) {
-              const oldRows = (explicitParent.items as TreeNode[]).filter((item): item is KeyValue =>
-                isKeyValue(item)
-                && item.key.value.length >= relativeKey.length
-                && arraysEqual(item.key.value.slice(0, relativeKey.length), relativeKey)
-              );
-              const exactRow = oldRows.find(item => arraysEqual(item.key.value, relativeKey));
-              for (const oldRow of oldRows) {
-                if (oldRow !== exactRow) removeMember(original, explicitParent, oldRow);
-              }
-              if (exactRow) {
-                replace(original, explicitParent, exactRow, replacementRow);
-              } else {
-                insert(original, explicitParent, replacementRow, undefined);
-              }
-              commentEligibleNodes.add(replacementRow);
-              return;
-            }
+          const replacementRow = relativeKey.length === 1 && !isTableArrayValue(jsValue)
+            ? generateExplicitParentRow(relativeKey[0], jsValue, format)
+            : undefined;
+          if (replacementRow) {
+            upsertExplicitParentRow(original, explicitParent, relativeKey, replacementRow);
+            commentEligibleNodes.add(replacementRow);
+            return;
           }
         }
       }
@@ -4389,7 +4355,7 @@ function handleStructuralEdit(
       // Rebuild the tail of the path as a fresh KV (or KVs) and insert
       // into the entry.
       let tail: any;
-      if (Array.isArray(jsValue) && jsValue.length > 0 && jsValue.every(isObject)) {
+      if (isTableArrayValue(jsValue)) {
         tail = { [changedKey[changedKey.length - 1]]: jsValue };
       } else {
         tail = jsValue;
@@ -4401,21 +4367,9 @@ function handleStructuralEdit(
       const tailToml = toTOML(tailDoc.items, format);
       const tailCst = Array.from(parseTOML(tailToml));
 
-      // Without a removed sub-entry to replace, append after the entry's own
-      // sections only: the scope also spans unrelated tables (e.g. a later
-      // `[settings]`), and a [[section]] placed after those would read as
-      // belonging to them.
-      let sectionInsertIndex = removedIndex;
-      if (sectionInsertIndex < 0) {
-        sectionInsertIndex = original.items.indexOf(aotEntry) + 1;
-        for (const scopeItem of findAotEntryScopeItems(original, aotEntry)) {
-          const scopeKey = isTable(scopeItem) || isTableArray(scopeItem)
-            ? scopeItem.key.item.value
-            : undefined;
-          if (!keyStartsWith(scopeKey, entryKey)) break;
-          sectionInsertIndex = original.items.indexOf(scopeItem) + 1;
-        }
-      }
+      let sectionInsertIndex = removedIndex >= 0
+        ? removedIndex
+        : ownedSectionsEndIndex(original, aotEntry, findAotEntryScopeItems(original, aotEntry));
 
       const upsertEntryKeyValue = (kv: KeyValue): void => {
         const existingRow = aotEntry.items.find(row =>
@@ -4478,23 +4432,27 @@ function handleStructuralEdit(
         }
 
         if (isTableArray(item)) {
-          const section = item as TableArray;
-          const keyNode = section.key.item;
-          const oldRaw = keyNode.raw;
-          const dotted = entryKey.concat(changedKey.slice(0, -1), keyNode.value);
-          keyNode.value = dotted;
-          keyNode.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
-          const delta = keyNode.raw.length - oldRaw.length;
-          keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
-          if (section.key.loc.end.line === section.key.loc.start.line) {
-            section.key.loc.end.column += delta;
-          }
-
-          insert(original, original, section, sectionInsertIndex, undefined, undefined, 1);
-          sectionInsertIndex++;
-          commentEligibleNodes.add(section);
+          insertReplacementTableArray(
+            original, item, fullChangedKey.slice(0, -1), sectionInsertIndex++, format, commentEligibleNodes
+          );
         }
       }
+      return;
+    }
+  }
+
+  // The same edit below an explicit [table] outside any array-of-tables
+  // entry: rebuilding from the root would emit `route = { args = … }` (or a
+  // `[route]` merge carrying `args = { … }`) while the explicit
+  // `[route.args.deep]` header survives, failing the re-parse with "Cannot
+  // extend inline table".  Scope the replacement to the deepest explicit
+  // parent instead.
+  if (change.path.length > 1 && change.path.every(seg => typeof seg === 'string')) {
+    const changedKey = change.path as string[];
+    const explicitParent = findDeepestExplicitTable(original, changedKey, 0, undefined);
+    if (explicitParent && replaceBelowExplicitTable(
+      original, explicitParent, changedKey, jsValue, format, commentEligibleNodes
+    )) {
       return;
     }
   }
@@ -5145,6 +5103,160 @@ function findAotScopedDocumentItems(
   if (!owner) return matchingNodes;
   const scopedItems = new Set(findAotEntryScopeItems(document, owner));
   return matchingNodes.filter(item => scopedItems.has(item));
+}
+
+function isTableArrayValue(value: any): value is any[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isObject);
+}
+
+/**
+ * Finds the deepest explicit `[table]` header that is a strict ancestor of
+ * `key` and longer than `minLength` segments, restricted to `owner`'s scope
+ * when the key lives inside an array-of-tables entry.
+ */
+function findDeepestExplicitTable(
+  document: Document,
+  key: string[],
+  minLength: number,
+  owner: TableArray | undefined
+): Table | undefined {
+  for (let keyLength = key.length - 1; keyLength > minLength; keyLength--) {
+    const parentKey = key.slice(0, keyLength);
+    const parent = findAotScopedDocumentItems(document, parentKey, owner)
+      .find(item => isTable(item) && arraysEqual(item.key.item.value, parentKey));
+    if (parent) return parent as Table;
+  }
+  return undefined;
+}
+
+/**
+ * Renders `key = value` as a single row for an explicit parent table.  An
+ * object value must stay one row: at the default inlineTableStart parseJS
+ * would emit it as a `[key]` section, which can't be placed inside the parent.
+ */
+function generateExplicitParentRow(key: string, value: any, format: TomlFormat): KeyValue | undefined {
+  const inlineFormat = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+  const rowDoc = parseJS({ [key]: value }, inlineFormat);
+  const rowItems = Array.from(parseTOML(toTOML(rowDoc.items, format)));
+  return rowItems.length === 1 && isKeyValue(rowItems[0]) ? rowItems[0] : undefined;
+}
+
+/**
+ * Puts `row` in place of `relativeKey` inside `parent`, dropping any dotted
+ * rows that extended the old value.
+ */
+function upsertExplicitParentRow(document: Document, parent: Table, relativeKey: string[], row: KeyValue): void {
+  const oldRows = (parent.items as TreeNode[]).filter((item): item is KeyValue =>
+    isKeyValue(item) && keyStartsWith(item.key.value, relativeKey)
+  );
+  const exactRow = oldRows.find(item => arraysEqual(item.key.value, relativeKey));
+  for (const oldRow of oldRows) {
+    if (oldRow !== exactRow) removeMember(document, parent, oldRow);
+  }
+  if (exactRow) {
+    replace(document, parent, exactRow, row);
+  } else {
+    insert(document, parent, row, undefined);
+  }
+}
+
+/**
+ * Index just past `owner` and the contiguous `followers` keyed under it.  Used
+ * when no removed sub-entry marks the spot for a replacement section: the
+ * followers can include unrelated tables (e.g. a later `[settings]`), and a
+ * section placed after those would read as belonging to them.
+ */
+function ownedSectionsEndIndex(document: Document, owner: Table | TableArray, followers: Block[]): number {
+  const ownerKey = owner.key.item.value;
+  let index = document.items.indexOf(owner) + 1;
+  for (const item of followers) {
+    const key = isTable(item) || isTableArray(item) ? item.key.item.value : undefined;
+    if (!keyStartsWith(key, ownerKey)) break;
+    index = document.items.indexOf(item) + 1;
+  }
+  return index;
+}
+
+/**
+ * Re-keys a section rendered relative to `parentKey` (`[[items]]` →
+ * `[[route.args.deep.items]]`) and inserts it at `index` in the document.
+ */
+function insertReplacementTableArray(
+  document: Document,
+  section: Table | TableArray,
+  parentKey: string[],
+  index: number,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): void {
+  const keyNode = section.key.item;
+  const oldRaw = keyNode.raw;
+  const dotted = parentKey.concat(keyNode.value);
+  keyNode.value = dotted;
+  keyNode.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
+  const delta = keyNode.raw.length - oldRaw.length;
+  keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
+  if (section.key.loc.end.line === section.key.loc.start.line) {
+    section.key.loc.end.column += delta;
+  }
+
+  insert(document, document, section, index, undefined, undefined, 1);
+  commentEligibleNodes.add(section);
+}
+
+/**
+ * Replaces the value at `fullKey` below the explicit `parent` table, keeping
+ * the edit inside that table: a single row for scalars, arrays and objects,
+ * or `[[fullKey]]` sections at the old sub-table's position for an array of
+ * tables.  Returns false when the shape isn't handled here.
+ */
+function replaceBelowExplicitTable(
+  document: Document,
+  parent: Table,
+  fullKey: string[],
+  jsValue: any,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  const relativeKey = fullKey.slice(parent.key.item.value.length);
+
+  if (isTableArrayValue(jsValue)) {
+    // A `[[header]]` can't extend a table the parent defines through dotted
+    // keys or an inline table (`args.deep.x = 1`, `args = { … }`).
+    const parentRows = (parent.items as TreeNode[]).filter((item): item is KeyValue =>
+      isKeyValue(item) && item.key.value[0] === relativeKey[0]
+    );
+    if (parentRows.some(row => !keyStartsWith(row.key.value, relativeKey))) return false;
+
+    const leaf = fullKey[fullKey.length - 1];
+    const sectionDoc = parseJS({ [leaf]: jsValue }, format);
+    const sections = Array.from(parseTOML(toTOML(sectionDoc.items, format)));
+    if (!sections.every(item => isTable(item) || isTableArray(item))) return false;
+
+    const toRemove = findDocumentItemsByKeyPrefix(document, fullKey);
+    const removedIndex = toRemove.length > 0 ? document.items.indexOf(toRemove[0]) : -1;
+    for (const node of toRemove) removeMember(document, document, node);
+    for (const row of parentRows) removeMember(document, parent, row);
+
+    let index = removedIndex >= 0
+      ? removedIndex
+      : ownedSectionsEndIndex(document, parent, document.items.slice(document.items.indexOf(parent) + 1));
+    for (const section of sections as Array<Table | TableArray>) {
+      insertReplacementTableArray(document, section, fullKey.slice(0, -1), index++, format, commentEligibleNodes);
+    }
+    return true;
+  }
+
+  if (relativeKey.length !== 1) return false;
+  const row = generateExplicitParentRow(relativeKey[0], jsValue, format);
+  if (!row) return false;
+
+  for (const node of findDocumentItemsByKeyPrefix(document, fullKey)) {
+    removeMember(document, document, node);
+  }
+  upsertExplicitParentRow(document, parent, relativeKey, row);
+  commentEligibleNodes.add(row);
+  return true;
 }
 
 /**
