@@ -139,9 +139,9 @@ describe('composable patch fuzz profiles', () => {
     const hashes = sources.map(source => createHash('sha256').update(source).digest('hex'));
 
     expect(hashes).toEqual([
-      'a835d552ccb40452a01881ec6f066ff98d5021f1df09fb6c9bcfbd497bcda294',
-      '8fe104be6844c0b61c8582894355d08fc13e492f60ca22fbca1e256446b28585',
-      '4047ef23e3b793de68db9defd57d6a961bdb2ebecd7c0dfb43e0af2d60c8ed72'
+      'ee082341e3f8f9e9f988810d0b590d146c7767d5e5e21a7d582d89ff67554f86',
+      'e577979b9603908efa24f734d0d14471c17dbc023b1a95f8476dd035e01ee0b9',
+      '7a4d702bbf569d00f8b4161face684a9ceeed5004c82fb76255ae5e9475afd0d'
     ]);
     expect(new Set(sources).size).toBe(sources.length);
     expect(generateAotSource({ seed: 3 }).source).toBe(sources[1]);

@@ -120,9 +120,49 @@ function makeAncestorFamily(
   }
 }
 
+function makeInterleavedFamily(
+  seed: number,
+  rng: SeededRandom,
+  blocks: string[]
+): void {
+  const parent = [keyPart('twist_', seed, 0)];
+  const branch = [...parent, 'branch'];
+  const leaf = [...branch, 'leaf.items'];
+  const interlude = [keyPart('interlude_', seed, 0)];
+  const leafEntries = rng.nextRange(2, 4);
+
+  blocks.push(section(parent, true));
+  blocks.push(`id = ${quote(`first-${seed}`)}`);
+  blocks.push(section(interlude, true));
+  blocks.push(`value = ${integer(rng)}`);
+  blocks.push(section(branch, false));
+  blocks.push(`value = ${integer(rng)}`);
+
+  for (let entry = 0; entry < leafEntries; entry++) {
+    blocks.push(section(leaf, true));
+    blocks.push(`id = ${quote(`${seed}-${entry}`)}`);
+    blocks.push(`value = ${integer(rng)}`);
+    if (entry === 0 && rng.chance(0.75)) {
+      blocks.push(section([...interlude, 'details'], false));
+      blocks.push(`value = ${integer(rng)}`);
+    }
+  }
+
+  blocks.push(section([...branch, 'tail'], false));
+  blocks.push(`value = ${integer(rng)}`);
+  blocks.push(section(parent, true));
+  blocks.push(section(branch, false));
+  blocks.push(`value = ${integer(rng)}`);
+  blocks.push(section([...branch, 'empty'], false));
+  blocks.push(section(leaf, true));
+  blocks.push(`id = ${quote(`second-${seed}`)}`);
+  blocks.push(`value = ${integer(rng)}`);
+}
+
 function generateDocument(seed: number): GeneratedAotDocument {
   const rng = new SeededRandom(seed + 5000000);
   const blocks = [`seed = ${seed}`];
+  makeInterleavedFamily(seed, rng, blocks);
   const families = rng.nextRange(2, 4);
 
   for (let family = 0; family < families; family++) {
