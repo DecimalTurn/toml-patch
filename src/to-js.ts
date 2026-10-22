@@ -225,7 +225,11 @@ export default function toJS(
 
   function handleKeyValue(node: KeyValue) {
     const key = node.key.value;
-    const keyScope = tableScopeForPath(active_path.concat(key));
+    // Scope by the key's container, like the table handlers: a key naming an
+    // array of tables itself (`arr = 2` under `[parent]` after `[[parent.arr]]`)
+    // belongs to the parent scope that recorded the array, not to the array's
+    // own entry scope.
+    const keyScope = tableScopeForPath(active_path.concat(key.slice(0, -1)));
     try {
       validateKey(active, active_path, key, node.type, state, keyScope);
     } catch (err) {

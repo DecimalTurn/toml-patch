@@ -208,6 +208,28 @@ describe('validation', () => {
     expect(() => toJS(parseTOML(src))).toThrow(/Cannot extend explicit table a\.b\.c with dotted keys/);
   });
 
+  test('still rejects a value that overwrites a table array from its parent table', () => {
+    const src = `
+      [[parent.items]]
+      [parent]
+      other = 1
+      items = 2
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Table already defined: parent\.items/);
+  });
+
+  test('still rejects a value that overwrites a nested table array from its parent table in the same entry', () => {
+    const src = `
+      [[group]]
+      [[group.route.items]]
+      [group.route]
+      items = 2
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Table already defined: group\.route\.items/);
+  });
+
   test('rejects extending an explicit sub-table after an unrelated table header', () => {
     const src = `
       [[group]]
