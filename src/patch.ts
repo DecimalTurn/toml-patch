@@ -1602,6 +1602,37 @@ function applyChanges(
           is_table_array = true;
         }
       }
+      if (is_table_array && isInteger(index) && !isInteger(last(parent_path))) {
+        const updated_js = toJS(updated.items, '', { temporal });
+        let updatedArray: any = updated_js;
+        for (const segment of parent_path) updatedArray = updatedArray?.[segment];
+
+        const owner = findAotEntryForPath(original, parent_path);
+        if (Array.isArray(updatedArray) && !updatedArray.every(isObject)) {
+          const arrayKey = parent_path.filter((segment): segment is string => typeof segment === 'string');
+          const explicitParent = findDeepestExplicitTable(
+            original,
+            arrayKey,
+            owner?.key.item.value.length ?? 0,
+            owner
+          );
+          const parentKey = explicitParent?.key.item.value ?? owner?.key.item.value ?? [];
+          const relativeKey = arrayKey.slice(parentKey.length);
+          const replacementRow = generateExplicitParentRow(relativeKey, updatedArray, format);
+          if (replacementRow) {
+            const oldSections = findAotScopedDocumentItems(original, arrayKey, owner)
+              .filter(item => (isTable(item) || isTableArray(item)) && keyStartsWith(itemKey(item), arrayKey));
+            for (const section of oldSections.reverse()) {
+              removeMember(original, original, section);
+            }
+            const destination = explicitParent ?? owner ?? original;
+            const insertionIndex = isDocument(destination) ? rootKeyValueInsertIndex(original) : undefined;
+            insert(original, destination, replacementRow, insertionIndex);
+            commentEligibleNodes.add(replacementRow);
+            return;
+          }
+        }
+      }
       // The converse of the guard below: parseJS renders an array of objects as [[key]]
       // sections at the default inlineTableStart, but the document may hold that array
       // inline (`key = [{ ... }]`). The document's shape has to win, or the new element

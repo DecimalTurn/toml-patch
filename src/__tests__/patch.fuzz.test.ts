@@ -1263,7 +1263,7 @@ test('appending a primitive to a nested AOT after an interleaved table preserves
 
     [[group.cluster]]
     id = "second"
-    route = [{ id = "third-route", value = 3 }, 831]
+    route = [ { id = "third-route", value = 3 }, 831 ]
 
     [noise]
     value = 0
