@@ -27,9 +27,9 @@ test('should parse single-quoted multiline string', () => {
   expect(parseString(multiline_literal)).toBe('a\\"b\\t\n');
 });
 
-test('should normalize CRLF newlines in multiline strings', () => {
-  expect(parseString('"""\r\nfirst\r\nsecond\r\n"""')).toBe('first\nsecond\n');
-  expect(parseString("'''\r\nfirst\r\nsecond\r\n'''" )).toBe('first\nsecond\n');
+test('should preserve CRLF newlines in multiline strings', () => {
+  expect(parseString('"""\r\nfirst\r\nsecond\r\n"""')).toBe('first\r\nsecond\r\n');
+  expect(parseString("'''\r\nfirst\r\nsecond\r\n'''" )).toBe('first\r\nsecond\r\n');
 });
 
 test('should escape unicode expressions', () => {

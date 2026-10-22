@@ -90,7 +90,7 @@ other_negative_zero = -0 # This form should not resolve to -0 in JS Object forma
   
 });
 
-test('it should normalize MLBS CRLF newlines in the value', () => {
+test('it should parse MLBS with \\r\\n newlines and preserve them in the value', () => {
   const parsed = parse(
     'a = 1' + '\r\n' +
     'text = """' + '\r\n' +
@@ -101,12 +101,12 @@ test('it should normalize MLBS CRLF newlines in the value', () => {
 
   expect(parsed).toEqual({
     a: 1,
-    text: 'Hello world \nThis is a test. \nGoodbye world.'
+    text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
   });
 
 });
 
-test('it should normalize MLBS CRLF newlines when the document uses LF', () => {
+test('it should parse MLBS with \\r\\n newlines and preserve them in the value - even with LF at TOML file level', () => {
   const parsed = parse(
     'a = 1' + '\n' +
     'text = """' + '\r\n' +
@@ -117,12 +117,12 @@ test('it should normalize MLBS CRLF newlines when the document uses LF', () => {
 
   expect(parsed).toEqual({
     a: 1,
-    text: 'Hello world \nThis is a test. \nGoodbye world.'
+    text: 'Hello world \r\nThis is a test. \r\nGoodbye world.'
   });
 
 });
 
-test('it should normalize CRLF in MLBS values with mixed source newlines', () => {
+test('it should parse MLBS with mixed newlines and preserve them in the value', () => {
   const parsed = parse(
     'a = 1' + '\n' +
     'text = """' + '\r\n' +
@@ -133,7 +133,7 @@ test('it should normalize CRLF in MLBS values with mixed source newlines', () =>
 
   expect(parsed).toEqual({
     a: 1,
-    text: 'Hello world \nThis is a test. \nGoodbye world.'
+    text: 'Hello world \nThis is a test. \r\nGoodbye world.'
   });
 
 });
