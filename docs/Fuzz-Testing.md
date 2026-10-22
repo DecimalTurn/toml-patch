@@ -93,17 +93,19 @@ general randomizer rarely creates the AOT ownership layouts it targets.
 - **Purpose:** Builds TOML from an abstract AOT model instead of relying on the
   general randomizer. It varies AOT family count parent-key depth entry count
   entry-owned sub-tables nested AOTs and unrelated sections between entries.
-  The first mutation removes an AOT entry so each seed exercises an ownership
-  boundary.
+  The first mutation rotates by seed across removing an AOT entry, inserting a
+  flat object entry, appending a non-object value, and editing an existing
+  scalar.
 - **Why it exists:** The general randomizer can produce AOT nodes but rarely
   produces repeated entries with document-level sub-tables scoped to each
   entry. That missing shape allowed the AOT sub-table deletion bug to escape
   broad fuzz sweeps.
 - **Coverage boundary:** Variant 5 is intentionally AOT-focused. It currently
   does not provide variant 4's date precision and full format randomization.
-  Its default is one structural mutation so a failure identifies the entry
-  removal operation. Passing `--mutations 3` enables broader AOT insertion and
-  entry-edit exploration.
+  Its default is one mutation per seed. Every four consecutive seeds cover all
+  four mutation classes, while keeping failures easy to reproduce. Passing
+  `--mutations 3` applies additional deterministic mutations after the
+  seed-selected first operation.
 
 ### Patch-lite fuzzing
 

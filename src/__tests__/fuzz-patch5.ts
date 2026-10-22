@@ -203,56 +203,136 @@ function objectArrays(object: any, prefix: (string | number)[] = []): AotArrayPa
   return Object.keys(object).flatMap((key) => objectArrays(object[key], [...prefix, key]));
 }
 
-function mutateAot(object: any, rng: SeededRandom, first: boolean): MutationPlan | undefined {
+type AotMutationMode = 'remove-entry' | 'add-object' | 'add-mixed-value' | 'edit-scalar';
+
+function scalarPaths(value: any, prefix: (string | number)[] = []): (string | number)[][] {
+  if (value instanceof Date) return prefix.length > 0 ? [prefix] : [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => scalarPaths(item, [...prefix, index]));
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value).flatMap(key => scalarPaths(value[key], [...prefix, key]));
+  }
+  return prefix.length > 0 ? [prefix] : [];
+}
+
+function mixedValue(rng: SeededRandom): unknown {
+  switch (rng.nextInt(4)) {
+    case 0:
+      return integer(rng);
+    case 1:
+      return `added_${integer(rng)}`;
+    case 2:
+      return rng.chance(0.5);
+    default:
+      return [integer(rng), `nested_${integer(rng)}`];
+  }
+}
+
+function changedScalar(value: unknown, rng: SeededRandom): unknown {
+  if (typeof value === 'string') return `${value}!`;
+  if (typeof value === 'boolean') return !value;
+  if (typeof value === 'number') {
+    const replacement = integer(rng);
+    return replacement === value ? replacement + 1 : replacement;
+  }
+  if (value instanceof Date) return new Date(value.getTime() + 86400000);
+  return integer(rng);
+}
+
+function mutateAot(
+  object: any,
+  rng: SeededRandom,
+  mode?: AotMutationMode
+): { plan: MutationPlan; description: string } | undefined {
   const arrays = objectArrays(object).filter(({ path }) => {
     const value = getAt(object, path);
-    return Array.isArray(value) && value.length > (first ? 1 : 0);
+    return Array.isArray(value) && value.length > (mode === 'remove-entry' ? 1 : 0);
   });
   if (arrays.length === 0) return undefined;
 
   const selected = rng.pick(arrays);
   const array = getAt(object, selected.path) as any[];
-  if (first || rng.chance(0.55)) {
+  const selectedMode = mode ?? (rng.chance(0.55) ? 'remove-entry' : rng.chance(0.5) ? 'add-object' : 'edit-scalar');
+
+  if (selectedMode === 'remove-entry') {
+    if (array.length < 2) return undefined;
     const index = rng.nextInt(array.length);
     array.splice(index, 1);
-    return { kind: 'remove-array-item', path: [...selected.path, index] };
+    return {
+      plan: { kind: 'remove-array-item', path: [...selected.path, index] },
+      description: 'remove AOT entry'
+    };
   }
 
-  if (rng.chance(0.5)) {
-    const copy = deepClone(array[rng.nextInt(array.length)]);
-    if (copy && typeof copy === 'object' && !Array.isArray(copy)) {
-      (copy as any).added = integer(rng);
-      const index = rng.nextInt(array.length + 1);
-      array.splice(index, 0, copy);
-      return { kind: 'add-array-item', path: [...selected.path, index], newValue: copy };
-    }
+  if (selectedMode === 'add-object') {
+    const original = array[rng.nextInt(array.length)] as Record<string, unknown>;
+    const copy = Object.fromEntries(
+      Object.entries(original).filter(([, value]) =>
+        value === null || typeof value !== 'object' || value instanceof Date
+      ).map(([key, value]) => [key, deepClone(value)])
+    );
+    copy[`added_${rng.nextInt(100)}`] = integer(rng);
+    const index = rng.nextInt(array.length + 1);
+    array.splice(index, 0, copy);
+    return {
+      plan: { kind: 'add-array-item', path: [...selected.path, index], newValue: copy },
+      description: 'add object AOT entry'
+    };
   }
 
-  const index = rng.nextInt(array.length);
-  const value = integer(rng);
-  const entry = array[index] as Record<string, unknown>;
-  entry.edited = value;
+  if (selectedMode === 'add-mixed-value') {
+    const index = array.length;
+    const value = mixedValue(rng);
+    array.push(value);
+    return {
+      plan: { kind: 'add-array-item', path: [...selected.path, index], newValue: value },
+      description: 'append non-object AOT value'
+    };
+  }
+
+  const entryIndex = rng.nextInt(array.length);
+  const entry = array[entryIndex];
+  const paths = scalarPaths(entry);
+  if (paths.length === 0) return undefined;
+  const valuePath = rng.pick(paths);
+  const entryValue = getAt(entry, valuePath);
+  const newValue = changedScalar(entryValue, rng);
+  let parent = entry;
+  for (const segment of valuePath.slice(0, -1)) parent = parent[segment];
+  parent[valuePath[valuePath.length - 1]] = newValue;
   return {
-    kind: 'change-value',
-    path: [...selected.path, index, 'edited'],
-    newValue: value
+    plan: { kind: 'change-value', path: [...selected.path, entryIndex, ...valuePath], newValue },
+    description: 'edit existing AOT value'
   };
 }
 
-export const aotMutationStrategy: MutationStrategy = ({ updated, context }) => {
+function runAotMutationStrategy(
+  updated: unknown,
+  context: FuzzContext,
+  firstMode: (seed: number) => AotMutationMode
+): { updated: unknown; descriptions: string[]; plans: MutationPlan[] } {
   const mutationDescs: string[] = [];
   const mutationPlans: MutationPlan[] = [];
   for (let mutation = 0; mutation < context.mutationCount; mutation++) {
-    const plan = mutateAot(
+    const result = mutateAot(
       updated,
       new SeededRandom(context.seed + mutation * 100003 + 17),
-      mutation === 0
+      mutation === 0 ? firstMode(context.seed) : undefined
     );
-    if (!plan) break;
-    mutationDescs.push(`${plan.kind} at ${plan.path.join('.')}`);
-    mutationPlans.push(plan);
+    if (!result) break;
+    mutationDescs.push(`${result.description} at ${result.plan.path.join('.')}`);
+    mutationPlans.push(result.plan);
   }
   return { updated, descriptions: mutationDescs, plans: mutationPlans };
+}
+
+export const aotRemovalMutationStrategy: MutationStrategy = ({ updated, context }) =>
+  runAotMutationStrategy(updated, context, () => 'remove-entry');
+
+export const aotMutationStrategy: MutationStrategy = ({ updated, context }) => {
+  const modes: AotMutationMode[] = ['remove-entry', 'add-object', 'add-mixed-value', 'edit-scalar'];
+  return runAotMutationStrategy(updated, context, seed => modes[seed % modes.length]);
 };
 
 export function fuzzOne5(seed: number, mutationCount: number): PatchFuzzResult {

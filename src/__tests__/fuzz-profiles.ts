@@ -9,7 +9,7 @@ import {
   type FuzzComparator,
   type PatchFuzzResult
 } from './fuzz-patch';
-import { aotMutationStrategy, generateAotSource } from './fuzz-patch5';
+import { aotRemovalMutationStrategy, generateAotSource } from './fuzz-patch5';
 import { SeededRandom } from './randomizer';
 
 export type FuzzProfile = 'aot' | 'aot-format' | 'aot-general' | 'general-format';
@@ -24,7 +24,7 @@ export function profileConfig(profile: FuzzProfile, mutationCount: number): Fuzz
         mutationCount,
         generateSource: generateAotSource,
         generateFormat: () => undefined,
-        mutate: aotMutationStrategy,
+        mutate: aotRemovalMutationStrategy,
         compare: deepEqual,
         variant: '5',
         profile
@@ -34,7 +34,7 @@ export function profileConfig(profile: FuzzProfile, mutationCount: number): Fuzz
         mutationCount,
         generateSource: generateAotSource,
         generateFormat: createFormatGenerator(true, true, true),
-        mutate: aotMutationStrategy,
+        mutate: aotRemovalMutationStrategy,
         compare: formatComparator,
         variant: '5',
         profile

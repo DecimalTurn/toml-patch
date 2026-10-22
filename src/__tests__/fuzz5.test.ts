@@ -16,6 +16,22 @@ test('generates interleaved nested AOT ownership and empty subtables', () => {
   expect(parent[1].branch['leaf.items']).toHaveLength(1);
 });
 
+test('rotates deterministically through varied AOT mutation classes', () => {
+  const expected = [
+    'remove AOT entry',
+    'add object AOT entry',
+    'append non-object AOT value',
+    'edit existing AOT value'
+  ];
+  const results = expected.map((_, seed) => fuzzOne5(seed, 1));
+
+  expect(results.map(result => result.mutationDescs?.[0]?.split(' at ')[0])).toEqual(expected);
+  expect(results.every(result => result.status === 'ok')).toBe(true);
+  expect(results.map(result => result.patchedToml)).toEqual(
+    expected.map((_, seed) => fuzzOne5(seed, 1).patchedToml)
+  );
+});
+
 test.each(structureSeeds)('fuzz5 seed %d round-trips structure-first AOT edits', (seed) => {
   const result = fuzzOne5(seed, 1);
   expect(result.status, result.error).toBe('ok');
