@@ -230,6 +230,45 @@ describe('validation', () => {
     expect(() => toJS(parseTOML(src))).toThrow(/Table already defined: group\.route\.items/);
   });
 
+  test('rejects traversing inherited date properties without mutating shared prototypes', () => {
+    const sourceDate = toJS(parseTOML('d = 1979-05-27')).d as Date;
+    const datePrototype = Object.getPrototypeOf(sourceDate);
+    const originalToISOString = datePrototype.toISOString;
+    const src = `
+      d = 1979-05-27
+      d.constructor.prototype.toISOString = "broken"
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for d\.constructor/);
+    expect(datePrototype.toISOString).toBe(originalToISOString);
+    expect(sourceDate.toISOString()).toBe('1979-05-27');
+    expect((toJS(parseTOML('d = 1979-05-27')).d as Date).toISOString()).toBe('1979-05-27');
+  });
+
+  test('rejects an array of tables when its implicit parent already has children', () => {
+    const src = `
+      [a.b]
+      value = 1
+
+      [[a]]
+      other = 2
+    `;
+
+    expect(() => toJS(parseTOML(src))).toThrow(/Cannot add Array of Tables to table at a/);
+  });
+
+  test('allows an explicit table header to open an implicit parent with children', () => {
+    const src = `
+      [a.b]
+      value = 1
+
+      [a]
+      other = 2
+    `;
+
+    expect(toJS(parseTOML(src))).toEqual({ a: { b: { value: 1 }, other: 2 } });
+  });
+
   test('rejects extending an explicit sub-table after an unrelated table header', () => {
     const src = `
       [[group]]

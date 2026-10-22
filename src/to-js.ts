@@ -192,12 +192,14 @@ export default function toJS(
       resolvePathState(pathState, fullPath, true).kind = 'inline';
       trackNestedInlineTables(node.value, fullPath, pathState);
     } else {
-      resolvePathState(pathState, fullPath, true).kind =
+      const valueState = resolvePathState(pathState, fullPath, true);
+      valueState.kind =
         node.value.type === NodeType.InlineArray
           ? 'array'
           : node.value.type === NodeType.DateTime
             ? 'date'
             : 'value';
+      if (node.value.type === NodeType.DateTime) valueState.runtimeValue = value;
     }
 
     const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
@@ -313,6 +315,22 @@ function validateKey(
   const fullName = joinKey(fullPath);
   const target = resolvePathState(root, fullPath);
 
+  for (let index = 0; index < fullPath.length - 1; index++) {
+    const path = fullPath.slice(0, index + 1);
+    const node = resolvePathState(root, path);
+    const nextSegment = fullPath[index + 1];
+    const runtimeValue = node.runtimeValue;
+    if (
+      node.kind === 'date'
+      && !node.children.has(nextSegment)
+      && runtimeValue !== null
+      && typeof runtimeValue === 'object'
+      && nextSegment in runtimeValue
+    ) {
+      throw new Error(`Value already defined for ${joinKey(path.concat(nextSegment))}`);
+    }
+  }
+
   if (type === NodeType.KeyValue) {
     if (key.length > 1) {
       for (let index = 1; index < key.length; index++) {
@@ -361,7 +379,10 @@ function validateKey(
     if (target.kind === 'value' || target.kind === 'date') {
       throw new Error(`Value already defined for ${fullName}`);
     }
-  } else if (target.kind !== 'undefined' && target.kind !== 'table-array') {
+  } else if (
+    (target.kind !== 'undefined' && target.kind !== 'table-array')
+    || (target.kind === 'undefined' && target.children.size > 0)
+  ) {
     throw new Error(`Cannot add Array of Tables to table at ${fullName}`);
   }
 }
@@ -420,6 +441,7 @@ type PathState = {
   kind: PathStateKind;
   children: Map<string, PathState>;
   entries: PathState[];
+  runtimeValue?: unknown;
 };
 
 function createPathState(): PathState {
