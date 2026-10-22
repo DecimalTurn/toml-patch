@@ -589,9 +589,47 @@ describe('R5 - comments the parser files under the previous table', () => {
 });
 
 describe('R2 - leading comment of the first section', () => {
+  test('adds the first root key-value above the leading comment of the first section', () => {
+    const input = dedent`
+      # server settings
+      [server]
+      port = 1
+    ` + '\n';
+
+    const value = parse(input);
+    value.top = 1;
+
+    expect(patch(input, value)).toEqual(dedent`
+      top = 1
+
+      # server settings
+      [server]
+      port = 1
+    ` + '\n');
+  });
+
+  test('adds a root key-value below a pinned banner above the first section', () => {
+    // A blank line severs the banner from [server] (R3), so it stays at the top.
+    const input = dedent`
+      # banner
+
+      [server]
+      port = 1
+    ` + '\n';
+
+    const value = parse(input);
+    value.top = 1;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # banner
+      top = 1
+
+      [server]
+      port = 1
+    ` + '\n');
+  });
+
   test('adds a root key-value above the leading comment of the first section', () => {
-    // The new key is inserted just above the [server] header, which puts it
-    // between the header and the comment R2 assigns to it.
     const input = dedent`
       title = "x"
 

@@ -1909,10 +1909,8 @@ function applyChanges(
           }
           let resolvedIndex = index;
           if (isDocument(parent) && isKeyValue(childToInsert)) {
-            const rootTableEnd = (parent as Document).items.findIndex(
-              item => isTable(item) || isTableArray(item)
-            );
-            if (rootTableEnd !== -1) {
+            const rootTableEnd = rootKeyValueInsertIndex(parent as Document);
+            if (rootTableEnd !== undefined) {
               resolvedIndex = rootTableEnd;
             }
           }
@@ -3725,8 +3723,7 @@ function applyChanges(
                     // key-value below it, so it must land after all root KVs —
                     // before the first existing section, or at the very end —
                     // never at the removed KV's index (fuzz seed 11).
-                    const headerIdx = firstSectionHeaderIndex(original);
-                    insertIdx = headerIdx >= 0 ? headerIdx : original.items.length;
+                    insertIdx = rootKeyValueInsertIndex(original) ?? original.items.length;
                   }
                   // The removal above registered its line/column offset on
                   // the parent (or a preceding item).  insert() measures
@@ -4201,10 +4198,21 @@ function firstSectionHeaderIndex(doc: Document): number {
   return doc.items.findIndex(item => isTable(item) || isTableArray(item));
 }
 
-/** Index to insert a regenerated root key-value at so it stays in the root table. */
+/**
+ * Index to insert a root key-value at so it stays in the root table: above the first section
+ * header, and above the comment block R2 assigns to that header — inserting between them would
+ * leave the comment introducing the new key instead (docs/Comment-Ownership.md, R2).
+ */
 function rootKeyValueInsertIndex(doc: Document): number | undefined {
   const firstTableIndex = firstSectionHeaderIndex(doc);
-  return firstTableIndex === -1 ? undefined : firstTableIndex;
+  if (firstTableIndex === -1) return undefined;
+  if (firstTableIndex === 0 || !isComment(doc.items[firstTableIndex - 1])) return firstTableIndex;
+
+  // R2 compares line numbers, which pending removal offsets would skew.
+  applyWrites(doc);
+  const header = doc.items[firstTableIndex];
+  const group = resolveGroups(doc).find(candidate => candidate.member === header);
+  return group ? doc.items.indexOf(group.items[0] as Block) : firstTableIndex;
 }
 
 /**
@@ -4232,7 +4240,7 @@ function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
   // before measuring, like every other insert that follows a removal.
   applyWrites(doc);
 
-  insert(doc, doc, kv, firstTableIndex);
+  insert(doc, doc, kv, rootKeyValueInsertIndex(doc) ?? firstTableIndex);
 }
 
 /**
