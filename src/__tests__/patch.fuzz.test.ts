@@ -1219,6 +1219,7 @@ test.fails('regression for fuzz5 seed 112 (removing nested AOT item before addin
   obj.root.splice(0, 0, { id: 'first', added: 1 });
 
   const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
     [[root]]
     id = "first"
@@ -1226,6 +1227,54 @@ test.fails('regression for fuzz5 seed 112 (removing nested AOT item before addin
 
     [[root]]
     id = "first"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "two"
+
+    [[root]]
+
+    [root.branch]
+    value = 2
+  `);
+});
+
+test.fails('regression for fuzz5 seed 112 + inlineformatting (removing nested AOT item before adding parent entry)', () => {
+  const src = dedent`
+    [[root]]
+    id = "first"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "one"
+
+    [[root.branch.items]]
+    id = "two"
+
+    [[root]]
+
+    [root.branch]
+    value = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj.root[0].branch.items.splice(0, 1, { inlineTableStart: 1 });
+  obj.root.splice(0, 0, { id: 'first', added: 1 });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "first"
+    added = 1
+
+    [[root]]
+    id = "first"
+
     branch = { value = 1, items = [ { id = "two" } ] }
 
     [[root]]
@@ -1233,7 +1282,25 @@ test.fails('regression for fuzz5 seed 112 (removing nested AOT item before addin
     [root.branch]
     value = 2
   `);
+});
+
+
+test('respects inlineTableStart when adding a nested branch table', () => {
+  const src = dedent`
+    [root]
+    name = "r"
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.branch = { value: 1 };
+
+  const result = patch(src, obj, { inlineTableStart: 1 });
   expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [root]
+    name = "r"
+    branch = { value = 1 }
+  `);
 });
 
 test('regression for fuzz seed 599513: moving a multiline inline table left corrupts its interior rows', () => {
