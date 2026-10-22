@@ -32,6 +32,11 @@ test('rotates deterministically through varied AOT mutation classes', () => {
   );
 });
 
+test('fuzz5 seed 112 round-trips three varied AOT mutations', () => {
+  const result = fuzzOne5(112, 3);
+  expect(result.status, result.error).toBe('ok');
+});
+
 test.each(structureSeeds)('fuzz5 seed %d round-trips structure-first AOT edits', (seed) => {
   const result = fuzzOne5(seed, 1);
   expect(result.status, result.error).toBe('ok');
