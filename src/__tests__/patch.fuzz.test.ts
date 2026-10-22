@@ -1221,6 +1221,61 @@ test('regression for fuzz seed 599513: moving a multiline inline table left corr
   `);
 });
 
+test('appending a primitive to a nested AOT after an interleaved table preserves the value', () => {
+  const src = dedent`
+    [[group.cluster]]
+    id = "first"
+    [[group.cluster.route]]
+    id = "first-route"
+    value = 1
+    [[group.cluster.route]]
+    id = "second-route"
+    value = 2
+
+    [[group.cluster]]
+    id = "second"
+    [[group.cluster.route]]
+    id = "third-route"
+    value = 3
+
+    [noise]
+    value = 0
+
+    [[group.cluster]]
+    id = "third"
+    [group.cluster.route.args]
+    value = 4
+  `;
+
+  const obj = parse(src) as any;
+  obj.group.cluster[1].route[1] = 831;
+
+  const result = patch(src, obj);
+  expect(result).toEqual(dedent`
+    [[group.cluster]]
+    id = "first"
+    [[group.cluster.route]]
+    id = "first-route"
+    value = 1
+    [[group.cluster.route]]
+    id = "second-route"
+    value = 2
+
+    [[group.cluster]]
+    id = "second"
+    route = [{ id = "third-route", value = 3 }, 831]
+
+    [noise]
+    value = 0
+
+    [[group.cluster]]
+    id = "third"
+    [group.cluster.route.args]
+    value = 4
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
 test('regression for fuzz seed 742554 (non-contiguous AOT sub-table skipped on append)', () => {
   // `[[y."!"]]` is a sub-table of `y` entry 0, but it is separated from the
   // `[[y]]` header by an unrelated `[[c]]` section.  Appending a new `y`
