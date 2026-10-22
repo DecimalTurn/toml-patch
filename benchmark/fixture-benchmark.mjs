@@ -34,6 +34,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const CURRENT_IMPL = 'toml-patch (current)';
 const BASELINE_IMPL = 'toml-patch (baseline)';
+const BASELINE_VERSION = process.env.BENCH_BASELINE_VERSION;
 const SMOL_TEMPORAL = 'smol-toml (Temporal)';
 const CURRENT_TEMPORAL = 'toml-patch (current, Temporal)';
 const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-fixtures.md');
@@ -288,6 +289,9 @@ function writeMarkdown(parseResults, stringifyResults) {
   const smolVersion = JSON.parse(readFileSync(join(__dirname, '../node_modules/smol-toml/package.json'), 'utf8')).version;
   const versions = {
     [CURRENT_IMPL]: `@decimalturn/toml-patch@${tomlPatchVersion}`,
+    [BASELINE_IMPL]: BASELINE_VERSION
+      ? `@decimalturn/toml-patch@${BASELINE_VERSION} (baseline)`
+      : '@decimalturn/toml-patch (baseline)',
     [CURRENT_TEMPORAL]: `@decimalturn/toml-patch@${tomlPatchVersion} (Temporal, current)`,
     'smol-toml': `smol-toml@${smolVersion}`,
     [SMOL_TEMPORAL]: `smol-toml@${smolVersion} (Temporal)`,

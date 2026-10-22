@@ -149,7 +149,8 @@ x = 1
 y = 2
 ```
 
-Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it. A blank line before
+Here `# about b` belongs to `[b]`. Removing `[b]` takes the comment with it, while removing `[a]`
+leaves it in place above `[b]`. A blank line before
 `[b]` severs that link (R3), so the block belongs to `[a]` instead:
 
 ```toml

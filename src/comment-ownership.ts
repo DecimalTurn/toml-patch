@@ -443,8 +443,11 @@ function trailingOwnedRun(container: Table | TableArray, nextBlock: TreeNode): C
  * (leading block and trailing comments — see resolveGroups), plus,
  * when `member` is a [table]/[[array]] block, any trailing comment block the
  * parser filed under the PRECEDING sibling table but which R5 assigns to
- * `member` instead. Falls back to a plain removal when `parent` isn't a
- * container the ownership model applies to (e.g. InlineTable/InlineArray).
+ * `member` instead. Conversely, `member`'s own trailing block that R5 assigns
+ * to the FOLLOWING block survives: it is re-parented into Document.items
+ * just above that block before `member` goes. Falls back to a plain removal
+ * when `parent` isn't a container the ownership model applies to (e.g.
+ * InlineTable/InlineArray).
  */
 export function removeMember(root: Root, parent: TreeNode, member: TreeNode): void {
   if (isDocument(parent) && (isTable(member) || isTableArray(member))) {
@@ -456,6 +459,20 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
         for (const item of runItems) {
           remove(root, previousSibling, item);
         }
+      }
+    }
+
+    // Same re-parenting as normalizeSectionComments, for this one block: the
+    // run keeps its loc, so it stays put while `member`'s narrowed span is
+    // removed above it.
+    const nextSibling = parent.items[index + 1];
+    if (nextSibling && (isTable(nextSibling) || isTableArray(nextSibling))) {
+      const runItems = trailingOwnedRun(member, nextSibling);
+      if (runItems) {
+        const items = member.items as TreeNode[];
+        items.splice(items.length - runItems.length, runItems.length);
+        (parent.items as TreeNode[]).splice(index + 1, 0, ...runItems);
+        recalcContainerEnd(member);
       }
     }
   }

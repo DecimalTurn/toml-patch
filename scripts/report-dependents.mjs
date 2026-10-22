@@ -117,9 +117,12 @@ async function buildReport(packageName, dependentNames, reportOptions, cache) {
     sourceUrl: dependentPageUrl(packageName),
     cachePath: reportOptions.cache ?? DEFAULT_CACHE,
     dependentNames: rows.map((row) => row.name),
-    newSinceLastRun: cache
-      ? uniqueNames.filter((name) => !cache.dependentNames.includes(name))
-      : [],
+    newSinceLastRun:
+      cache && reportOptions.namesSource.startsWith('npm dependents page cache')
+        ? cache.newSinceLastRun ?? []
+        : cache
+          ? uniqueNames.filter((name) => !cache.dependentNames.includes(name))
+          : [],
     count: rows.length,
     rows,
   };

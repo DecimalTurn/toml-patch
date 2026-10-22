@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: prevent applying changes in the wrong place for nested table-array entries when removing sub-tables, resolving nested AOT paths, materialising emptied arrays, replacing values inside an entry and appending new entries.
+- Parsing: accept dotted keys that extend a sub-table path an earlier `[[array]]` entry defined with a header. 
+- Patching: replacing a value two or more keys below its nearest `[table]` header no longer produces invalid TOML when a sibling header still extends the table in between.
+- Patching: removing a table no longer deletes the comment directly above the next header.
+- Patching: a new root key-value is inserted above the comment that introduces the first section, instead of between that comment and its header.
+
+### Changed
+
+- Patching: emptying a dotted-key parent now leaves  an empty inline table instead of an empty table with header.
+
 ## [3.3.1] - 2026-10-17
 
 ### Fixed

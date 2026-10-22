@@ -218,7 +218,7 @@ function applyRequestedRootKeyOrder(updated: any, updated_js: any, diffing_fmt: 
  * `[[x]]` header). This function promotes those trailing comments to Document-level
  * siblings so that resolveGroups can assign them to the correct entry.
  */
-function normalizeAotEntryComments(doc: Document): void {
+function normalizeAotEntryComments(doc: Document, ancestorBoundariesOnly = false): void {
   const items = doc.items as TreeNode[];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -241,7 +241,9 @@ function normalizeAotEntryComments(doc: Document): void {
       if (nextItem && isTableArray(nextItem)) {
         const thisKey = (item as Table | TableArray).key.item.value;
         const nextKey = (nextItem as TableArray).key.item.value;
-        if (arraysEqual(thisKey, nextKey.slice(0, thisKey.length))) {
+        const isDescendantBoundary = arraysEqual(thisKey, nextKey.slice(0, thisKey.length));
+        const isAncestorBoundary = arraysEqual(nextKey, thisKey.slice(0, nextKey.length));
+        if (ancestorBoundariesOnly ? isAncestorBoundary : isDescendantBoundary) {
           // Promote trailing comments to Document level
           const comments = containerItems.splice(commentStart);
           const nextIdx = items.indexOf(nextItem);
@@ -1076,10 +1078,10 @@ function applyChanges(
   indentWidthExplicit = false,
   trailingCommaExplicit = true
 ): Document {
-  // Track AOT keys whose entries were all removed so we can insert empty arrays. Keyed by
-  // the dotted name for de-duplication, but carrying the path segments — a nested key like
-  // [[a.b]] has to be re-materialised as `a.b = []`, not as a root key named `a.b`.
-  const emptiedAotKeys = new Map<string, string[]>();
+  // Track AOT paths whose entries were all removed so we can insert empty arrays. The full
+  // path keeps separate parent AOT entries distinct, while a nested key like [[a.b]] still
+  // carries enough information to be re-materialised as `a.b = []`.
+  const emptiedAotKeys = new Map<string, Path>();
 
   // Tables materialised in-place during this patch (R2 extension).  After
   // applyWrites, fix up their line position to remove spurious blank lines
@@ -1726,6 +1728,13 @@ function applyChanges(
             let lastSubTable = index - 1;
             for (let i = index; i < document.items.length; i++) {
               const item = document.items[i];
+              if (isTableArray(item)) {
+                const itemKey = (item as TableArray).key.item.value;
+                if (itemKey.length < aotKey.length
+                    && arraysEqual(aotKey.slice(0, itemKey.length), itemKey)) {
+                  break;
+                }
+              }
               const key = isTable(item) || isTableArray(item)
                 ? (item as Table | TableArray).key.item.value
                 : undefined;
@@ -1809,6 +1818,10 @@ function applyChanges(
         : undefined;
 
       if (isTableArray(parent) || isInlineArray(parent) || isDocument(parent)) {
+        if (is_table_array && !isInteger(last(parent_path))) {
+          normalizeAotEntryComments(original, true);
+        }
+
         // Special handling for InlineArray: preserve original trailing comma format
         if (isInlineArray(parent)) {
           const originalHadTrailingCommas = trailingCommaForAddedItem(
@@ -1896,10 +1909,8 @@ function applyChanges(
           }
           let resolvedIndex = index;
           if (isDocument(parent) && isKeyValue(childToInsert)) {
-            const rootTableEnd = (parent as Document).items.findIndex(
-              item => isTable(item) || isTableArray(item)
-            );
-            if (rootTableEnd !== -1) {
+            const rootTableEnd = rootKeyValueInsertIndex(parent as Document);
+            if (rootTableEnd !== undefined) {
               resolvedIndex = rootTableEnd;
             }
           }
@@ -2530,6 +2541,7 @@ function applyChanges(
           // value instead of swapping the table (fuzz seed 6803).  Prefer the
           // node's actual structural container.
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+          const aotOwner = findAotEntryForPath(original, change.path);
 
           // The table's key can be a strict prefix of OTHER document sections
           // (e.g. `[""]` collapsing to a scalar while `["".hv8lx]` is also a
@@ -2537,7 +2549,9 @@ function applyChanges(
           // re-define the key on re-parse and fail with "Value already defined"
           // (fuzz seed 22772).  Remove them before the table becomes a scalar.
           if (isDocument(tableParent)) {
-            const sectionedSiblings = findDocumentItemsByKeyPrefix(original, existingTableKey)
+            const sectionedSiblings = (aotOwner
+              ? findAotScopedDocumentItems(original, existingTableKey, aotOwner)
+              : findDocumentItemsByKeyPrefix(original, existingTableKey))
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of sectionedSiblings) {
               removeMember(original, tableParent, sibling);
@@ -2547,6 +2561,23 @@ function applyChanges(
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
           const freshKV = freshDoc.items[0] as KeyValue;
+
+          // Sub-tables of a table-array entry are document siblings in the CST,
+          // but a scalar replacement belongs in the owning entry's items. Keep
+          // the replacement scoped to that entry instead of binding it to the
+          // preceding AOT entry on re-parse.
+          if (isKeyValue(freshKV) && aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+            const scalarParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
+              ? aotOwner
+              : findAotScopedDocumentItems(original, parentKey, aotOwner)
+                .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
+            if (scalarParent) {
+              removeMember(original, tableParent, existing);
+              insert(original, scalarParent, freshKV, undefined);
+              commentEligibleNodes.add(freshKV);
+              return;
+            }
+          }
 
           if (parentKey.length > 0) {
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
@@ -2664,6 +2695,7 @@ function applyChanges(
           // (fuzz seed 6803): the path prefix can prefix-match an unrelated
           // earlier dotted key-value.
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
+          const aotOwner = findAotEntryForPath(original, navPath);
 
           // Regenerate a fresh KV using parseJS on just the single key-value
           const freshDoc = parseJS({ [lastSegment[0]]: jsValue }, format);
@@ -2683,7 +2715,9 @@ function applyChanges(
             // re-define the key on re-parse and fail with "Cannot add to
             // static array" (fuzz seed 1285105).  Match them by key prefix,
             // not just exact key equality.
-            const siblingEntries = findDocumentItemsByKeyPrefix(original, existingAotKey)
+            const siblingEntries = (aotOwner
+              ? findAotScopedDocumentItems(original, existingAotKey, aotOwner)
+              : findDocumentItemsByKeyPrefix(original, existingAotKey))
               .filter(n => n !== existing && (isTable(n) || isTableArray(n)));
             for (const sibling of siblingEntries) {
               removeMember(original, original, sibling);
@@ -2691,6 +2725,19 @@ function applyChanges(
           }
 
           if (parentKey.length > 0) {
+            if (isKeyValue(freshKV) && aotOwner && keyStartsWith(parentKey, aotOwner.key.item.value)) {
+              const replacementParent: Table | TableArray | undefined = arraysEqual(parentKey, aotOwner.key.item.value)
+                ? aotOwner
+                : findAotScopedDocumentItems(original, parentKey, aotOwner)
+                  .find(item => isTable(item) && arraysEqual((item as Table).key.item.value, parentKey)) as Table | undefined;
+              if (replacementParent) {
+                removeMember(original, tableParent, existing);
+                insert(original, replacementParent, freshKV, undefined);
+                commentEligibleNodes.add(freshKV);
+                return;
+              }
+            }
+
             // The regenerated `freshKV` is a Table/TableArray (not a KeyValue)
             // when `jsValue` is an object or an array of objects.  Emitting it
             // with only the last key segment under a `[parentKey]` header
@@ -2846,11 +2893,17 @@ function applyChanges(
           let materialiseAotInPlace = false;
           if (change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
-            const allSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
+            const cstParentPath = stripAotEntryIndices(original, parentPath);
+            const owner = findAotEntryForPath(original, change.path);
+            const allSiblings = owner
+              ? findAotScopedDocumentItems(original, cstParentPath, owner)
+              : findDocumentItemsByKeyPrefix(original, cstParentPath);
             const otherSiblings = allSiblings.filter(s =>
-              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, change.path))
+              s !== first &&
+              !(isTableArray(s) && arraysEqual((s as TableArray).key.item.value, stripAotEntryIndices(original, change.path)))
             );
-            if (otherSiblings.length === 0) {
+            if (otherSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
@@ -2871,7 +2924,7 @@ function applyChanges(
                 (aotKeyHolder as any).type = NodeType.TableKey;
                 // Rename the key in place (preserving original loc.start).
                 const aotKey = hasItem(aotKeyHolder) ? aotKeyHolder.item : aotKeyHolder;
-                aotKey.value = parentPath as string[];
+                aotKey.value = cstParentPath as string[];
                 aotKey.raw = preserveEscapedKeyRaw(aotKey.raw, aotKey.value, format.escapeSequenceUpperCase);
                 aotKey.loc.end.column = aotKey.loc.start.column + aotKey.raw.length;
                 aotKeyHolder.loc.end.column = aotKeyHolder.loc.start.column + aotKey.raw.length + 2;
@@ -2887,23 +2940,34 @@ function applyChanges(
 
           // Remove remaining AOT entries.  If the first was converted in place
           // it no longer matches change.path, so the loop naturally skips it.
+          const cstPath = stripAotEntryIndices(original, change.path);
+          const indexedOwner = findAotEntryForPath(original, change.path);
           let entry: TreeNode | undefined;
           while ((entry = nextAotEntry())) {
+            if (isTableArray(entry)) {
+              const ownedItems = findAotEntryScopeItems(original, entry)
+                .filter(item => isTable(item) || isTableArray(item))
+                .filter(item => keyStartsWith(itemKey(item), cstPath));
+              for (const ownedItem of ownedItems) {
+                removeMember(original, original, ownedItem);
+              }
+            }
             removeMember(original, original, entry);
           }
-          // [table] sections extending the same prefix belong to the removed
-          // key too — deleting `""` must remove `["". "aV^16c`G"]` as well,
-          // or the re-parse revives the key (fuzz seed 3463).
-          for (const tableNode of findDocumentItemsByKeyPrefix(original, change.path).filter(isTable)) {
-            removeMember(original, original, tableNode);
+          // For an unindexed root-level removal, extending tables can precede
+          // the AOT entries and must still be removed with the shared prefix.
+          if (!indexedOwner) {
+            for (const tableNode of findDocumentItemsByKeyPrefix(original, cstPath).filter(isTable)) {
+              removeMember(original, original, tableNode);
+            }
           }
           // After removing all AOT entries, insert an empty inline array key-value so the
           // key isn't lost (e.g. b = []), but only when the caller still wants the key.
           // "Emptied to []" and "deleted outright" both arrive here as a Remove of every
           // entry; re-materialising unconditionally put back a key the caller had deleted.
           if (tryFindByPath(updated, change.path)) {
-            const aotPath = change.path as string[];
-            emptiedAotKeys.set(aotPath.join('.'), aotPath);
+            const aotPath = change.path;
+            emptiedAotKeys.set(stableStringify(aotPath), aotPath);
           }
 
           // When the AOT entries were the sole children of an implicit parent
@@ -2913,27 +2977,45 @@ function applyChanges(
           if (!materialiseAotInPlace &&
               change.path.length > 1 && rawUpdated !== undefined) {
             const parentPath = change.path.slice(0, -1);
-            const remainingSiblings = findDocumentItemsByKeyPrefix(original, parentPath);
-            if (remainingSiblings.length === 0) {
+            const cstParentPath = stripAotEntryIndices(original, parentPath);
+            const owner = findAotEntryForPath(original, change.path);
+            const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
+            if (remainingSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
               let value: any = rawUpdated;
               for (const k of parentPath) value = value?.[k];
               if (isObject(value) && Object.keys(value).length === 0) {
-                const emptyTable = generateTable(parentPath as string[], format.escapeSequenceUpperCase);
+                const emptyTable = generateTable(cstParentPath as string[], format.escapeSequenceUpperCase);
                 materialisedTables.add(emptyTable);
                 // The removals above already spliced the document items, so a
                 // stale index (e.g. the removed entry was the last item) must
                 // be clamped — inserting past the end leaves the generated
                 // header at its (1,0) origin, corrupting line 1 (fuzz seed
                 // 11605).
-                const insertIdx = firstIndex >= 0
-                  ? Math.min(firstIndex, original.items.length)
-                  : original.items.length;
+                const ownerIndex = owner && keyStartsWith(cstParentPath as string[], owner.key.item.value)
+                  ? (original.items as TreeNode[]).indexOf(owner)
+                  : -1;
+                const insertIdx = ownerIndex >= 0
+                  ? ownerIndex + 1
+                  : firstIndex >= 0
+                    ? Math.min(firstIndex, original.items.length)
+                    : original.items.length;
                 // Same pending-offset hazard as the implicit-key branch
                 // below: insert after the removals are resolved so the new
                 // header can't absorb the document's enter offset (fuzz
                 // seed 1172).
                 applyWrites(original);
                 insert(original, original, emptyTable, insertIdx);
+                if (ownerIndex >= 0) {
+                  applyWrites(original);
+                  const owner = original.items[ownerIndex];
+                  const gap = emptyTable.loc.start.line - owner.loc.end.line - 1;
+                  if (gap > 0) {
+                    for (const item of (original.items as TreeNode[]).slice(ownerIndex + 1)) {
+                      shiftNode(item, { lines: -gap, columns: 0 });
+                    }
+                  }
+                }
               }
             }
           }
@@ -2948,7 +3030,8 @@ function applyChanges(
           // `delete obj[""][0]["-vX`"]` has path `["", 0, "-vX`"]` but the
           // CST sub-table is keyed `["", "-vX`"]` (fuzz seed 1428499).
           const cstPath = stripAotEntryIndices(original, change.path);
-          const prefixNodes = findDocumentItemsByKeyPrefix(original, cstPath);
+          const owner = findAotEntryForPath(original, change.path);
+          const prefixNodes = findAotScopedDocumentItems(original, cstPath, owner);
           if (prefixNodes.length > 0) {
             const firstPrefixIndex = (original.items as TreeNode[]).indexOf(prefixNodes[0]);
             for (const prefixNode of prefixNodes) {
@@ -2960,8 +3043,9 @@ function applyChanges(
             // parent as an empty table so the key isn't dropped (seed 176).
             if (cstPath.length > 1 && rawUpdated !== undefined) {
               const cstParentPath = cstPath.slice(0, -1);
-              const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath);
-              if (remainingSiblings.length === 0) {
+              const remainingSiblings = findAotScopedDocumentItems(original, cstParentPath, owner);
+              if (remainingSiblings.length === 0 &&
+                  !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
                 // `rawUpdated` is the JS object, so walk the ORIGINAL
                 // (indexed) path — not the index-stripped CST path.
                 let value: any = rawUpdated;
@@ -3052,9 +3136,13 @@ function applyChanges(
           // sibling scan and in-place key rename must use the CST key, else
           // the index leaks into the header `["".0.fv]` (fuzz seed 1020868).
           const cstParentPath = (node as Table).key.item.value.slice(0, -1);
-          const remainingSiblings = findDocumentItemsByKeyPrefix(original, cstParentPath)
+          const owner = findAotEntryForPath(original, change.path);
+          const remainingSiblings = (owner
+            ? findAotScopedDocumentItems(original, cstParentPath, owner)
+            : findDocumentItemsByKeyPrefix(original, cstParentPath))
             .filter(s => s !== node);
-          if (remainingSiblings.length === 0) {
+          if (remainingSiblings.length === 0 &&
+              !(owner && arraysEqual(cstParentPath, owner.key.item.value))) {
             let value: any = rawUpdated;
             for (const k of parentPath) value = value?.[k];
             if (isObject(value) && Object.keys(value).length === 0) {
@@ -3130,8 +3218,13 @@ function applyChanges(
             ? node.item as KeyValue
             : undefined;
         if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
-          const containerAbsLen = nodeAbsolutePath.length - removePrefixKv.key.value.length;
-          const relativePrefix = change.path.slice(containerAbsLen) as Path;
+          const stringNodePath = nodeAbsolutePath.filter(
+            (segment): segment is string => typeof segment === 'string'
+          );
+          const containerAbsLen = stringNodePath.length - removePrefixKv.key.value.length;
+          const relativePrefix = change.path
+            .filter((segment): segment is string => typeof segment === 'string')
+            .slice(containerAbsLen) as Path;
           if (relativePrefix.length > 0 && relativePrefix.length < removePrefixKv.key.value.length) {
             const siblings = (parent as { items: TreeNode[] }).items;
             // Collect matches first, then remove by identity: removeMember
@@ -3203,15 +3296,31 @@ function applyChanges(
           // A sub-table belongs to the nearest [[x]] entry above it, so an
           // entry owns only the siblings up to the next entry of its own
           // array or of an ancestor array ([[x]] ends an [[x.y]] entry too).
-          const aotEntry = isTableArray(node);
-          const ownStart = siblings.indexOf(node);
+          const nodeIndex = siblings.indexOf(node);
+          let aotOwner: TableArray | undefined;
+          if (isTableArray(node)) {
+            aotOwner = node;
+          } else {
+            for (let i = nodeIndex - 1; i >= 0; i--) {
+              const sibling = siblings[i];
+              if (!isTableArray(sibling)) continue;
+              const siblingKey = sibling.key.item.value;
+              if (key.length > siblingKey.length && arraysEqual(key.slice(0, siblingKey.length), siblingKey)) {
+                aotOwner = sibling;
+                break;
+              }
+            }
+          }
+          const aotEntry = aotOwner !== undefined;
+          const ownStart = aotOwner ? siblings.indexOf(aotOwner) : nodeIndex;
           let ownEnd = siblings.length;
           if (aotEntry) {
+            const ownerKey = aotOwner!.key.item.value;
             for (let i = ownStart + 1; i < siblings.length; i++) {
               const s = siblings[i];
               if (!isTableArray(s)) continue;
               const sKey = s.key.item.value;
-              if (sKey.length <= key.length && arraysEqual(sKey, key.slice(0, sKey.length))) {
+              if (sKey.length <= ownerKey.length && arraysEqual(sKey, ownerKey.slice(0, sKey.length))) {
                 ownEnd = i;
                 break;
               }
@@ -3233,6 +3342,22 @@ function applyChanges(
           }
           for (const sibling of extending) {
             removeMember(original, parent, sibling);
+          }
+        }
+
+        // A dotted key inside an AOT entry can prefix-match the removed path
+        // while deeper sub-tables for the same path remain as document-level
+        // siblings.  Remove those sections from the owning entry's scope too.
+        if (removePrefixKv && nodeAbsolutePath) {
+          const owner = isTableArray(parent) ? parent : findAotEntryForPath(original, change.path);
+          if (owner) {
+            const cstPrefix = stripAotEntryIndices(original, change.path);
+            const scopedSections = findAotScopedDocumentItems(original, cstPrefix, owner)
+              .filter(item => item !== node && (isTable(item) || isTableArray(item)))
+              .filter(item => keyStartsWith(itemKey(item), cstPrefix));
+            for (const section of scopedSections) {
+              removeMember(original, original, section);
+            }
           }
         }
 
@@ -3473,9 +3598,10 @@ function applyChanges(
               const isAotEntry = isTableArray(container);
               let docSiblings: TreeNode[] = [];
               if (isAotEntry && remaining.length === 0) {
-                docSiblings = findDocumentItemsByKeyPrefix(
+                docSiblings = findAotScopedDocumentItems(
                   original,
-                  (container as TableArray).key.item.value.concat(relativePrefix)
+                  (container as TableArray).key.item.value.concat(relativePrefix),
+                  container as TableArray
                 );
               }
               // When the removed dotted key sits directly inside an explicit
@@ -3493,7 +3619,7 @@ function applyChanges(
               if (remaining.length === 0 && docSiblings.length === 0 && !containerAlreadyIsParent) {
                 let value: any = rawUpdated;
                 for (const k of parentPath) value = value?.[k];
-                if (isObject(value) && Object.keys(value).length === 0) {
+                if (isObject(value) && Object.keys(value).every(key => value[key] === undefined)) {
                   if (isInlineTable(container)) {
                     // Emptied dotted prefix inside an inline table: re-emit it
                     // as `prefix = {}` at the removed item's position, keeping
@@ -3550,14 +3676,31 @@ function applyChanges(
                     }
                     return;
                   }
+                  // A dotted-key parent inside a block table remains a value
+                  // in that table, so preserve it as an empty inline table.
+                  // Explicit table sections are handled above and remain
+                  // headers when their contents are removed.
+                  if (isTable(container) || isTableArray(container)) {
+                    const freshKey = relativePrefix
+                      .map(part => IS_BARE_KEY.test(part) ? part : JSON.stringify(part).replace(/\x7f/g, '\\u007f'))
+                      .join('.');
+                    const freshKv = Array.from(parseTOML(`${freshKey} = {}`))[0];
+                    if (isKeyValue(freshKv)) {
+                      applyWrites(original);
+                      const insertIndex = containerItemIndex >= 0
+                        ? Math.min(containerItemIndex, container.items.length)
+                        : container.items.length;
+                      const leadingLines = container.items.length === 0 && isTable(container) ? 0 : undefined;
+                      insert(original, container, freshKv, insertIndex, undefined, undefined, leadingLines);
+                    }
+                    return;
+                  }
+
                   // Table key: container key + relative prefix.  For a root
-                  // KV that's just the relative prefix; for an AOT entry the
-                  // numeric index is NOT part of the key.
+                  // KV that's just the relative prefix.
                   const tableKey = isAotEntry
                     ? (container as TableArray).key.item.value.concat(relativePrefix)
-                    : isTable(container)
-                      ? (container as Table).key.item.value.concat(relativePrefix)
-                      : relativePrefix;
+                    : relativePrefix;
                   const emptyTable = generateTable(tableKey as string[], format.escapeSequenceUpperCase);
                   materialisedTables.add(emptyTable);
                   let insertIdx = nodeIndex >= 0 ? nodeIndex : original.items.length;
@@ -3580,8 +3723,7 @@ function applyChanges(
                     // key-value below it, so it must land after all root KVs —
                     // before the first existing section, or at the very end —
                     // never at the removed KV's index (fuzz seed 11).
-                    const headerIdx = firstSectionHeaderIndex(original);
-                    insertIdx = headerIdx >= 0 ? headerIdx : original.items.length;
+                    insertIdx = rootKeyValueInsertIndex(original) ?? original.items.length;
                   }
                   // The removal above registered its line/column offset on
                   // the parent (or a preceding item).  insert() measures
@@ -3600,11 +3742,10 @@ function applyChanges(
         // Track AOT keys whose entries may have been fully removed — again only when the
         // caller still wants the key, so deleting it outright doesn't bring it back as `[]`.
         if (isTableArray(node)) {
-          const aotKey = (node as TableArray).key.item.value;
           const aotPath = change.path.slice(0, -1);
           const stillExists = tryFindByPath(original, aotPath.concat(0));
           if (!stillExists && tryFindByPath(updated, aotPath)) {
-            emptiedAotKeys.set(aotKey.join('.'), aotKey);
+            emptiedAotKeys.set(stableStringify(aotPath), aotPath);
           }
         }
       }
@@ -4057,10 +4198,21 @@ function firstSectionHeaderIndex(doc: Document): number {
   return doc.items.findIndex(item => isTable(item) || isTableArray(item));
 }
 
-/** Index to insert a regenerated root key-value at so it stays in the root table. */
+/**
+ * Index to insert a root key-value at so it stays in the root table: above the first section
+ * header, and above the comment block R2 assigns to that header — inserting between them would
+ * leave the comment introducing the new key instead (docs/Comment-Ownership.md, R2).
+ */
 function rootKeyValueInsertIndex(doc: Document): number | undefined {
   const firstTableIndex = firstSectionHeaderIndex(doc);
-  return firstTableIndex === -1 ? undefined : firstTableIndex;
+  if (firstTableIndex === -1) return undefined;
+  if (firstTableIndex === 0 || !isComment(doc.items[firstTableIndex - 1])) return firstTableIndex;
+
+  // R2 compares line numbers, which pending removal offsets would skew.
+  applyWrites(doc);
+  const header = doc.items[firstTableIndex];
+  const group = resolveGroups(doc).find(candidate => candidate.member === header);
+  return group ? doc.items.indexOf(group.items[0] as Block) : firstTableIndex;
 }
 
 /**
@@ -4088,7 +4240,7 @@ function hoistRootKeyValueAboveTables(doc: Document, kv: KeyValue): void {
   // before measuring, like every other insert that follows a removal.
   applyWrites(doc);
 
-  insert(doc, doc, kv, firstTableIndex);
+  insert(doc, doc, kv, rootKeyValueInsertIndex(doc) ?? firstTableIndex);
 }
 
 /**
@@ -4155,85 +4307,152 @@ function handleStructuralEdit(
   // (fuzz seed 6409).  Handle it inside the entry instead: drop the old
   // sub-entries and insert a fresh key-value for the changed segment.
   {
-    const aotIndexPos = change.path.findIndex(seg => typeof seg === 'number');
-    if (aotIndexPos > 0 && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
-      const entry = tryFindByPath(original, change.path.slice(0, aotIndexPos + 1));
-      if (entry && isTableArray(entry)) {
-        const entryKey = (entry as TableArray).key.item.value;
-        const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+    let aotIndexPos = -1;
+    let entry: TableArray | undefined;
+    for (let index = change.path.length - 1; index > 0; index--) {
+      if (typeof change.path[index] !== 'number') continue;
+      const candidate = tryFindByPath(original, change.path.slice(0, index + 1));
+      if (candidate && isTableArray(candidate)) {
+        aotIndexPos = index;
+        entry = candidate;
+        break;
+      }
+    }
+    if (aotIndexPos > 0 && entry && change.path.slice(aotIndexPos + 1).every(seg => typeof seg === 'string')) {
+      const aotEntry = entry;
+      const entryKey = aotEntry.key.item.value;
+      const changedKey = change.path.slice(aotIndexPos + 1) as string[];
+      const fullChangedKey = entryKey.concat(changedKey);
 
-        // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
-        // (the previous object value's children), and any dotted-key rows
-        // inside the entry that start with the changed segment.
-        const toRemove = findDocumentItemsByKeyPrefix(original, entryKey.concat(changedKey));
-        for (const prefixNode of toRemove) {
-          removeMember(original, original, prefixNode);
-        }
-        const entryItems = (entry as TableArray).items as TreeNode[];
-        const inlineToRemove = entryItems.filter(item => {
-          const key = isKeyValue(item) ? item.key.value : undefined;
-          return key
-            && key.length > changedKey.length
-            && arraysEqual(key.slice(0, changedKey.length), changedKey);
-        });
-        for (const item of inlineToRemove) {
-          removeMember(original, entry, item);
-        }
+      // Remove old sub-tables/[[sub-arrays]] extending entryKey + changedKey
+      // (the previous object value's children), and any dotted-key rows
+      // inside the entry that start with the changed segment.
+      const toRemove = findAotScopedDocumentItems(original, entryKey.concat(changedKey), aotEntry);
+      // Remember where the old sub-entries sat so a replacement [[section]]
+      // takes their place rather than drifting below later siblings.
+      const removedIndex = toRemove.length > 0 ? original.items.indexOf(toRemove[0]) : -1;
+      for (const prefixNode of toRemove) {
+        removeMember(original, original, prefixNode);
+      }
+      const entryItems = aotEntry.items as TreeNode[];
+      const inlineToRemove = entryItems.filter(item => {
+        const key = isKeyValue(item) ? item.key.value : undefined;
+        return key
+          && key.length > changedKey.length
+          && arraysEqual(key.slice(0, changedKey.length), changedKey);
+      });
+      for (const item of inlineToRemove) {
+        removeMember(original, aotEntry, item);
+      }
 
-        // Rebuild the tail of the path as a fresh KV (or KVs) and insert
-        // into the entry.
-        let tail: any = jsValue;
+      if (changedKey.length > 1) {
+        const explicitParent = findDeepestExplicitTable(original, fullChangedKey, entryKey.length, aotEntry);
+        if (explicitParent) {
+          const relativeKey = fullChangedKey.slice(explicitParent.key.item.value.length);
+          const replacementRow = !isTableArrayValue(jsValue)
+            ? generateExplicitParentRow(relativeKey, jsValue, format)
+            : undefined;
+          if (replacementRow) {
+            upsertExplicitParentRow(original, explicitParent, relativeKey, replacementRow);
+            commentEligibleNodes.add(replacementRow);
+            return;
+          }
+        }
+      }
+
+      // Rebuild the tail of the path as a fresh KV (or KVs) and insert
+      // into the entry.
+      let tail: any;
+      if (isTableArrayValue(jsValue)) {
+        tail = { [changedKey[changedKey.length - 1]]: jsValue };
+      } else {
+        tail = jsValue;
         for (let k = change.path.length - 1; k > aotIndexPos; k--) {
           tail = { [change.path[k]]: tail };
         }
-        const tailDoc = parseJS(tail, format);
-        const tailToml = toTOML(tailDoc.items, format);
-        const tailCst = Array.from(parseTOML(tailToml));
+      }
+      const tailDoc = parseJS(tail, format);
+      const tailToml = toTOML(tailDoc.items, format);
+      const tailCst = Array.from(parseTOML(tailToml));
 
-        const upsertEntryKeyValue = (kv: KeyValue): void => {
-          const existingRow = (entry as TableArray).items.find(row =>
-            isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
-          );
-          if (existingRow) {
-            replace(original, entry as TableArray, existingRow, kv);
-          } else {
-            insert(original, entry, kv, undefined);
-          }
-        };
+      let sectionInsertIndex = removedIndex >= 0
+        ? removedIndex
+        : ownedSectionsEndIndex(original, aotEntry, findAotEntryScopeItems(original, aotEntry));
 
-        for (const item of tailCst) {
-          if (isKeyValue(item)) {
-            upsertEntryKeyValue(item);
-            continue;
-          }
+      const upsertEntryKeyValue = (kv: KeyValue): void => {
+        const existingRow = aotEntry.items.find(row =>
+          isKeyValue(row) && arraysEqual(row.key.value, kv.key.value)
+        );
+        if (existingRow) {
+          replace(original, aotEntry, existingRow, kv);
+        } else {
+          insert(original, aotEntry, kv, undefined);
+        }
+      };
 
-          // parseJS may materialize the replacement tail as a Table section
-          // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
-          // edit scoped to a specific AOT entry, flatten section rows back to
-          // dotted KVs relative to that entry (fuzz seed 1657445).
-          if (isTable(item)) {
-            const tableKey = (item as Table).key.item.value;
+      for (const item of tailCst) {
+        if (isKeyValue(item)) {
+          upsertEntryKeyValue(item);
+          continue;
+        }
+
+        // parseJS may materialize the replacement tail as a Table section
+        // (`[rw109]\nkjzi = ...`) under inlineTableStart defaults. For an
+        // edit scoped to a specific AOT entry, flatten section rows back to
+        // dotted KVs relative to that entry (fuzz seed 1657445).
+        if (isTable(item)) {
+          const tableKey = (item as Table).key.item.value;
+          const fullTableKey = entryKey.concat(tableKey);
+          const explicitParent = findAotScopedDocumentItems(original, fullTableKey, aotEntry)
+            .find(candidate => isTable(candidate)
+              && arraysEqual((candidate as Table).key.item.value, fullTableKey)) as Table | undefined;
+          if (explicitParent) {
             for (const row of (item as Table).items as TreeNode[]) {
               if (!isKeyValue(row)) continue;
-
-              const oldRaw = row.key.raw;
-              const dotted = tableKey.concat(row.key.value);
-              row.key.value = dotted;
-              row.key.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
-              const delta = row.key.raw.length - oldRaw.length;
-              row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
-              row.equals += delta;
-              shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
-              if (row.loc.end.line === row.loc.start.line) {
-                row.loc.end.column += delta;
+              const existingRow = explicitParent.items.find(candidate =>
+                isKeyValue(candidate) && arraysEqual(candidate.key.value, row.key.value)
+              );
+              if (existingRow) {
+                replace(original, explicitParent, existingRow, row);
+              } else {
+                insert(original, explicitParent, row, undefined);
               }
-
-              upsertEntryKeyValue(row);
             }
+            continue;
+          }
+          for (const row of (item as Table).items as TreeNode[]) {
+            if (!isKeyValue(row)) continue;
+            rekeyKeyValue(row, tableKey.concat(row.key.value), format);
+            upsertEntryKeyValue(row);
           }
         }
-        return;
+
+        if (isTableArray(item)) {
+          insertReplacementTableArray(
+            original, item, fullChangedKey.slice(0, -1), sectionInsertIndex++, format, commentEligibleNodes
+          );
+        }
       }
+      return;
+    }
+  }
+
+  // The same edit below an explicit [table] outside any array-of-tables
+  // entry: rebuilding from the root would emit `route = { args = … }` (or a
+  // `[route]` merge carrying `args = { … }`) while the explicit
+  // `[route.args.deep]` header survives, failing the re-parse with "Cannot
+  // extend inline table".  Scope the replacement to the deepest explicit
+  // parent instead.
+  if (change.path.length > 1 && change.path.every(seg => typeof seg === 'string')) {
+    const changedKey = change.path as string[];
+    const explicitParent = findDeepestExplicitTable(original, changedKey, 0, undefined);
+    if (explicitParent && replaceBelowExplicitTable(
+      original, explicitParent, changedKey, jsValue, format, commentEligibleNodes
+    )) {
+      return;
+    }
+    if (!explicitParent && replaceAsRootDottedRow(original, changedKey, jsValue, format, commentEligibleNodes)) {
+      return;
     }
   }
 
@@ -4608,7 +4827,7 @@ function cleanupOrphanedComments(doc: Document): void {
  * Replaces emptied TableArrays with inline empty array key-values so that
  * keys aren't silently lost when all AOT entries are removed (e.g. b = []).
  */
-function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, string[]>, format: TomlFormat): void {
+function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, Path>, format: TomlFormat): void {
   if (emptiedKeys.size === 0) return;
 
   for (const path of emptiedKeys.values()) {
@@ -4618,9 +4837,14 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // as an implicit table and collides with the surviving `[[""]]` header on
     // re-parse ("Implicit table already defined", fuzz seed 62163).
     if (path.length > 1) {
-      const parentEntry = tryFindByPath(doc, (path.slice(0, -1) as Path).concat([0]));
+      const parentPath = path.slice(0, -1) as Path;
+      const parentEntryPath = typeof parentPath[parentPath.length - 1] === 'number'
+        ? parentPath
+        : parentPath.concat([0]);
+      const parentEntry = tryFindByPath(doc, parentEntryPath);
       if (parentEntry && isTableArray(parentEntry)) {
         const lastSegment = path[path.length - 1];
+        if (typeof lastSegment !== 'string') continue;
         const emptyArrayDoc = parseJS({ [lastSegment]: [] }, format);
         const emptyKV = generateKeyValue([lastSegment], (emptyArrayDoc.items[0] as KeyValue).value);
         // The removal that emptied the array left pending line offsets on the
@@ -4631,26 +4855,25 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
         continue;
       }
 
-      // An AOT declared inside an explicit [table] (e.g. `[["".b.c]]` under
-      // `[""]`) must be re-materialised inside that table with a RELATIVE
-      // key (`b.c = []`).  Materialising it as a root dotted key `"".b.c = []`
-      // defines `""` as an implicit table and collides with the surviving
-      // `[""]` header on re-parse ("Implicit table already defined", fuzz
-      // seed 67221).
-      let hostTable: Table | undefined;
+      // An AOT declared inside an explicit [table] or a TableArray entry must
+      // be re-materialised inside that host with a RELATIVE key. Materialising
+      // it as a root dotted key can define an implicit table that collides with
+      // a surviving section header on re-parse.
+      let hostContainer: Table | TableArray | undefined;
       for (let len = path.length - 1; len >= 1; len--) {
         const ancestor = tryFindByPath(doc, path.slice(0, len));
-        if (ancestor && isTable(ancestor)) {
-          hostTable = ancestor;
+        if (ancestor && (isTable(ancestor) || isTableArray(ancestor))) {
+          hostContainer = ancestor;
           break;
         }
       }
-      if (hostTable) {
-        const relativeKey = path.slice(hostTable.key.item.value.length);
+      if (hostContainer) {
+        const stringPath = path.filter((segment): segment is string => typeof segment === 'string');
+        const relativeKey = stringPath.slice(hostContainer.key.item.value.length);
         const emptyArrayDoc = parseJS({ [relativeKey[relativeKey.length - 1]]: [] }, format);
         const emptyKV = generateKeyValue(relativeKey, (emptyArrayDoc.items[0] as KeyValue).value);
         applyWrites(doc);
-        insert(doc, hostTable, emptyKV);
+        insert(doc, hostContainer, emptyKV);
         continue;
       }
     }
@@ -4658,8 +4881,9 @@ function replaceEmptiedTableArrays(doc: Document, emptiedKeys: Map<string, strin
     // Build the key from its segments rather than a joined string: `parseJS({ 'a.b': [] })`
     // reads the dot as part of a single JS key and emits the quoted `"a.b" = []`, which is a
     // root key literally named `a.b` instead of `b` nested under `a`.
-    const emptyArrayDoc = parseJS({ [path[path.length - 1]]: [] }, format);
-    const emptyKV = generateKeyValue(path, (emptyArrayDoc.items[0] as KeyValue).value);
+    const keyPath = path.filter((segment): segment is string => typeof segment === 'string');
+    const emptyArrayDoc = parseJS({ [keyPath[keyPath.length - 1]]: [] }, format);
+    const emptyKV = generateKeyValue(keyPath, (emptyArrayDoc.items[0] as KeyValue).value);
     // The removal that emptied the array left pending line offsets on the
     // preceding siblings.  Inserting against their pre-offset locs and only
     // then resolving drags the new KV up past line 1 — a negative render
@@ -4828,6 +5052,270 @@ function findDocumentItemsByKeyPrefix(
     }
   }
   return matchingNodes;
+}
+
+function itemKey(item: Block): string[] | undefined {
+  if (isKeyValue(item)) return item.key.value;
+  if (isTable(item) || isTableArray(item)) return item.key.item.value;
+  return undefined;
+}
+
+function keyStartsWith(key: string[] | undefined, prefix: Path): boolean {
+  return key !== undefined &&
+    prefix.every((segment, index) => typeof segment === 'string' && key[index] === segment);
+}
+
+function findAotEntryScopeItems(document: Document, entry: TableArray): Block[] {
+  const items = document.items as Block[];
+  const start = items.indexOf(entry);
+  if (start < 0) return [];
+
+  const entryKey = entry.key.item.value;
+  let end = items.length;
+  for (let index = start + 1; index < items.length; index++) {
+    const sibling = items[index];
+    if (!isTableArray(sibling)) continue;
+    const siblingKey = sibling.key.item.value;
+    if (siblingKey.length <= entryKey.length && arraysEqual(siblingKey, entryKey.slice(0, siblingKey.length))) {
+      end = index;
+      break;
+    }
+  }
+  return items.slice(start + 1, end);
+}
+
+function findAotEntryForPath(document: Document, path: Path): TableArray | undefined {
+  for (let index = path.length - 1; index >= 0; index--) {
+    if (typeof path[index] !== 'number') continue;
+    const candidate = tryFindByPath(document, path.slice(0, index + 1));
+    if (candidate && isTableArray(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function findAotScopedDocumentItems(
+  document: Document,
+  pathPrefix: Path,
+  owner: TableArray | undefined
+): Block[] {
+  const matchingNodes = findDocumentItemsByKeyPrefix(document, pathPrefix);
+  if (!owner) return matchingNodes;
+  const scopedItems = new Set(findAotEntryScopeItems(document, owner));
+  return matchingNodes.filter(item => scopedItems.has(item));
+}
+
+function isTableArrayValue(value: any): value is any[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isObject);
+}
+
+/**
+ * Finds the deepest explicit `[table]` header that is a strict ancestor of
+ * `key` and longer than `minLength` segments, restricted to `owner`'s scope
+ * when the key lives inside an array-of-tables entry.
+ */
+function findDeepestExplicitTable(
+  document: Document,
+  key: string[],
+  minLength: number,
+  owner: TableArray | undefined
+): Table | undefined {
+  for (let keyLength = key.length - 1; keyLength > minLength; keyLength--) {
+    const parentKey = key.slice(0, keyLength);
+    const parent = findAotScopedDocumentItems(document, parentKey, owner)
+      .find(item => isTable(item) && arraysEqual(item.key.item.value, parentKey));
+    if (parent) return parent as Table;
+  }
+  return undefined;
+}
+
+/**
+ * Renders `key = value` as a single row for an explicit parent table.  An
+ * object value must stay one row: at the default inlineTableStart parseJS
+ * would emit it as a `[key]` section, which can't be placed inside the parent.
+ * A multi-segment key becomes a dotted row (`args.deep = …`): the
+ * intermediate tables are implicit, and nesting them as `args = { deep = … }`
+ * would close `args` to any surviving `[parent.args.other]` header.
+ */
+function generateExplicitParentRow(key: string[], value: any, format: TomlFormat): KeyValue | undefined {
+  const inlineFormat = resolveTomlFormat({ ...format, inlineTableStart: 0 }, format);
+  const rowDoc = parseJS({ [key[key.length - 1]]: value }, inlineFormat);
+  const rowItems = Array.from(parseTOML(toTOML(rowDoc.items, format)));
+  if (rowItems.length !== 1 || !isKeyValue(rowItems[0])) return undefined;
+  const row = rowItems[0];
+  if (key.length > 1) rekeyKeyValue(row, key, format);
+  return row;
+}
+
+/**
+ * Rewrites a freshly parsed row's key to `key`, shifting the value along so
+ * its locations still line up with the new key's width.
+ */
+function rekeyKeyValue(row: KeyValue, key: string[], format: TomlFormat): void {
+  const oldRaw = row.key.raw;
+  row.key.value = key;
+  row.key.raw = generateKey(key, format.escapeSequenceUpperCase).raw;
+  const delta = row.key.raw.length - oldRaw.length;
+  row.key.loc.end.column = row.key.loc.start.column + row.key.raw.length;
+  row.equals += delta;
+  shiftNode(row.value, { lines: 0, columns: delta }, { first_line_only: true });
+  if (row.loc.end.line === row.loc.start.line) {
+    row.loc.end.column += delta;
+  }
+}
+
+/**
+ * Puts `row` in place of `relativeKey` inside `parent`, dropping any dotted
+ * rows that extended the old value.
+ */
+function upsertExplicitParentRow(document: Document, parent: Table, relativeKey: string[], row: KeyValue): void {
+  const oldRows = (parent.items as TreeNode[]).filter((item): item is KeyValue =>
+    isKeyValue(item) && keyStartsWith(item.key.value, relativeKey)
+  );
+  const exactRow = oldRows.find(item => arraysEqual(item.key.value, relativeKey));
+  for (const oldRow of oldRows) {
+    if (oldRow !== exactRow) removeMember(document, parent, oldRow);
+  }
+  if (exactRow) {
+    replace(document, parent, exactRow, row);
+  } else {
+    insert(document, parent, row, undefined);
+  }
+}
+
+/**
+ * Index just past `owner` and the contiguous `followers` keyed under it.  Used
+ * when no removed sub-entry marks the spot for a replacement section: the
+ * followers can include unrelated tables (e.g. a later `[settings]`), and a
+ * section placed after those would read as belonging to them.
+ */
+function ownedSectionsEndIndex(document: Document, owner: Table | TableArray, followers: Block[]): number {
+  const ownerKey = owner.key.item.value;
+  let index = document.items.indexOf(owner) + 1;
+  for (const item of followers) {
+    const key = isTable(item) || isTableArray(item) ? item.key.item.value : undefined;
+    if (!keyStartsWith(key, ownerKey)) break;
+    index = document.items.indexOf(item) + 1;
+  }
+  return index;
+}
+
+/**
+ * Re-keys a section rendered relative to `parentKey` (`[[items]]` →
+ * `[[route.args.deep.items]]`) and inserts it at `index` in the document.
+ */
+function insertReplacementTableArray(
+  document: Document,
+  section: Table | TableArray,
+  parentKey: string[],
+  index: number,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): void {
+  const keyNode = section.key.item;
+  const oldRaw = keyNode.raw;
+  const dotted = parentKey.concat(keyNode.value);
+  keyNode.value = dotted;
+  keyNode.raw = generateKey(dotted, format.escapeSequenceUpperCase).raw;
+  const delta = keyNode.raw.length - oldRaw.length;
+  keyNode.loc.end.column = keyNode.loc.start.column + keyNode.raw.length;
+  if (section.key.loc.end.line === section.key.loc.start.line) {
+    section.key.loc.end.column += delta;
+  }
+
+  insert(document, document, section, index, undefined, undefined, 1);
+  commentEligibleNodes.add(section);
+}
+
+/**
+ * Replaces the value at `fullKey` below the explicit `parent` table, keeping
+ * the edit inside that table: a single row for scalars, arrays and objects,
+ * or `[[fullKey]]` sections at the old sub-table's position for an array of
+ * tables.  Returns false when the shape isn't handled here.
+ */
+function replaceBelowExplicitTable(
+  document: Document,
+  parent: Table,
+  fullKey: string[],
+  jsValue: any,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  const relativeKey = fullKey.slice(parent.key.item.value.length);
+
+  if (isTableArrayValue(jsValue)) {
+    // A `[[header]]` can't extend a table the parent defines through dotted
+    // keys or an inline table (`args.deep.x = 1`, `args = { … }`).
+    const parentRows = (parent.items as TreeNode[]).filter((item): item is KeyValue =>
+      isKeyValue(item) && item.key.value[0] === relativeKey[0]
+    );
+    if (parentRows.some(row => !keyStartsWith(row.key.value, relativeKey))) return false;
+
+    const leaf = fullKey[fullKey.length - 1];
+    const sectionDoc = parseJS({ [leaf]: jsValue }, format);
+    const sections = Array.from(parseTOML(toTOML(sectionDoc.items, format)));
+    if (!sections.every(item => isTable(item) || isTableArray(item))) return false;
+
+    const toRemove = findDocumentItemsByKeyPrefix(document, fullKey);
+    const removedIndex = toRemove.length > 0 ? document.items.indexOf(toRemove[0]) : -1;
+    for (const node of toRemove) removeMember(document, document, node);
+    for (const row of parentRows) removeMember(document, parent, row);
+
+    let index = removedIndex >= 0
+      ? removedIndex
+      : ownedSectionsEndIndex(document, parent, document.items.slice(document.items.indexOf(parent) + 1));
+    for (const section of sections as Array<Table | TableArray>) {
+      insertReplacementTableArray(document, section, fullKey.slice(0, -1), index++, format, commentEligibleNodes);
+    }
+    return true;
+  }
+
+  const row = generateExplicitParentRow(relativeKey, jsValue, format);
+  if (!row) return false;
+
+  for (const node of findDocumentItemsByKeyPrefix(document, fullKey)) {
+    removeMember(document, document, node);
+  }
+  upsertExplicitParentRow(document, parent, relativeKey, row);
+  commentEligibleNodes.add(row);
+  return true;
+}
+
+/**
+ * Replaces the value at `key` with a root dotted row when no explicit table
+ * owns it but a surviving header still extends one of its implicit
+ * intermediate tables (`[route.args.other]` beside `route.args.deep`): the
+ * generic rebuild would emit `[route]` + `args = { … }`, which that header
+ * can't extend.  Returns false when nothing would collide.
+ */
+function replaceAsRootDottedRow(
+  document: Document,
+  key: string[],
+  jsValue: any,
+  format: TomlFormat,
+  commentEligibleNodes: WeakSet<TreeNode>
+): boolean {
+  if (key.length < 3 || isTableArrayValue(jsValue)) return false;
+
+  const intermediateKey = key.slice(0, 2);
+  const extendsIntermediate = (document.items as Block[]).some(item => {
+    const sectionKey = isTable(item) || isTableArray(item) ? item.key.item.value : undefined;
+    return keyStartsWith(sectionKey, intermediateKey) && !keyStartsWith(sectionKey, key);
+  });
+  if (!extendsIntermediate) return false;
+
+  const row = generateExplicitParentRow(key, jsValue, format);
+  if (!row) return false;
+
+  for (const node of findDocumentItemsByKeyPrefix(document, key)) {
+    removeMember(document, document, node);
+  }
+  // See the generic rebuild: flush the removals before positioning against
+  // a surviving header.
+  const insertIndex = rootKeyValueInsertIndex(document);
+  if (insertIndex !== undefined) applyWrites(document);
+  insert(document, document, row, insertIndex);
+  commentEligibleNodes.add(row);
+  return true;
 }
 
 /**

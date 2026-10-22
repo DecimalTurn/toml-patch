@@ -116,15 +116,22 @@ export default function toJS(
 ): any {
   const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   const result = blank();
-  const tables: Set<string> = new Set();
   const table_arrays: Set<string> = new Set();
   const defined: Set<string> = new Set();
   const implicit_tables: Set<string> = new Set();
   const inline_tables: Set<string> = new Set();
+  const tableScopes: Array<{
+    key: string[];
+    explicitTables: Set<string>;
+    defined: Set<string>;
+    implicitTables: Set<string>;
+  }> = [
+    { key: [], explicitTables: new Set(), defined, implicitTables: implicit_tables }
+  ];
   let active: any = result;
   let active_path: string[] = [];
 
-  const state = { tables, table_arrays, defined, implicit_tables, inline_tables };
+  const state = { tableScopes, table_arrays, defined, implicit_tables, inline_tables };
 
   // Specialized inline walk — only visits Table, TableArray, and KeyValue.
   // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
@@ -158,16 +165,17 @@ export default function toJS(
 
   function handleTable(node: Table) {
     const key = node.key.item.value;
+    const scope = tableScopeForPath(key.slice(0, -1));
     try {
-      validateKey(result, [], key, node.type, state);
+      validateKey(result, [], key, node.type, state, scope);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
     }
 
-    const joined_key = encodeKey(key);
-    tables.add(joined_key);
-    defined.add(joined_key);
+    const encodedKey = encodeKey(key);
+    scope.explicitTables.add(encodedKey);
+    scope.defined.add(encodedKey);
 
     active = ensureTable(result, key);
     active_path = key;
@@ -175,9 +183,10 @@ export default function toJS(
 
   function handleTableArray(node: TableArray) {
     const key = node.key.item.value;
+    const parentScope = tableScopeForPath(key.slice(0, -1));
 
     try {
-      validateKey(result, [], key, node.type, state);
+      validateKey(result, [], key, node.type, state, parentScope);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
@@ -185,16 +194,44 @@ export default function toJS(
 
     const joined_key = encodeKey(key);
     table_arrays.add(joined_key);
-    defined.add(joined_key);
+    parentScope.defined.add(joined_key);
 
     active = ensureTableArray(result, key);
     active_path = key;
+    for (let index = tableScopes.length - 1; index > 0; index--) {
+      if (isPathPrefix(key, tableScopes[index].key)) {
+        tableScopes.splice(index, 1);
+      }
+    }
+    tableScopes.push({
+      key,
+      explicitTables: new Set(),
+      defined: new Set(),
+      implicitTables: new Set()
+    });
+  }
+
+  function tableScopeForPath(key: string[]) {
+    for (let index = tableScopes.length - 1; index > 0; index--) {
+      if (isPathPrefix(tableScopes[index].key, key)) return tableScopes[index];
+    }
+    return tableScopes[0];
+  }
+
+  function isPathPrefix(prefix: string[], key: string[]) {
+    return prefix.length <= key.length
+      && prefix.every((segment, index) => key[index] === segment);
   }
 
   function handleKeyValue(node: KeyValue) {
     const key = node.key.value;
+    // Scope by the key's container, like the table handlers: a key naming an
+    // array of tables itself (`arr = 2` under `[parent]` after `[[parent.arr]]`)
+    // belongs to the parent scope that recorded the array, not to the array's
+    // own entry scope.
+    const keyScope = tableScopeForPath(active_path.concat(key.slice(0, -1)));
     try {
-      validateKey(active, active_path, key, node.type, state);
+      validateKey(active, active_path, key, node.type, state, keyScope);
     } catch (err) {
       const e = err as Error;
       throw new ParseError(input, node.key.loc.start, e.message);
@@ -204,8 +241,8 @@ export default function toJS(
     if (key.length > 1) {
       for (let i = 1; i < key.length; i++) {
         const implicit = encodeKey(active_path.concat(key.slice(0, i)));
-        implicit_tables.add(implicit);
-        defined.add(implicit);
+        keyScope.implicitTables.add(implicit);
+        keyScope.defined.add(implicit);
       }
     }
 
@@ -226,7 +263,7 @@ export default function toJS(
     const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
 
     target[last(key)!] = value;
-    defined.add(encodeKey(active_path.concat(key)));
+    keyScope.defined.add(encodeKey(active_path.concat(key)));
   }
 }
 
@@ -334,11 +371,22 @@ function validateKey(
   key: string[],
   type: NodeType.Table | NodeType.TableArray | NodeType.KeyValue,
   state: {
-    tables: Set<string>;
+    tableScopes: Array<{
+      key: string[];
+      explicitTables: Set<string>;
+      defined: Set<string>;
+      implicitTables: Set<string>;
+    }>;
     table_arrays: Set<string>;
     defined: Set<string>;
     implicit_tables: Set<string>;
     inline_tables: Set<string>;
+  },
+  keyTableScope?: {
+    key: string[];
+    explicitTables: Set<string>;
+    defined: Set<string>;
+    implicitTables: Set<string>;
   }
 ) {
   // Pre-compute candidate key strings incrementally to avoid repeated
@@ -362,6 +410,8 @@ function validateKey(
   }
   const joined_full_key = candidates[key.length - 1];
   const encoded_full_key = encoded[key.length - 1];
+  const defined = keyTableScope?.defined ?? state.defined;
+  const implicitTables = keyTableScope?.implicitTables ?? state.implicit_tables;
 
   // 0. Inline tables are immutable.
   // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
@@ -404,7 +454,7 @@ function validateKey(
 
   // 0b. Tables created implicitly by dotted keys cannot be re-opened via table headers.
   // (toml-test invalid: spec-1.1.0/common-46-0 and common-46-1)
-  if ((type === NodeType.Table || type === NodeType.TableArray) && state.implicit_tables.has(encoded_full_key)) {
+  if ((type === NodeType.Table || type === NodeType.TableArray) && implicitTables.has(encoded_full_key)) {
     throw new Error(`Implicit table already defined: ${joined_full_key}`);
   }
 
@@ -412,7 +462,7 @@ function validateKey(
   // Example: `type.name = "Nail"` then `type = { edible = false }` is invalid.
   // Example: `a.b.c = 1` then `a.b = 2` is invalid (a.b was implicitly created as a table).
   // (toml-test invalid: spec-1.1.0/common-50-0, table/append-with-dotted-keys-05)
-  if (type === NodeType.KeyValue && state.implicit_tables.has(encoded_full_key)) {
+  if (type === NodeType.KeyValue && implicitTables.has(encoded_full_key)) {
     throw new Error(`Table already defined: ${joined_full_key}`);
   }
 
@@ -422,7 +472,7 @@ function validateKey(
   if (type === NodeType.KeyValue && key.length > 1) {
     for (let i = 1; i <= key.length; i++) {
       const candidate = candidates[i - 1];
-      if (state.tables.has(encoded[i - 1])) {
+      if (keyTableScope?.explicitTables.has(encoded[i - 1])) {
         throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
       }
     }
@@ -448,12 +498,12 @@ function validateKey(
   const joined_key = joined_full_key;
 
   // 2. Cannot override table
-  if (object && type === NodeType.Table && state.defined.has(encoded_full_key)) {
+  if (object && type === NodeType.Table && defined.has(encoded_full_key)) {
     throw new Error(`Table already defined: ${joined_key}`);
   }
 
   // 2b. Cannot assign a value to a path that is already a table (explicit or implicit).
-  if (object && type === NodeType.KeyValue && key.length === 1 && state.defined.has(encoded_full_key)) {
+  if (object && type === NodeType.KeyValue && key.length === 1 && defined.has(encoded_full_key)) {
     // If the path exists as a structured value, overriding it is invalid.
     if (!isPrimitive(object)) {
       throw new Error(`Table already defined: ${joined_key}`);

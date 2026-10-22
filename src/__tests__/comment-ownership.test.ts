@@ -443,6 +443,216 @@ describe('R5 - comments the parser files under the previous table', () => {
       # end of a
     ` + '\n');
   });
+
+  test('keeps the next section\'s leading comment when the previous section is deleted', () => {
+    const input = dedent`
+      [a]
+      x = 1
+      # section about b
+      [b]
+      z = 3
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.a;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # section about b
+      [b]
+      z = 3
+    ` + '\n');
+  });
+
+  test('keeps the following section\'s comment while removing the deleted section\'s own', () => {
+    const input = dedent`
+      [a]
+      x = 1
+
+      # section about b
+      [b]
+      y = 2
+      # section about c
+      [c]
+      z = 3
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.b;
+
+    expect(patch(input, value)).toEqual(dedent`
+      [a]
+      x = 1
+
+      # section about c
+      [c]
+      z = 3
+    ` + '\n');
+  });
+
+  test('keeps the next section\'s leading comment when the previous section is deleted and a new one is added', () => {
+    const input = dedent`
+      [a]
+      x = 1
+      # section about b
+      [b]
+      y = 2
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.a;
+    value.c = { z: 3 };
+
+    expect(patch(input, value)).toEqual(dedent`
+      # section about b
+      [b]
+      y = 2
+
+      [c]
+      z = 3
+    ` + '\n');
+  });
+
+  test('keeps the next section\'s leading comment when the previous section is deleted and the rest reordered', () => {
+    const input = dedent`
+      [a]
+      x = 1
+      # section about b
+      [b]
+      y = 2
+
+      [c]
+      z = 3
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.a;
+    const b = value.b;
+    delete value.b;
+    value.b = b;
+
+    expect(patch(input, value, { updateOrder: true })).toEqual(dedent`
+      [c]
+      z = 3
+
+      # section about b
+      [b]
+      y = 2
+    ` + '\n');
+  });
+
+  test('keeps the next entry\'s leading comment when the first table-array entry and its sub-table are deleted', () => {
+    const input = dedent`
+      [[p]]
+      n = 1
+      [p.meta]
+      tag = "first"
+      # about second
+      [[p]]
+      n = 2
+    ` + '\n';
+
+    const value = parse(input);
+    value.p.splice(0, 1);
+
+    expect(patch(input, value)).toEqual(dedent`
+      # about second
+      [[p]]
+      n = 2
+    ` + '\n');
+  });
+
+  test('keeps the next entry\'s leading comment when a sub-table is deleted and a value is added to the same entry', () => {
+    const input = dedent`
+      [[p]]
+      n = 1
+      [p.meta]
+      tag = "first"
+      # about second
+      [[p]]
+      n = 2
+    ` + '\n';
+
+    const value = parse(input);
+    delete value.p[0].meta;
+    value.p[0].steps = [{ k: 1 }];
+
+    expect(patch(input, value)).toEqual(dedent`
+      [[p]]
+      n = 1
+      steps = [ { k = 1 } ]
+      # about second
+      [[p]]
+      n = 2
+    ` + '\n');
+  });
+
+});
+
+describe('R2 - leading comment of the first section', () => {
+  test('adds the first root key-value above the leading comment of the first section', () => {
+    const input = dedent`
+      # server settings
+      [server]
+      port = 1
+    ` + '\n';
+
+    const value = parse(input);
+    value.top = 1;
+
+    expect(patch(input, value)).toEqual(dedent`
+      top = 1
+
+      # server settings
+      [server]
+      port = 1
+    ` + '\n');
+  });
+
+  test('adds a root key-value below a pinned banner above the first section', () => {
+    // A blank line severs the banner from [server] (R3), so it stays at the top.
+    const input = dedent`
+      # banner
+
+      [server]
+      port = 1
+    ` + '\n';
+
+    const value = parse(input);
+    value.top = 1;
+
+    expect(patch(input, value)).toEqual(dedent`
+      # banner
+      top = 1
+
+      [server]
+      port = 1
+    ` + '\n');
+  });
+
+  test('adds a root key-value above the leading comment of the first section', () => {
+    const input = dedent`
+      title = "x"
+
+      # server settings
+      [server]
+      port = 1
+    ` + '\n';
+
+    const value = parse(input);
+    value.top = 1;
+
+    const result = patch(input, value);
+
+    expect(result).toContain('# server settings\n[server]');
+    expect(result).toEqual(dedent`
+      title = "x"
+      top = 1
+
+      # server settings
+      [server]
+      port = 1
+    ` + '\n');
+  });
 });
 
 describe('a pinned block inside a table body is owned by that table', () => {
