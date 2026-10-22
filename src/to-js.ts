@@ -1,5 +1,5 @@
 import { Value, NodeType, TreeNode, CST, InlineTable, Table, TableArray, KeyValue } from './cst';
-import { last, blank, isDate, has } from './utils';
+import { last, blank } from './utils';
 import ParseError from './parse-error';
 import { IntegersAsBigInt } from './parse-options';
 import { LocalDate, LocalTime, LocalDateTime, OffsetDateTime } from './date-format';
@@ -38,19 +38,15 @@ function integerFromRaw(raw: string, mode: IntegersAsBigInt = 'asNeeded'): numbe
 }
 
 /**
- * Recursively tracks all nested inline tables within an inline table.
- * This ensures that nested inline tables like { nest = {} } are also tracked as immutable.
+ * Recursively tracks nested inline tables as immutable path metadata.
  */
-function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], inlineTables: Set<string>) {
+function trackNestedInlineTables(inlineTable: InlineTable, basePath: string[], root: PathState) {
   for (const item of inlineTable.items) {
     const keyValue = item.item;
-    
     if (keyValue.value.type === NodeType.InlineTable) {
-      // Only allocate concat array when we actually have a nested inline table
       const fullPath = basePath.concat(keyValue.key.value);
-      inlineTables.add(encodeKey(fullPath));
-      // Recursively track nested inline tables
-      trackNestedInlineTables(keyValue.value, fullPath, inlineTables);
+      resolvePathState(root, fullPath, true).kind = 'inline';
+      trackNestedInlineTables(keyValue.value, fullPath, root);
     }
   }
 }
@@ -116,27 +112,10 @@ export default function toJS(
 ): any {
   const { integersAsBigInt = 'asNeeded', temporal = false } = opts;
   const result = blank();
-  const table_arrays: Set<string> = new Set();
-  const defined: Set<string> = new Set();
-  const implicit_tables: Set<string> = new Set();
-  const inline_tables: Set<string> = new Set();
-  const tableScopes: Array<{
-    key: string[];
-    explicitTables: Set<string>;
-    defined: Set<string>;
-    implicitTables: Set<string>;
-  }> = [
-    { key: [], explicitTables: new Set(), defined, implicitTables: implicit_tables }
-  ];
+  const pathState = createPathState();
   let active: any = result;
   let active_path: string[] = [];
 
-  const state = { tableScopes, table_arrays, defined, implicit_tables, inline_tables };
-
-  // Specialized inline walk — only visits Table, TableArray, and KeyValue.
-  // Skips Comment, Key, Value sub-nodes entirely (toValue handles InlineTable/
-  // InlineArray recursively). This avoids the overhead of the generic traverse
-  // dispatching through every CST node.
   for (const block of cst) {
     switch (block.type) {
       case NodeType.Table:
@@ -145,19 +124,15 @@ export default function toJS(
           if (item.type === NodeType.KeyValue) handleKeyValue(item as KeyValue);
         }
         break;
-
       case NodeType.TableArray:
         handleTableArray(block as TableArray);
         for (const item of (block as TableArray).items) {
           if (item.type === NodeType.KeyValue) handleKeyValue(item as KeyValue);
         }
         break;
-
       case NodeType.KeyValue:
         handleKeyValue(block as KeyValue);
         break;
-
-      // Skip Comments
     }
   }
 
@@ -165,84 +140,43 @@ export default function toJS(
 
   function handleTable(node: Table) {
     const key = node.key.item.value;
-    const scope = tableScopeForPath(key.slice(0, -1));
     try {
-      validateKey(result, [], key, node.type, state, scope);
+      validateKey(pathState, [], key, node.type);
     } catch (err) {
-      const e = err as Error;
-      throw new ParseError(input, node.key.loc.start, e.message);
+      throw new ParseError(input, node.key.loc.start, (err as Error).message);
     }
-
-    const encodedKey = encodeKey(key);
-    scope.explicitTables.add(encodedKey);
-    scope.defined.add(encodedKey);
-
+    resolvePathState(pathState, key, true).kind = 'explicit';
     active = ensureTable(result, key);
     active_path = key;
   }
 
   function handleTableArray(node: TableArray) {
     const key = node.key.item.value;
-    const parentScope = tableScopeForPath(key.slice(0, -1));
-
     try {
-      validateKey(result, [], key, node.type, state, parentScope);
+      validateKey(pathState, [], key, node.type);
     } catch (err) {
-      const e = err as Error;
-      throw new ParseError(input, node.key.loc.start, e.message);
+      throw new ParseError(input, node.key.loc.start, (err as Error).message);
     }
 
-    const joined_key = encodeKey(key);
-    table_arrays.add(joined_key);
-    parentScope.defined.add(joined_key);
-
+    const arrayState = resolvePathState(pathState, key, true);
+    arrayState.kind = 'table-array';
+    arrayState.entries.push(createPathState());
     active = ensureTableArray(result, key);
     active_path = key;
-    for (let index = tableScopes.length - 1; index > 0; index--) {
-      if (isPathPrefix(key, tableScopes[index].key)) {
-        tableScopes.splice(index, 1);
-      }
-    }
-    tableScopes.push({
-      key,
-      explicitTables: new Set(),
-      defined: new Set(),
-      implicitTables: new Set()
-    });
-  }
-
-  function tableScopeForPath(key: string[]) {
-    for (let index = tableScopes.length - 1; index > 0; index--) {
-      if (isPathPrefix(tableScopes[index].key, key)) return tableScopes[index];
-    }
-    return tableScopes[0];
-  }
-
-  function isPathPrefix(prefix: string[], key: string[]) {
-    return prefix.length <= key.length
-      && prefix.every((segment, index) => key[index] === segment);
   }
 
   function handleKeyValue(node: KeyValue) {
     const key = node.key.value;
-    // Scope by the key's container, like the table handlers: a key naming an
-    // array of tables itself (`arr = 2` under `[parent]` after `[[parent.arr]]`)
-    // belongs to the parent scope that recorded the array, not to the array's
-    // own entry scope.
-    const keyScope = tableScopeForPath(active_path.concat(key.slice(0, -1)));
     try {
-      validateKey(active, active_path, key, node.type, state, keyScope);
+      validateKey(pathState, active_path, key, node.type);
     } catch (err) {
-      const e = err as Error;
-      throw new ParseError(input, node.key.loc.start, e.message);
+      throw new ParseError(input, node.key.loc.start, (err as Error).message);
     }
 
-    // Track implicit tables created by dotted keys.
     if (key.length > 1) {
-      for (let i = 1; i < key.length; i++) {
-        const implicit = encodeKey(active_path.concat(key.slice(0, i)));
-        keyScope.implicitTables.add(implicit);
-        keyScope.defined.add(implicit);
+      for (let index = 1; index < key.length; index++) {
+        const implicit = resolvePathState(pathState, active_path.concat(key.slice(0, index)), true);
+        if (implicit.kind === 'undefined') implicit.kind = 'implicit';
       }
     }
 
@@ -250,20 +184,26 @@ export default function toJS(
     try {
       value = toValue(node.value, { integersAsBigInt, temporal });
     } catch (err) {
-      const e = err as Error;
-      throw new ParseError(input, node.value.loc.start, e.message);
+      throw new ParseError(input, node.value.loc.start, (err as Error).message);
     }
-    
-    // Inline tables are immutable in TOML
-    if (node.value.type === NodeType.InlineTable) {
-      const base_path = active_path.concat(key);
-      inline_tables.add(encodeKey(base_path));
-      trackNestedInlineTables(node.value, base_path, inline_tables);
-    }
-    const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
 
+    const fullPath = active_path.concat(key);
+    if (node.value.type === NodeType.InlineTable) {
+      resolvePathState(pathState, fullPath, true).kind = 'inline';
+      trackNestedInlineTables(node.value, fullPath, pathState);
+    } else {
+      const valueState = resolvePathState(pathState, fullPath, true);
+      valueState.kind =
+        node.value.type === NodeType.InlineArray
+          ? 'array'
+          : node.value.type === NodeType.DateTime
+            ? 'date'
+            : 'value';
+      if (node.value.type === NodeType.DateTime) valueState.runtimeValue = value;
+    }
+
+    const target = key.length > 1 ? ensureTable(active, key.slice(0, -1)) : active;
     target[last(key)!] = value;
-    keyScope.defined.add(encodeKey(active_path.concat(key)));
   }
 }
 
@@ -366,153 +306,84 @@ export function toValue(
 }
 
 function validateKey(
-  object: any,
+  root: PathState,
   prefix: string[],
   key: string[],
-  type: NodeType.Table | NodeType.TableArray | NodeType.KeyValue,
-  state: {
-    tableScopes: Array<{
-      key: string[];
-      explicitTables: Set<string>;
-      defined: Set<string>;
-      implicitTables: Set<string>;
-    }>;
-    table_arrays: Set<string>;
-    defined: Set<string>;
-    implicit_tables: Set<string>;
-    inline_tables: Set<string>;
-  },
-  keyTableScope?: {
-    key: string[];
-    explicitTables: Set<string>;
-    defined: Set<string>;
-    implicitTables: Set<string>;
-  }
+  type: NodeType.Table | NodeType.TableArray | NodeType.KeyValue
 ) {
-  // Pre-compute candidate key strings incrementally to avoid repeated
-  // prefix.concat(key.slice(0, i)) + join allocations.  Two representations
-  // are kept side by side: `candidates` is the human-readable `.`-joined path
-  // used in error messages, while `encoded` is the unambiguous encodeKey form
-  // used for the state sets below (a joined path collides for distinct keys —
-  // fuzz seed 65682).
-  // The accumulation must be structural, not string-truthiness based: an
-  // empty-string key segment (e.g. the first segment of `""`.lt = …) makes
-  // the accumulated string '' and would silently drop the segment — then
-  // lookups like state.table_arrays (registered with joinKey) miss and
-  // valid AOT sub-table headers are rejected (fuzz seed 103).
-  const parts: string[] = prefix.length > 0 ? [...prefix] : [];
-  const candidates: string[] = new Array(key.length);
-  const encoded: string[] = new Array(key.length);
-  for (let i = 0; i < key.length; i++) {
-    parts.push(key[i]);
-    candidates[i] = joinKey(parts);
-    encoded[i] = encodeKey(parts);
-  }
-  const joined_full_key = candidates[key.length - 1];
-  const encoded_full_key = encoded[key.length - 1];
-  const defined = keyTableScope?.defined ?? state.defined;
-  const implicitTables = keyTableScope?.implicitTables ?? state.implicit_tables;
+  const fullPath = prefix.concat(key);
+  const fullName = joinKey(fullPath);
+  const target = resolvePathState(root, fullPath);
 
-  // 0. Inline tables are immutable.
-  // Once a key is assigned an inline table, it cannot be extended by dotted keys or table headers.
-  // (toml-test invalid: spec-1.1.0/common-49-0, inline-table/overwrite-02, inline-table/overwrite-05)
-  if (type === NodeType.KeyValue && key.length > 1) {
-    for (let i = 1; i < key.length; i++) {
-      const candidate = candidates[i - 1];
-      if (state.inline_tables.has(encoded[i - 1])) {
-        throw new Error(`Cannot extend inline table at ${candidate}`);
+  for (let index = 0; index < fullPath.length - 1; index++) {
+    const path = fullPath.slice(0, index + 1);
+    const node = resolvePathState(root, path);
+    const nextSegment = fullPath[index + 1];
+    const runtimeValue = node.runtimeValue;
+    if (
+      node.kind === 'date'
+      && !node.children.has(nextSegment)
+      && runtimeValue !== null
+      && typeof runtimeValue === 'object'
+      && nextSegment in runtimeValue
+    ) {
+      throw new Error(`Value already defined for ${joinKey(path.concat(nextSegment))}`);
+    }
+  }
+
+  if (type === NodeType.KeyValue) {
+    if (key.length > 1) {
+      for (let index = 1; index < key.length; index++) {
+        const path = prefix.concat(key.slice(0, index));
+        const node = resolvePathState(root, path);
+        const name = joinKey(path);
+        if (node.kind === 'inline') throw new Error(`Cannot extend inline table at ${name}`);
+        if (node.kind === 'array') throw new Error(`Cannot add to static array at ${name}`);
+        if (node.kind === 'table-array') throw new Error(`Cannot traverse Array of Tables at ${name}`);
+        if (node.kind === 'value') throw new Error(`Value already defined for ${name}`);
+      }
+      for (let index = prefix.length + 1; index <= fullPath.length; index++) {
+        const path = fullPath.slice(0, index);
+        if (resolvePathState(root, path).kind === 'explicit') {
+          throw new Error(`Cannot extend explicit table ${joinKey(path)} with dotted keys`);
+        }
       }
     }
-  }
-  
-  // Also check if a table header tries to extend an inline table
-  if ((type === NodeType.Table || type === NodeType.TableArray) && state.inline_tables.has(encoded_full_key)) {
-    throw new Error(`Cannot extend inline table at ${joined_full_key}`);
-  }
-  
-  // Check if table header path contains an inline table
-  if (type === NodeType.Table || type === NodeType.TableArray) {
-    for (let i = 1; i < key.length; i++) {
-      const candidate = candidates[i - 1];
-      if (state.inline_tables.has(encoded[i - 1])) {
-        throw new Error(`Cannot extend inline table at ${candidate}`);
-      }
+    if (target.kind === 'implicit' || target.kind === 'explicit') {
+      throw new Error(`Table already defined: ${fullName}`);
     }
-  }
-
-  // 0a. Dotted key-value assignments cannot traverse into an Array of Tables.
-  // This would be ambiguous (which element?) and is rejected by toml-test's
-  // append-with-dotted-keys fixtures.
-  if (type === NodeType.KeyValue && key.length > 1) {
-    for (let i = 1; i < key.length; i++) {
-      const candidate = candidates[i - 1];
-      if (state.table_arrays.has(encoded[i - 1])) {
-        throw new Error(`Cannot traverse Array of Tables at ${candidate}`);
-      }
+    if (target.kind === 'table-array') throw new Error(`Table already defined: ${fullName}`);
+    if (target.kind === 'value' || target.kind === 'date' || target.kind === 'inline') {
+      throw new Error(`Value already defined for ${fullName}`);
     }
+    if (target.kind === 'array') throw new Error(`Cannot add to static array at ${fullName}`);
+    return;
   }
 
-  // 0b. Tables created implicitly by dotted keys cannot be re-opened via table headers.
-  // (toml-test invalid: spec-1.1.0/common-46-0 and common-46-1)
-  if ((type === NodeType.Table || type === NodeType.TableArray) && implicitTables.has(encoded_full_key)) {
-    throw new Error(`Implicit table already defined: ${joined_full_key}`);
+  for (let index = 1; index < fullPath.length; index++) {
+    const path = fullPath.slice(0, index);
+    const node = resolvePathState(root, path);
+    const name = joinKey(path);
+    if (node.kind === 'inline') throw new Error(`Cannot extend inline table at ${name}`);
+    if (node.kind === 'array') throw new Error(`Cannot add to static array at ${name}`);
+    if (node.kind === 'value') throw new Error(`Value already defined for ${name}`);
   }
 
-  // 0c. A table path cannot later be re-assigned as a value.
-  // Example: `type.name = "Nail"` then `type = { edible = false }` is invalid.
-  // Example: `a.b.c = 1` then `a.b = 2` is invalid (a.b was implicitly created as a table).
-  // (toml-test invalid: spec-1.1.0/common-50-0, table/append-with-dotted-keys-05)
-  if (type === NodeType.KeyValue && implicitTables.has(encoded_full_key)) {
-    throw new Error(`Table already defined: ${joined_full_key}`);
-  }
-
-  // 0d. Dotted keys cannot extend tables that were explicitly defined earlier.
-  // Example: `[a.b.c]` followed by `[a]` then `b.c.t = "value"` is invalid.
-  // (toml-test invalid: table/append-with-dotted-keys-01, table/append-with-dotted-keys-02)
-  if (type === NodeType.KeyValue && key.length > 1) {
-    for (let i = 1; i <= key.length; i++) {
-      const candidate = candidates[i - 1];
-      if (keyTableScope?.explicitTables.has(encoded[i - 1])) {
-        throw new Error(`Cannot extend explicit table ${candidate} with dotted keys`);
-      }
+  if (target.kind === 'inline') throw new Error(`Cannot extend inline table at ${fullName}`);
+  if (target.kind === 'implicit') throw new Error(`Implicit table already defined: ${fullName}`);
+  if (target.kind === 'array') throw new Error(`Cannot add to static array at ${fullName}`);
+  if (type === NodeType.Table) {
+    if (target.kind === 'explicit' || target.kind === 'table-array') {
+      throw new Error(`Table already defined: ${fullName}`);
     }
-  }
-
-  // 1. Cannot override primitive value
-  let index = 0;
-  for (const part of key) {
-    if (!has(object, part)) return;
-    if (isPrimitive(object[part])) {
-      throw new Error(`Value already defined for ${candidates[index]}`);
+    if (target.kind === 'value' || target.kind === 'date') {
+      throw new Error(`Value already defined for ${fullName}`);
     }
-
-    const joined_parts = candidates[index];
-    if (Array.isArray(object[part]) && !state.table_arrays.has(encoded[index])) {
-      throw new Error(`Cannot add to static array at ${joined_parts}`);
-    }
-
-    const next_is_last = index++ < key.length - 1;
-    object = Array.isArray(object[part]) && next_is_last ? last(object[part]) : object[part];
-  }
-
-  const joined_key = joined_full_key;
-
-  // 2. Cannot override table
-  if (object && type === NodeType.Table && defined.has(encoded_full_key)) {
-    throw new Error(`Table already defined: ${joined_key}`);
-  }
-
-  // 2b. Cannot assign a value to a path that is already a table (explicit or implicit).
-  if (object && type === NodeType.KeyValue && key.length === 1 && defined.has(encoded_full_key)) {
-    // If the path exists as a structured value, overriding it is invalid.
-    if (!isPrimitive(object)) {
-      throw new Error(`Table already defined: ${joined_key}`);
-    }
-  }
-
-  // 3. Cannot add table array to static array or table
-  if (object && type === NodeType.TableArray && !state.table_arrays.has(encoded_full_key)) {
-    throw new Error(`Cannot add Array of Tables to table at ${joined_key}`);
+  } else if (
+    (target.kind !== 'undefined' && target.kind !== 'table-array')
+    || (target.kind === 'undefined' && target.children.size > 0)
+  ) {
+    throw new Error(`Cannot add Array of Tables to table at ${fullName}`);
   }
 }
 
@@ -548,10 +419,6 @@ function ensure(object: any, keys: string[]): any {
   }, object);
 }
 
-function isPrimitive(value: any) {
-  return typeof value !== 'object' && !isDate(value);
-}
-
 function joinKey(key: string[]): string {
   return key.join('.');
 }
@@ -566,4 +433,32 @@ function joinKey(key: string[]): string {
  */
 function encodeKey(key: string[]): string {
   return JSON.stringify(key);
+}
+
+type PathStateKind = 'undefined' | 'implicit' | 'explicit' | 'value' | 'date' | 'array' | 'inline' | 'table-array';
+
+type PathState = {
+  kind: PathStateKind;
+  children: Map<string, PathState>;
+  entries: PathState[];
+  runtimeValue?: unknown;
+};
+
+function createPathState(): PathState {
+  return { kind: 'undefined', children: new Map(), entries: [] };
+}
+
+function resolvePathState(root: PathState, path: string[], create = false): PathState {
+  let node = root;
+  for (const segment of path) {
+    if (node.kind === 'table-array') node = node.entries[node.entries.length - 1] ?? node;
+    let child = node.children.get(segment);
+    if (!child && create) {
+      child = createPathState();
+      node.children.set(segment, child);
+    }
+    if (!child) return createPathState();
+    node = child;
+  }
+  return node;
 }
