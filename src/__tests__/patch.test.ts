@@ -1145,7 +1145,7 @@ test('should normalize bare LF in new value to CRLF to match the document line e
   const existing = '[description]\r\ntext = """\r\nFirst line\r\nSecond line\r\n"""\r\n';
 
   const value = parse(existing);
-  expect(value.description.text).toEqual('First line\r\nSecond line\r\n');
+  expect(value.description.text).toEqual('First line\nSecond line\n');
 
   value.description.text = 'Hello world\nand goodbye world\n';
   const patched = patch(existing, value);
@@ -1155,7 +1155,7 @@ test('should normalize bare LF in new value to CRLF to match the document line e
   expect(patched).not.toContain('\r\r\n');
   expect(patched.split('\r\n').join('').includes('\n')).toBe(false);
   expect(patched).toEqual('[description]\r\ntext = """\r\nHello world\r\nand goodbye world\r\n"""\r\n');
-  expect(parse(patched).description.text).toEqual('Hello world\r\nand goodbye world\r\n');
+  expect(parse(patched).description.text).toEqual('Hello world\nand goodbye world\n');
 });
 
 test('should normalize CRLF in new value to LF to match the document line endings', () => {
@@ -1190,7 +1190,7 @@ test('should keep literal \\n and \\r\\n sequences while normalizing real newlin
     'line\r\n' +
     'end"""\r\n'
   );
-  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\r\nline\r\nend');
+  expect(parse(patched).description.text).toEqual('literal \\n and literal \\r\\n plus real\nline\nend');
 });
 
 test('should keep literal \\n and \\r\\n sequences while normalizing real newlines to LF', () => {
@@ -6928,7 +6928,7 @@ describe('Mixed line endings', () => {
     const existing = 'key = """line1\r\nline2\nline3"""\n';
 
     const obj = parse(existing);
-    expect(obj.key).toEqual('line1\r\nline2\nline3');
+    expect(obj.key).toEqual('line1\nline2\nline3');
 
     obj.key = updateValue;
 
@@ -6945,7 +6945,7 @@ describe('Mixed line endings', () => {
     const existing = 'key = """line1\nline2\r\nline3"""\r\n';
 
     const obj = parse(existing);
-    expect(obj.key).toEqual('line1\nline2\r\nline3');
+    expect(obj.key).toEqual('line1\nline2\nline3');
 
     obj.key = updateValue;
 
@@ -6970,7 +6970,7 @@ describe('Mixed line endings', () => {
     ].join('');
 
     const obj = parse(existing);
-    expect(obj.multi).toEqual('line1\r\nline2\r\n');
+    expect(obj.multi).toEqual('line1\nline2\n');
     obj.unrelated = 2;
 
     const result = patch(existing, obj);
@@ -10813,7 +10813,7 @@ describe('wasEmptied compensation — multiple tables', () => {
     ].join('\r\n'));
     expect(parse(result)).toEqual({
       '?': {
-        j16ata5: 'Z(4jxV:VdbXcB<t\r\nH4T.1\r\nJW[f*l/O!KyD\r\n',
+        j16ata5: 'Z(4jxV:VdbXcB<t\nH4T.1\nJW[f*l/O!KyD\n',
       },
     });
   });

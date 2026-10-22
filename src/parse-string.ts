@@ -23,16 +23,23 @@ function hexVal4(s: string, i: number): number {
 
 export function parseString(raw: string): string {
   if (raw.startsWith(TRIPLE_SINGLE_QUOTE)) {
-    return trimLeadingNewline(raw.slice(3, raw.length - 3));
+    return trimLeadingNewline(normalizeMultilineNewlines(raw.slice(3, raw.length - 3)));
   } else if (raw.startsWith(SINGLE_QUOTE)) {
     return raw.slice(1, raw.length - 1);
   } else if (raw.startsWith(TRIPLE_DOUBLE_QUOTE)) {
-    return unescapeBasicString(trimLeadingNewline(raw.slice(3, raw.length - 3)), true);
+    return unescapeBasicString(
+      trimLeadingNewline(normalizeMultilineNewlines(raw.slice(3, raw.length - 3))),
+      true
+    );
   } else if (raw.startsWith(DOUBLE_QUOTE)) {
     return unescapeBasicString(raw.slice(1, raw.length - 1), false);
   } else {
     return raw;
   }
+}
+
+function normalizeMultilineNewlines(value: string): string {
+  return value.replace(/\r\n/g, '\n');
 }
 
 /**
