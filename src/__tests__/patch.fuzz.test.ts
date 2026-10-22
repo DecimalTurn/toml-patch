@@ -1194,6 +1194,48 @@ test('regression for fuzz seed 460447 (table replaced by an array-of-tables drop
   `);
 });
 
+test.fails('regression for fuzz5 seed 112 (removing nested AOT item before adding parent entry)', () => {
+  const src = dedent`
+    [[root]]
+    id = "first"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "one"
+
+    [[root.branch.items]]
+    id = "two"
+
+    [[root]]
+
+    [root.branch]
+    value = 2
+  `;
+
+  const obj = parse(src) as any;
+  obj.root[0].branch.items.splice(0, 1);
+  obj.root.splice(0, 0, { id: 'first', added: 1 });
+
+  const result = patch(src, obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "first"
+    added = 1
+
+    [[root]]
+    id = "first"
+    branch = { value = 1, items = [ { id = "two" } ] }
+
+    [[root]]
+
+    [root.branch]
+    value = 2
+  `);
+  expect(parse(result)).toEqual(obj);
+});
+
 test('regression for fuzz seed 599513: moving a multiline inline table left corrupts its interior rows', () => {
   // Changing index 0 from a long string to `true` makes the diff align the
   // pre-existing `true` (index 1) with it, producing a Move of the multiline
