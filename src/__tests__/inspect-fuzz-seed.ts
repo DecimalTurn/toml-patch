@@ -13,6 +13,39 @@
  */
 import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
+import { runProfile, type FuzzProfile } from './fuzz-profiles';
+
+const requestedProfile = process.argv.includes('--profile')
+  ? process.argv[process.argv.indexOf('--profile') + 1]
+  : process.argv.includes('--variant') && process.argv[process.argv.indexOf('--variant') + 1] === '5'
+    ? 'aot'
+    : undefined;
+
+if (requestedProfile) {
+  const profile = requestedProfile as FuzzProfile;
+  const mutationIndex = process.argv.indexOf('--mutations');
+  const profileMutationCount = mutationIndex >= 0 ? Number(process.argv[mutationIndex + 1]) : 3;
+  const profileSeed = Number(process.argv[2] || '42');
+  const result = runProfile(profileSeed, profile, profileMutationCount);
+
+  console.log('=== SEED', profileSeed, '===');
+  console.log('Profile:', result.profile);
+  console.log('Variant:', result.variant);
+  console.log('Generator:', result.generatorDescription ?? 'default');
+  console.log('Mutations:', result.mutationDescs?.join(', ') ?? 'none');
+  console.log('Mutation plans:', JSON.stringify(result.mutationPlans ?? []));
+  console.log('Format:', result.formatDesc ?? 'default');
+  console.log('Status:', result.status, result.error ?? '');
+  if (result.originalToml) {
+    console.log('--- Original TOML ---');
+    console.log(result.originalToml);
+  }
+  if (result.patchedToml) {
+    console.log('--- Patched TOML ---');
+    console.log(result.patchedToml);
+  }
+  process.exit(result.status === 'ok' ? 0 : 1);
+}
 
 const seed = parseInt(process.argv[2] || '42');
 const mutationCount = parseInt(process.argv[4] || '3');

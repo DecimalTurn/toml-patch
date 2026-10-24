@@ -4,11 +4,16 @@
  *
  * Usage: npx -y tsx src/__tests__/fuzz-patch3.ts [--count N] [--seed SEED] [--mutations M]
  */
-import { fuzzOne, type PatchFuzzResult } from './fuzz-patch';
+import { createFormatGenerator, runFuzz, type PatchFuzzResult } from './fuzz-patch';
 
 // Fuzz harness variant with randomized indentation and multiline formats
 export function fuzzOne3(seed: number, mutationCount: number): PatchFuzzResult {
-  return fuzzOne(seed, mutationCount, undefined, true, true);
+  return runFuzz(seed, {
+    mutationCount,
+    generateFormat: createFormatGenerator(true, true, false),
+    variant: '3',
+    profile: 'random-format'
+  });
 }
 
 function main(): void {

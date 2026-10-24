@@ -17,7 +17,17 @@
  *
  * Usage: npx -y tsx src/__tests__/fuzz-patch4.ts [--count N] [--seed SEED] [--mutations M]
  */
-import { fuzzOne, type FuzzOptions, type PatchFuzzResult } from './fuzz-patch';
+import {
+  createDefaultMutationStrategy,
+  createFormatGenerator,
+  deepEqual,
+  normalizeNewlines,
+  runFuzz,
+  shortenFractionalSeconds,
+  type FuzzOptions,
+  type PatchFuzzResult
+} from './fuzz-patch';
+import { SeededRandom } from './randomizer';
 
 const VARIANT_4: FuzzOptions = {
   subSecondDates: true,
@@ -27,7 +37,21 @@ const VARIANT_4: FuzzOptions = {
 };
 
 export function fuzzOne4(seed: number, mutationCount: number): PatchFuzzResult {
-  return fuzzOne(seed, mutationCount, undefined, true, true, VARIANT_4);
+  return runFuzz(seed, {
+    mutationCount,
+    sourceTransforms: [
+      (source, context) => shortenFractionalSeconds(
+        source,
+        new SeededRandom(context.seed + 700_000)
+      )
+    ],
+    generateFormat: createFormatGenerator(true, true, true),
+    mutate: createDefaultMutationStrategy(VARIANT_4),
+    compare: (expected, actual, format) =>
+      deepEqual(normalizeNewlines(expected, format), normalizeNewlines(actual, format)),
+    variant: '4',
+    profile: 'date-precision-format'
+  });
 }
 
 function main(): void {
