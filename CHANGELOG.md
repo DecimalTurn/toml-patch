@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Patching: preserve nested table and array-of-tables formatting when rebuilding array-of-tables entries, and correctly handle appending primitive values to mixed arrays. ([#328])
 - Parsing: reject dotted assignments that traverse inherited properties of date values such as `.toISOString()`. ([#332])
 - Patching: reject array-of-tables headers that conflict with an implicit parent table. ([#332])
 - Patching: prevent applying changes in the wrong place for nested table-array entries when removing sub-tables, resolving nested AOT paths, materialising emptied arrays, replacing values inside an entry and appending new entries. ([#329])
@@ -522,6 +523,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#314]: https://github.com/DecimalTurn/toml-patch/pull/314
 [#316]: https://github.com/DecimalTurn/toml-patch/pull/316
 [#321]: https://github.com/DecimalTurn/toml-patch/pull/321
+[#328]: https://github.com/DecimalTurn/toml-patch/pull/328
 [#329]: https://github.com/DecimalTurn/toml-patch/pull/329
 [#332]: https://github.com/DecimalTurn/toml-patch/pull/332
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
