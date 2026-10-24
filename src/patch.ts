@@ -103,7 +103,11 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
   const trailingCommaExplicit = format instanceof TomlFormat ||
     (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
-  const patchedToml = patchCst(existing_cst, updated, fmt, indentWidthExplicit, trailingCommaExplicit).tomlString;
+  const inlineTableStartExplicit = format instanceof TomlFormat ||
+    (format != null && Object.prototype.hasOwnProperty.call(format, 'inlineTableStart'));
+  const patchedToml = patchCst(
+    existing_cst, updated, fmt, indentWidthExplicit, trailingCommaExplicit, inlineTableStartExplicit
+  ).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
   return withBom(patchedToml);
 }
@@ -263,7 +267,8 @@ export function patchCst(
   updated: any,
   format: TomlFormat,
   indentWidthExplicit = false,
-  trailingCommaExplicit = true
+  trailingCommaExplicit = true,
+  inlineTableStartExplicit = false
 ): { tomlString: string; document: Document } {
   const items = [...existing_cst];
   updated = compactSparseArrays(updated);
@@ -352,7 +357,8 @@ export function patchCst(
     commentEligibleNodes,
     updated,
     indentWidthExplicit,
-    trailingCommaExplicit
+    trailingCommaExplicit,
+    inlineTableStartExplicit
   );
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
@@ -1076,7 +1082,8 @@ function applyChanges(
   commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(),
   rawUpdated: any = undefined,
   indentWidthExplicit = false,
-  trailingCommaExplicit = true
+  trailingCommaExplicit = true,
+  inlineTableStartExplicit = false
 ): Document {
   // Track AOT paths whose entries were all removed so we can insert empty arrays. The full
   // path keeps separate parent AOT entries distinct, while a nested key like [[a.b]] still
@@ -1585,6 +1592,19 @@ function applyChanges(
   //
   // Special consideration, inline comments need to move as-needed
 
+  const aotStylePathsByKey = new Map<string, { tablePaths: Set<string>; tableArrayPaths: Set<string> }>();
+  for (const entry of original.items.filter(isTableArray)) {
+    const sections = findAotEntryScopeItems(original, entry).filter(item => isTable(item) || isTableArray(item));
+    if (sections.length === 0) continue;
+    const key = JSON.stringify(entry.key.item.value);
+    const paths = aotStylePathsByKey.get(key) ?? { tablePaths: new Set<string>(), tableArrayPaths: new Set<string>() };
+    for (const section of sections) {
+      if (isTable(section)) paths.tablePaths.add(JSON.stringify(section.key.item.value));
+      if (isTableArray(section)) paths.tableArrayPaths.add(JSON.stringify(section.key.item.value));
+    }
+    aotStylePathsByKey.set(key, paths);
+  }
+
   changes.forEach(change => {
     if (isAdd(change)) {
 
@@ -1680,19 +1700,71 @@ function applyChanges(
         }
       }
 
-      // When is_table_array is true but the child from the updated document is not
-      // a TableArray block (e.g. parseJS inlined it because of inlineTableStart),
-      // regenerate a fresh TableArray from the JS value.
-      if (is_table_array && !isTableArray(child)) {
-        const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
-        const updated_js = toJS(updated.items, '', { temporal });
-        let jsValue: any = updated_js;
-        for (const k of change.path) jsValue = jsValue?.[k];
+      const tableArrayKey = parent_path.filter((part): part is string => typeof part === 'string');
+      const aotStyle = aotStylePathsByKey.get(JSON.stringify(tableArrayKey));
+      const preserveScopedSections = is_table_array && !inlineTableStartExplicit && !!aotStyle;
+      const updated_js = toJS(updated.items, '', { temporal });
+      let jsValue: any = updated_js;
+      for (const k of change.path) jsValue = jsValue?.[k];
+      const hasMatchingSectionStyle = (value: any, relativePath: string[] = []): boolean => {
+        if (!value || typeof value !== 'object') return false;
+        if (Array.isArray(value)) return value.some(item => hasMatchingSectionStyle(item, relativePath));
+        return Object.entries(value).some(([key, nestedValue]) => {
+          const fullPath = JSON.stringify(tableArrayKey.concat(relativePath, key));
+          if ((aotStyle?.tablePaths.has(fullPath) && !Array.isArray(nestedValue)) ||
+              (aotStyle?.tableArrayPaths.has(fullPath) && Array.isArray(nestedValue))) return true;
+          return hasMatchingSectionStyle(nestedValue, relativePath.concat(key));
+        });
+      };
+      const hasMatchingStyle = preserveScopedSections && hasMatchingSectionStyle(jsValue);
+
+      // Rebuild a new AOT entry when its nested values have a section-style
+      // precedent in another entry of the same array.
+      if (is_table_array && (!isTableArray(child) || hasMatchingStyle)) {
         if (jsValue !== undefined) {
           const freshTableArray = generateTableArray(tableArrayKey, format.escapeSequenceUpperCase);
           const entryDoc = parseJS(jsValue, format);
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
+          }
+          if (preserveScopedSections && aotStyle) {
+            const preserveNestedAotArrays = (container: Table | TableArray, relativePath: string[]) => {
+              for (const item of [...container.items] as TreeNode[]) {
+                if (isKeyValue(item) && isInlineTable(item.value)) {
+                  const fullPath = tableArrayKey.concat(relativePath, item.key.value);
+                  if (aotStyle.tablePaths.has(JSON.stringify(fullPath))) {
+                    remove(freshTableArray, container, item);
+                    const table = generateTable(relativePath.concat(item.key.value), format.escapeSequenceUpperCase);
+                    for (const row of item.value.items as InlineItem[]) {
+                      insert(freshTableArray, table, row.item, undefined, undefined, undefined, undefined, true);
+                    }
+                    insert(freshTableArray, container, table);
+                    preserveNestedAotArrays(table, relativePath.concat(item.key.value));
+                    continue;
+                  }
+                }
+                if (isKeyValue(item) && isInlineArray(item.value)) {
+                  const fullPath = tableArrayKey.concat(relativePath, item.key.value);
+                  if (aotStyle.tableArrayPaths.has(JSON.stringify(fullPath)) && item.value.items.length > 0 &&
+                      item.value.items.every(value => isInlineItem(value) && isInlineTable(value.item))) {
+                    remove(freshTableArray, container, item);
+                    for (const value of item.value.items as InlineItem[]) {
+                      const tableArray = generateTableArray(relativePath.concat(item.key.value), format.escapeSequenceUpperCase);
+                      for (const row of (value.item as InlineTable).items as InlineItem[]) {
+                        insert(freshTableArray, tableArray, row.item, undefined, undefined, undefined, undefined, true);
+                      }
+                      insert(freshTableArray, container, tableArray);
+                      preserveNestedAotArrays(tableArray, relativePath.concat(item.key.value));
+                    }
+                    continue;
+                  }
+                }
+                if (isTable(item) || isTableArray(item)) {
+                  preserveNestedAotArrays(item, relativePath.concat(item.key.item.value));
+                }
+              }
+            };
+            preserveNestedAotArrays(freshTableArray, []);
           }
           // The entry value was parsed standalone, so any [table]/[[array]]
           // sections inside it carry their LOCAL keys (e.g. `[k79]` for

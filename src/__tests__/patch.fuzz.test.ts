@@ -1194,7 +1194,7 @@ test('regression for fuzz seed 460447 (table replaced by an array-of-tables drop
   `);
 });
 
-test.fails('regression for fuzz5 seed 112 (removing nested AOT item before adding parent entry)', () => {
+test('regression for fuzz5 seed 112 (removing nested AOT item before adding parent entry)', () => {
   const src = dedent`
     [[root]]
     id = "first"
@@ -1241,7 +1241,7 @@ test.fails('regression for fuzz5 seed 112 (removing nested AOT item before addin
   `);
 });
 
-test.fails('regression for fuzz5 seed 112 + inlineformatting (removing nested AOT item before adding parent entry)', () => {
+test('regression for fuzz5 seed 112 with inline formatting', () => {
   const src = dedent`
     [[root]]
     id = "first"
@@ -1262,10 +1262,10 @@ test.fails('regression for fuzz5 seed 112 + inlineformatting (removing nested AO
   `;
 
   const obj = parse(src) as any;
-  obj.root[0].branch.items.splice(0, 1, { inlineTableStart: 1 });
+  obj.root[0].branch.items.splice(0, 1);
   obj.root.splice(0, 0, { id: 'first', added: 1 });
 
-  const result = patch(src, obj);
+  const result = patch(src, obj, { inlineTableStart: 1 });
   expect(parse(result)).toEqual(obj);
   expect(result).toEqual(dedent`
     [[root]]
@@ -1274,13 +1274,204 @@ test.fails('regression for fuzz5 seed 112 + inlineformatting (removing nested AO
 
     [[root]]
     id = "first"
-
     branch = { value = 1, items = [ { id = "two" } ] }
 
     [[root]]
 
     [root.branch]
     value = 2
+  `);
+});
+
+test('does not reuse nested AOT section formatting from an unrelated array', () => {
+  const src = dedent`
+    [[root]]
+    id = "one"
+    branch = { value = 1 }
+
+    [[other]]
+    id = "other"
+
+    [other.branch]
+    value = 2
+
+    [[other.branch.items]]
+    id = "source"
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.push({ id: 'two', branch: { value: 3 } });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "one"
+    branch = { value = 1 }
+
+    [[root]]
+    id = "two"
+    branch = { value = 3 }
+
+    [[other]]
+    id = "other"
+
+    [other.branch]
+    value = 2
+
+    [[other.branch.items]]
+    id = "source"
+  `);
+});
+
+test('keeps mixed arrays inline when a neighboring AOT entry uses table-array sections', () => {
+  const src = dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old"
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.push({ id: 'two', branch: { value: 2, items: [{ id: 'new' }, 'text'] } });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old"
+
+    [[root]]
+    id = "two"
+
+    [root.branch]
+    value = 2
+    items = [ { id = "new" }, "text" ]
+  `);
+});
+
+test('keeps style of AOT of sibling when adding a new entry', () => {
+  const src = dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old"
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.push({ id: 'two', branch: { value: 2, items: [{ id: 'new' }] } });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old"
+
+    [[root]]
+    id = "two"
+
+    [root.branch]
+    value = 2
+
+    [[root.branch.items]]
+    id = "new"
+  `);
+});
+
+test('does not apply nested table style to an array value at the same path', () => {
+  const src = dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.push({ id: 'two', branch: [{ value: 2 }] });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root]]
+    id = "two"
+    branch = [ { value = 2 } ]
+  `);
+});
+
+test('preserves section headers through multiple nested AOT levels', () => {
+  const src = dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old-item"
+
+    [[root.branch.items.parts]]
+    name = "old-part"
+  `;
+
+  const obj = parse(src) as any;
+  obj.root.push({
+    id: 'two',
+    branch: { value: 2, items: [{ id: 'new-item', parts: [{ name: 'new-part' }] }] }
+  });
+
+  const result = patch(src, obj);
+  expect(parse(result)).toEqual(obj);
+  expect(result).toEqual(dedent`
+    [[root]]
+    id = "one"
+
+    [root.branch]
+    value = 1
+
+    [[root.branch.items]]
+    id = "old-item"
+
+    [[root.branch.items.parts]]
+    name = "old-part"
+
+    [[root]]
+    id = "two"
+
+    [root.branch]
+    value = 2
+
+    [[root.branch.items]]
+    id = "new-item"
+
+    [[root.branch.items.parts]]
+    name = "new-part"
   `);
 });
 
