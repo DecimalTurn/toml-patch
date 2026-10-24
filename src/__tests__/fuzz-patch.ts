@@ -509,6 +509,10 @@ export interface MutationPlan {
   newValue?: unknown;
 }
 
+export function snapshotMutationPlan<T extends MutationPlan>(plan: T): T {
+  return deepClone(plan) as T;
+}
+
 export type SourceTransform = (source: string, context: FuzzContext) => string;
 export type FormatGenerator = (context: FuzzContext) => Partial<TomlFormat> | undefined;
 export type FuzzComparator = (
@@ -629,7 +633,7 @@ function defaultMutationStrategy({ updated, context }: {
     }
     applyMutation(updated, mutation);
     mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);
-    mutationPlans.push(mutation);
+    mutationPlans.push(snapshotMutationPlan(mutation));
     applied++;
   }
 

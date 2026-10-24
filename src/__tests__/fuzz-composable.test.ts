@@ -1,20 +1,23 @@
 import { createHash } from 'node:crypto';
 import { runFuzz } from './fuzz-patch';
 import {
+  createDefaultMutationStrategy,
   deepClone,
   deepEqual,
   generateDefaultSource,
   shortenFractionalSeconds,
   type FuzzContext
 } from './fuzz-patch';
+import { parse } from '../index';
 import { spaceDottedKeySeparators } from './fuzz-patch2';
-import { generateAotSource } from './fuzz-patch5';
+import { aotMutationStrategy, fuzzOne5, generateAotSource } from './fuzz-patch5';
 import { fuzzOne1 } from './fuzz-patch1';
 import { fuzzOne2 } from './fuzz-patch2';
 import { fuzzOne3 } from './fuzz-patch3';
 import { fuzzOne4 } from './fuzz-patch4';
 import { profileConfig, runProfile, type FuzzProfile } from './fuzz-profiles';
 import { SeededRandom } from './randomizer';
+import { mutationSource, scaffoldImports, valueSource } from '../../scripts/distill-profile';
 
 const profiles: FuzzProfile[] = ['aot', 'aot-format', 'aot-general', 'general-format'];
 
@@ -80,6 +83,87 @@ const legacySeedExpectations = {
 const numberedRunners = { '1': fuzzOne1, '2': fuzzOne2, '3': fuzzOne3, '4': fuzzOne4 } as const;
 
 describe('composable patch fuzz profiles', () => {
+  test('default mutation plans snapshot inserted object values', () => {
+    const original = {
+      rows: [
+        { id: 'a', items: [{ value: 1 }, { value: 2 }] },
+        { id: 'b', items: [{ value: 3 }, { value: 4 }] }
+      ]
+    };
+    const updated = deepClone(original) as typeof original;
+    const result = createDefaultMutationStrategy()({
+      original,
+      updated,
+      context: {
+        seed: 10,
+        mutationCount: 5,
+        source: '',
+        generated: { source: '' }
+      }
+    });
+    const plan = result.plans?.find(item =>
+      item.kind === 'add-array-item' && item.newValue !== null && typeof item.newValue === 'object'
+    );
+    const [key, index] = plan?.path ?? [];
+
+    expect(plan).toBeDefined();
+    expect(plan?.newValue).not.toBe((result.updated as any)[key as string][index as number]);
+  });
+
+  test('AOT mutation plans snapshot inserted object values', () => {
+    const generated = generateAotSource({ seed: 1 });
+    const original = parse(generated.source);
+    const updated = deepClone(original);
+    const result = aotMutationStrategy({
+      original,
+      updated,
+      context: { seed: 1, mutationCount: 1, source: generated.source, generated }
+    });
+    const plan = result.plans?.[0];
+    const getAtPath = (value: any, path: (string | number)[]) =>
+      path.reduce((current, segment) => current?.[segment], value);
+
+    expect(plan?.kind).toBe('add-array-item');
+    expect(plan?.newValue).not.toBe(getAtPath(result.updated, plan?.path ?? []));
+  });
+
+  test('the fuzz5 runner uses the default format policy of the aot profile', () => {
+    const runner = fuzzOne5(17, 1);
+    const profile = runProfile(17, 'aot', 1);
+
+    expect(runner.formatDesc).toBe('default');
+    expect(profile.formatDesc).toBe(runner.formatDesc);
+  });
+
+  test('distilled scaffolds resolve imports from the output directory', () => {
+    expect(scaffoldImports('src/__tests__/distilled-aot.test.ts')).toEqual([
+      "import patch from '../patch';",
+      "import { parse } from '..';",
+      "import dedent from 'dedent';"
+    ]);
+    expect(scaffoldImports('local/distilled-aot.test.ts')).toEqual([
+      "import patch from '../src/patch';",
+      "import { parse } from '../src';",
+      "import dedent from 'dedent';"
+    ]);
+  });
+
+  test('distilled mutation values preserve nested Date instances', () => {
+    const value = {
+      dates: [new Date('2026-10-22T00:00:00.000Z'), { date: new Date('2026-10-23T00:00:00.000Z') }]
+    };
+
+    expect(valueSource(value)).toBe(
+      '{ "dates": [new Date("2026-10-22T00:00:00.000Z"), { "date": new Date("2026-10-23T00:00:00.000Z") }] }'
+    );
+  });
+
+  test('distilled delete-key mutations generate delete statements', () => {
+    expect(mutationSource({ kind: 'delete-key', path: ['root', 'child'] })).toBe(
+      'delete obj["root"]["child"];'
+    );
+  });
+
   test.each(['1', '2', '3', '4'] as const)('%s preserves legacy seed edits and formats', (profile) => {
     const run = numberedRunners[profile];
     for (const [seedText, expected] of Object.entries(legacySeedExpectations[profile])) {

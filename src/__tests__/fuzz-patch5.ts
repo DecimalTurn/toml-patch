@@ -10,6 +10,7 @@ import {
   deepClone,
   deepEqual,
   runFuzz,
+  snapshotMutationPlan,
   type FuzzContext,
   type GeneratedSource,
   type MutationPlan,
@@ -322,7 +323,7 @@ function runAotMutationStrategy(
     );
     if (!result) break;
     mutationDescs.push(`${result.description} at ${result.plan.path.join('.')}`);
-    mutationPlans.push(result.plan);
+    mutationPlans.push(snapshotMutationPlan(result.plan));
   }
   return { updated, descriptions: mutationDescs, plans: mutationPlans };
 }
@@ -339,6 +340,7 @@ export function fuzzOne5(seed: number, mutationCount: number): PatchFuzzResult {
   return runFuzz(seed, {
     mutationCount,
     generateSource: generateAotSource,
+    generateFormat: () => undefined,
     mutate: aotMutationStrategy,
     compare: deepEqual,
     variant: '5',
