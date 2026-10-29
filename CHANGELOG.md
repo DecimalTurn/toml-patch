@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: preserve nested table and array-of-tables formatting when rebuilding array-of-tables entries, and correctly handle appending primitive values to mixed arrays. ([#328])
+- Patching: preserve nested table and array-of-tables formatting when rebuilding array-of-tables entries and correctly handle appending primitive values to mixed arrays. ([#328])
 - Parsing: reject dotted assignments that traverse inherited properties of date values such as `.toISOString()`. ([#332])
 - Patching: reject array-of-tables headers that conflict with an implicit parent table. ([#332])
 - Patching: prevent applying changes in the wrong place for nested table-array entries when removing sub-tables, resolving nested AOT paths, materialising emptied arrays, replacing values inside an entry and appending new entries. ([#329])

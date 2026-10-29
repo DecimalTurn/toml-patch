@@ -6,7 +6,8 @@ import {
   deepEqual,
   generateDefaultSource,
   shortenFractionalSeconds,
-  type FuzzContext
+  type FuzzContext,
+  type PatchFuzzResult
 } from './fuzz-patch';
 import { parse } from '../index';
 import { spaceDottedKeySeparators } from './fuzz-patch2';
@@ -81,6 +82,92 @@ const legacySeedExpectations = {
 } as const;
 
 const numberedRunners = { '1': fuzzOne1, '2': fuzzOne2, '3': fuzzOne3, '4': fuzzOne4 } as const;
+
+function normalizeFingerprintValue(value: unknown): unknown {
+  if (value instanceof Date) return { $type: 'Date', value: value.toISOString() };
+  if (typeof value === 'bigint') return { $type: 'BigInt', value: value.toString() };
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return { $type: 'Number', value: String(value) };
+  }
+  if (typeof value === 'number' && Object.is(value, -0)) {
+    return { $type: 'Number', value: '-0' };
+  }
+  if (Array.isArray(value)) return value.map(normalizeFingerprintValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value).sort().map(key => [
+        key,
+        normalizeFingerprintValue((value as Record<string, unknown>)[key])
+      ])
+    );
+  }
+  if (value === undefined) return { $type: 'Undefined' };
+  return value;
+}
+
+function fuzzResultFingerprint(result: PatchFuzzResult): string {
+  const snapshot = {
+    status: result.status,
+    mutationDescs: result.mutationDescs ?? [],
+    mutationPlans: result.mutationPlans ?? [],
+    format: result.format ?? null,
+    formatDesc: result.formatDesc ?? 'default'
+  };
+  return createHash('sha256')
+    .update(JSON.stringify(normalizeFingerprintValue(snapshot)))
+    .digest('hex');
+}
+
+// Captured from the original fuzzOne implementation at latest commit
+// 83cc17388601db8091c0014a6aa80d01307a3e8d. Temporary instrumentation exposed
+// plans and format values without changing RNG calls or mutation order.
+const legacyResultFingerprints = {
+  '1': {
+    0: '281b1b67cdd1c74a42247514758f42b538b0bc8f4c4fc643ccb256ec861f2184',
+    3: 'fa54922a144f72e9c93c792bc12c495d53200e81c66037b9501c9701289953f3',
+    19506: 'abf37bb754ccb6da2e12774a48e1cc894354029a4211460fc4d8f6c13a77626f'
+  },
+  '2': {
+    0: '18c0b7cc2c6d43b3b39e47e28ba9e26f5d888a120d8b4ea92bf997a95ecef275',
+    3: '2df0579ca594ef5101bf6396f808b7dbf8a5acbd9e0b1635a2bf9fcfc072c3da',
+    19506: 'abf37bb754ccb6da2e12774a48e1cc894354029a4211460fc4d8f6c13a77626f'
+  },
+  '3': {
+    0: '18c0b7cc2c6d43b3b39e47e28ba9e26f5d888a120d8b4ea92bf997a95ecef275',
+    3: '2df0579ca594ef5101bf6396f808b7dbf8a5acbd9e0b1635a2bf9fcfc072c3da',
+    19506: 'abf37bb754ccb6da2e12774a48e1cc894354029a4211460fc4d8f6c13a77626f'
+  },
+  '4': {
+    0: 'b655165a0df11a019020dc05190644d09ad5ec7bbadb24a55226b27f878cc1f0',
+    3: '3bcffc7974c40ad6cf406c604d3daeff7c7216bfd37d98e30b2744c901694ec2',
+    19506: 'a71fde8e017957391bc71f457c52e1b7e12a6c070ac37d49d609788aba65ce7f'
+  }
+} as const;
+
+const latestVariant4OneMutationFingerprints = {
+  1: 'c1a5b21c506aaa3c60caa117423b1e65b6d6fe5c7c6ef6d2e2e2f54d45366b53',
+  3: 'cac385c16bfd506125f5458c253d8b3ffbf7ca61738aeb4b4f894273d94aea0c',
+  4: '90f644f9567fef32bc1eb5bc2bc3537fa2951df32a69c17555eef83e908ffba7'
+} as const;
+
+const profileResultFingerprints = {
+  aot: {
+    1: '3a70bf7c93904c99ab7ac7fbb39db1f1f28129c59eea4c85367a1b3f8ca4b4bb',
+    3: '679da4c854edff4fcf95ce4def141a69a9c04fed3b2c364cceab2292dadb40cf',
+    4: '7bd578ac1bee8bf8bc23484a18a519b423047f01cfe4566f5f4277de78dea99e'
+  },
+  'aot-format': {
+    1: '3a70bf7c93904c99ab7ac7fbb39db1f1f28129c59eea4c85367a1b3f8ca4b4bb',
+    3: '58e5fe8b0fffad65a2d677cfe1ebceb3fd5e7a5efd37be6ee48d079a941062d4',
+    4: 'd8ed59e4c1a2ab127df3c89633954397aa7b0a9323b8d9219710f8a8fe6ba891'
+  },
+  'aot-general': {
+    1: '3a0949ba27788b7ee69edb2eccd750d30fdd2780a4ee10356a7c0f73810b5021',
+    3: '8a8430f723266a62938c2ae87d690fe6d7bce4b8f3d695a106b4413a002c16c1',
+    4: 'f4c75a8d881e29a70991d879dd1d988c5192ce9a5645508f53fedc685ca1a3b9'
+  },
+  'general-format': latestVariant4OneMutationFingerprints
+} as const;
 
 describe('composable patch fuzz profiles', () => {
   test('default mutation plans snapshot inserted object values', () => {
@@ -176,6 +263,12 @@ describe('composable patch fuzz profiles', () => {
     }
   });
 
+  test.each(['1', '2', '3', '4'] as const)('%s matches latest-branch mutation-plan baselines', (variant) => {
+    for (const [seedText, expected] of Object.entries(legacyResultFingerprints[variant])) {
+      expect(fuzzResultFingerprint(numberedRunners[variant](Number(seedText), 3))).toBe(expected);
+    }
+  });
+
   test('keeps the default generator byte-stable for fixed seeds', () => {
     const sourceFor = (seed: number) => generateDefaultSource({ seed }).source;
     const first = [0, 1, 17, 19506].map(sourceFor);
@@ -240,6 +333,18 @@ describe('composable patch fuzz profiles', () => {
     expect(new Set(mutationSignatures).size).toBe(results.length);
   });
 
+  test.each(['aot', 'aot-format', 'aot-general'] as const)('%s has fixed mutation-plan fingerprints', (profile) => {
+    for (const [seedText, expected] of Object.entries(profileResultFingerprints[profile])) {
+      expect(fuzzResultFingerprint(runProfile(Number(seedText), profile, 1))).toBe(expected);
+    }
+  });
+
+  test('general-format matches latest variant 4 mutation-plan baselines', () => {
+    for (const [seedText, expected] of Object.entries(latestVariant4OneMutationFingerprints)) {
+      expect(fuzzResultFingerprint(runProfile(Number(seedText), 'general-format', 1))).toBe(expected);
+    }
+  });
+
   test.each(profiles)('%s changes data and round-trips the changed TOML', (profile) => {
     const config = profileConfig(profile, 1);
     let before: unknown;
@@ -293,4 +398,5 @@ describe('composable patch fuzz profiles', () => {
     expect(result.status).toBe('ok');
     expect(result.mutationDescs).toEqual(['edit value']);
   });
+
 });
