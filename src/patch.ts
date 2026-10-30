@@ -1592,18 +1592,48 @@ function applyChanges(
   //
   // Special consideration, inline comments need to move as-needed
 
-  const aotStylePathsByKey = new Map<string, { tablePaths: Set<string>; tableArrayPaths: Set<string> }>();
-  for (const entry of original.items.filter(isTableArray)) {
-    const sections = findAotEntryScopeItems(original, entry).filter(item => isTable(item) || isTableArray(item));
-    if (sections.length === 0) continue;
-    const key = JSON.stringify(entry.key.item.value);
-    const paths = aotStylePathsByKey.get(key) ?? { tablePaths: new Set<string>(), tableArrayPaths: new Set<string>() };
-    for (const section of sections) {
-      if (isTable(section)) paths.tablePaths.add(JSON.stringify(section.key.item.value));
-      if (isTableArray(section)) paths.tableArrayPaths.add(JSON.stringify(section.key.item.value));
+  const mayAddTableArray = changes.some(change => {
+    if (!isAdd(change)) return false;
+    const child = findByPath(updated, change.path);
+    if (child && isTableArray(child)) return true;
+
+    const parentPath = change.path.slice(0, -1);
+    const index = last(change.path);
+    const sibling = tryFindByPath(original, parentPath.concat(0));
+    return isInteger(index) && !isInteger(last(parentPath)) &&
+      !!sibling && isTableArray(sibling);
+  });
+  const originalAotItems = mayAddTableArray ? [...original.items] as Block[] : undefined;
+  const aotStylePathsByKey = new Map<
+    string,
+    { tablePaths: Set<string>; tableArrayPaths: Set<string> } | undefined
+  >();
+  const getAotStylePaths = (entryKey: string[]) => {
+    const cacheKey = JSON.stringify(entryKey);
+    if (aotStylePathsByKey.has(cacheKey)) return aotStylePathsByKey.get(cacheKey);
+
+    const paths = { tablePaths: new Set<string>(), tableArrayPaths: new Set<string>() };
+    const items = originalAotItems ?? original.items as Block[];
+    for (let index = 0; index < items.length; index++) {
+      const entry = items[index];
+      if (!isTableArray(entry) || !arraysEqual(entry.key.item.value, entryKey)) continue;
+
+      const sections = findAotEntryScopeItems(original, entry, index, items);
+      for (const section of sections) {
+        if (!isTable(section) && !isTableArray(section)) continue;
+        const sectionKey = itemKey(section);
+        if (!sectionKey || sectionKey.length <= entryKey.length || !keyStartsWith(sectionKey, entryKey)) {
+          continue;
+        }
+        if (isTable(section)) paths.tablePaths.add(JSON.stringify(sectionKey));
+        else paths.tableArrayPaths.add(JSON.stringify(sectionKey));
+      }
     }
-    aotStylePathsByKey.set(key, paths);
-  }
+
+    const result = paths.tablePaths.size > 0 || paths.tableArrayPaths.size > 0 ? paths : undefined;
+    aotStylePathsByKey.set(cacheKey, result);
+    return result;
+  };
 
   changes.forEach(change => {
     if (isAdd(change)) {
@@ -1701,7 +1731,9 @@ function applyChanges(
       }
 
       const tableArrayKey = parent_path.filter((part): part is string => typeof part === 'string');
-      const aotStyle = aotStylePathsByKey.get(JSON.stringify(tableArrayKey));
+      const aotStyle = is_table_array && !inlineTableStartExplicit
+        ? getAotStylePaths(tableArrayKey)
+        : undefined;
       const preserveScopedSections = is_table_array && !inlineTableStartExplicit && !!aotStyle;
       const updated_js = toJS(updated.items, '', { temporal });
       let jsValue: any = updated_js;
@@ -5168,9 +5200,14 @@ function keyStartsWith(key: string[] | undefined, prefix: Path): boolean {
     prefix.every((segment, index) => typeof segment === 'string' && key[index] === segment);
 }
 
-function findAotEntryScopeItems(document: Document, entry: TableArray): Block[] {
-  const items = document.items as Block[];
-  const start = items.indexOf(entry);
+function findAotEntryScopeItems(
+  document: Document,
+  entry: TableArray,
+  knownStart?: number,
+  sourceItems?: Block[]
+): Block[] {
+  const items = sourceItems ?? document.items as Block[];
+  const start = knownStart ?? items.indexOf(entry);
   if (start < 0) return [];
 
   const entryKey = entry.key.item.value;
