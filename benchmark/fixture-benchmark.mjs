@@ -313,7 +313,7 @@ function writeMarkdown(parseResults, stringifyResults) {
       ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
     ])];
     return tableFixtures.map((fixture) => buildRankedTable({
-      heading: `${benchmarkType}, ${fixture.title}`,
+      heading: `${benchmarkType === 'Parse' ? '📖' : '✍️'} ${benchmarkType}, ${fixture.title}`,
       rows: ids.map((id) => ({
         id,
         label: implementationLabel(id, benchmarkType),

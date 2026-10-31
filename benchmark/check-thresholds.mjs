@@ -17,7 +17,8 @@
  *   maxMinified = 48
  *   maxGzipped = 14
  *
- * The `reference` key is optional and defaults to smol-toml.
+ * `reference` can be set globally or on a suite; an operation-level value
+ * overrides both. The global key is optional and defaults to smol-toml.
  */
 
 import { existsSync, readFileSync } from 'fs';
@@ -58,6 +59,8 @@ function readSuite(thresholds, suite) {
  * @param {object} options
  * @param {string} options.suite Benchmark suite, matching a table in the thresholds file.
  * @param {string} options.currentName Implementation name of the current build.
+ * @param {string} [options.defaultReference] Caller-specific default used when
+ *   no operation or suite reference is configured.
  * @param {Array<{
  *   name: string,
  *   fixtures: string[],
@@ -70,6 +73,7 @@ export function checkThresholds({
   suite,
   currentName,
   operations,
+  defaultReference: referenceDefault,
   thresholdsPath = DEFAULT_THRESHOLDS_PATH,
 }) {
   const thresholds = readThresholds(thresholdsPath);
@@ -77,17 +81,23 @@ export function checkThresholds({
     console.log(`\nNo thresholds file at ${thresholdsPath}; skipping the performance gate.`);
     return false;
   }
-  const referenceName =
-    typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
   const suiteThresholds = readSuite(thresholds, suite);
+  const defaultReference = typeof suiteThresholds.reference === 'string'
+    ? suiteThresholds.reference
+    : referenceDefault ??
+      (typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE);
 
-  console.log(`\nPerformance thresholds for ${suite} fixtures (max slowdown vs ${referenceName}):`);
+  console.log(`\nPerformance thresholds for ${suite} fixtures:`);
 
   let failed = false;
 
   for (const { name, fixtures, hzFor } of operations) {
-    const maxSlowdown = suiteThresholds[name]?.maxSlowdown;
+    const operationThresholds = suiteThresholds[name] ?? {};
+    const maxSlowdown = operationThresholds.maxSlowdown;
     if (typeof maxSlowdown !== 'number') continue;
+    const referenceName = typeof operationThresholds.reference === 'string'
+      ? operationThresholds.reference
+      : defaultReference;
 
     // Runs restricted to a subset of implementations have no reference to
     // compare against, so the gate has to sit that operation out.

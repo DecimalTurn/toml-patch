@@ -139,6 +139,17 @@ jobs:
         else
           pnpm run bench
         fi
+    - name: Benchmark patch scenarios
+      env:
+        BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
+      run: pnpm run bench:patch
+    - name: Merge patch results into benchmark report
+      if: always()
+      run: |
+        if [ -f benchmark/patch-benchmark.md ]; then
+          printf '\n' >> benchmark-fixtures.md
+          cat benchmark/patch-benchmark.md >> benchmark-fixtures.md
+        fi
     - name: Upload benchmark summary
       if: always()
       uses: actions/upload-artifact@v7
@@ -206,7 +217,7 @@ jobs:
           echo '## Benchmark comparison'
           echo ''
           echo "This branch measured against \`${{ github.base_ref || 'latest' }}\` in one run on the same runner."
-          echo 'Ratios close to 1.0 are within run to run noise.'
+          echo 'Ratios close to 1.0 are within run to run noise. They indicate improvements (higher is better) compared to baseline.'
           echo ''
           for file in summaries/benchmark-fixtures.md; do
             if [ -f "$file" ]; then
