@@ -28,6 +28,11 @@ reference = "toml-patch-lite"
 
 [fixtures.patch.aot-unrelated-scalar-edit]
 maxSlowdown = 3
+reference = "toml-patch-lite"
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite]
+maxSlowdown = 10
+reference = "smol-toml"
 
 
 # Bundle size budgets, in kB (1 kB = 1024 bytes). The bundle measurement scripts

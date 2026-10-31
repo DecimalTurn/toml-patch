@@ -57,7 +57,8 @@ function readSuite(thresholds, suite) {
 
 function resolveReference(thresholds, suite, operation, defaultReference) {
   const suiteThresholds = readSuite(thresholds, suite);
-  const operationReference = suiteThresholds[operation]?.reference;
+  const operationThresholds = readSuite(suiteThresholds, operation);
+  const operationReference = operationThresholds.reference;
   if (typeof operationReference === 'string') return operationReference;
   if (typeof suiteThresholds.reference === 'string') return suiteThresholds.reference;
   if (defaultReference) return defaultReference;
@@ -107,7 +108,7 @@ export function checkThresholds({
   let failed = false;
 
   for (const { name, fixtures, hzFor } of operations) {
-    const operationThresholds = suiteThresholds[name] ?? {};
+    const operationThresholds = readSuite(suiteThresholds, name);
     const maxSlowdown = operationThresholds.maxSlowdown;
     if (typeof maxSlowdown !== 'number') continue;
     const referenceName = resolveReference(thresholds, suite, name, referenceDefault);

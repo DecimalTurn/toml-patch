@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const currentName = '@decimalturn/toml-patch (current)';
 const liteName = 'toml-patch-lite';
-const smolName = 'smol-toml (parse/edit/stringify)';
+const smolName = 'smol-toml';
 const baselineName = 'toml-patch (baseline)';
 const baselineLiteName = 'toml-patch-lite (baseline)';
 const defaultImplementations = ['full', 'lite', 'smol', 'baseline', 'baseline-lite'];
@@ -95,10 +95,10 @@ const scenarios = [
     description: 'Change several existing root and nested scalar values.',
     implementations: defaultImplementations,
     maxTime: 2,
-    threshold: {
+    thresholds: [{
       suite: 'fixtures.patch',
       operation: 'in-place-edit',
-    },
+    }],
     fixtures: [{
       name: 'representative-document',
       source: representativeSource,
@@ -116,10 +116,17 @@ const scenarios = [
     description: 'Change one root value while each named AOT owns a nested subtable.',
     implementations: defaultImplementations,
     maxTime: 1,
-    threshold: {
-      suite: 'fixtures.patch',
-      operation: 'aot-unrelated-scalar-edit',
-    },
+    thresholds: [
+      {
+        suite: 'fixtures.patch',
+        operation: 'aot-unrelated-scalar-edit',
+      },
+      {
+        suite: 'fixtures.patch',
+        operation: 'aot-unrelated-scalar-edit.lite',
+        currentName: liteName,
+      },
+    ],
     fixtures: [64, 256, 1024].map((familyCount) => ({
       name: `aot-scopes-${familyCount}`,
       source: makeAotSource(familyCount),
@@ -219,22 +226,22 @@ function adapterKeyForName(name) {
 }
 
 let thresholdFailed = false;
-for (const scenario of scenarios.filter((item) => item.threshold)) {
-  const { suite, operation } = scenario.threshold;
-  const failed = checkThresholds({
-    suite,
-    currentName,
-    defaultReference: baselineName,
-    operations: [{
-      name: operation,
-      fixtures: scenario.fixtures.map((fixture) => `${scenario.id}:${fixture.name}`),
-      hzFor: (implementation, fixtureKey) => {
-        const key = Object.entries(adapters).find(([, adapter]) => adapter?.name === implementation)?.[0];
-        return rates.get(`${key}:${fixtureKey}`);
-      },
-    }],
-  });
-  thresholdFailed = failed || thresholdFailed;
+for (const scenario of scenarios.filter((item) => item.thresholds)) {
+  for (const { suite, operation, currentName: thresholdCurrentName = currentName } of scenario.thresholds) {
+    const failed = checkThresholds({
+      suite,
+      currentName: thresholdCurrentName,
+      operations: [{
+        name: operation,
+        fixtures: scenario.fixtures.map((fixture) => `${scenario.id}:${fixture.name}`),
+        hzFor: (implementation, fixtureKey) => {
+          const key = Object.entries(adapters).find(([, adapter]) => adapter?.name === implementation)?.[0];
+          return rates.get(`${key}:${fixtureKey}`);
+        },
+      }],
+    });
+    thresholdFailed = failed || thresholdFailed;
+  }
 }
 
 const reportLines = [
