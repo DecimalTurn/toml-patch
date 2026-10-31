@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import Benchmark from 'benchmark';
 import { parse as parseSmol, stringify as stringifySmol } from 'smol-toml';
 import { buildRankedTable } from './ranked-tables.mjs';
-import { checkThresholds, getThresholdReference } from './check-thresholds.mjs';
+import { checkThresholds } from './check-thresholds.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -28,7 +28,6 @@ const smolName = 'smol-toml (parse/edit/stringify)';
 const baselineName = 'toml-patch (baseline)';
 const baselineLiteName = 'toml-patch-lite (baseline)';
 const defaultImplementations = ['full', 'lite', 'smol', 'baseline', 'baseline-lite'];
-const currentVersion = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8')).version;
 const baselineVersion = process.env.BENCH_BASELINE_VERSION;
 const smolVersion = JSON.parse(readFileSync(join(rootDir, 'node_modules/smol-toml/package.json'), 'utf8')).version;
 
@@ -254,8 +253,8 @@ const packageLabel = (version) => version
   ? `@decimalturn/toml-patch@${version}`
   : '@decimalturn/toml-patch';
 const implementationLabels = new Map([
-  [currentName, `${packageLabel(currentVersion)} (full, current)`],
-  [liteName, `${packageLabel(currentVersion)} (lite, current)`],
+  [currentName, '@decimalturn/toml-patch (full, current)'],
+  [liteName, '@decimalturn/toml-patch (lite, current)'],
   [smolName, `smol-toml@${smolVersion}`],
   [baselineName, `${packageLabel(baselineVersion)} (full, baseline)`],
   [baselineLiteName, `${packageLabel(baselineVersion)} (lite, baseline)`],
@@ -264,25 +263,9 @@ const implementationLabels = new Map([
 for (const scenario of scenarios) {
   const scenarioAdapters = adaptersFor(scenario);
   reportLines.push(`## ${scenario.title}`, '', scenario.description, '');
-  const referenceName = scenario.threshold
-    ? getThresholdReference({
-      suite: scenario.threshold.suite,
-      operation: scenario.threshold.operation,
-      defaultReference: baselineName,
-    })
-    : undefined;
-  const referenceKey = referenceName ? adapterKeyForName(referenceName) : undefined;
 
   for (const fixture of scenario.fixtures) {
     const key = `${scenario.id}:${fixture.name}`;
-    const ratios = [];
-    if (baseline) {
-      ratios.push({ label: 'Full vs base', compareId: 'baseline', currentId: 'full' });
-      ratios.push({ label: 'Lite vs base', compareId: 'baseline-lite', currentId: 'lite' });
-    }
-    if (referenceKey === 'lite') {
-      ratios.push({ label: 'Full vs lite', compareId: 'lite', currentId: 'full' });
-    }
     reportLines.push(buildRankedTable({
       heading: `🧩 ${scenario.title}, ${fixture.name}`,
       rows: scenarioAdapters.map((adapter) => ({
@@ -291,7 +274,10 @@ for (const scenario of scenarios) {
         hz: rates.get(`${adapterKeyForName(adapter.name)}:${key}`),
       })),
       includeRank: true,
-      ratios,
+      changes: baseline ? [
+        { compareId: 'baseline', currentId: 'full' },
+        { compareId: 'baseline-lite', currentId: 'lite' },
+      ] : [],
     }));
   }
 }

@@ -34,18 +34,17 @@ export function formatSlowdown(hz, fastestHz) {
  * @param {boolean} [options.includeRank] - Adds the medal/number column. The
  *   render order already carries the ranking, so only the smol-toml README
  *   style uses it.
- * @param {{ label?: string, compareId: string, currentId: string }} [options.ratio] - Adds a
+ * @param {{ compareId: string, currentId: string }} [options.ratio] - Adds a
  *   percentage-change column, filled in on the current build's row.
- * @param {Array<{ label: string, compareId: string, currentId: string }>} [options.ratios] - Adds
- *   named percentage-change columns, each filled in on its current implementation's row.
+ * @param {Array<{ compareId: string, currentId: string }>} [options.changes] - Adds comparison
+ *   mappings to the same percentage-change column.
  * @returns {string} Markdown for the table, ending with a blank line.
  */
-export function buildRankedTable({ heading, rows, includeRank = false, ratio, ratios = [] }) {
+export function buildRankedTable({ heading, rows, includeRank = false, ratio, changes = [] }) {
   const ranked = [...rows].sort((left, right) => (right.hz ?? 0) - (left.hz ?? 0));
   const fastestHz = ranked[0]?.hz;
-  const ratioColumns = [...(ratio ? [ratio] : []), ...ratios];
-  const compareRates = ratioColumns.map(({ compareId }) =>
-    ranked.find(({ id }) => id === compareId)?.hz);
+  const changeMappings = [...(ratio ? [ratio] : []), ...changes];
+  const hasChange = changeMappings.length > 0;
 
   const headers = [];
   const separators = [];
@@ -55,8 +54,10 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ra
   }
   headers.push('Library', 'Performance', 'Slowdown');
   separators.push('---', '---', '---');
-  headers.push(...ratioColumns.map(({ label }) => label ? `Change (${label})` : 'Change'));
-  separators.push(...ratioColumns.map(() => '---'));
+  if (hasChange) {
+    headers.push('Change');
+    separators.push('---');
+  }
 
   let markdown = `#### ${heading}\n\n`;
   markdown += '|' + headers.map(header => header === '' ? '    ' : ` ${header} `).join('|') + '|\n';
@@ -68,12 +69,18 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ra
       cells.push(hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-');
     }
     cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz));
-    cells.push(...ratioColumns.map(({ currentId }, ratioIndex) => {
-      const compareHz = compareRates[ratioIndex];
-      if (id !== currentId || !compareHz || !hz) return '';
-      const changePercent = ((hz / compareHz) - 1) * 100;
-      return `${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%`;
-    }));
+    if (hasChange) {
+      const mapping = changeMappings.find(({ currentId }) => id === currentId);
+      const compareHz = mapping
+        ? ranked.find(({ id: compareId }) => compareId === mapping.compareId)?.hz
+        : undefined;
+      if (!compareHz || !hz) {
+        cells.push('');
+      } else {
+        const changePercent = ((hz / compareHz) - 1) * 100;
+        cells.push(`${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%`);
+      }
+    }
     markdown += '| ' + cells.join(' | ') + ' |\n';
   }
 
