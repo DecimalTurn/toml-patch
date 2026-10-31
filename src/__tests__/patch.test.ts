@@ -4766,6 +4766,9 @@ describe('sub-table replacement known issues', () => {
       y = 2
       [[route]]
       id = "b"
+      args.x = 3
+      [route.args.deep]
+      y = 4
     ` + '\n';
 
     const updated = parse(existing) as {
@@ -4780,6 +4783,9 @@ describe('sub-table replacement known issues', () => {
       args = "none"
       [[route]]
       id = "b"
+      args.x = 3
+      [route.args.deep]
+      y = 4
     ` + '\n';
 
     expect(parse(patched)).toEqual(updated);
