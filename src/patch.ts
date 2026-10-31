@@ -2425,6 +2425,7 @@ function applyChanges(
                 }
               }
             }
+            removeDocumentItemsExtendingPath(original, change.path, existing);
           }
         }
 
@@ -2518,6 +2519,7 @@ function applyChanges(
                 }
               }
             }
+            removeDocumentItemsExtendingPath(original, change.path, existing);
           }
         }
 
@@ -5581,5 +5583,13 @@ function removeSiblingsExtendingPrefix(
         && arraysEqual(siblingKey.slice(0, prefix.length), prefix)) {
       removeMember(original, container, sibling);
     }
+  }
+}
+
+function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: Block): void {
+  const cstPath = stripAotEntryIndices(document, path);
+  const owner = findAotEntryForPath(document, path);
+  for (const item of findAotScopedDocumentItems(document, cstPath, owner)) {
+    if (item !== keep) removeMember(document, document, item);
   }
 }

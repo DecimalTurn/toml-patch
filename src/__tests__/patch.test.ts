@@ -4731,7 +4731,7 @@ test('should keep the leading comment of a sibling header when replacing the sub
 
 describe('sub-table replacement known issues', () => {
   // See https://github.com/DecimalTurn/toml-patch/issues/331
-  test.skip('replaces a table defined by both dotted keys and a deeper header in a parent table', () => {
+  test('replaces a table defined by both dotted keys and a deeper header in a parent table', () => {
     // Fails the re-parse with "Value already defined for route.deep": the
     // dotted row becomes `deep = "none"` but [route.deep.leaf] survives. The
     // same shape at the document root is handled.
@@ -4755,7 +4755,7 @@ describe('sub-table replacement known issues', () => {
     expect(patched).toBe(expected);
   });
 
-  test.skip('replaces a table defined by both dotted keys and a deeper header in a table array entry', () => {
+  test('replaces a table defined by both dotted keys and a deeper header in a table array entry', () => {
     // Fails the re-parse with "Value already defined for route.args": the
     // dotted row becomes `args = "none"` but [route.args.deep] survives.
     const existing = dedent`
