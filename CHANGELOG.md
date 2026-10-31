@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-10-31
+
 ### Fixed
 
 - Patching: remove descendant table headers when replacing a dotted-key table with a scalar, including inside array-of-tables entries. ([#331])
