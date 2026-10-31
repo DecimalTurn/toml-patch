@@ -78,7 +78,8 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ch
         cells.push('');
       } else {
         const changePercent = ((hz / compareHz) - 1) * 100;
-        cells.push(`${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%`);
+        const roundedChange = Math.round(Math.abs(changePercent)) * Math.sign(changePercent);
+        cells.push(`${roundedChange > 0 ? '+' : ''}${roundedChange}%`);
       }
     }
     markdown += '| ' + cells.join(' | ') + ' |\n';
