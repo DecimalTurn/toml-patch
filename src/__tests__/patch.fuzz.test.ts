@@ -1398,6 +1398,35 @@ test('keeps style of AOT of sibling when adding a new entry', () => {
   `);
 });
 
+test('does not borrow nested AOT section style from another parent entry', () => {
+  const src = dedent`
+    [[root]]
+    id = "first"
+
+    [[root.items]]
+    id = "section-style"
+
+    [root.items.branch]
+    value = 1
+
+    [[root]]
+    id = "second"
+
+    [[root.items]]
+    id = "inline-style"
+    branch = { value = 2 }
+  `;
+
+  const obj = parse(src) as any;
+  obj.root[1].items.push({ id: 'new', branch: { value: 3 } });
+
+  const result = patch(src, obj);
+
+  expect(parse(result)).toEqual(obj);
+  expect(result.match(/^\[root\.items\.branch\]$/gm)).toHaveLength(1);
+  expect(result).toContain('branch = { value = 3 }');
+});
+
 test('does not apply nested table style to an array value at the same path', () => {
   const src = dedent`
     [[root]]
@@ -3785,6 +3814,20 @@ test('converting an AOT into a scalar-first mixed array (seed 136865 alt.2)', ()
     [ng]
     tll = [ -4619, { k8 = 187, k78 = [ 3357.17 ] } ]
   `);
+});
+
+test('preserves comments when converting an AOT into a mixed array', () => {
+  const src = dedent`
+    [[items]]
+    a = 1 # keep
+  `;
+  const obj = parse(src) as any;
+  obj.items.push(2);
+
+  const result = patch(src, obj);
+
+  expect(parse(result)).toEqual(obj);
+  expect(result).toContain('# keep');
 });
 
 
