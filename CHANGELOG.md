@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Patching: remove descendant table headers when replacing a dotted-key table with a scalar, including inside array-of-tables entries. ([#331])
 - Patching: preserve nested table and array-of-tables formatting when rebuilding array-of-tables entries and correctly handle appending primitive values to mixed arrays. ([#328])
 - Parsing: reject dotted assignments that traverse inherited properties of date values such as `.toISOString()`. ([#332])
 - Patching: reject array-of-tables headers that conflict with an implicit parent table. ([#332])
