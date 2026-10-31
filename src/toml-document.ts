@@ -100,13 +100,16 @@ export class TomlDocument {
       (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
     const trailingCommaExplicit = format instanceof TomlFormat ||
       (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
+    const inlineTableStartExplicit = format instanceof TomlFormat ||
+      (format != null && Object.prototype.hasOwnProperty.call(format, 'inlineTableStart'));
     attachSources(this._cst, sourceBefore);
     const result = patchCst(
       this._cst,
       updatedObject,
       fmt,
       indentWidthExplicit,
-      trailingCommaExplicit
+      trailingCommaExplicit,
+      inlineTableStartExplicit
     );
     this._cst = Array.from(parseTOML(result.tomlString));
     this._format = fmt;
