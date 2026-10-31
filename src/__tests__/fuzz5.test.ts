@@ -25,6 +25,7 @@ test('rotates deterministically through varied AOT mutation classes', () => {
   ];
   const results = expected.map((_, seed) => fuzzOne5(seed, 1));
 
+  expect(results.every(result => result.originalToml !== undefined && result.patchedToml !== undefined)).toBe(true);
   expect(results.map(result => result.mutationDescs?.[0]?.split(' at ')[0])).toEqual(expected);
   expect(results.every(result => result.status === 'ok')).toBe(true);
   expect(results.map(result => result.patchedToml)).toEqual(

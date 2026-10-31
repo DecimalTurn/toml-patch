@@ -14,19 +14,23 @@
 import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
 import { runProfile, type FuzzProfile } from './fuzz-profiles';
+import { fuzzOne5 } from './fuzz-patch5';
 
 const requestedProfile = process.argv.includes('--profile')
   ? process.argv[process.argv.indexOf('--profile') + 1]
-  : process.argv.includes('--variant') && process.argv[process.argv.indexOf('--variant') + 1] === '5'
-    ? 'aot'
-    : undefined;
+  : undefined;
+const inspectVariant5 = !requestedProfile && process.argv.includes('--variant') &&
+  process.argv[process.argv.indexOf('--variant') + 1] === '5';
 
-if (requestedProfile) {
+if (requestedProfile || inspectVariant5) {
   const profile = requestedProfile as FuzzProfile;
   const mutationIndex = process.argv.indexOf('--mutations');
-  const profileMutationCount = mutationIndex >= 0 ? Number(process.argv[mutationIndex + 1]) : 3;
+  const defaultMutationCount = inspectVariant5 ? 1 : 3;
+  const profileMutationCount = mutationIndex >= 0 ? Number(process.argv[mutationIndex + 1]) : defaultMutationCount;
   const profileSeed = Number(process.argv[2] || '42');
-  const result = runProfile(profileSeed, profile, profileMutationCount);
+  const result = inspectVariant5
+    ? fuzzOne5(profileSeed, profileMutationCount)
+    : runProfile(profileSeed, profile, profileMutationCount);
 
   console.log('=== SEED', profileSeed, '===');
   console.log('Profile:', result.profile);

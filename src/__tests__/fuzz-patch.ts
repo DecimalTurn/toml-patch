@@ -710,7 +710,12 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
     const formatDesc = describeFormat(format);
     const mutationRun = (config.mutate ?? defaultMutationStrategy)({ original, updated, context });
     if (mutationRun.descriptions.length === 0) {
-      return runResultMetadata({ ...baseResult, formatDesc }, config, generated);
+      return runResultMetadata({
+        ...baseResult,
+        formatDesc,
+        originalToml: source,
+        patchedToml: source
+      }, config, generated);
     }
 
     const result = runResultMetadata({
@@ -760,7 +765,11 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
       };
     }
 
-    return result;
+    return {
+      ...result,
+      originalToml: source,
+      patchedToml
+    };
   } catch (error: any) {
     return {
       ...baseResult,
