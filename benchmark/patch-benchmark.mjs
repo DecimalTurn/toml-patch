@@ -233,10 +233,10 @@ for (const scenario of scenarios.filter((item) => item.thresholds)) {
       currentName: thresholdCurrentName,
       operations: [{
         name: operation,
-        fixtures: scenario.fixtures.map((fixture) => `${scenario.id}:${fixture.name}`),
-        hzFor: (implementation, fixtureKey) => {
+        fixtures: scenario.fixtures.map((fixture) => fixture.name),
+        hzFor: (implementation, fixtureName) => {
           const key = Object.entries(adapters).find(([, adapter]) => adapter?.name === implementation)?.[0];
-          return rates.get(`${key}:${fixtureKey}`);
+          return rates.get(`${key}:${scenario.id}:${fixtureName}`);
         },
       }],
     });

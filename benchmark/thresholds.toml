@@ -34,6 +34,15 @@ reference = "toml-patch-lite"
 maxSlowdown = 12
 reference = "smol-toml"
 
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-64]
+maxSlowdown = 20
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-256]
+maxSlowdown = 12
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-1024]
+maxSlowdown = 12
+
 
 # Bundle size budgets, in kB (1 kB = 1024 bytes). The bundle measurement scripts
 # fail when a bundle grows past its budget. A budget key that is left out is not

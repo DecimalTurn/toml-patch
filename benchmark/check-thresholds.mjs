@@ -13,6 +13,9 @@
  *   [fixtures.parse]
  *   maxSlowdown = 8
  *
+ *   [fixtures.patch.aot-edit.fixtures.large]
+ *   maxSlowdown = 12
+ *
  *   [bundle.patch-lite]
  *   maxMinified = 48
  *   maxGzipped = 14
@@ -109,8 +112,11 @@ export function checkThresholds({
 
   for (const { name, fixtures, hzFor } of operations) {
     const operationThresholds = readSuite(suiteThresholds, name);
-    const maxSlowdown = operationThresholds.maxSlowdown;
-    if (typeof maxSlowdown !== 'number') continue;
+    const hasThreshold = fixtures.some((fixture) =>
+      typeof operationThresholds.fixtures?.[fixture]?.maxSlowdown === 'number' ||
+      typeof operationThresholds.maxSlowdown === 'number'
+    );
+    if (!hasThreshold) continue;
     const referenceName = resolveReference(thresholds, suite, name, referenceDefault);
 
     // Runs restricted to a subset of implementations have no reference to
@@ -121,6 +127,10 @@ export function checkThresholds({
     }
 
     for (const fixture of fixtures) {
+      const maxSlowdown = operationThresholds.fixtures?.[fixture]?.maxSlowdown ??
+        operationThresholds.maxSlowdown;
+      if (typeof maxSlowdown !== 'number') continue;
+
       const current = hzFor(currentName, fixture);
       const reference = hzFor(referenceName, fixture);
 
