@@ -34,10 +34,10 @@ export function formatSlowdown(hz, fastestHz) {
  * @param {boolean} [options.includeRank] - Adds the medal/number column. The
  *   render order already carries the ranking, so only the smol-toml README
  *   style uses it.
- * @param {{ label?: string, compareId: string, currentId: string }} [options.ratio] - Adds the
- *   baseline comparison column, filled in on the current build's row.
+ * @param {{ label?: string, compareId: string, currentId: string }} [options.ratio] - Adds a
+ *   percentage-change column, filled in on the current build's row.
  * @param {Array<{ label: string, compareId: string, currentId: string }>} [options.ratios] - Adds
- *   named comparison columns, each filled in on its current implementation's row.
+ *   named percentage-change columns, each filled in on its current implementation's row.
  * @returns {string} Markdown for the table, ending with a blank line.
  */
 export function buildRankedTable({ heading, rows, includeRank = false, ratio, ratios = [] }) {
@@ -55,7 +55,7 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ra
   }
   headers.push('Library', 'Performance', 'Slowdown');
   separators.push('---', '---', '---');
-  headers.push(...ratioColumns.map(({ label }) => label ?? 'Ratio'));
+  headers.push(...ratioColumns.map(({ label }) => label ? `Change (${label})` : 'Change'));
   separators.push(...ratioColumns.map(() => '---'));
 
   let markdown = `#### ${heading}\n\n`;
@@ -70,7 +70,9 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ra
     cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz));
     cells.push(...ratioColumns.map(({ currentId }, ratioIndex) => {
       const compareHz = compareRates[ratioIndex];
-      return id === currentId && compareHz && hz ? (hz / compareHz).toFixed(2) : '';
+      if (id !== currentId || !compareHz || !hz) return '';
+      const changePercent = ((hz / compareHz) - 1) * 100;
+      return `${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%`;
     }));
     markdown += '| ' + cells.join(' | ') + ' |\n';
   }
@@ -88,7 +90,7 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio, ra
  */
 export function buildReport({ title, tables }) {
   let markdown = `# ${title}\n\n`;
-  markdown += '*Time per iteration. Lower is better.*\n\n';
+  markdown += '*Time per iteration. Lower is better. Change is throughput vs. reference: + is faster, - is slower.*\n\n';
   for (const table of tables) markdown += table;
   return markdown;
 }
