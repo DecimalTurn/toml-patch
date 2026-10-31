@@ -84,9 +84,14 @@ jobs:
         name: dist-baseline
         path: dist/
 
-  benchmark-smol:
+  benchmark-run:
     needs: [build, build-baseline]
     if: always() && !cancelled()
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [parse, stringify, patch]
+    name: Benchmark ${{ matrix.scenario }}
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -122,40 +127,44 @@ jobs:
       with:
         name: dist-baseline
         path: baseline
-    # The gate runs the curated fixtures on pull requests and every fixture when
-    # the workflow is dispatched by hand. The baseline is only passed when it
-    # downloaded, so a failed base branch build degrades to a plain benchmark run.
-    - name: Benchmark fixtures
+    # Each matrix leg benchmarks one workload on its own runner. The baseline is
+    # only passed when it downloaded, so a failed base build skips ratio gates.
+    - name: Run benchmark scenario
       env:
+        SCENARIO: ${{ matrix.scenario }}
         DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
         VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
         BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
         BENCH_BASELINE_VERSION: ${{ needs.build-baseline.outputs.version }}
       run: |
-        if [ -n "$VERSION" ]; then
-          pnpm run bench -- --versions "$VERSION"
+        if [ "$SCENARIO" = "patch" ]; then
+          pnpm run bench:patch
+        elif [ -n "$VERSION" ] && [ "$DISPATCH" = "true" ]; then
+          pnpm run bench:all -- --type "$SCENARIO" --versions "$VERSION"
+        elif [ -n "$VERSION" ]; then
+          pnpm run bench -- --type "$SCENARIO" --versions "$VERSION"
         elif [ "$DISPATCH" = "true" ]; then
-          pnpm run bench:all
+          pnpm run bench:all -- --type "$SCENARIO"
         else
-          pnpm run bench
+          pnpm run bench -- --type "$SCENARIO"
         fi
-    - name: Benchmark patch scenarios
-      env:
-        BENCH_BASELINE: ${{ steps.baseline.outcome == 'success' && 'baseline/toml-patch.js' || '' }}
-      run: pnpm run bench:patch
-    - name: Merge patch results into benchmark report
+    - name: Select benchmark report
       if: always()
+      id: report
+      env:
+        SCENARIO: ${{ matrix.scenario }}
       run: |
-        if [ -f benchmark/patch-benchmark.md ]; then
-          printf '\n' >> benchmark-fixtures.md
-          cat benchmark/patch-benchmark.md >> benchmark-fixtures.md
+        if [ "$SCENARIO" = "patch" ]; then
+          echo "path=benchmark/patch-benchmark.md" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=benchmark-fixtures-$SCENARIO.md" >> "$GITHUB_OUTPUT"
         fi
-    - name: Upload benchmark summary
+    - name: Upload scenario report
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: benchmark-summary
-        path: benchmark-fixtures.md
+        name: benchmark-${{ matrix.scenario }}
+        path: ${{ steps.report.outputs.path }}
         if-no-files-found: ignore
 
   # Absolute bundle size budgets from benchmark/thresholds.toml. This is its own
@@ -199,27 +208,43 @@ jobs:
   # Posts one comment on the pull request holding every benchmark summary. The
   # comment is updated in place on later pushes instead of piling up.
   report:
-    needs: [benchmark-smol]
+    needs: [benchmark-run]
     if: always() && !cancelled() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-    - name: Download benchmark summary
+    - name: Download parse report
+      if: always()
+      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
-        name: benchmark-summary
-        path: summaries
+        name: benchmark-parse
+        path: summaries/parse
+    - name: Download stringify report
+      if: always()
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: benchmark-stringify
+        path: summaries/stringify
+    - name: Download patch report
+      if: always()
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: benchmark-patch
+        path: summaries/patch
     - name: Build comment
       run: |
         {
           echo '<!-- benchmark-summary -->'
           echo '## Benchmark comparison'
           echo ''
-          echo "This branch measured against \`${{ github.base_ref || 'latest' }}\` in one run on the same runner."
+          echo "Each workload measured this branch against \`${{ github.base_ref || 'latest' }}\` on the same runner."
           echo 'Ratios close to 1.0 are within run to run noise. They indicate improvements (higher is better) compared to baseline.'
           echo ''
-          for file in summaries/benchmark-fixtures.md; do
+          for file in summaries/parse/benchmark-fixtures-parse.md summaries/stringify/benchmark-fixtures-stringify.md summaries/patch/patch-benchmark.md; do
             if [ -f "$file" ]; then
               sed -e 's/^# /### /' -e 's/^## /#### /' "$file"
               echo ''
