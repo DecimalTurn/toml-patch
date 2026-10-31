@@ -7,6 +7,7 @@ import {
   isKeyValue,
   WithItems,
   KeyValue,
+  Comment,
   isTable,
   TreeNode,
   Key,
@@ -41,7 +42,7 @@ import { last, isInteger, arraysEqual, isTemporal, temporalToTomlString, hasTemp
 import { insert, replace, remove, applyWrites, applyBracketSpacing, hasInlineContainerNeedingTighten, deleteInlineContainerNeedingTighten, shiftNode, recalcContainerEnd, addExitOffset, markDirty, getPendingEnterOffsets, getExitOffsets, setRootIndentWidth, setInlineIndentColumn, perLine } from './writer';
 import { removeMember, moveInlineElement, findHostContainer, resolveGroups } from './comment-ownership';
 import { applyKeyOrderMoves } from './update-order';
-import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue } from './generate';
+import { generateInlineItem, generateTable, generateTableArray, generateString, generateKey, generateKeyValue, generateComment } from './generate';
 import { IS_BARE_KEY, createNewlineScanState } from './tokenizer';
 import { escapeStringContent } from './escape-preference';
 import { resolveTomlFormat } from './toml-format';
@@ -103,7 +104,11 @@ export default function patch(existing: string, updated: any, format?: Partial<T
     (format != null && Object.prototype.hasOwnProperty.call(format, 'indentWidth'));
   const trailingCommaExplicit = format instanceof TomlFormat ||
     (format != null && Object.prototype.hasOwnProperty.call(format, 'trailingComma'));
-  const patchedToml = patchCst(existing_cst, updated, fmt, indentWidthExplicit, trailingCommaExplicit).tomlString;
+  const inlineTableStartExplicit = format instanceof TomlFormat ||
+    (format != null && Object.prototype.hasOwnProperty.call(format, 'inlineTableStart'));
+  const patchedToml = patchCst(
+    existing_cst, updated, fmt, indentWidthExplicit, trailingCommaExplicit, inlineTableStartExplicit
+  ).tomlString;
   const withBom = (toml: string) => (fmt.leadingBom ? `${UTF8_BOM}${toml}` : toml);
   return withBom(patchedToml);
 }
@@ -263,7 +268,8 @@ export function patchCst(
   updated: any,
   format: TomlFormat,
   indentWidthExplicit = false,
-  trailingCommaExplicit = true
+  trailingCommaExplicit = true,
+  inlineTableStartExplicit = false
 ): { tomlString: string; document: Document } {
   const items = [...existing_cst];
   updated = compactSparseArrays(updated);
@@ -341,7 +347,9 @@ export function patchCst(
   // runs: a structural edit (e.g. table→scalar) regenerates a fresh node in place of an existing
   // one, and that replacement is conceptually the same entry, not a new one — so it needs to
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
-  const commentEligibleNodes = collectPrePatchNodes(existing_document);
+  const commentEligibleNodes = format.updateOrder
+    ? collectPrePatchNodes(existing_document)
+    : new WeakSet<TreeNode>();
 
   const patched_document = applyChanges(
     existing_document,
@@ -352,7 +360,9 @@ export function patchCst(
     commentEligibleNodes,
     updated,
     indentWidthExplicit,
-    trailingCommaExplicit
+    trailingCommaExplicit,
+    inlineTableStartExplicit,
+    updated_js_raw
   );
   const tomlString = normalizeInlineCommentAlignmentInString(
     patched_document,
@@ -1076,8 +1086,11 @@ function applyChanges(
   commentEligibleNodes: WeakSet<TreeNode> = new WeakSet(),
   rawUpdated: any = undefined,
   indentWidthExplicit = false,
-  trailingCommaExplicit = true
+  trailingCommaExplicit = true,
+  inlineTableStartExplicit = false,
+  updatedJs: any = undefined
 ): Document {
+  const convertedUpdated = updatedJs ?? toJS(updated.items, '', { temporal });
   // Track AOT paths whose entries were all removed so we can insert empty arrays. The full
   // path keeps separate parent AOT entries distinct, while a nested key like [[a.b]] still
   // carries enough information to be re-materialised as `a.b = []`.
@@ -1585,6 +1598,82 @@ function applyChanges(
   //
   // Special consideration, inline comments need to move as-needed
 
+  const mayAddTableArray = changes.some(change => {
+    if (!isAdd(change)) return false;
+    const child = findByPath(updated, change.path);
+    if (child && isTableArray(child)) return true;
+
+    const parentPath = change.path.slice(0, -1);
+    const index = last(change.path);
+    const sibling = tryFindByPath(original, parentPath.concat(0));
+    return isInteger(index) && !isInteger(last(parentPath)) &&
+      !!sibling && isTableArray(sibling);
+  });
+  const originalAotItems = mayAddTableArray ? [...original.items] as Block[] : undefined;
+  const aotStylePathsByKey = new Map<
+    TableArray | undefined,
+    Map<string, { tablePaths: Set<string>; tableArrayPaths: Set<string>; inlineTablePaths: Set<string> } | undefined>
+  >();
+  const getAotStylePaths = (entryKey: string[], owner?: TableArray) => {
+    let stylePathsByKey = aotStylePathsByKey.get(owner);
+    if (!stylePathsByKey) {
+      stylePathsByKey = new Map();
+      aotStylePathsByKey.set(owner, stylePathsByKey);
+    }
+    const cacheKey = JSON.stringify(entryKey);
+    if (stylePathsByKey.has(cacheKey)) return stylePathsByKey.get(cacheKey);
+
+    const paths = {
+      tablePaths: new Set<string>(),
+      tableArrayPaths: new Set<string>(),
+      inlineTablePaths: new Set<string>()
+    };
+    const items = originalAotItems ?? original.items as Block[];
+    const ownerScope = owner
+      ? new Set(findAotEntryScopeItems(original, owner, items.indexOf(owner), items))
+      : undefined;
+    const collectNestedInlineTableStyles = (table: InlineTable, basePath: string[]) => {
+      for (const item of table.items as InlineItem[]) {
+        if (!isInlineItem(item) || !isKeyValue(item.item) || !isInlineTable(item.item.value)) continue;
+        const path = basePath.concat(item.item.key.value);
+        paths.inlineTablePaths.add(JSON.stringify(path));
+        collectNestedInlineTableStyles(item.item.value, path);
+      }
+    };
+    const collectInlineTableStyles = (container: Table | TableArray, basePath: string[]) => {
+      for (const item of container.items as TreeNode[]) {
+        if (!isKeyValue(item) || !isInlineTable(item.value)) continue;
+        const path = basePath.concat(item.key.value);
+        paths.inlineTablePaths.add(JSON.stringify(path));
+        collectNestedInlineTableStyles(item.value, path);
+      }
+    };
+    for (let index = 0; index < items.length; index++) {
+      const entry = items[index];
+      if (!isTableArray(entry) || !arraysEqual(entry.key.item.value, entryKey) ||
+          (ownerScope && !ownerScope.has(entry))) continue;
+
+      collectInlineTableStyles(entry, entryKey);
+      const sections = findAotEntryScopeItems(original, entry, index, items);
+      for (const section of sections) {
+        if (!isTable(section) && !isTableArray(section)) continue;
+        const sectionKey = itemKey(section);
+        if (!sectionKey || sectionKey.length <= entryKey.length || !keyStartsWith(sectionKey, entryKey)) {
+          continue;
+        }
+        collectInlineTableStyles(section, sectionKey);
+        if (isTable(section)) paths.tablePaths.add(JSON.stringify(sectionKey));
+        else paths.tableArrayPaths.add(JSON.stringify(sectionKey));
+      }
+    }
+
+    const result = paths.tablePaths.size > 0 || paths.tableArrayPaths.size > 0 || paths.inlineTablePaths.size > 0
+      ? paths
+      : undefined;
+    stylePathsByKey.set(cacheKey, result);
+    return result;
+  };
+
   changes.forEach(change => {
     if (isAdd(change)) {
 
@@ -1602,6 +1691,55 @@ function applyChanges(
           is_table_array = true;
         }
       }
+      const owner = findAotEntryForPath(original, parent_path);
+      if (is_table_array && isInteger(index) && !isInteger(last(parent_path))) {
+        const updated_js = convertedUpdated;
+        let updatedArray: any = updated_js;
+        for (const segment of parent_path) updatedArray = updatedArray?.[segment];
+
+        if (Array.isArray(updatedArray) && !updatedArray.every(isObject)) {
+          const arrayKey = parent_path.filter((segment): segment is string => typeof segment === 'string');
+          const explicitParent = findDeepestExplicitTable(
+            original,
+            arrayKey,
+            owner?.key.item.value.length ?? 0,
+            owner
+          );
+          const parentKey = explicitParent?.key.item.value ?? owner?.key.item.value ?? [];
+          const relativeKey = arrayKey.slice(parentKey.length);
+          const replacementRow = generateExplicitParentRow(relativeKey, updatedArray, format);
+          if (replacementRow) {
+            const oldSections = findAotScopedDocumentItems(original, arrayKey, owner)
+              .filter(item => (isTable(item) || isTableArray(item)) && keyStartsWith(itemKey(item), arrayKey));
+            const oldSectionSet = new Set(oldSections);
+            const commentsToRelocate = new Set<Comment>();
+            for (const section of oldSections) {
+              traverse(section, { Comment: comment => commentsToRelocate.add(comment) });
+            }
+            for (const group of resolveGroups(original)) {
+              if (!group.member || !oldSectionSet.has(group.member as Block)) continue;
+              for (const item of group.items) {
+                if (isComment(item)) commentsToRelocate.add(item);
+              }
+            }
+            const comments = [...commentsToRelocate]
+              .sort((a, b) => a.loc.start.line - b.loc.start.line || a.loc.start.column - b.loc.start.column)
+              .map(comment => comment.raw);
+            for (const section of oldSections.reverse()) {
+              removeMember(original, original, section);
+            }
+            const destination = explicitParent ?? owner ?? original;
+            let insertionIndex = isDocument(destination) ? rootKeyValueInsertIndex(original) : undefined;
+            for (const comment of comments) {
+              insert(original, destination, generateComment(comment), insertionIndex);
+              if (insertionIndex !== undefined) insertionIndex++;
+            }
+            insert(original, destination, replacementRow, insertionIndex);
+            commentEligibleNodes.add(replacementRow);
+            return;
+          }
+        }
+      }
       // The converse of the guard below: parseJS renders an array of objects as [[key]]
       // sections at the default inlineTableStart, but the document may hold that array
       // inline (`key = [{ ... }]`). The document's shape has to win, or the new element
@@ -1614,7 +1752,7 @@ function applyChanges(
           : existingParent;
 
         if (existingArray && isInlineArray(existingArray)) {
-          const updated_js = toJS(updated.items, '', { temporal });
+          const updated_js = convertedUpdated;
           let jsValue: any = updated_js;
           for (const k of change.path) jsValue = jsValue?.[k];
 
@@ -1649,19 +1787,87 @@ function applyChanges(
         }
       }
 
-      // When is_table_array is true but the child from the updated document is not
-      // a TableArray block (e.g. parseJS inlined it because of inlineTableStart),
-      // regenerate a fresh TableArray from the JS value.
-      if (is_table_array && !isTableArray(child)) {
-        const tableArrayKey = parent_path.filter(p => typeof p === 'string') as string[];
-        const updated_js = toJS(updated.items, '', { temporal });
-        let jsValue: any = updated_js;
-        for (const k of change.path) jsValue = jsValue?.[k];
+      const tableArrayKey = parent_path.filter((part): part is string => typeof part === 'string');
+      const aotStyle = is_table_array && !inlineTableStartExplicit
+        ? getAotStylePaths(tableArrayKey, owner)
+        : undefined;
+      const preserveScopedSections = is_table_array && !inlineTableStartExplicit && !!aotStyle;
+      const updated_js = convertedUpdated;
+      let jsValue: any = updated_js;
+      for (const k of change.path) jsValue = jsValue?.[k];
+      const hasMatchingInlineStyle = (value: any, relativePath: string[] = []): boolean => {
+        if (!value || typeof value !== 'object') return false;
+        if (Array.isArray(value)) return value.some(item => hasMatchingInlineStyle(item, relativePath));
+        return Object.entries(value).some(([key, nestedValue]) => {
+          const fullPath = JSON.stringify(tableArrayKey.concat(relativePath, key));
+          if (aotStyle?.inlineTablePaths.has(fullPath) && isObject(nestedValue)) return true;
+          return hasMatchingInlineStyle(nestedValue, relativePath.concat(key));
+        });
+      };
+      const hasMatchingSectionStyle = (value: any, relativePath: string[] = []): boolean => {
+        if (!value || typeof value !== 'object') return false;
+        if (Array.isArray(value)) return value.some(item => hasMatchingSectionStyle(item, relativePath));
+        return Object.entries(value).some(([key, nestedValue]) => {
+          const fullPath = JSON.stringify(tableArrayKey.concat(relativePath, key));
+          if ((aotStyle?.tablePaths.has(fullPath) && !Array.isArray(nestedValue)) ||
+              (aotStyle?.tableArrayPaths.has(fullPath) && Array.isArray(nestedValue))) return true;
+          return hasMatchingSectionStyle(nestedValue, relativePath.concat(key));
+        });
+      };
+      const hasMatchingInlineStyleForEntry = preserveScopedSections && hasMatchingInlineStyle(jsValue);
+      const hasMatchingStyle = preserveScopedSections &&
+        (hasMatchingInlineStyleForEntry || hasMatchingSectionStyle(jsValue));
+
+      // Rebuild a new AOT entry when its nested values have a section-style
+      // precedent in another entry of the same array.
+      if (is_table_array && (!isTableArray(child) || hasMatchingStyle)) {
         if (jsValue !== undefined) {
           const freshTableArray = generateTableArray(tableArrayKey, format.escapeSequenceUpperCase);
-          const entryDoc = parseJS(jsValue, format);
+          const entryFormat = hasMatchingInlineStyleForEntry
+            ? resolveTomlFormat({ ...format, inlineTableStart: 0 }, format)
+            : format;
+          const entryDoc = parseJS(jsValue, entryFormat);
           for (const item of entryDoc.items) {
             insert(freshTableArray, freshTableArray, item, undefined);
+          }
+          if (preserveScopedSections && aotStyle) {
+            const preserveNestedAotArrays = (container: Table | TableArray, relativePath: string[]) => {
+              for (const item of [...container.items] as TreeNode[]) {
+                if (isKeyValue(item) && isInlineTable(item.value)) {
+                  const fullPath = tableArrayKey.concat(relativePath, item.key.value);
+                  if (aotStyle.tablePaths.has(JSON.stringify(fullPath))) {
+                    remove(freshTableArray, container, item);
+                    const table = generateTable(relativePath.concat(item.key.value), format.escapeSequenceUpperCase);
+                    for (const row of item.value.items as InlineItem[]) {
+                      insert(freshTableArray, table, row.item, undefined, undefined, undefined, undefined, true);
+                    }
+                    insert(freshTableArray, container, table);
+                    preserveNestedAotArrays(table, relativePath.concat(item.key.value));
+                    continue;
+                  }
+                }
+                if (isKeyValue(item) && isInlineArray(item.value)) {
+                  const fullPath = tableArrayKey.concat(relativePath, item.key.value);
+                  if (aotStyle.tableArrayPaths.has(JSON.stringify(fullPath)) && item.value.items.length > 0 &&
+                      item.value.items.every(value => isInlineItem(value) && isInlineTable(value.item))) {
+                    remove(freshTableArray, container, item);
+                    for (const value of item.value.items as InlineItem[]) {
+                      const tableArray = generateTableArray(relativePath.concat(item.key.value), format.escapeSequenceUpperCase);
+                      for (const row of (value.item as InlineTable).items as InlineItem[]) {
+                        insert(freshTableArray, tableArray, row.item, undefined, undefined, undefined, undefined, true);
+                      }
+                      insert(freshTableArray, container, tableArray);
+                      preserveNestedAotArrays(tableArray, relativePath.concat(item.key.value));
+                    }
+                    continue;
+                  }
+                }
+                if (isTable(item) || isTableArray(item)) {
+                  preserveNestedAotArrays(item, relativePath.concat(item.key.item.value));
+                }
+              }
+            };
+            preserveNestedAotArrays(freshTableArray, []);
           }
           // The entry value was parsed standalone, so any [table]/[[array]]
           // sections inside it carry their LOCAL keys (e.g. `[k79]` for
@@ -1856,7 +2062,7 @@ function applyChanges(
             if (addedTable && siblingTable) {
               const wanted = tableHadTrailingCommas(siblingTable);
               if (wanted !== tableHadTrailingCommas(addedTable)) {
-                const updated_js = toJS(updated.items, '', { temporal });
+                const updated_js = convertedUpdated;
                 let jsValue: any = updated_js;
                 for (const k of change.path) jsValue = jsValue?.[k];
 
@@ -2525,7 +2731,7 @@ function applyChanges(
         // node and `replacement` (from the updated document) may be an InlineItem or KV that does
         // not carry the full scope. Simply splicing it into the Document would lose the scope.
         // Get the JS value at change.path and regenerate a fresh KV + parent table from scratch.
-        const updated_js = toJS(updated.items, '', { temporal });
+        const updated_js = convertedUpdated;
         let jsValue: any = updated_js;
         for (const key of change.path) {
           jsValue = jsValue?.[key];
@@ -2670,7 +2876,7 @@ function applyChanges(
         // InlineItem from the updated doc — carries no key.  Splicing it in for
         // the [[a]] node emits a bare value with no key at all (fuzz seed 3333).
         // Regenerate the array as a fresh KV instead.
-        const updated_js = toJS(updated.items, '', { temporal });
+        const updated_js = convertedUpdated;
         const existingAotKey = (existing as TableArray).key.item.value;
         let jsValue: any = updated_js;
         // Navigate to the array's JS value.  When the edit targets an AOT
@@ -5065,9 +5271,14 @@ function keyStartsWith(key: string[] | undefined, prefix: Path): boolean {
     prefix.every((segment, index) => typeof segment === 'string' && key[index] === segment);
 }
 
-function findAotEntryScopeItems(document: Document, entry: TableArray): Block[] {
-  const items = document.items as Block[];
-  const start = items.indexOf(entry);
+function findAotEntryScopeItems(
+  document: Document,
+  entry: TableArray,
+  knownStart?: number,
+  sourceItems?: Block[]
+): Block[] {
+  const items = sourceItems ?? document.items as Block[];
+  const start = knownStart ?? items.indexOf(entry);
   if (start < 0) return [];
 
   const entryKey = entry.key.item.value;

@@ -1,31 +1,58 @@
 /**
- * Benchmark full `patch()` vs `patch-lite()` on the same in-place edit
- * workload. Both distributions can edit existing scalar values, so the two are
- * measured with an identical update object and the throughput is compared.
+ * Compare TOML editing workflows across a registry of patch scenarios.
+ * Add a scenario by defining its fixtures, update function, and optional gate
+ * alongside the existing entries below.
  *
  * Usage:
- *   node benchmark/patch-benchmark.mjs
+ *   pnpm run build
+ *   pnpm run bench:patch
+ *   node benchmark/patch-benchmark.mjs --verify-only
  *
- * Prerequisites:
- *   pnpm run build   (so dist/patch-lite.js and dist/toml-patch.js exist)
- *
- * The report is written to benchmark/patch-benchmark.md (regenerated on every
- * run). Numbers vary by machine, so that file is gitignored.
+ * BENCH_BASELINE may point to a built toml-patch.js for same-run comparison.
+ * The report is written to benchmark/patch-benchmark.md.
  */
-import { join, dirname } from 'path';
-import { writeFileSync } from 'fs';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import Benchmark from 'benchmark';
+import { parse as parseSmol, stringify as stringifySmol } from 'smol-toml';
+import { buildRankedTable } from './ranked-tables.mjs';
+import { checkThresholds } from './check-thresholds.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
+const currentName = '@decimalturn/toml-patch (current)';
+const liteName = 'toml-patch-lite';
+const smolName = 'smol-toml';
+const baselineName = 'toml-patch (baseline)';
+const baselineLiteName = 'toml-patch-lite (baseline)';
+const defaultImplementations = ['full', 'lite', 'smol', 'baseline', 'baseline-lite'];
+const baselineVersion = process.env.BENCH_BASELINE_VERSION;
+const smolVersion = JSON.parse(readFileSync(join(rootDir, 'node_modules/smol-toml/package.json'), 'utf8')).version;
 
 const importDist = (file) => import(pathToFileURL(join(rootDir, 'dist', file)).href);
+const current = await importDist('toml-patch.js');
+const lite = await importDist('patch-lite.js');
 
-const { parse, patch } = await importDist('toml-patch.js');
-const { patch: patchLite } = await importDist('patch-lite.js');
+const baselinePath = process.env.BENCH_BASELINE
+  ? resolve(rootDir, process.env.BENCH_BASELINE)
+  : undefined;
+if (baselinePath && !existsSync(baselinePath)) {
+  throw new Error(`Baseline build not found: ${baselinePath}`);
+}
+const baselineLitePath = baselinePath ? join(dirname(baselinePath), 'patch-lite.js') : undefined;
+if (baselineLitePath && !existsSync(baselineLitePath)) {
+  throw new Error(`Baseline lite build not found: ${baselineLitePath}`);
+}
+const baseline = baselinePath
+  ? await import(pathToFileURL(baselinePath).href)
+  : undefined;
+const baselineLite = baselineLitePath
+  ? await import(pathToFileURL(baselineLitePath).href)
+  : undefined;
 
-const source = [
+const representativeSource = [
   'title = "TOML Example"',
   'description = "A representative document for benchmarking"',
   'version = "1.0.0"',
@@ -43,68 +70,226 @@ const source = [
   '',
 ].join('\n');
 
-// Build the edited object once. patch() does not mutate its `updated` argument,
-// and patch-lite() re-parses the source itself.
-const updated = parse(source);
-updated.version = '1.0.1';
-updated.port = 9090;
-updated.enabled = false;
-updated.server.host = '127.0.0.1';
-
-// Both must agree on the result for the comparison to be meaningful.
-const fullResult = patch(source, updated);
-const liteResult = patchLite(source, updated);
-if (fullResult !== liteResult) {
-  console.error('Sanity check failed: full patch and patch-lite disagree on this workload.');
-  process.exit(1);
+function makeAotSource(familyCount) {
+  const lines = ['unrelated_value = 0', ''];
+  for (let family = 0; family < familyCount; family++) {
+    const key = `scope_${String(family).padStart(4, '0')}`;
+    lines.push(
+      `[[${key}.entries]]`,
+      `id = ${family}`,
+      '',
+      `[${key}.entries.options]`,
+      'enabled = true',
+      ''
+    );
+  }
+  return `${lines.join('\n')}\n`;
 }
 
-const format = (n) => Math.round(n).toLocaleString('en-US');
+// Each scenario owns its fixture generation and mutation. Implementations and
+// reporting are shared, so adding a new workload does not require new runners.
+const scenarios = [
+  {
+    id: 'in-place-edit',
+    title: 'Edit existing scalar values',
+    description: 'Change several existing root and nested scalar values.',
+    implementations: defaultImplementations,
+    maxTime: 2,
+    thresholds: [{
+      suite: 'fixtures.patch',
+      operation: 'in-place-edit',
+    }],
+    fixtures: [{
+      name: 'representative-document',
+      source: representativeSource,
+      update(document) {
+        document.version = '1.0.1';
+        document.port = 9090;
+        document.enabled = false;
+        document.server.host = '127.0.0.1';
+      },
+    }],
+  },
+  {
+    id: 'aot-unrelated-scalar-edit',
+    title: 'Edit an unrelated scalar with many top-level AOT scopes',
+    description: 'Change one root value while each named AOT owns a nested subtable.',
+    implementations: defaultImplementations,
+    maxTime: 1,
+    thresholds: [
+      {
+        suite: 'fixtures.patch',
+        operation: 'aot-unrelated-scalar-edit',
+      },
+      {
+        suite: 'fixtures.patch',
+        operation: 'aot-unrelated-scalar-edit.lite',
+        currentName: liteName,
+      },
+    ],
+    fixtures: [64, 256, 1024].map((familyCount) => ({
+      name: `aot-scopes-${familyCount}`,
+      source: makeAotSource(familyCount),
+      update(document) {
+        document.unrelated_value = 1;
+      },
+    })),
+  },
+];
 
-function printReport(fullOps, liteOps) {
-  const speedup = liteOps / fullOps;
-  const table = [
-    `  ${'Metric'.padEnd(16)} ${'patch (full)'.padEnd(18)} ${'patch-lite'.padEnd(18)} Speedup`,
-    `  ${'-'.repeat(16)} ${'-'.repeat(18)} ${'-'.repeat(18)} ${'-'.repeat(8)}`,
-    `  ${'ops/sec'.padEnd(16)} ${format(fullOps).padStart(18)} ${format(liteOps).padStart(18)} ${speedup.toFixed(2)}x`,
-  ].join('\n');
+const adapters = {
+  full: {
+    name: currentName,
+    run: (fixture) => current.patch(fixture.source, fixture.updated),
+  },
+  lite: {
+    name: liteName,
+    run: (fixture) => lite.patch(fixture.source, fixture.updated),
+  },
+  smol: {
+    name: smolName,
+    run(fixture) {
+      const document = parseSmol(fixture.source);
+      fixture.update(document);
+      return stringifySmol(document);
+    },
+  },
+  baseline: baseline && {
+    name: baselineName,
+    run: (fixture) => baseline.patch(fixture.source, fixture.updated),
+  },
+  'baseline-lite': baselineLite && {
+    name: baselineLiteName,
+    run: (fixture) => baselineLite.patch(fixture.source, fixture.updated),
+  },
+};
 
-  console.log();
-  console.log('======================================================================');
-  console.log('  Performance Comparison: patch vs patch-lite (in-place edits)');
-  console.log('======================================================================');
-  console.log();
-  console.log(table);
-  console.log();
+const fixtures = scenarios.flatMap((scenario) => scenario.fixtures.map((fixture) => ({
+  ...fixture,
+  scenario,
+  key: `${scenario.id}:${fixture.name}`,
+  updated: (() => {
+    const document = current.parse(fixture.source);
+    fixture.update(document);
+    return document;
+  })(),
+})));
 
-  const markdown = [
-    '# Performance Comparison: patch vs patch-lite\n',
-    '## How to generate this report\n',
-    'From the repository root:\n',
-    '1. Build the package: `pnpm run build`\n',
-    '2. Run the comparison: `node benchmark/patch-benchmark.mjs`\n',
-    'The script writes this file directly. Numbers vary by machine.\n',
-    '## Results\n',
-    '| Metric | patch (full) | patch-lite | Speedup |',
-    '|--------|--------------|------------|---------|',
-    `| ops/sec | ${format(fullOps)} | ${format(liteOps)} | ${speedup.toFixed(2)}x |\n`,
-  ].join('\n');
-
-  writeFileSync(join(rootDir, 'benchmark', 'patch-benchmark.md'), markdown);
-  console.log('Report written to benchmark/patch-benchmark.md');
-}
-
-const suite = new Benchmark.Suite('patch-vs-patch-lite');
-suite
-  .add('patch (full)', () => patch(source, updated), { maxTime: 2 })
-  .add('patch-lite', () => patchLite(source, updated), { maxTime: 2 });
-
-await new Promise((resolve) => {
-  suite
-    .on('cycle', (event) => console.log(String(event.target)))
-    .on('complete', function () {
-      printReport(this[0].hz, this[1].hz);
-      resolve();
+function adaptersFor(scenario) {
+  return scenario.implementations
+    .map((key) => {
+      const adapter = adapters[key];
+      if (key.startsWith('baseline') && !baseline) return undefined;
+      if (!adapter) throw new Error(`Unknown implementation adapter "${key}" in scenario "${scenario.id}"`);
+      return adapter;
     })
-    .run({ async: true });
-});
+    .filter(Boolean);
+}
+
+function verifyFixture(fixture) {
+  for (const adapter of adaptersFor(fixture.scenario)) {
+    const output = adapter.run(fixture);
+    const actual = current.parse(output);
+    if (!isDeepStrictEqual(actual, fixture.updated)) {
+      throw new Error(`${adapter.name} failed semantic validation for ${fixture.key}`);
+    }
+  }
+}
+
+for (const fixture of fixtures) verifyFixture(fixture);
+
+if (process.argv.includes('--verify-only')) {
+  console.log(`Verified ${fixtures.length} fixtures across ${scenarios.length} scenarios without timing.`);
+  process.exit(0);
+}
+
+const rates = new Map();
+for (const fixture of fixtures) {
+  const suite = new Benchmark.Suite(`${fixture.scenario.id} ${fixture.name}`);
+  for (const adapter of adaptersFor(fixture.scenario)) {
+    suite.add(adapter.name, () => adapter.run(fixture), { maxTime: fixture.scenario.maxTime });
+  }
+
+  await new Promise((resolveSuite) => {
+    suite
+      .on('cycle', (event) => {
+        console.log(String(event.target));
+        rates.set(`${adapterKeyForName(event.target.name)}:${fixture.key}`, event.target.hz);
+      })
+      .on('complete', resolveSuite)
+      .run({ async: true });
+  });
+}
+
+function adapterKeyForName(name) {
+  return Object.entries(adapters).find(([, adapter]) => adapter?.name === name)?.[0];
+}
+
+let thresholdFailed = false;
+for (const scenario of scenarios.filter((item) => item.thresholds)) {
+  for (const { suite, operation, currentName: thresholdCurrentName = currentName } of scenario.thresholds) {
+    const failed = checkThresholds({
+      suite,
+      currentName: thresholdCurrentName,
+      operations: [{
+        name: operation,
+        fixtures: scenario.fixtures.map((fixture) => fixture.name),
+        hzFor: (implementation, fixtureName) => {
+          const key = Object.entries(adapters).find(([, adapter]) => adapter?.name === implementation)?.[0];
+          return rates.get(`${key}:${scenario.id}:${fixtureName}`);
+        },
+      }],
+    });
+    thresholdFailed = failed || thresholdFailed;
+  }
+}
+
+const reportLines = [
+  '# 🧩 Patch benchmarks',
+  '',
+  'Full and lite patching are compared with smol-toml. The smol-toml method parses the document, updates the object, and stringifies it. Timings include each implementation’s complete operation; fixture creation and correctness checks are outside the timed section.',
+  '',
+  baseline
+    ? 'Current and base-branch full and lite patch builds are compared in the same run.'
+    : 'No base build was supplied; the current-versus-baseline performance gate is skipped.',
+  '',
+];
+
+/** @param {string | undefined} version */
+const packageLabel = (version) => version
+  ? `@decimalturn/toml-patch@${version}`
+  : '@decimalturn/toml-patch';
+const implementationLabels = new Map([
+  [currentName, '@decimalturn/toml-patch (full, current)'],
+  [liteName, '@decimalturn/toml-patch (lite, current)'],
+  [smolName, `smol-toml@${smolVersion}`],
+  [baselineName, `${packageLabel(baselineVersion)} (full, baseline)`],
+  [baselineLiteName, `${packageLabel(baselineVersion)} (lite, baseline)`],
+]);
+
+for (const scenario of scenarios) {
+  const scenarioAdapters = adaptersFor(scenario);
+  reportLines.push(`## ${scenario.title}`, '', scenario.description, '');
+
+  for (const fixture of scenario.fixtures) {
+    const key = `${scenario.id}:${fixture.name}`;
+    reportLines.push(buildRankedTable({
+      heading: `🧩 ${scenario.title}, ${fixture.name}`,
+      rows: scenarioAdapters.map((adapter) => ({
+        id: adapterKeyForName(adapter.name),
+        label: implementationLabels.get(adapter.name) ?? adapter.name,
+        hz: rates.get(`${adapterKeyForName(adapter.name)}:${key}`),
+      })),
+      includeRank: true,
+      changes: baseline ? [
+        { compareId: 'baseline', currentId: 'full' },
+        { compareId: 'baseline-lite', currentId: 'lite' },
+      ] : [],
+    }));
+  }
+}
+
+const reportPath = join(__dirname, 'patch-benchmark.md');
+writeFileSync(reportPath, `${reportLines.join('\n')}\n`);
+console.log(`Report written to ${reportPath}`);
+if (thresholdFailed) process.exitCode = 1;

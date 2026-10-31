@@ -68,7 +68,7 @@ jobs:
       run: pnpm run test:all
 
     - name: Fuzz test
-      run: pnpm run fuzz
+      run: pnpm run fuzz1
 
     - name: Specs
       run: pnpm run specs

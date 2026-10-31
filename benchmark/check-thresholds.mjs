@@ -13,11 +13,15 @@
  *   [fixtures.parse]
  *   maxSlowdown = 8
  *
+ *   [fixtures.patch.aot-edit.fixtures.large]
+ *   maxSlowdown = 12
+ *
  *   [bundle.patch-lite]
  *   maxMinified = 48
  *   maxGzipped = 14
  *
- * The `reference` key is optional and defaults to smol-toml.
+ * `reference` can be set globally or on a suite; an operation-level value
+ * overrides both. The global key is optional and defaults to smol-toml.
  */
 
 import { existsSync, readFileSync } from 'fs';
@@ -54,10 +58,32 @@ function readSuite(thresholds, suite) {
   return suite.split('.').reduce((table, key) => table?.[key], thresholds) ?? {};
 }
 
+function resolveReference(thresholds, suite, operation, defaultReference) {
+  const suiteThresholds = readSuite(thresholds, suite);
+  const operationThresholds = readSuite(suiteThresholds, operation);
+  const operationReference = operationThresholds.reference;
+  if (typeof operationReference === 'string') return operationReference;
+  if (typeof suiteThresholds.reference === 'string') return suiteThresholds.reference;
+  if (defaultReference) return defaultReference;
+  return typeof thresholds?.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
+}
+
+/** Resolves the reference used by an operation's threshold gate. */
+export function getThresholdReference({
+  suite,
+  operation,
+  defaultReference,
+  thresholdsPath = DEFAULT_THRESHOLDS_PATH,
+}) {
+  return resolveReference(readThresholds(thresholdsPath), suite, operation, defaultReference);
+}
+
 /**
  * @param {object} options
  * @param {string} options.suite Benchmark suite, matching a table in the thresholds file.
  * @param {string} options.currentName Implementation name of the current build.
+ * @param {string} [options.defaultReference] Caller-specific default used when
+ *   no operation or suite reference is configured.
  * @param {Array<{
  *   name: string,
  *   fixtures: string[],
@@ -70,6 +96,7 @@ export function checkThresholds({
   suite,
   currentName,
   operations,
+  defaultReference: referenceDefault,
   thresholdsPath = DEFAULT_THRESHOLDS_PATH,
 }) {
   const thresholds = readThresholds(thresholdsPath);
@@ -77,17 +104,20 @@ export function checkThresholds({
     console.log(`\nNo thresholds file at ${thresholdsPath}; skipping the performance gate.`);
     return false;
   }
-  const referenceName =
-    typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
   const suiteThresholds = readSuite(thresholds, suite);
 
-  console.log(`\nPerformance thresholds for ${suite} fixtures (max slowdown vs ${referenceName}):`);
+  console.log(`\nPerformance thresholds for ${suite} fixtures:`);
 
   let failed = false;
 
   for (const { name, fixtures, hzFor } of operations) {
-    const maxSlowdown = suiteThresholds[name]?.maxSlowdown;
-    if (typeof maxSlowdown !== 'number') continue;
+    const operationThresholds = readSuite(suiteThresholds, name);
+    const hasThreshold = fixtures.some((fixture) =>
+      typeof operationThresholds.fixtures?.[fixture]?.maxSlowdown === 'number' ||
+      typeof operationThresholds.maxSlowdown === 'number'
+    );
+    if (!hasThreshold) continue;
+    const referenceName = resolveReference(thresholds, suite, name, referenceDefault);
 
     // Runs restricted to a subset of implementations have no reference to
     // compare against, so the gate has to sit that operation out.
@@ -97,6 +127,10 @@ export function checkThresholds({
     }
 
     for (const fixture of fixtures) {
+      const maxSlowdown = operationThresholds.fixtures?.[fixture]?.maxSlowdown ??
+        operationThresholds.maxSlowdown;
+      if (typeof maxSlowdown !== 'number') continue;
+
       const current = hzFor(currentName, fixture);
       const reference = hzFor(referenceName, fixture);
 
@@ -112,7 +146,7 @@ export function checkThresholds({
       if (!ok) failed = true;
 
       console.log(
-        `  ${ok ? '✅' : '❌'} ${name} ${fixture}: ${slowdown.toFixed(1)}x slower than ${referenceName} (max ${maxSlowdown}x)`
+        `  ${ok ? '✅' : '❌'} ${currentName} is ${slowdown.toFixed(1)}x slower than ${referenceName} for ${name} ${fixture} (max ${maxSlowdown}x)`
       );
     }
   }

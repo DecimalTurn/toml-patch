@@ -484,6 +484,59 @@ export function describeFormat(fmt: Partial<TomlFormat> | undefined): string {
 
 // ─── Fuzz runner ─────────────────────────────────────────────────────────
 
+export interface FuzzContext {
+  seed: number;
+  mutationCount: number;
+  source: string;
+  generated: GeneratedSource;
+}
+
+export interface GeneratedSource {
+  source: string;
+  description?: string;
+  metadata?: unknown;
+}
+
+export interface MutationRun {
+  updated: unknown;
+  descriptions: string[];
+  plans?: MutationPlan[];
+}
+
+export interface MutationPlan {
+  kind: string;
+  path: (string | number)[];
+  newValue?: unknown;
+}
+
+export function snapshotMutationPlan<T extends MutationPlan>(plan: T): T {
+  return deepClone(plan) as T;
+}
+
+export type SourceTransform = (source: string, context: FuzzContext) => string;
+export type FormatGenerator = (context: FuzzContext) => Partial<TomlFormat> | undefined;
+export type FuzzComparator = (
+  expected: unknown,
+  actual: unknown,
+  format: Partial<TomlFormat> | undefined
+) => boolean;
+export type MutationStrategy = (input: {
+  original: unknown;
+  updated: unknown;
+  context: FuzzContext;
+}) => MutationRun;
+
+export interface FuzzConfig {
+  generateSource?: (context: Pick<FuzzContext, 'seed' | 'mutationCount'>) => GeneratedSource;
+  sourceTransforms?: SourceTransform[];
+  generateFormat?: FormatGenerator;
+  mutate?: MutationStrategy;
+  compare?: FuzzComparator;
+  mutationCount?: number;
+  variant?: string;
+  profile?: string;
+}
+
 export interface PatchFuzzResult {
   seed: number;
   mutations: number;
@@ -493,8 +546,13 @@ export interface PatchFuzzResult {
   patchedToml?: string;
   modifiedObj?: unknown;
   reParsedObj?: unknown;
+  variant?: string;
+  profile?: string;
+  generatorDescription?: string;
   mutationDescs?: string[];
+  mutationPlans?: MutationPlan[];
   formatDesc?: string;
+  format?: Partial<TomlFormat>;
 }
 
 /**
@@ -502,7 +560,7 @@ export interface PatchFuzzResult {
  * patch() normalise every line ending in the document, including multiline
  * string content, so both sides are compared with one spelling.
  */
-function normalizeNewlines(value: unknown, fmt?: Partial<TomlFormat>): unknown {
+export function normalizeNewlines(value: unknown, fmt?: Partial<TomlFormat>): unknown {
   if (fmt?.newLine === undefined) return value;
   if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
   if (Array.isArray(value)) return value.map((item) => normalizeNewlines(item, fmt));
@@ -532,6 +590,195 @@ export interface FuzzOptions {
   dateFocus?: boolean;
 }
 
+export function generateDefaultSource({ seed }: Pick<FuzzContext, 'seed'>): GeneratedSource {
+  const generated = randomToml({ seed });
+  return {
+    source: generated.toml,
+    metadata: generated.document
+  };
+}
+
+function defaultMutationStrategy({ updated, context }: {
+  original: unknown;
+  updated: unknown;
+  context: FuzzContext;
+}, subSecondDates = false, dateFocus = false): MutationRun {
+  const mutationRng = new SeededRandom(context.seed + context.mutationCount * 1_000_000);
+  const aotKeyPaths = new Set<string>();
+  (function collectAotKeys(node: any) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === NodeType.TableArray && node.key && node.key.item) {
+      aotKeyPaths.add((node.key.item.value as string[]).join('.'));
+    }
+    if (Array.isArray(node.items)) for (const item of node.items) collectAotKeys(item);
+    if (node.value) collectAotKeys(node.value);
+    if (node.item) collectAotKeys(node.item);
+  })(context.generated.metadata);
+  const isTableLike = (value: unknown) =>
+    value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
+
+  const mutationDescs: string[] = [];
+  const mutationPlans: MutationPlan[] = [];
+  let applied = 0;
+  let attempts = 0;
+  while (applied < context.mutationCount && attempts < context.mutationCount * 5) {
+    attempts++;
+    const mutation = generateMutation(updated, mutationRng, subSecondDates, dateFocus);
+    if (!mutation) break;
+    if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
+      const lastSeg = mutation.path[mutation.path.length - 1];
+      const parentPath = mutation.path.slice(0, -1);
+      const stringPath = parentPath.filter(seg => typeof seg === 'string').join('.');
+      if (typeof lastSeg === 'number' && aotKeyPaths.has(stringPath)) continue;
+    }
+    applyMutation(updated, mutation);
+    mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);
+    mutationPlans.push(snapshotMutationPlan(mutation));
+    applied++;
+  }
+
+  return { updated, descriptions: mutationDescs, plans: mutationPlans };
+}
+
+export function createFormatGenerator(
+  randomizeIndentWidth: boolean,
+  randomizeMultiline: boolean,
+  fullFormats: boolean
+): FormatGenerator {
+  return ({ seed }) => randomTomlFormat(
+    new SeededRandom(seed + 500_000),
+    randomizeIndentWidth,
+    randomizeMultiline,
+    fullFormats
+  );
+}
+
+export function createDefaultMutationStrategy(options: Pick<FuzzOptions, 'subSecondDates' | 'dateFocus'> = {}): MutationStrategy {
+  return (input) => defaultMutationStrategy(input, options.subSecondDates, options.dateFocus);
+}
+
+function defaultComparator(
+  expected: unknown,
+  actual: unknown,
+  format: Partial<TomlFormat> | undefined
+): boolean {
+  return deepEqualWithFormat(expected, actual, format);
+}
+
+function runResultMetadata(result: PatchFuzzResult, config: FuzzConfig, generated: GeneratedSource): PatchFuzzResult {
+  return {
+    ...result,
+    ...(config.variant ? { variant: config.variant } : {}),
+    ...(config.profile ? { profile: config.profile } : {}),
+    ...(generated.description ? { generatorDescription: generated.description } : {})
+  };
+}
+
+export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult {
+  const mutationCount = config.mutationCount ?? 3;
+  const baseResult: PatchFuzzResult = {
+    seed,
+    mutations: mutationCount,
+    status: 'ok',
+    ...(config.variant ? { variant: config.variant } : {}),
+    ...(config.profile ? { profile: config.profile } : {})
+  };
+
+  try {
+    const generated = (config.generateSource ?? generateDefaultSource)({ seed, mutationCount });
+    const context: FuzzContext = {
+      seed,
+      mutationCount,
+      source: generated.source,
+      generated
+    };
+    let source = generated.source;
+    for (const transform of config.sourceTransforms ?? []) {
+      source = transform(source, context);
+      context.source = source;
+    }
+
+    let original: any;
+    try {
+      original = parse(source);
+    } catch {
+      return runResultMetadata(baseResult, config, generated);
+    }
+
+    const updated = deepClone(original) as any;
+    const format = (config.generateFormat ?? createFormatGenerator(false, false, false))(context);
+    const formatDesc = describeFormat(format);
+    const mutationRun = (config.mutate ?? defaultMutationStrategy)({ original, updated, context });
+    if (mutationRun.descriptions.length === 0) {
+      return runResultMetadata({
+        ...baseResult,
+        formatDesc,
+        originalToml: source,
+        patchedToml: source
+      }, config, generated);
+    }
+
+    const result = runResultMetadata({
+      ...baseResult,
+      mutationDescs: mutationRun.descriptions,
+      ...(mutationRun.plans ? { mutationPlans: mutationRun.plans } : {}),
+      formatDesc,
+      ...(format ? { format } : {})
+    }, config, generated);
+    let patchedToml: string;
+    try {
+      patchedToml = patch(source, mutationRun.updated, format);
+    } catch (error: any) {
+      return {
+        ...result,
+        status: 'patch-fail',
+        error: `patch() threw: ${error.message}`,
+        originalToml: source,
+        modifiedObj: mutationRun.updated
+      };
+    }
+
+    let reParsed: any;
+    try {
+      reParsed = parse(patchedToml);
+    } catch (error: any) {
+      return {
+        ...result,
+        status: 'roundtrip-mismatch',
+        error: `re-parse failed: ${error.message}`,
+        originalToml: source,
+        patchedToml,
+        modifiedObj: mutationRun.updated
+      };
+    }
+
+    const compare = config.compare ?? defaultComparator;
+    if (!compare(mutationRun.updated, reParsed, format)) {
+      return {
+        ...result,
+        status: 'roundtrip-mismatch',
+        error: 'Objects differ after patch round-trip',
+        originalToml: source,
+        patchedToml,
+        modifiedObj: mutationRun.updated,
+        reParsedObj: reParsed
+      };
+    }
+
+    return {
+      ...result,
+      originalToml: source,
+      patchedToml
+    };
+  } catch (error: any) {
+    return {
+      ...baseResult,
+      status: 'error',
+      error: `Unexpected: ${error.message}\n${error.stack}`
+    };
+  }
+}
+
 export function fuzzOne(
   seed: number,
   mutationCount: number,
@@ -540,137 +787,23 @@ export function fuzzOne(
   randomizeMultiline = false,
   options: FuzzOptions = {}
 ): PatchFuzzResult {
-  const result: PatchFuzzResult = { seed, mutations: mutationCount, status: 'ok' };
-
-  try {
-    // 1. Generate random TOML and parse it
-    const generated = randomToml({ seed });
-    let source = sourceTransform ? sourceTransform(generated.toml) : generated.toml;
-    if (options.shortenFractions) {
-      source = shortenFractionalSeconds(source, new SeededRandom(seed + 700_000));
-    }
-
-    let obj1: any;
-    try {
-      obj1 = parse(source);
-    } catch {
-      return { seed, mutations: mutationCount, status: 'ok' }; // skip unparseable
-    }
-
-    // 2. Deep clone
-    let obj2 = deepClone(obj1) as any;
-
-    // 3. Generate random TomlFormat (deterministic from seed)
-    const formatRng = new SeededRandom(seed + 500000);
-    const format = randomTomlFormat(formatRng, randomizeIndentWidth, randomizeMultiline, options.fullFormats);
-    const formatDesc = describeFormat(format);
-
-    // 4. Apply mutations using a seeded RNG (offset from doc seed
-    //    so mutationCount changes don't alter the same-seed sequence)
-    const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
-
-    // Entries of an array-of-tables must be tables — a scalar/array/date
-    // element cannot be represented in TOML at all, so mutations that
-    // would write one into an AOT array are skipped (fuzz seed 52).
-    const aotKeyPaths = new Set<string>();
-    (function collectAotKeys(node: any) {
-      if (!node || typeof node !== 'object') return;
-      if (node.type === NodeType.TableArray && node.key && node.key.item) {
-        aotKeyPaths.add((node.key.item.value as string[]).join('.'));
-      }
-      if (Array.isArray(node.items)) for (const item of node.items) collectAotKeys(item);
-      if (node.value) collectAotKeys(node.value);
-      if (node.item) collectAotKeys(node.item);
-    })(generated.document);
-    const isTableLike = (v: unknown) =>
-      v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
-
-    const mutationDescs: string[] = [];
-    let applied = 0;
-    let attempts = 0;
-    while (applied < mutationCount && attempts < mutationCount * 5) {
-      attempts++;
-      const mutation = generateMutation(obj2, mutationRng, options.subSecondDates, options.dateFocus);
-      if (!mutation) break;
-      if (mutation.newValue !== undefined && !isTableLike(mutation.newValue)) {
-        const lastSeg = mutation.path[mutation.path.length - 1];
-        const parentPath = mutation.path.slice(0, -1);
-        // The AOT keys in aotKeyPaths are stored in CST coordinates (no numeric
-        // entry indices), while mutation.path lives in JS-object coordinates
-        // where an array-of-tables parent interleaves a numeric index
-        // (e.g. ['', 0, 'azn_', 'I/(T'] vs the AOT key ['', 'azn_', 'I/(T']).
-        // Compare the string-segment projection so the guard actually fires for
-        // an AOT nested inside another AOT entry (fuzz seed 421089).
-        const stringPath = parentPath.filter(seg => typeof seg === 'string').join('.');
-        if (typeof lastSeg === 'number' && aotKeyPaths.has(stringPath)) {
-          continue; // unrepresentable in TOML — retry
-        }
-      }
-      applyMutation(obj2, mutation);
-      mutationDescs.push(`${mutation.kind} at ${mutation.path.join('.') || 'root'}`);
-      applied++;
-    }
-
-    if (mutationDescs.length === 0) {
-      return { seed, mutations: mutationCount, status: 'ok' };
-    }
-
-    // 5. Apply patch
-    let patchedToml: string;
-    try {
-      patchedToml = patch(source, obj2, format);
-    } catch (e: any) {
-      result.status = 'patch-fail';
-      result.error = `patch() threw: ${e.message}`;
-      result.originalToml = source;
-      result.modifiedObj = obj2;
-      result.mutationDescs = mutationDescs;
-      result.formatDesc = formatDesc;
-      return result;
-    }
-
-    // 6. Parse the patched result
-    let reParsed: any;
-    try {
-      reParsed = parse(patchedToml);
-    } catch (e: any) {
-      result.status = 'roundtrip-mismatch';
-      result.error = `re-parse failed: ${e.message}`;
-      result.originalToml = source;
-      result.patchedToml = patchedToml;
-      result.modifiedObj = obj2;
-      result.mutationDescs = mutationDescs;
-      result.formatDesc = formatDesc;
-      return result;
-    }
-
-    // 7. Compare. The shared path is format-aware so that
-    // truncateZeroTimeInDates / minimumDecimals don't cause false positives.
-    // Dates instead compare by instant when replacement values can carry a
-    // fraction: the format-aware path renders dates back to text, which reports
-    // a difference between a value and the same instant written with a
-    // different number of fractional digits.
-    const equal = options.subSecondDates
-      ? deepEqual(normalizeNewlines(obj2, format), normalizeNewlines(reParsed, format))
-      : deepEqualWithFormat(obj2, reParsed, format);
-    if (!equal) {
-      result.status = 'roundtrip-mismatch';
-      result.error = 'Objects differ after patch round-trip';
-      result.originalToml = source;
-      result.patchedToml = patchedToml;
-      result.modifiedObj = obj2;
-      result.reParsedObj = reParsed;
-      result.mutationDescs = mutationDescs;
-      result.formatDesc = formatDesc;
-      return result;
-    }
-
-    return result;
-  } catch (e: any) {
-    result.status = 'error';
-    result.error = `Unexpected: ${e.message}\n${e.stack}`;
-    return result;
+  const sourceTransforms: SourceTransform[] = [];
+  if (sourceTransform) sourceTransforms.push((source) => sourceTransform(source));
+  if (options.shortenFractions) {
+    sourceTransforms.push((source, context) =>
+      shortenFractionalSeconds(source, new SeededRandom(context.seed + 700_000))
+    );
   }
+
+  return runFuzz(seed, {
+    mutationCount,
+    sourceTransforms,
+    generateFormat: createFormatGenerator(randomizeIndentWidth, randomizeMultiline, options.fullFormats ?? false),
+    mutate: createDefaultMutationStrategy(options),
+    compare: options.subSecondDates
+      ? (expected, actual, format) => deepEqual(normalizeNewlines(expected, format), normalizeNewlines(actual, format))
+      : defaultComparator
+  });
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────

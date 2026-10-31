@@ -1,4 +1,5 @@
 import { TomlDocument } from '../toml-document';
+import patch from '../patch';
 import { hard_example } from '../__fixtures__';
 import { LocalDate } from '../date-format';
 import dedent from 'dedent';
@@ -39,6 +40,43 @@ describe('TomlDocument', () => {
   it('returns the original TOML string', () => {
     const doc = new TomlDocument(simpleToml);
     expect(doc.toTomlString).toBe(simpleToml);
+  });
+
+  it.each(['patch', 'document'] as const)('respects explicit inlineTableStart through %s', (api) => {
+    const source = dedent`
+      [[items]]
+      id = 1
+
+      [items.detail]
+      x = 1
+    `;
+    const updated = {
+      items: [
+        { id: 1, detail: { x: 1 } },
+        { id: 2, detail: { x: 2 } }
+      ]
+    };
+    let output: string;
+
+    if (api === 'patch') {
+      output = patch(source, updated, { inlineTableStart: 0 });
+    } else {
+      const doc = new TomlDocument(source);
+      doc.patch(updated, { inlineTableStart: 0 });
+      output = doc.toTomlString;
+    }
+
+    expect(output).toEqual(dedent`
+      [[items]]
+      id = 1
+
+      [items.detail]
+      x = 1
+
+      [[items]]
+      id = 2
+      detail = { x = 2 }
+    `);
   });
 
   it('preserves UTF-8 BOM when patching string input', () => {

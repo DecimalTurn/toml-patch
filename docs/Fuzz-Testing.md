@@ -25,9 +25,161 @@ correctly (see `src/__tests__/fuzz-patch.ts` and its `randomizer.ts`).
 
 Once every failing seed in a window is fixed and each previously-failing seed
 re-runs clean, the window is done — there is no need to re-sweep the *entire*
-range a second time. Checking just the previously-failing seeds (via
-`fuzz-run.ts --seed <N> --to <N>`) is sufficient; a fresh full sweep only
-matters when you change core logic and want a broad regression signal.
+range a second time. For variant 1, check just the previously failing seeds
+with `scripts/fuzz-run1.ts --seed <N> --to <N>`. For variant 5, use
+`scripts/fuzz-run5.ts --seed <N> --to <N>`. A fresh full sweep only matters
+when you change core logic and want a broad regression signal.
+
+## Fuzz suite variants
+
+The numbered suites are complementary layers, not strictly cumulative
+versions. Variant 1 is the original general harness. Variants 2, 3 and 4 reuse the general harness in
+`src/__tests__/fuzz-patch.ts` and change the generated source, mutations or
+format options. Variant 5 uses its own structure-first generator because the
+general randomizer rarely creates the AOT ownership layouts it targets.
+
+### Variant 1: general patch fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch1.ts`, backed by
+  `src/__tests__/fuzz-patch.ts`
+- **Runner:** `scripts/fuzz-run1.ts`, `pnpm run fuzz1`
+- **Purpose:** Establish the broad baseline. It generates deterministic TOML
+  with the shared randomizer, applies random additions deletions value changes
+  type changes and array mutations, then checks that the patched output parses
+  back to the mutated object.
+- **Why it exists:** This is the general regression net and the source of the
+  shared mutation and comparison helpers used by variants 2 through 4.
+
+### Variant 2: spaced dotted keys
+
+- **Implementation:** `src/__tests__/fuzz-patch2.ts`
+- **Runner:** `scripts/fuzz-run2.ts`, `pnpm run fuzz2`
+- **Purpose:** Reuses the baseline corpus but inserts whitespace around
+  tokenizer-recognized dotted-key separators, such as `a . b = 1` and
+  `[a . b]`.
+- **Why it exists:** Dotted-key whitespace is syntactically insignificant but
+  structurally important to a formatting-preserving patcher. The variant
+  catches code that assumes compact `a.b` spelling or mistakes dots inside
+  quoted keys strings dates or comments for separators.
+
+### Variant 3: indentation and multiline layout
+
+- **Implementation:** `src/__tests__/fuzz-patch3.ts`
+- **Runner:** `scripts/fuzz-run3.ts`, `pnpm run fuzz3`
+- **Purpose:** Reuses the baseline corpus while randomizing indentation width
+  and multiline table or array formatting.
+- **Why it exists:** The baseline mostly exercises compact output. This
+  variant targets row alignment closing delimiters generated indentation and
+  edits that move content across multiline containers.
+
+### Variant 4: date precision and full formatting options
+
+- **Implementation:** `src/__tests__/fuzz-patch4.ts`
+- **Runner:** `scripts/fuzz-run4.ts`, `pnpm run fuzz4`
+- **Purpose:** Rewrites source fractions to one or two digits, generates
+  replacement dates with random milliseconds and enables the format options
+  omitted by earlier variants, including `minimumTimeDecimals` and
+  `escapeSequenceUpperCase`.
+- **Why it exists:** Earlier mutations commonly used whole-second dates or
+  source fractions wide enough to hide precision loss. Variant 4 creates the
+  narrower-source and sub-second-replacement combination that exposes date
+  truncation, then compares dates by instant rather than by spelling.
+- **Coverage boundary:** It keeps the general random document generator. It
+  does not deliberately create specialized AOT ownership topologies.
+
+### Variant 5: structure-first AOT fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch5.ts`
+- **Runner:** `scripts/fuzz-run5.ts`, `pnpm run fuzz5`
+- **Purpose:** Builds TOML from an abstract AOT model instead of relying on the
+  general randomizer. It varies AOT family count parent-key depth entry count
+  entry-owned sub-tables nested AOTs and unrelated sections between entries.
+  The first mutation rotates by seed across removing an AOT entry, inserting a
+  flat object entry, appending a non-object value, and editing an existing
+  scalar. Later mutations choose between removing an entry, inserting an
+  object entry and editing a scalar.
+- **Why it exists:** The general randomizer can produce AOT nodes but rarely
+  produces repeated entries with document-level sub-tables scoped to each
+  entry. That missing shape allowed the AOT sub-table deletion bug to escape
+  broad fuzz sweeps.
+- **Coverage boundary:** Variant 5 is intentionally AOT-focused. It currently
+  does not provide variant 4's date precision and full format randomization.
+  Its default is one mutation per seed. Every four consecutive seeds cover all
+  four mutation classes, while keeping failures easy to reproduce. Passing
+  `--mutations 3` applies additional deterministic mutations after the
+  seed-selected first operation.
+
+### Patch-lite fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch-lite.ts`
+- **Runner:** `src/__tests__/fuzz-patch-lite.ts` and
+  `src/__tests__/patch-lite.fuzz.test.ts`
+- **Purpose:** Exercises the separate `patch-lite` contract. It edits existing
+  scalar and date leaves with hostile values and verifies round trips. A
+  companion rejection pass checks that unsupported structural changes raise
+  `PatchLiteError` rather than partially modifying the document.
+- **Why it exists:** `patch-lite` intentionally supports a narrower operation
+  set than full `patch()`, so its valid edits and expected failures need a
+  separate oracle and mutation policy.
+
+### Choosing a variant
+
+Use variant 1 for broad general coverage, variant 2 for dotted-key spacing,
+variant 3 for layout and multiline behavior, variant 4 for date and format
+precision and variant 5 for AOT ownership boundaries. A future variant should
+prefer composing a new structure generator or mutation strategy with the
+shared format-aware harness rather than silently replacing another variant's
+coverage. In particular, variant 5 is an AOT topology mode, not a replacement
+for variant 4.
+
+### Composable profiles
+
+The shared lifecycle is exposed by `runFuzz` in
+`src/__tests__/fuzz-patch.ts`. Profiles in `src/__tests__/fuzz-profiles.ts`
+combine generators transforms mutation strategies format generators and
+comparators without duplicating patch and round-trip handling:
+
+- `aot`: the structure-first generator with one forced AOT removal;
+- `aot-format`: AOT topology with randomized layout and full format options;
+- `aot-general`: AOT topology with the general random mutation strategy;
+- `general-format`: the general generator with variant 4 date and format policies.
+
+Inspect a profile with its generator metadata and resolved result:
+
+```powershell
+npx -y tsx src/__tests__/inspect-fuzz-seed.ts 17 --profile aot-format --mutations 1
+```
+
+For a failing AOT profile, write a `.fails` scaffold that replays the
+strategy's serialized paths and values:
+
+```powershell
+npx -y tsx scripts/distill-profile.ts --seed <N> --profile aot --out src/__tests__/distilled-aot.test.ts
+```
+
+### Seed-generation compatibility tests
+
+`src/__tests__/fuzz-composable.test.ts` pins selected seeds so changes to the
+profiling and composition code do not silently change existing fuzz inputs.
+SHA-256 expectations cover the default generator, composed source transforms
+and AOT generator. The `legacySeedExpectations` table checks mutation
+descriptions and format settings for variants 1 through 4. Additional fixed
+fingerprints cover complete mutation plans, including generated values, and
+resolved format settings for variants 1 through 4 at seeds 0, 3 and 19506
+(three mutations), and for every composable profile at seeds 1, 3 and 4 (one
+mutation). The variant 1 through 4 fingerprints were captured from the original
+runner on `latest` commit `83cc17388601db8091c0014a6aa80d01307a3e8d`; the
+`general-format` profile is also checked against the original variant 4 runner
+at matching seeds. The AOT profiles have no pre-refactor equivalent, so their
+fingerprints check determinism rather than migration parity. These are static
+goldens, not a live branch comparison.
+
+When adding a numbered variant or profile, extend these checks with fixed-seed
+expectations for its generator or transforms, complete mutation plans and
+resolved format behavior. Keep existing expectations stable unless changing
+those seeds is intentional; review and update any changed hashes or expectations
+as part of that change. Run the focused test with
+`pnpm exec vitest run src/__tests__/fuzz-composable.test.ts`.
 
 ## Date precision and the format surface (variant 4)
 
@@ -52,6 +204,32 @@ npx -y tsx scripts/fuzz-run4.ts --seed 0 --to 2000 --mutations 3
 Distill a seed with `--variant 4`; the distiller compares dates by instant for
 this variant, so a fraction written with a different digit count is not
 mistaken for a failure.
+
+## Structure-first AOT fuzzing (variant 5)
+
+`src/__tests__/fuzz-patch5.ts` uses a different generation algorithm instead
+of extending the general randomizer. It builds an abstract document from
+multiple AOT families, randomly varies parent-key depth and entry counts, and
+places entry-owned tables and nested AOTs between unrelated sections. The
+`fuzz5` runner rotates its first mutation by seed across removing an entry,
+adding an object entry, appending a non-object value and editing a scalar. This
+targets ownership boundaries such as `[route.args]` after `[[route]]` and
+`[group.route.args]` after a later `[[group]]` entry.
+
+Run the focused corpus with:
+
+```powershell
+pnpm run fuzz5
+```
+
+The default is one mutation per seed, so each failure points to the seed's
+selected operation. Passing `--mutations 3` to `scripts/fuzz-run5.ts` applies
+two more deterministic AOT mutations after that first operation.
+
+This runner behavior differs from the composable profiles above: `aot` and
+`aot-format` always remove an AOT entry first, while `aot-general` uses the
+shared general mutation strategy. `fuzzOne5` disables generated format options;
+use `aot-format` to fuzz layout and format options with the AOT removal strategy.
 
 ## Patch-lite
 
@@ -236,50 +414,42 @@ A distilled `.fails` test narrows the *what*, but not the *why*; the remaining
 work is finding the faulty line in the writer/diff and the exact offset that is
 wrong. These techniques have repeatedly shortened that loop:
 
-### 1. Use the right tool for the right job: `fuzz-run.ts` to detect, `fuzz-investigate.ts` to diagnose
+### 1. Use the runner that matches the variant
 
-The two scripts answer different questions and must not be confused:
+Use `scripts/fuzz-run1.ts` to sweep or confirm variant 1 seeds and
+`scripts/fuzz-run5.ts` for the structure-first AOT variant. For composable
+profiles, `src/__tests__/inspect-fuzz-seed.ts --profile <name>` runs the same
+profile configuration used by the profile suite and prints its mutations,
+format and patched TOML. `scripts/distill-profile.ts` generates a replay test
+for a failing `aot`, `aot-format` or `aot-general` profile.
 
-- **`fuzz-run.ts`** (`fuzzOne`) is the *detection* tool and the authority on
-  "is this seed actually broken?". It compares with `deepEqualWithFormat`,
-  which normalises `\r\n`↔`\n` and truncates zero-time dates per
-  `truncateZeroTimeInDates` — the same tolerance the suite enforces. It also
-  replicates `fuzzOne`'s AOT-entry mutation guard. Use it to sweep ranges and
-  to confirm a fix ("0 failures").
-- **`fuzz-investigate.ts`** is the *diagnosis* tool for a seed you *already know*
-  is bad. It uses a stricter raw `diffPaths` comparison, dumps the expected vs
-  re-parsed objects, and prints the **full original and full patched TOML
-  line-numbered** — the fastest way to see exactly *where* (line/column) the
-  output went wrong before you start dumping the CST. Its raw comparison is a
-  *feature*, not a bug: it surfaces discrepancies `fuzzOne` intentionally
-  ignores (e.g. `\n` vs `\r\n`), which is sometimes precisely what you need while
-  tracing. It also re-derives mutations deterministically, so it never applies a
-  mutation that `fuzzOne` would have skipped — which is why a "DIFFS: N" here can
-  be a false positive relative to the sweep.
+`scripts/fuzz-investigate.ts` is a diagnostic helper for the general random
+generator, not a fuzz5 investigator or pass/fail authority. It independently
+recreates three general mutations and reports raw object differences, so its
+result can differ from a numbered runner's result. In particular, use the
+fuzz5 runner or profile inspector for structure-first AOT seeds.
 
-So: **prefer `fuzz-run.ts` for "is it broken?"** (if they disagree, `fuzz-run.ts`
-wins), and **prefer `fuzz-investigate.ts` for "what changed, line by line?"** once
-you're drilling into a confirmed failure.
+### 2. Reproduce general-generator seeds faithfully
 
-### 2. Reproduce the seed faithfully, don't transcribe it
+A reproducible case is identified by its seed, variant or profile, and mutation
+count. The seed alone is not enough because variants and profiles can select
+different generators, source transforms, mutation strategies and format
+policies. Record all three when reporting or saving a failure.
 
-Hand-transcribing a seed's TOML (or its array literals) flips the diff — a
-`null` vs `-inf`, or a re-ordered literal, changes `compareArrays`' behaviour
-and makes the bug vanish (or appear different). Recompute the exact input and
-mutations from the RNG instead, mirroring `fuzzOne`:
+For variant 1, hand-transcribing a seed's TOML or array literals can change the
+failure. The runner derives the source, mutation sequence and format from the
+seed. Its mutation RNG uses `seed + mutationCount * 1_000_000`, and its format
+RNG uses `seed + 500_000`. Prefer `scripts/fuzz-run1.ts` to confirm the seed and
+`scripts/fuzz-investigate.ts` to inspect a general-generator mismatch.
 
-```ts
-const generated = randomToml({ seed });
-const obj = deepClone(parse(generated.toml));
-const mutationRng = new SeededRandom(seed + mutationCount * 1000000);
-// apply generateMutation/applyMutation in a loop, exactly like fuzzOne
-// pass randomTomlFormat(new SeededRandom(seed + 500000)) — the FORMAT matters:
-//   truncateZeroTimeInDates / minimumDecimals / newLine all change the output.
-```
+Do not use this RNG recipe for fuzz5. It has a structure-first AOT generator
+and a seed-selected first mutation; use the runner or profile inspector above
+to reproduce those cases.
 
-The **format** is a first-class input: many "DIFF" results only reproduce with
-the seed's `randomTomlFormat`, not the default (e.g. seed 299772's `0NaN-NaN-NaN`
-LocalTime corruption only appeared with `truncateZeroTimeInDates: true`).
+The **format** is also part of a general-generator reproduction: options such
+as `truncateZeroTimeInDates`, `minimumDecimals` and `newLine` can affect the
+result (for example, seed 299772's LocalTime corruption only appeared with
+`truncateZeroTimeInDates: true`).
 
 ### 3. `dedent`-based fixtures strip the trailing newline
 

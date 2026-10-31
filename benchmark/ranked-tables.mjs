@@ -1,6 +1,6 @@
 /**
- * Shared rendering for the per-fixture ranked result tables used by the iarna
- * and smol-toml benchmark summaries.
+ * Shared rendering for the per-fixture ranked result tables used by the iarna,
+ * smol-toml and patch benchmark summaries.
  *
  * Every fixture gets its own table with one row per implementation, fastest
  * first. Performance is the time per iteration so small documents stay
@@ -34,16 +34,17 @@ export function formatSlowdown(hz, fastestHz) {
  * @param {boolean} [options.includeRank] - Adds the medal/number column. The
  *   render order already carries the ranking, so only the smol-toml README
  *   style uses it.
- * @param {{ compareId: string, currentId: string }} [options.ratio] - Adds the
- *   baseline comparison column, filled in on the current build's row.
+ * @param {{ compareId: string, currentId: string }} [options.ratio] - Adds a
+ *   percentage-change column, filled in on the current build's row.
+ * @param {Array<{ compareId: string, currentId: string }>} [options.changes] - Adds comparison
+ *   mappings to the same percentage-change column.
  * @returns {string} Markdown for the table, ending with a blank line.
  */
-export function buildRankedTable({ heading, rows, includeRank = false, ratio }) {
+export function buildRankedTable({ heading, rows, includeRank = false, ratio, changes = [] }) {
   const ranked = [...rows].sort((left, right) => (right.hz ?? 0) - (left.hz ?? 0));
   const fastestHz = ranked[0]?.hz;
-  const compareHz = ratio
-    ? ranked.find(({ id }) => id === ratio.compareId)?.hz
-    : undefined;
+  const changeMappings = [...(ratio ? [ratio] : []), ...changes];
+  const hasChange = changeMappings.length > 0;
 
   const headers = [];
   const separators = [];
@@ -53,8 +54,8 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
   }
   headers.push('Library', 'Performance', 'Slowdown');
   separators.push('---', '---', '---');
-  if (ratio) {
-    headers.push('Ratio');
+  if (hasChange) {
+    headers.push('Change');
     separators.push('---');
   }
 
@@ -68,10 +69,18 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
       cells.push(hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-');
     }
     cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz));
-    if (ratio) {
-      cells.push(id === ratio.currentId && compareHz && hz
-        ? (hz / compareHz).toFixed(2)
-        : '');
+    if (hasChange) {
+      const mapping = changeMappings.find(({ currentId }) => id === currentId);
+      const compareHz = mapping
+        ? ranked.find(({ id: compareId }) => compareId === mapping.compareId)?.hz
+        : undefined;
+      if (!compareHz || !hz) {
+        cells.push('');
+      } else {
+        const changePercent = ((hz / compareHz) - 1) * 100;
+        const roundedChange = Math.round(Math.abs(changePercent)) * Math.sign(changePercent);
+        cells.push(`${roundedChange > 0 ? '+' : ''}${roundedChange}%`);
+      }
     }
     markdown += '| ' + cells.join(' | ') + ' |\n';
   }
@@ -89,7 +98,7 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
  */
 export function buildReport({ title, tables }) {
   let markdown = `# ${title}\n\n`;
-  markdown += '*Time per iteration. Lower is better.*\n\n';
+  markdown += '*Time per iteration. Lower is better. Change is throughput vs. reference: + is faster, - is slower.*\n\n';
   for (const table of tables) markdown += table;
   return markdown;
 }

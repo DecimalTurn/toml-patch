@@ -1,7 +1,7 @@
-# Maximum allowed slowdown of the current toml-patch build relative to
-# smol-toml, measured in the same benchmark run. The suite fails when
-# toml-patch is more than `maxSlowdown` times slower than the reference on any
-# fixture for that operation.
+# Maximum allowed slowdown of the current toml-patch build relative to the
+# configured reference, measured in the same benchmark run. The global
+# `reference` is the default; a suite may set its own default, and individual
+# operations may override it. A suite fails when a maxSlowdown is exceeded.
 #
 # The small spec examples carry a fixed per-document overhead, so the parse
 # budget leaves room for them. The ~5 MB document is where raw throughput shows
@@ -18,6 +18,31 @@ maxSlowdown = 8
 
 [fixtures.stringify]
 maxSlowdown = 25
+
+# Compare patch throughput with the base-branch build on the same runner.
+[fixtures.patch]
+
+[fixtures.patch.in-place-edit]
+maxSlowdown = 4
+reference = "toml-patch-lite"
+
+[fixtures.patch.aot-unrelated-scalar-edit]
+maxSlowdown = 6
+reference = "toml-patch-lite"
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite]
+maxSlowdown = 12
+reference = "smol-toml"
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-64]
+maxSlowdown = 20
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-256]
+maxSlowdown = 12
+
+[fixtures.patch.aot-unrelated-scalar-edit.lite.fixtures.aot-scopes-1024]
+maxSlowdown = 12
+
 
 # Bundle size budgets, in kB (1 kB = 1024 bytes). The bundle measurement scripts
 # fail when a bundle grows past its budget. A budget key that is left out is not

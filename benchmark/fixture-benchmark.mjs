@@ -17,6 +17,7 @@
  *   --list             Print the fixtures that would run and exit.
  *   --versions <list>  Comma-separated published toml-patch versions to also
  *                      benchmark (installed to .bench-cache on first use).
+ *   --type <type>      Run only `parse` or `stringify`; defaults to both.
  */
 
 import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
@@ -41,10 +42,15 @@ const MARKDOWN_PATH = join(__dirname, '..', 'benchmark-fixtures.md');
 
 globalThis.Temporal ??= Temporal;
 
-const { versions, baseline, all, list } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
+const { versions, baseline, all, list, type } = mri(process.argv.slice(2).filter((arg) => arg !== '--'), {
   boolean: ['all', 'list'],
-  string: ['versions', 'baseline'],
+  string: ['versions', 'baseline', 'type'],
 });
+if (type && !['parse', 'stringify'].includes(type)) {
+  throw new Error(`Unknown benchmark type "${type}"; expected "parse" or "stringify".`);
+}
+const runParse = !type || type === 'parse';
+const runStringify = !type || type === 'stringify';
 
 const SMOL_FIXTURES_DIR = join(__dirname, '../submodules/smol-toml/bench/testfiles');
 const IARNA_FIXTURES_DIR = join(__dirname, '../submodules/iarna-toml/benchmark');
@@ -199,14 +205,16 @@ const stringifyResults = [];
 // has no shared input, so it stays parse-only.
 const referenceToml = await loadModule(join(__dirname, '../node_modules/smol-toml'));
 const parsedFixtures = [];
-for (const fixture of FIXTURES) {
-  try {
-    parsedFixtures.push({
-      ...fixture,
-      value: referenceToml.parse(fixture.data, { useLegacyDate: true, maxDepth: 1010 }),
-    });
-  } catch (error) {
-    console.warn(`Skipping ${fixture.name} stringify: smol-toml could not parse it (${error.message})`);
+if (runStringify) {
+  for (const fixture of FIXTURES) {
+    try {
+      parsedFixtures.push({
+        ...fixture,
+        value: referenceToml.parse(fixture.data, { useLegacyDate: true, maxDepth: 1010 }),
+      });
+    } catch (error) {
+      console.warn(`Skipping ${fixture.name} stringify: smol-toml could not parse it (${error.message})`);
+    }
   }
 }
 
@@ -220,37 +228,39 @@ for (const impl of IMPLEMENTATIONS) {
   }
 
   // Parse Date and Temporal variants separately, as in the upstream README.
-  const parseNames = [impl.name];
-  if (impl.name === 'smol-toml') parseNames.push(SMOL_TEMPORAL);
-  if (impl.name === CURRENT_IMPL) parseNames.push(CURRENT_TEMPORAL);
-  for (const parseName of parseNames) {
-    const parseFn = createParseRunner(TOML, parseName);
-    const runnable = FIXTURES.filter(({ name, data }) => {
-      try {
-        parseFn(data);
-        return true;
-      } catch {
-        console.warn(`Skipping ${parseName} parse on ${name}: failed`);
-        return false;
-      }
-    });
+  if (runParse) {
+    const parseNames = [impl.name];
+    if (impl.name === 'smol-toml') parseNames.push(SMOL_TEMPORAL);
+    if (impl.name === CURRENT_IMPL) parseNames.push(CURRENT_TEMPORAL);
+    for (const parseName of parseNames) {
+      const parseFn = createParseRunner(TOML, parseName);
+      const runnable = FIXTURES.filter(({ name, data }) => {
+        try {
+          parseFn(data);
+          return true;
+        } catch {
+          console.warn(`Skipping ${parseName} parse on ${name}: failed`);
+          return false;
+        }
+      });
 
-    if (runnable.length > 0) {
-      for (const { data } of runnable) {
-        const iterations = data.length > 1_000_000 ? 3 : 50;
-        for (let i = 0; i < iterations; i++) parseFn(data);
-      }
-      const suite = new Suite(`${parseName} parse`);
-      for (const { name, data } of runnable) suite.add(name, () => parseFn(data));
-      const hzByName = await runSuite(suite);
-      for (const { name } of runnable) {
-        parseResults.push({ fixture: name, impl: parseName, hz: hzByName.get(name) });
+      if (runnable.length > 0) {
+        for (const { data } of runnable) {
+          const iterations = data.length > 1_000_000 ? 3 : 50;
+          for (let i = 0; i < iterations; i++) parseFn(data);
+        }
+        const suite = new Suite(`${parseName} parse`);
+        for (const { name, data } of runnable) suite.add(name, () => parseFn(data));
+        const hzByName = await runSuite(suite);
+        for (const { name } of runnable) {
+          parseResults.push({ fixture: name, impl: parseName, hz: hzByName.get(name) });
+        }
       }
     }
   }
 
   // Stringify.
-  if (typeof TOML.stringify === 'function') {
+  if (runStringify && typeof TOML.stringify === 'function') {
     const stringifyFn = (value) => TOML.stringify(value);
     const stringifiable = parsedFixtures.filter(({ name, value }) => {
       try {
@@ -282,17 +292,16 @@ for (const impl of IMPLEMENTATIONS) {
  * keeps the CI Ratio column comparing the current build with the baseline.
  */
 function writeMarkdown(parseResults, stringifyResults) {
-  const comparisonName = parseResults.some((result) => result.impl === BASELINE_IMPL)
+  const comparisonName = IMPLEMENTATIONS.some((impl) => impl.name === BASELINE_IMPL)
     ? BASELINE_IMPL
     : null;
-  const tomlPatchVersion = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')).version;
   const smolVersion = JSON.parse(readFileSync(join(__dirname, '../node_modules/smol-toml/package.json'), 'utf8')).version;
   const versions = {
-    [CURRENT_IMPL]: `@decimalturn/toml-patch@${tomlPatchVersion}`,
+    [CURRENT_IMPL]: '@decimalturn/toml-patch',
     [BASELINE_IMPL]: BASELINE_VERSION
       ? `@decimalturn/toml-patch@${BASELINE_VERSION} (baseline)`
       : '@decimalturn/toml-patch (baseline)',
-    [CURRENT_TEMPORAL]: `@decimalturn/toml-patch@${tomlPatchVersion} (Temporal, current)`,
+    [CURRENT_TEMPORAL]: '@decimalturn/toml-patch (Temporal, current)',
     'smol-toml': `smol-toml@${smolVersion}`,
     [SMOL_TEMPORAL]: `smol-toml@${smolVersion} (Temporal)`,
     '@iarna/toml': `@iarna/toml@${JSON.parse(readFileSync(join(__dirname, '../submodules/iarna-toml/package.json'), 'utf8')).version}`,
@@ -313,7 +322,7 @@ function writeMarkdown(parseResults, stringifyResults) {
       ...(benchmarkType === 'Parse' ? [SMOL_TEMPORAL, CURRENT_TEMPORAL] : []),
     ])];
     return tableFixtures.map((fixture) => buildRankedTable({
-      heading: `${benchmarkType}, ${fixture.title}`,
+      heading: `${benchmarkType === 'Parse' ? '📖' : '✍️'} ${benchmarkType}, ${fixture.title}`,
       rows: ids.map((id) => ({
         id,
         label: implementationLabel(id, benchmarkType),
@@ -325,24 +334,27 @@ function writeMarkdown(parseResults, stringifyResults) {
   };
 
   const markdown = buildReport({
-    title: 'Fixture Benchmark Results',
+    title: type ? `${type === 'parse' ? 'Parse' : 'Stringify'} Benchmark Results` : 'Fixture Benchmark Results',
     tables: [
-      ...tablesFor('Parse', parseResults, FIXTURES),
-      ...tablesFor('Stringify', stringifyResults, parsedFixtures),
+      ...(runParse ? tablesFor('Parse', parseResults, FIXTURES) : []),
+      ...(runStringify ? tablesFor('Stringify', stringifyResults, parsedFixtures) : []),
     ],
   });
 
-  writeFileSync(MARKDOWN_PATH, markdown, 'utf8');
+  const reportPath = type
+    ? join(__dirname, `../benchmark-fixtures-${type}.md`)
+    : MARKDOWN_PATH;
+  writeFileSync(reportPath, markdown, 'utf8');
   console.log(`\n${markdown}`);
-  console.log(`\nBenchmark results written to ${MARKDOWN_PATH}`);
+  console.log(`\nBenchmark results written to ${reportPath}`);
 }
 
 writeMarkdown(parseResults, stringifyResults);
 
 // CI gate: fail when the current build's throughput drops below the budgets
 // configured for the fixture suite in thresholds.toml.
-const parseFixtures = FIXTURES.map(({ name }) => name);
-const stringifyFixtures = parsedFixtures.map(({ name }) => name);
+const parseFixtures = runParse ? FIXTURES.map(({ name }) => name) : [];
+const stringifyFixtures = runStringify ? parsedFixtures.map(({ name }) => name) : [];
 const hzFor = (results) => (impl, fixture) =>
   results.find((result) => result.fixture === fixture && result.impl === impl)?.hz;
 
@@ -350,8 +362,8 @@ const thresholdFailed = checkThresholds({
   suite: 'fixtures',
   currentName: CURRENT_IMPL,
   operations: [
-    { name: 'parse', fixtures: parseFixtures, hzFor: hzFor(parseResults) },
-    { name: 'stringify', fixtures: stringifyFixtures, hzFor: hzFor(stringifyResults) },
+    ...(runParse ? [{ name: 'parse', fixtures: parseFixtures, hzFor: hzFor(parseResults) }] : []),
+    ...(runStringify ? [{ name: 'stringify', fixtures: stringifyFixtures, hzFor: hzFor(stringifyResults) }] : []),
   ],
 });
 
