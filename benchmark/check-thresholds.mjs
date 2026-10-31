@@ -136,7 +136,7 @@ export function checkThresholds({
       if (!ok) failed = true;
 
       console.log(
-        `  ${ok ? '✅' : '❌'} ${name} ${fixture}: ${slowdown.toFixed(1)}x slower than ${referenceName} (max ${maxSlowdown}x)`
+        `  ${ok ? '✅' : '❌'} ${currentName} is ${slowdown.toFixed(1)}x slower than ${referenceName} for ${name} ${fixture} (max ${maxSlowdown}x)`
       );
     }
   }

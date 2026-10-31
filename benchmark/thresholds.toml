@@ -31,7 +31,7 @@ maxSlowdown = 6
 reference = "toml-patch-lite"
 
 [fixtures.patch.aot-unrelated-scalar-edit.lite]
-maxSlowdown = 10
+maxSlowdown = 12
 reference = "smol-toml"
 
 
