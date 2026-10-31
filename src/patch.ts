@@ -346,7 +346,9 @@ export function patchCst(
   // runs: a structural edit (e.g. table→scalar) regenerates a fresh node in place of an existing
   // one, and that replacement is conceptually the same entry, not a new one — so it needs to
   // stay eligible for R2 too, even though its object identity postdates the snapshot.
-  const commentEligibleNodes = collectPrePatchNodes(existing_document);
+  const commentEligibleNodes = format.updateOrder
+    ? collectPrePatchNodes(existing_document)
+    : new WeakSet<TreeNode>();
 
   const patched_document = applyChanges(
     existing_document,
