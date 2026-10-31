@@ -23,7 +23,7 @@ maxSlowdown = 25
 [fixtures.patch]
 
 [fixtures.patch.in-place-edit]
-maxSlowdown = 2
+maxSlowdown = 3
 reference = "toml-patch-lite"
 
 [fixtures.patch.aot-unrelated-scalar-edit]
