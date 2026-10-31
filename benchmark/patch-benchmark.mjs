@@ -17,11 +17,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Benchmark from 'benchmark';
 import { parse as parseSmol, stringify as stringifySmol } from 'smol-toml';
-import { checkThresholds } from './check-thresholds.mjs';
+import { buildRankedTable } from './ranked-tables.mjs';
+import { checkThresholds, getThresholdReference } from './check-thresholds.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
-const currentName = 'toml-patch (full)';
+const currentName = '@decimalturn/toml-patch (current)';
 const liteName = 'toml-patch-lite';
 const smolName = 'smol-toml (parse/edit/stringify)';
 const baselineName = 'toml-patch (baseline)';
@@ -181,10 +182,6 @@ if (process.argv.includes('--verify-only')) {
   process.exit(0);
 }
 
-function formatOps(operationsPerSecond) {
-  return Math.round(operationsPerSecond).toLocaleString('en-US');
-}
-
 const rates = new Map();
 for (const fixture of fixtures) {
   const suite = new Benchmark.Suite(`${fixture.scenario.id} ${fixture.name}`);
@@ -240,15 +237,31 @@ const reportLines = [
 for (const scenario of scenarios) {
   const scenarioAdapters = adaptersFor(scenario);
   reportLines.push(`## ${scenario.title}`, '', scenario.description, '');
-  reportLines.push(`| Fixture | ${scenarioAdapters.map((adapter) => adapter.name).join(' | ')} |`);
-  reportLines.push(`|---|${scenarioAdapters.map(() => '---:').join('|')}|`);
+  const referenceName = scenario.threshold
+    ? getThresholdReference({
+      suite: scenario.threshold.suite,
+      operation: scenario.threshold.operation,
+      defaultReference: baselineName,
+    })
+    : undefined;
+  const referenceKey = referenceName ? adapterKeyForName(referenceName) : undefined;
+
   for (const fixture of scenario.fixtures) {
     const key = `${scenario.id}:${fixture.name}`;
-    reportLines.push(`| ${fixture.name} | ${scenarioAdapters
-      .map((adapter) => formatOps(rates.get(`${adapterKeyForName(adapter.name)}:${key}`)))
-      .join(' | ')} |`);
+    const ratio = referenceKey && rates.get(`${referenceKey}:${key}`)
+      ? { compareId: referenceKey, currentId: 'full' }
+      : undefined;
+    reportLines.push(buildRankedTable({
+      heading: `🧩 ${scenario.title}, ${fixture.name}`,
+      rows: scenarioAdapters.map((adapter) => ({
+        id: adapterKeyForName(adapter.name),
+        label: adapter.name,
+        hz: rates.get(`${adapterKeyForName(adapter.name)}:${key}`),
+      })),
+      includeRank: true,
+      ratio,
+    }));
   }
-  reportLines.push('');
 }
 
 const reportPath = join(__dirname, 'patch-benchmark.md');

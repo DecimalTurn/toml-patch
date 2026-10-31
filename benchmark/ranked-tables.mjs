@@ -1,6 +1,6 @@
 /**
- * Shared rendering for the per-fixture ranked result tables used by the iarna
- * and smol-toml benchmark summaries.
+ * Shared rendering for the per-fixture ranked result tables used by the iarna,
+ * smol-toml and patch benchmark summaries.
  *
  * Every fixture gets its own table with one row per implementation, fastest
  * first. Performance is the time per iteration so small documents stay

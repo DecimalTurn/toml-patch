@@ -55,6 +55,25 @@ function readSuite(thresholds, suite) {
   return suite.split('.').reduce((table, key) => table?.[key], thresholds) ?? {};
 }
 
+function resolveReference(thresholds, suite, operation, defaultReference) {
+  const suiteThresholds = readSuite(thresholds, suite);
+  const operationReference = suiteThresholds[operation]?.reference;
+  if (typeof operationReference === 'string') return operationReference;
+  if (typeof suiteThresholds.reference === 'string') return suiteThresholds.reference;
+  if (defaultReference) return defaultReference;
+  return typeof thresholds?.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE;
+}
+
+/** Resolves the reference used by an operation's threshold gate. */
+export function getThresholdReference({
+  suite,
+  operation,
+  defaultReference,
+  thresholdsPath = DEFAULT_THRESHOLDS_PATH,
+}) {
+  return resolveReference(readThresholds(thresholdsPath), suite, operation, defaultReference);
+}
+
 /**
  * @param {object} options
  * @param {string} options.suite Benchmark suite, matching a table in the thresholds file.
@@ -82,10 +101,6 @@ export function checkThresholds({
     return false;
   }
   const suiteThresholds = readSuite(thresholds, suite);
-  const defaultReference = typeof suiteThresholds.reference === 'string'
-    ? suiteThresholds.reference
-    : referenceDefault ??
-      (typeof thresholds.reference === 'string' ? thresholds.reference : DEFAULT_REFERENCE);
 
   console.log(`\nPerformance thresholds for ${suite} fixtures:`);
 
@@ -95,9 +110,7 @@ export function checkThresholds({
     const operationThresholds = suiteThresholds[name] ?? {};
     const maxSlowdown = operationThresholds.maxSlowdown;
     if (typeof maxSlowdown !== 'number') continue;
-    const referenceName = typeof operationThresholds.reference === 'string'
-      ? operationThresholds.reference
-      : defaultReference;
+    const referenceName = resolveReference(thresholds, suite, name, referenceDefault);
 
     // Runs restricted to a subset of implementations have no reference to
     // compare against, so the gate has to sit that operation out.
