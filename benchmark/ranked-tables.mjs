@@ -34,16 +34,18 @@ export function formatSlowdown(hz, fastestHz) {
  * @param {boolean} [options.includeRank] - Adds the medal/number column. The
  *   render order already carries the ranking, so only the smol-toml README
  *   style uses it.
- * @param {{ compareId: string, currentId: string }} [options.ratio] - Adds the
+ * @param {{ label?: string, compareId: string, currentId: string }} [options.ratio] - Adds the
  *   baseline comparison column, filled in on the current build's row.
+ * @param {Array<{ label: string, compareId: string, currentId: string }>} [options.ratios] - Adds
+ *   named comparison columns, each filled in on its current implementation's row.
  * @returns {string} Markdown for the table, ending with a blank line.
  */
-export function buildRankedTable({ heading, rows, includeRank = false, ratio }) {
+export function buildRankedTable({ heading, rows, includeRank = false, ratio, ratios = [] }) {
   const ranked = [...rows].sort((left, right) => (right.hz ?? 0) - (left.hz ?? 0));
   const fastestHz = ranked[0]?.hz;
-  const compareHz = ratio
-    ? ranked.find(({ id }) => id === ratio.compareId)?.hz
-    : undefined;
+  const ratioColumns = [...(ratio ? [ratio] : []), ...ratios];
+  const compareRates = ratioColumns.map(({ compareId }) =>
+    ranked.find(({ id }) => id === compareId)?.hz);
 
   const headers = [];
   const separators = [];
@@ -53,10 +55,8 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
   }
   headers.push('Library', 'Performance', 'Slowdown');
   separators.push('---', '---', '---');
-  if (ratio) {
-    headers.push('Ratio');
-    separators.push('---');
-  }
+  headers.push(...ratioColumns.map(({ label }) => label ?? 'Ratio'));
+  separators.push(...ratioColumns.map(() => '---'));
 
   let markdown = `#### ${heading}\n\n`;
   markdown += '|' + headers.map(header => header === '' ? '    ' : ` ${header} `).join('|') + '|\n';
@@ -68,11 +68,10 @@ export function buildRankedTable({ heading, rows, includeRank = false, ratio }) 
       cells.push(hz ? (index < 3 ? ['\u{1F947}', '\u{1F948}', '\u{1F949}'][index] : index + 1) : '-');
     }
     cells.push(label ?? id, formatPerformance(hz), formatSlowdown(hz, fastestHz));
-    if (ratio) {
-      cells.push(id === ratio.currentId && compareHz && hz
-        ? (hz / compareHz).toFixed(2)
-        : '');
-    }
+    cells.push(...ratioColumns.map(({ currentId }, ratioIndex) => {
+      const compareHz = compareRates[ratioIndex];
+      return id === currentId && compareHz && hz ? (hz / compareHz).toFixed(2) : '';
+    }));
     markdown += '| ' + cells.join(' | ') + ' |\n';
   }
 

@@ -11,7 +11,7 @@
  * BENCH_BASELINE may point to a built toml-patch.js for same-run comparison.
  * The report is written to benchmark/patch-benchmark.md.
  */
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -26,7 +26,11 @@ const currentName = '@decimalturn/toml-patch (current)';
 const liteName = 'toml-patch-lite';
 const smolName = 'smol-toml (parse/edit/stringify)';
 const baselineName = 'toml-patch (baseline)';
-const defaultImplementations = ['full', 'lite', 'smol', 'baseline'];
+const baselineLiteName = 'toml-patch-lite (baseline)';
+const defaultImplementations = ['full', 'lite', 'smol', 'baseline', 'baseline-lite'];
+const currentVersion = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8')).version;
+const baselineVersion = process.env.BENCH_BASELINE_VERSION;
+const smolVersion = JSON.parse(readFileSync(join(rootDir, 'node_modules/smol-toml/package.json'), 'utf8')).version;
 
 const importDist = (file) => import(pathToFileURL(join(rootDir, 'dist', file)).href);
 const current = await importDist('toml-patch.js');
@@ -38,8 +42,15 @@ const baselinePath = process.env.BENCH_BASELINE
 if (baselinePath && !existsSync(baselinePath)) {
   throw new Error(`Baseline build not found: ${baselinePath}`);
 }
+const baselineLitePath = baselinePath ? join(dirname(baselinePath), 'patch-lite.js') : undefined;
+if (baselineLitePath && !existsSync(baselineLitePath)) {
+  throw new Error(`Baseline lite build not found: ${baselineLitePath}`);
+}
 const baseline = baselinePath
   ? await import(pathToFileURL(baselinePath).href)
+  : undefined;
+const baselineLite = baselineLitePath
+  ? await import(pathToFileURL(baselineLitePath).href)
   : undefined;
 
 const representativeSource = [
@@ -141,6 +152,10 @@ const adapters = {
     name: baselineName,
     run: (fixture) => baseline.patch(fixture.source, fixture.updated),
   },
+  'baseline-lite': baselineLite && {
+    name: baselineLiteName,
+    run: (fixture) => baselineLite.patch(fixture.source, fixture.updated),
+  },
 };
 
 const fixtures = scenarios.flatMap((scenario) => scenario.fixtures.map((fixture) => ({
@@ -158,7 +173,7 @@ function adaptersFor(scenario) {
   return scenario.implementations
     .map((key) => {
       const adapter = adapters[key];
-      if (key === 'baseline' && !baseline) return undefined;
+      if (key.startsWith('baseline') && !baseline) return undefined;
       if (!adapter) throw new Error(`Unknown implementation adapter "${key}" in scenario "${scenario.id}"`);
       return adapter;
     })
@@ -226,13 +241,25 @@ for (const scenario of scenarios.filter((item) => item.threshold)) {
 const reportLines = [
   '# 🧩 Patch benchmarks',
   '',
-  'Full and lite patching are compared with smol-toml performing parse, object update, and stringify. Timings include each implementation’s complete operation; fixture creation and correctness checks are outside the timed section.',
+  'Full and lite patching are compared with smol-toml. The smol-toml method parses the document, updates the object, and stringifies it. Timings include each implementation’s complete operation; fixture creation and correctness checks are outside the timed section.',
   '',
   baseline
-    ? 'The current full patch build is also compared with the base-branch build in the same run.'
+    ? 'Current and base-branch full and lite patch builds are compared in the same run.'
     : 'No base build was supplied; the current-versus-baseline performance gate is skipped.',
   '',
 ];
+
+/** @param {string | undefined} version */
+const packageLabel = (version) => version
+  ? `@decimalturn/toml-patch@${version}`
+  : '@decimalturn/toml-patch';
+const implementationLabels = new Map([
+  [currentName, `${packageLabel(currentVersion)} (full, current)`],
+  [liteName, `${packageLabel(currentVersion)} (lite, current)`],
+  [smolName, `smol-toml@${smolVersion}`],
+  [baselineName, `${packageLabel(baselineVersion)} (full, baseline)`],
+  [baselineLiteName, `${packageLabel(baselineVersion)} (lite, baseline)`],
+]);
 
 for (const scenario of scenarios) {
   const scenarioAdapters = adaptersFor(scenario);
@@ -248,18 +275,23 @@ for (const scenario of scenarios) {
 
   for (const fixture of scenario.fixtures) {
     const key = `${scenario.id}:${fixture.name}`;
-    const ratio = referenceKey && rates.get(`${referenceKey}:${key}`)
-      ? { compareId: referenceKey, currentId: 'full' }
-      : undefined;
+    const ratios = [];
+    if (baseline) {
+      ratios.push({ label: 'Full vs base', compareId: 'baseline', currentId: 'full' });
+      ratios.push({ label: 'Lite vs base', compareId: 'baseline-lite', currentId: 'lite' });
+    }
+    if (referenceKey === 'lite') {
+      ratios.push({ label: 'Full vs lite', compareId: 'lite', currentId: 'full' });
+    }
     reportLines.push(buildRankedTable({
       heading: `🧩 ${scenario.title}, ${fixture.name}`,
       rows: scenarioAdapters.map((adapter) => ({
         id: adapterKeyForName(adapter.name),
-        label: adapter.name,
+        label: implementationLabels.get(adapter.name) ?? adapter.name,
         hz: rates.get(`${adapterKeyForName(adapter.name)}:${key}`),
       })),
       includeRank: true,
-      ratio,
+      ratios,
     }));
   }
 }

@@ -295,14 +295,13 @@ function writeMarkdown(parseResults, stringifyResults) {
   const comparisonName = IMPLEMENTATIONS.some((impl) => impl.name === BASELINE_IMPL)
     ? BASELINE_IMPL
     : null;
-  const tomlPatchVersion = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')).version;
   const smolVersion = JSON.parse(readFileSync(join(__dirname, '../node_modules/smol-toml/package.json'), 'utf8')).version;
   const versions = {
-    [CURRENT_IMPL]: `@decimalturn/toml-patch@${tomlPatchVersion}`,
+    [CURRENT_IMPL]: '@decimalturn/toml-patch',
     [BASELINE_IMPL]: BASELINE_VERSION
       ? `@decimalturn/toml-patch@${BASELINE_VERSION} (baseline)`
       : '@decimalturn/toml-patch (baseline)',
-    [CURRENT_TEMPORAL]: `@decimalturn/toml-patch@${tomlPatchVersion} (Temporal, current)`,
+    [CURRENT_TEMPORAL]: '@decimalturn/toml-patch (Temporal, current)',
     'smol-toml': `smol-toml@${smolVersion}`,
     [SMOL_TEMPORAL]: `smol-toml@${smolVersion} (Temporal)`,
     '@iarna/toml': `@iarna/toml@${JSON.parse(readFileSync(join(__dirname, '../submodules/iarna-toml/package.json'), 'utf8')).version}`,
