@@ -242,7 +242,6 @@ jobs:
           echo '## Benchmark comparison'
           echo ''
           echo "Each workload measured this branch against \`${{ github.base_ref || 'latest' }}\` on the same runner."
-          echo 'Ratios close to 1.0 are within run to run noise. They indicate improvements (higher is better) compared to baseline.'
           echo ''
           for file in summaries/parse/benchmark-fixtures-parse.md summaries/stringify/benchmark-fixtures-stringify.md summaries/patch/patch-benchmark.md; do
             if [ -f "$file" ]; then
