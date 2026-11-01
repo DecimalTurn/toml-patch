@@ -28,6 +28,7 @@
  *   --output <path>     Write Markdown to a different path.
  *   --cache <path>      Read and write a different JSON cache.
  *   --names-file <path> Use a JSON array or one package name per line.
+ *   --saved-page <path> Use a saved npm HTML page as the names fallback.
  *   --no-cache          Ignore the cache and do not write one.
  *
  * The npm requests require network access. A names file is useful when the
@@ -46,6 +47,7 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_PACKAGE = '@decimalturn/toml-patch';
 const DEFAULT_OUTPUT = 'docs/dependents.md';
 const DEFAULT_CACHE = 'docs/dependents.json';
+const DEFAULT_SAVED_PAGE = 'docs/dependents/@decimalturn_toml-patch - npm.html';
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_CONCURRENCY = 2;
 const DEPENDENTS_PAGE = 'https://www.npmjs.com/browse/depended/';
@@ -114,8 +116,9 @@ async function buildReport(packageName, dependentNames, reportOptions, cache) {
     packageName,
     generatedAt: new Date().toISOString(),
     dependentSource: reportOptions.namesSource,
-    sourceUrl: dependentPageUrl(packageName),
+    sourceUrl: reportOptions.namesSourceUrl ?? dependentPageUrl(packageName),
     cachePath: reportOptions.cache ?? DEFAULT_CACHE,
+    cacheRecoveryAt: cache?.generatedAt ?? null,
     dependentNames: rows.map((row) => row.name),
     newSinceLastRun:
       cache && reportOptions.namesSource.startsWith('npm dependents page cache')
@@ -141,20 +144,49 @@ async function resolveDependentNames(packageName, reportOptions, cache) {
     return {
       dependentNames: await fetchDependentNames(packageName),
       namesSource: 'npm dependents pages',
+      namesSourceUrl: dependentPageUrl(packageName),
       shouldWriteCache: true,
     };
   } catch (error) {
-    if (reportOptions.refreshNames || !cache?.dependentNames?.length) throw error;
+    if (reportOptions.refreshNames) throw error;
     console.warn(
       `Could not refresh dependent names from npm: ${error instanceof Error ? error.message : String(error)}`,
     );
-    console.warn(`Using ${cache.dependentNames.length} dependent names from ${cache.generatedAt}.`);
+
+    const savedPage = reportOptions.savedPage ?? DEFAULT_SAVED_PAGE;
+    try {
+      const dependentNames = await readSavedPageNames(savedPage, packageName);
+      console.warn(`Using ${dependentNames.length} dependent names from saved page ${savedPage}.`);
+      return {
+        dependentNames,
+        namesSource: `saved npm page ${savedPage}`,
+        namesSourceUrl: savedPage,
+        shouldWriteCache: true,
+      };
+    } catch (savedPageError) {
+      if (!cache?.dependentNames?.length) throw error;
+      console.warn(
+        `Could not read saved npm page ${savedPage}: ${
+          savedPageError instanceof Error ? savedPageError.message : String(savedPageError)
+        }`,
+      );
+      console.warn(`Using ${cache.dependentNames.length} dependent names from ${cache.generatedAt}.`);
+    }
+
     return {
       dependentNames: cache.dependentNames,
       namesSource: `npm dependents page cache from ${cache.generatedAt}`,
+      namesSourceUrl: dependentPageUrl(packageName),
       shouldWriteCache: false,
     };
   }
+}
+
+async function readSavedPageNames(filePath, packageName) {
+  const html = await readFile(filePath, 'utf8');
+  const names = extractSavedPageNames(html, packageName);
+  if (names.length === 0) throw new Error('no dependent package links found');
+  return names;
 }
 
 async function fetchDependentNames(packageName) {
@@ -187,31 +219,52 @@ function extractPackageNames(html, packageName) {
   return [...names];
 }
 
+function extractSavedPageNames(html, packageName) {
+  const dependentsSection = html.match(
+    /<section\b[^>]*\bid=["']tabpanel-dependents["'][^>]*>([\s\S]*?)<\/section>/i,
+  );
+  return extractPackageNames(dependentsSection?.[1] ?? html, packageName);
+}
+
 async function fetchPackageRow(name, dependencyName, reportOptions, cachedRow) {
   const encodedName = encodeURIComponent(name);
   const metadata = await fetchJson(`${REGISTRY}${encodedName}`);
-  const latestVersion = metadata?.['dist-tags']?.latest ?? cachedRow?.latestVersion ?? null;
+  const cachedFields = [];
+  const registryLatestVersion = metadata?.['dist-tags']?.latest ?? null;
+  const latestVersion = registryLatestVersion ?? cachedRow?.latestVersion ?? null;
+  if (registryLatestVersion == null && cachedRow?.latestVersion != null) cachedFields.push('latestVersion');
   const latestMetadata = latestVersion ? metadata.versions?.[latestVersion] : undefined;
   const dependency = findDependency(latestMetadata, dependencyName);
-  const repository = normalizeRepository(latestMetadata?.repository ?? metadata?.repository ?? latestMetadata?.homepage) ?? cachedRow?.repository ?? null;
-  const [weeklyDownloads, monthlyDownloads] = await Promise.all([
+  const liveRepository = normalizeRepository(
+    latestMetadata?.repository ?? metadata?.repository ?? latestMetadata?.homepage,
+  );
+  const repository = liveRepository ?? cachedRow?.repository ?? null;
+  if (liveRepository == null && cachedRow?.repository != null) cachedFields.push('repository');
+  const dependencyRange = dependency?.range ?? cachedRow?.dependencyRange ?? null;
+  if (dependency?.range == null && cachedRow?.dependencyRange != null) cachedFields.push('dependencyRange');
+  const [weeklyDownloadData, monthlyDownloadData] = await Promise.all([
     fetchDownloads('last-week', encodedName),
     fetchDownloads('last-month', encodedName),
   ]);
+  const weeklyDownloads = weeklyDownloadData.downloads ?? cachedRow?.weeklyDownloads ?? null;
+  const monthlyDownloads = monthlyDownloadData.downloads ?? cachedRow?.monthlyDownloads ?? null;
+  if (weeklyDownloadData.downloads == null && cachedRow?.weeklyDownloads != null) cachedFields.push('weeklyDownloads');
+  if (monthlyDownloadData.downloads == null && cachedRow?.monthlyDownloads != null) cachedFields.push('monthlyDownloads');
 
   return {
     name,
     npmUrl: `https://www.npmjs.com/package/${encodedName}`,
     repository,
     latestVersion,
-    dependencyRange: dependency?.range ?? cachedRow?.dependencyRange ?? null,
+    dependencyRange,
     dependencyType: dependency?.type ?? cachedRow?.dependencyType ?? null,
-    weeklyDownloads: weeklyDownloads.downloads ?? cachedRow?.weeklyDownloads ?? null,
-    weeklyStart: weeklyDownloads.start ?? cachedRow?.weeklyStart ?? null,
-    weeklyEnd: weeklyDownloads.end ?? cachedRow?.weeklyEnd ?? null,
-    monthlyDownloads: monthlyDownloads.downloads ?? cachedRow?.monthlyDownloads ?? null,
-    monthlyStart: monthlyDownloads.start ?? cachedRow?.monthlyStart ?? null,
-    monthlyEnd: monthlyDownloads.end ?? cachedRow?.monthlyEnd ?? null,
+    weeklyDownloads,
+    weeklyStart: weeklyDownloadData.start ?? cachedRow?.weeklyStart ?? null,
+    weeklyEnd: weeklyDownloadData.end ?? cachedRow?.weeklyEnd ?? null,
+    monthlyDownloads,
+    monthlyStart: monthlyDownloadData.start ?? cachedRow?.monthlyStart ?? null,
+    monthlyEnd: monthlyDownloadData.end ?? cachedRow?.monthlyEnd ?? null,
+    cachedFields,
     error: metadata ? null : cachedRow ? 'package metadata cached' : 'package metadata unavailable',
   };
 }
@@ -270,6 +323,7 @@ async function mapWithConcurrency(values, concurrency, mapper) {
           monthlyDownloads: null,
           monthlyStart: null,
           monthlyEnd: null,
+          cachedFields: [],
           error: error instanceof Error ? error.message : String(error),
         };
       }
@@ -355,13 +409,31 @@ function toMarkdown(report) {
     lines.push(markdownRow(row));
   }
 
+  if (report.cacheRecoveryAt && report.rows.some((row) => row.cachedFields?.length > 0)) {
+    lines.push(
+      '',
+      `[^cached]: This value was recovered from the local cache ${report.cachePath}, generated at ${report.cacheRecoveryAt}.`,
+    );
+  }
+
   return lines.join('\n');
 }
 
 function markdownRow(row) {
-  return `| [${row.name}](${row.npmUrl}) | ${formatNumber(row.weeklyDownloads)} | ${formatNumber(row.monthlyDownloads)} | ${
-    row.repository ? `[GitHub](${row.repository})` : ''
-  } | ${row.latestVersion ?? ''} | ${row.dependencyRange ?? row.error ?? ''} |`;
+  const repository = row.repository ? `[GitHub](${row.repository})` : '';
+  return `| [${row.name}](${row.npmUrl}) | ${formatNumber(row.weeklyDownloads)}${cachedMarker(
+    row,
+    'weeklyDownloads',
+  )} | ${formatNumber(row.monthlyDownloads)}${cachedMarker(row, 'monthlyDownloads')} | ${repository}${cachedMarker(
+    row,
+    'repository',
+  )} | ${row.latestVersion ?? ''}${cachedMarker(row, 'latestVersion')} | ${
+    row.dependencyRange ?? row.error ?? ''
+  }${cachedMarker(row, 'dependencyRange')} |`;
+}
+
+function cachedMarker(row, field) {
+  return row.cachedFields?.includes(field) ? '[^cached]' : '';
 }
 
 function periodLabel(rows, startKey, endKey) {
@@ -406,6 +478,7 @@ function parseArgs(args) {
     else if (argument === '--no-cache') result.noCache = true;
     else if (argument === '--package') result.package = args[++index];
     else if (argument === '--names-file') result.namesFile = args[++index];
+    else if (argument === '--saved-page') result.savedPage = args[++index];
     else if (argument === '--refresh-names') result.refreshNames = true;
     else throw new Error(`Unknown argument: ${argument}`);
   }
@@ -421,10 +494,11 @@ Options:
   --no-cache            Ignore and do not write the JSON cache
   --package <name>     Package to inspect (default: ${DEFAULT_PACKAGE})
   --names-file <path>  JSON array or newline-separated dependent names
+  --saved-page <path>  Saved npm HTML fallback (default: ${DEFAULT_SAVED_PAGE})
   --refresh-names      Require a fresh read from npm's paginated dependents page
   --help               Show this help
 
-Normal runs read the npm dependents pages first and fall back to the cached snapshot from ${SNAPSHOT_DATE}.
+Normal runs read the npm dependents pages first and fall back to the saved page, then the JSON cache.
 The JSON cache stores names, metadata, and download counts and fills gaps when npm is unavailable.
 Package metadata and weekly/monthly download counts are refreshed when npm responds.`);
 }
