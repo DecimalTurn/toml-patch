@@ -413,7 +413,7 @@ stringify(parse('meeting = 09:30:00.123456\n'), { minimumTimeDecimals: 3 });
 
 - **Type:** `boolean` (optional)
 - **Default:** `false`
-- **Description:** Whether `patch()` should reorder entries to match the key order of the JavaScript object, instead of preserving the existing document's order. This applies to root key-values, `[table]` and `[[array-of-tables]]` section blocks, and rows inside table bodies. Each entry's comments travel with it. See [Comment ownership](CommentOwnership.md).
+- **Description:** Whether `patch()` should reorder entries to match the key order of the JavaScript object, instead of preserving the existing document's order. This applies to root key-values, `[table]` and `[[array-of-tables]]` section blocks, and rows inside table bodies. Each entry's comments travel with it. See [Comment ownership](Comment-Ownership.md).
 
 This option only affects `patch()` and is never auto-detected. With the option off, `patch()` changes values that differ and leaves their order alone:
 
