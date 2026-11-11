@@ -50,8 +50,7 @@ For browser usage, you can use unpkg:
 
 ## API
 
-overwrite(tomlString: string): void
-toml-patch provides a functional API for one-time operations and a document-oriented API for workflows that need multiple operations on the same TOML document.
+`toml-patch` provides a functional API for one-time operations and a document-oriented API for workflows that need multiple operations on the same TOML document.
 
 See the [API reference](https://github.com/DecimalTurn/toml-patch/blob/v3.3.2/docs/API.md) for `patch`, `parse`, `stringify` and the `TomlDocument` class.
 
@@ -66,32 +65,6 @@ const updated = patch(existing, {
   owner: { name: 'Tim' }
 });
 ```
-
-## Patch-lite
-
-`patch-lite` is a smaller, edit-only distribution for applications that only need to update existing TOML values, such as bumping a package version. It exposes the same `patch` name with a two-argument `(existing, updated)` signature.
-
-It is not part of the main package: the main package ships the full API only. Install the lite build from the `lite` npm dist-tag, then import it with the same specifier:
-
-```sh
-npm install --save @decimalturn/toml-patch@lite
-```
-
-```js
-import { patch } from '@decimalturn/toml-patch';
-
-const existing = 'version = "1.0.0"\n';
-const updated = patch(existing, { version: '1.0.1' });
-// updated === 'version = "1.0.1"\n'
-```
-
-The dist-tag tarball maps its root export to the lite build, so there is no `patch-lite` subpath: `import { patch } from '@decimalturn/toml-patch/patch-lite'` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Switching between the two is an install change, never a code change.
-
-The lite function edits existing primitive values only and preserves all source text outside the edited value, including comments, whitespace, line endings and a leading BOM. Added or removed keys, array length changes, reordering, renames, primitive/container type changes and unsupported value types throw before any output is produced. Date/time values may be given as the custom `Date` subclasses or as `Temporal` objects; both are serialized into the existing row's shape. Use the full `patch()` for additions, removals, moves, renames and advanced formatting.
-
-Unlike the full `patch()`, the lite distribution performs no encoding validation on its output: it does not reject strings containing unpaired UTF-16 surrogates, which cannot be represented as valid TOML/UTF-8. Use the full `patch()` when this validation is required.
-
-The [Patch-lite guide](https://github.com/DecimalTurn/toml-patch/blob/v3.3.2/docs/Patch-Lite.md) lists every supported and rejected operation with its error code, the value-encoding rules that differ from the full `patch()`, and the measured size and throughput, so you can check whether the lite distribution covers your use case.
 
 ## Comment Ownership
 
@@ -154,33 +127,31 @@ const obj2 = TOML.parse('d = 2024-01-15\n', { temporal: true });
 
 See the [date/time guide](https://github.com/DecimalTurn/toml-patch/blob/v3.3.2/docs/Dates.md) for details and examples.
 
+## Patch-lite
+
+`patch-lite` is a smaller, edit-only distribution for applications that only need to update existing TOML values, such as bumping a package version. It exposes the same `patch` name with a two-argument `(existing, updated)` signature.
+
+It is not part of the main package: the main package ships the full API only. Install the lite build from the `lite` npm dist-tag, then import it with the same specifier:
+
+```sh
+npm install --save @decimalturn/toml-patch@lite
+```
+
+```js
+import { patch } from '@decimalturn/toml-patch';
+
+const existing = 'version = "1.0.0"\n';
+const updated = patch(existing, { version: '1.0.1' });
+// updated === 'version = "1.0.1"\n'
+```
+
+For more info, check out the [Patch-lite guide](https://github.com/DecimalTurn/toml-patch/blob/v3.3.2/docs/Patch-Lite.md) 
+
 ## Formatting
 
 The `TomlFormat` class controls how TOML documents are formatted during stringification and patching operations.
 
-```typescript
-class TomlFormat {
-  newLine: string
-  trailingNewline: number
-  trailingComma: boolean
-  bracketSpacing: boolean
-  inlineTableStart?: number
-  truncateZeroTimeInDates: boolean
-  useTabsForIndentation?: boolean
-  indentWidth: number
-  minimumDecimals?: number
-  minimumTimeDecimals?: number
-  leadingBom: boolean
-  updateOrder?: boolean
-  multilineTable: boolean | number | 'auto' | 'parent'
-  multilineArray: boolean | number | 'auto' | 'parent'
-
-  static default(): TomlFormat
-  static autoDetectFormat(tomlString: string): TomlFormat
-}
-```
-
-Start with `TomlFormat.default()` and override the options you need. e.g.:
+The recommended approach is to start with `TomlFormat.default()` and override the options you need. e.g.:
 
 ```js
 import { stringify, TomlFormat } from '@decimalturn/toml-patch';
