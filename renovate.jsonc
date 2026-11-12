@@ -11,7 +11,7 @@
 
   "dependencyDashboard": {
     "title": "DevDependencies Dashboard"
-  }
+  },
 
   // https://docs.renovatebot.com/presets-group/#groupallnonmajor
   "packageRules": [
