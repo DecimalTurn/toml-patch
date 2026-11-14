@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Patching: correctly replace and delete tables split across dotted keys and headers, including nested array-of-tables and inline-table cases. ([#335])
+- Patching: correctly replace and delete tables split across dotted keys and headers, including nested inline-table paths. ([#335])
+- Patching: keep nested sub-table replacements scoped to the selected array-of-tables entry.
 
 ## [3.3.2] - 2026-10-31
 
