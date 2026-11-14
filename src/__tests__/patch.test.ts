@@ -4965,7 +4965,7 @@ describe('sub-table replacement known issues', () => {
 
       const patched = patch(existing, updated);
       const expected =
-        'items = [{ id = "a", opts.deep = [ 1, 2 ] }, ' +
+        'items = [{ id = "a", opts.deep = [1, 2] }, ' +
         '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }]\n';
 
       expect(patched).toBe(expected);
