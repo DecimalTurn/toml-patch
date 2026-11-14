@@ -2356,7 +2356,8 @@ function applyChanges(
       // sweeps below must look in the REAL container (the AOT entry) or stale
       // children survive the collapse and re-parse fails with "Value already
       // defined" (fuzz seed 1674968).  Resolve it structurally.
-      if (containerParent && isKeyValue(containerParent) &&
+      if (containerParent &&
+          (isKeyValue(containerParent) || isInlineItem(containerParent)) &&
           isPrefixMatchedNode(containerParent, change.path.slice(0, -1))) {
         containerParent = findStructuralParent(original, containerParent);
       }
