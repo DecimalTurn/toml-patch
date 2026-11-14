@@ -4971,6 +4971,187 @@ describe('sub-table replacement known issues', () => {
       expect(patched).toBe(expected);
       expect(parse(patched)).toEqual(updated);
     });
+
+    test('replaces a dotted/header-defined sub-table in the second AOT entry only', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit[1].apple.texture = 'matte';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+        apple.texture = "matte"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes dotted and header-defined descendants only from the selected AOT entry', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit[1].apple;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces dotted inline-table children in the middle array element only', () => {
+      const existing =
+        'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+        '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }, ' +
+        '{ id = "c", opts.deep.left = 5, opts.deep.right = 6 }]\n';
+      const updated = parse(existing);
+      updated.items[1].opts.deep = [7, 8];
+
+      const patched = patch(existing, updated);
+      const expected =
+        'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+        '{ id = "b", opts.deep = [7, 8] }, ' +
+        '{ id = "c", opts.deep.left = 5, opts.deep.right = 6 }]\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a table before an out-of-order sibling header', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit.apple = 'Fuji';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [fruit]
+        apple = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces an out-of-order nested table without moving its sibling headers', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.apple.texture]
+        smooth = true
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit.apple.texture = 'matte';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        texture = "matte"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes out-of-order descendants without removing unrelated headers', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [animal]
+        name = "fox"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
   });
 
   // See https://github.com/DecimalTurn/toml-patch/issues/330
