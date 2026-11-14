@@ -3480,6 +3480,7 @@ function applyChanges(
             for (const sibling of toRemove) {
               removeMember(original, parent, sibling);
             }
+            removeDocumentItemsExtendingPath(original, change.path, node);
           }
         }
 
@@ -5608,7 +5609,7 @@ function removeSiblingsExtendingPrefix(
   }
 }
 
-function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: Block): void {
+function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: TreeNode): void {
   const cstPath = stripAotEntryIndices(document, path);
   const owner = findAotEntryForPath(document, path);
   for (const item of findAotScopedDocumentItems(document, cstPath, owner)) {
