@@ -2807,6 +2807,15 @@ function applyChanges(
               commentEligibleNodes.add(freshKV);
               return;
             }
+
+            const relativeKey = existingTableKey.slice(aotOwner.key.item.value.length);
+            const scopedRow = generateExplicitParentRow(relativeKey, jsValue, format);
+            if (scopedRow) {
+              removeMember(original, tableParent, existing);
+              insert(original, aotOwner, scopedRow, undefined);
+              commentEligibleNodes.add(scopedRow);
+              return;
+            }
           }
 
           if (parentKey.length > 0) {
