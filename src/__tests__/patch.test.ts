@@ -4878,6 +4878,101 @@ describe('sub-table replacement known issues', () => {
     expect(parse(patched)).toEqual(updated);
   });
 
+  // Follow-up ownership and nesting cases for issue #335.
+  describe('issue 335 follow-up ownership and nesting cases', () => {
+    test('replaces a dotted/header-defined sub-table in only the selected AOT entry', () => {
+    const existing = dedent`
+      [[fruit]]
+      id = "red"
+      apple.color = "red"
+
+      [fruit.apple.texture]
+      smooth = true
+
+      [[fruit]]
+      id = "green"
+      apple.color = "green"
+
+      [fruit.apple.texture]
+      smooth = false
+    ` + '\n';
+
+    const updated = parse(existing);
+    updated.fruit[0].apple.texture = 'matte';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [[fruit]]
+      id = "red"
+      apple.color = "red"
+      apple.texture = "matte"
+
+      [[fruit]]
+      id = "green"
+      apple.color = "green"
+
+      [fruit.apple.texture]
+      smooth = false
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes a dotted parent and its nested AOT only from the selected entry', () => {
+    const existing = dedent`
+      [[fruit]]
+      id = "red"
+      apple.color = "red"
+
+      [[fruit.apple.seeds]]
+      size = 1
+
+      [[fruit]]
+      id = "green"
+      apple.color = "green"
+
+      [[fruit.apple.seeds]]
+      size = 2
+    ` + '\n';
+
+    const updated = parse(existing);
+    delete updated.fruit[0].apple;
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [[fruit]]
+      id = "red"
+
+      [[fruit]]
+      id = "green"
+      apple.color = "green"
+
+      [[fruit.apple.seeds]]
+      size = 2
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces dotted inline-table children in one array element without changing siblings', () => {
+    const existing =
+      'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+      '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }]\n';
+    const updated = parse(existing);
+    updated.items[0].opts.deep = [1, 2];
+
+    const patched = patch(existing, updated);
+    const expected =
+      'items = [{ id = "a", opts.deep = [ 1, 2 ] }, ' +
+      '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }]\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+    });
+  });
+
   // See https://github.com/DecimalTurn/toml-patch/issues/330
   test.skip('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
     // Documents a feature not implemented yet: keeping the document's blank-line
