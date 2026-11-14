@@ -115,6 +115,26 @@ general randomizer rarely creates the AOT ownership layouts it targets.
   (100,001 seeds, one mutation per seed, `--fast-fail`) completed with zero
   failures.
 
+### Variant 6: deletion and structural replacement fuzzing
+
+- **Implementation:** `src/__tests__/fuzz-patch6.ts`
+- **Runner:** `scripts/fuzz-run6.ts`, `pnpm run fuzz6`
+- **Purpose:** Generates block tables with dotted-key assignments, tables with
+  nested AOT descendants, and inline tables with overlapping dotted paths. The
+  seed rotates among replacing a header-defined table with a scalar, deleting
+  a table that owns an AOT descendant, and replacing a nested inline-table
+  path.
+- **Why it exists:** These source shapes and edits target the failures reported
+  in [issue #335](https://github.com/DecimalTurn/toml-patch/issues/335), which
+  the AOT-only generator in variant 5 cannot produce.
+- **Reproducing the three targeted cases:** Seeds 0, 1 and 2 select each case
+  once. Use `--to 2` to run all three without stopping at the first failure.
+- **Coverage boundary:** Variant 6 focuses on structural deletion and
+  replacement cases. A clean run is evidence only for the generated source
+  shapes and mutations, not a proof that every structural edit is correct.
+- **Latest clean sweep:** On 2026-11-14, seeds 0 through 100,000 inclusive
+  (100,001 seeds, one mutation per seed) passed after rebasing onto `fix-335`.
+
 ### Patch-lite fuzzing
 
 - **Implementation:** `src/__tests__/fuzz-patch-lite.ts`
