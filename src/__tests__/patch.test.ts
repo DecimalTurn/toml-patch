@@ -4792,6 +4792,92 @@ describe('sub-table replacement known issues', () => {
     expect(patched).toBe(expected);
   });
 
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 1: replace a sub-table that has its own [header] with a scalar
+  test('replaces a sub-table split between a dotted key and a deeper header', () => {
+    const existing = dedent`
+      [fruit]
+      apple.color = "red"
+
+      [fruit.apple.texture]
+      smooth = true
+    ` + '\n';
+
+    const updated = parse(existing);
+    updated.fruit.apple.texture = 'smooth';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [fruit]
+      apple.color = "red"
+      apple.texture = "smooth"
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 2: delete a table whose array-of-tables child has its own [[header]]
+  test('deletes dotted keys and deeper array-of-table headers with their parent table', () => {
+    const existing = dedent`
+      [fruit]
+      apple.color = "red"
+
+      [[fruit.apple.seeds]]
+      size = 2
+    ` + '\n';
+
+    const updated = parse(existing);
+    delete updated.fruit.apple;
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [fruit]
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+    
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 3A: replace a two-level dotted table inside an inline table
+  test('removes sibling dotted keys when replacing a nested inline-table path', () => {
+    const existing = 'x = { a.b.c = 1, a.b.d = 2 }\n';
+    const updated = parse(existing);
+    updated.x.a.b = [1, 2];
+
+    const patched = patch(existing, updated);
+    const expected = 'x = { a.b = [ 1, 2 ] }\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+    
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 3B: replace a two-level dotted table in a block-table TOML document
+  test('removes sibling dotted keys when replacing a nested path in a block table', () => {
+    const existing = dedent`
+      [x]
+      a.b.c = 1
+      a.b.d = 2
+    ` + '\n';
+    const updated = parse(existing);
+    updated.x.a.b = [1, 2];
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [x]
+      a.b = [ 1, 2 ]
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+  });
+
   // See https://github.com/DecimalTurn/toml-patch/issues/330
   test.skip('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
     // Documents a feature not implemented yet: keeping the document's blank-line
