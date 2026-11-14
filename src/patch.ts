@@ -2808,13 +2808,22 @@ function applyChanges(
               return;
             }
 
-            const relativeKey = existingTableKey.slice(aotOwner.key.item.value.length);
-            const scopedRow = generateExplicitParentRow(relativeKey, jsValue, format);
-            if (scopedRow) {
-              removeMember(original, tableParent, existing);
-              insert(original, aotOwner, scopedRow, undefined);
-              commentEligibleNodes.add(scopedRow);
-              return;
+            const relativeParentKey = parentKey.slice(aotOwner.key.item.value.length);
+            const hasImplicitAotParent = relativeParentKey.length > 0 &&
+              (aotOwner.items as TreeNode[]).some(item =>
+                isKeyValue(item) &&
+                item.key.value.length > relativeParentKey.length &&
+                keyStartsWith(item.key.value, relativeParentKey)
+              );
+            if (hasImplicitAotParent) {
+              const relativeKey = existingTableKey.slice(aotOwner.key.item.value.length);
+              const scopedRow = generateExplicitParentRow(relativeKey, jsValue, format);
+              if (scopedRow) {
+                removeMember(original, tableParent, existing);
+                insert(original, aotOwner, scopedRow, undefined);
+                commentEligibleNodes.add(scopedRow);
+                return;
+              }
             }
           }
 
