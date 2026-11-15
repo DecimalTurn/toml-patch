@@ -116,8 +116,10 @@ function generateStructuralSource(
   { seed, mutationCount }: Pick<FuzzContext, 'seed' | 'mutationCount'>
 ): GeneratedSource {
   const scenarios = Array.from({ length: mutationCount }, (_, index) => createScenario(seed, index));
+  const inlineScenarios = scenarios.filter(scenario => scenario.kind === 'replace-inline-table');
+  const sectionScenarios = scenarios.filter(scenario => scenario.kind !== 'replace-inline-table');
   return {
-    source: scenarios.map(scenario => scenario.source).join('\n'),
+    source: [...inlineScenarios, ...sectionScenarios].map(scenario => scenario.source).join('\n'),
     description: 'dotted-key, AOT-deletion, and inline-table structural cases'
   };
 }

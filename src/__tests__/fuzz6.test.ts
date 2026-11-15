@@ -21,3 +21,10 @@ test('fuzz6 seed 1 round-trips deleting a table that owns an AOT descendant', ()
 test('fuzz6 seed 2 round-trips replacing a nested inline-table path', () => {
   expect(fuzzOne6(2, 1).status).toBe('ok');
 });
+
+test('fuzz6 seed 0 keeps root inline tables scoped correctly across three mutations', () => {
+  const result = fuzzOne6(0, 3);
+
+  expect(result.status, result.error).toBe('ok');
+  expect(result.mutationDescs).toHaveLength(3);
+});
