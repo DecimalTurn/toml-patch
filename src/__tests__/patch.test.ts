@@ -4959,6 +4959,194 @@ describe('sub-table replacement known issues', () => {
       expect(parse(patched)).toEqual(updated);
     });
 
+  test('replaces a header-defined table with a dotted key when its parent was defined by dotted keys', () => {
+    const existing = dedent`
+      [route]
+      args.id = "a"
+      [route.args.deep.leaf]
+      id = "a"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: { args: { id: string; deep: { leaf: { id: string } } | string; other: { z: number } } };
+    };
+    updated.route.args.deep = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [route]
+      args.id = "a"
+      args.deep = "none"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+  test('quotes a dotted parent when replacing its header-defined child with a dotted key', () => {
+    const existing = dedent`
+      ["my.route"]
+      "my.args".id = "a"
+      ["my.route"."my.args".deep.leaf]
+      id = "a"
+      ["my.route"."my.args".other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      'my.route': {
+        'my.args': { id: string; deep: { leaf: { id: string } } | string; other: { z: number } };
+      };
+    };
+    updated['my.route']['my.args'].deep = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      ["my.route"]
+      "my.args".id = "a"
+      "my.args".deep = "none"
+      ["my.route"."my.args".other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+  test('replaces multiple header-defined tables with dotted keys under a dotted parent', () => {
+    const existing = dedent`
+      [route]
+      args.id = "a"
+      [route.args.deep.leaf]
+      id = "deep"
+      [route.args.wide.leaf]
+      id = "wide"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: {
+        args: {
+          id: string;
+          deep: { leaf: { id: string } } | string;
+          wide: { leaf: { id: string } } | number;
+          other: { z: number };
+        };
+      };
+    };
+    updated.route.args.deep = 'none';
+    updated.route.args.wide = 2;
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [route]
+      args.id = "a"
+      args.deep = "none"
+      args.wide = 2
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+    test('deletes a dotted parent and its descendant headers without recreating the table', () => {
+      const existing = dedent`
+        [route]
+        args.deep.token = "secret"
+
+        [route.args.deep.cache]
+        enabled = true
+
+        [route.meta]
+        name = "api"
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.route.args;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [route]
+
+        [route.meta]
+        name = "api"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deleting a scalar removes its dotted and header descendants', () => {
+      const existing = dedent`
+        value = 2019-06-13T09:28:26
+        value.child.enabled = true
+
+        [value.settings]
+        mode = "old"
+      ` + '\n';
+
+      const updated = parse(existing) as { value?: unknown };
+      delete updated.value;
+
+      const patched = patch(existing, updated);
+
+      expect(patched).toBe('\n');
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes dotted and header descendants from the first AOT entry only', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit[0].apple;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
     test('replaces dotted inline-table children in one array element without changing siblings', () => {
       const existing =
         'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
