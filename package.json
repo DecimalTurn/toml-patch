@@ -29,7 +29,7 @@
     "preserve-formatting",
     "edit-in-place"
   ],
-  "packageManager": "pnpm@12.11.2",
+  "packageManager": "pnpm@12.20.0",
   "engines": {
     "node": ">=16"
   },
