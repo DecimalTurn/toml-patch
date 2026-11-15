@@ -4880,6 +4880,9 @@ describe('sub-table replacement known issues', () => {
 
   // Follow-up ownership and nesting cases for issue #335.
   describe('issue 335 follow-up ownership and nesting cases', () => {
+
+    // This test was initially failing due to table redefinition issues.
+    // Addressed in 27a02a7
     test('replaces a dotted/header-defined sub-table in only the selected AOT entry', () => {
       const existing = dedent`
         [[fruit]]
