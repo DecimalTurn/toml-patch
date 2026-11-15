@@ -62,7 +62,7 @@ jobs:
 
       - name: Create or update stale overrides issue
         if: steps.check.outputs.has_stale == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           REPORT_PATH: override-report.txt
         with:
