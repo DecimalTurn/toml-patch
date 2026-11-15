@@ -6,8 +6,41 @@ import { TomlFormat, resolveTomlFormat } from './toml-format';
 import type { ParseOptions } from './parse-options';
 import { decodeUtf8Bytes, stripLeadingBom, UTF8_BOM } from './decode-utf8';
 import { TomlDocument } from './toml-document';
+import { findPosition } from './location';
+import { Block, Document, NodeType } from './cst';
+
+export * from './cst';
+export {
+  getCommentAttachments,
+  type CommentAttachment,
+  type CommentAttachmentKind
+} from './comment-attachments';
 
 export type { IntegersAsBigInt, ParseOptions } from './parse-options';
+
+/**
+ * Parses TOML into its concrete syntax tree without converting it to a
+ * JavaScript value. Comments, source locations, and source ordering are kept.
+ *
+ * @param value - TOML source as a string or raw UTF-8 bytes
+ * @returns A Document node containing the parsed CST blocks
+ */
+export function parseCst(value: string | Uint8Array): Document {
+  const rawString = typeof value === 'string'
+    ? value
+    : decodeUtf8Bytes(value);
+  const tomlString = stripLeadingBom(rawString);
+  const items: Block[] = Array.from(parseTOML(tomlString));
+
+  return {
+    type: NodeType.Document,
+    loc: {
+      start: { line: 1, column: 0 },
+      end: findPosition(tomlString, tomlString.length)
+    },
+    items
+  };
+}
 
 /**
  * Parses a TOML string or raw UTF-8 bytes into a JavaScript object.

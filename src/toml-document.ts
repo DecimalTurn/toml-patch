@@ -64,10 +64,12 @@ export class TomlDocument {
   }
 
   /**
-   * Returns the internal CST (for testing purposes).
-   * @internal
+   * Returns the current CST blocks in document order.
+   *
+   * Treat the returned nodes as read-only. Use `patch()`, `update()`, or
+   * `overwrite()` to change the document.
    */
-  get cst(): Block[] {
+  get cst(): readonly Block[] {
     return this._cst;
   }
 

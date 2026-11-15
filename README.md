@@ -32,6 +32,7 @@ We hope that these improvements can be incorporated upstream one day if the orig
     - [Methods](#methods)
       - [patch() Example](#patch-example)
       - [update() Example](#update-example)
+  - [Concrete Syntax Tree](#concrete-syntax-tree)
 - [Comment Ownership](#comment-ownership)
 - [Date/Time Handling & Temporal](#datetime-handling--temporal)
 - [Formatting](#formatting)
@@ -380,6 +381,32 @@ doc.update(updatedToml);
 
 console.log(doc.toJsObject.server.port); // 3000
 ```
+
+### Concrete Syntax Tree
+
+Use `parseCst()` when a conversion needs TOML syntax details such as comments,
+source locations, or original item order. The returned `Document` contains the
+same typed CST nodes used by `TomlDocument`; `TomlDocument.cst` provides a
+read-only view of its current top-level blocks.
+
+```js
+import { getCommentAttachments, parseCst } from '@decimalturn/toml-patch';
+
+const cst = parseCst(`
+# Port for the HTTP server
+port = 8080 # default
+`);
+
+for (const attachment of getCommentAttachments(cst)) {
+  console.log(attachment.kind, attachment.owner?.type, attachment.comment.raw);
+}
+```
+
+`getCommentAttachments()` reports `leading`, `trailing`, `header`, and
+`unattached` comments. Comments inside multiline inline arrays and tables are
+associated with their nearest inline item, even though the CST stores them in
+the enclosing document or table. The CST node interfaces and type guards are
+also exported from the package entry point.
 
 ## Comment Ownership
 
