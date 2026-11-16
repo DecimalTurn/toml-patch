@@ -9,3 +9,5 @@ minimumReleaseAgeExclude:
 overrides:
   # https://github.com/DecimalTurn/toml-patch/security/dependabot/80
   vite: ">=8.1.6"
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/85
+  minimatch: ">=11.0.1"
