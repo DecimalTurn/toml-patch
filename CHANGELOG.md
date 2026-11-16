@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-11-16
+
 ### Fixed
 
 - Patching: correctly replace and delete tables split across dotted keys and headers, including nested inline-table paths. ([#335])
