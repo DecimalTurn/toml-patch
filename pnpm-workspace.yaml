@@ -6,3 +6,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@decimalturn/toml-patch'
   
+overrides:
+  # https://github.com/DecimalTurn/toml-patch/security/dependabot/80
+  vite: ">=8.1.6"
