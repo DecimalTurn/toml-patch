@@ -34,7 +34,13 @@
  * The npm requests require network access. A names file is useful when the
  * npm dependents page is unavailable or when the report should cover a fixed
  * set of packages. Use `--refresh-names` to require a live npm refresh instead
- * of falling back to cached names when npm is unavailable.
+ * of falling back to cached names when npm is unavailable. If the saved HTML
+ * page is stale, open the Dependents page in a browser, wait for it to finish
+ * loading, and save it again as <Webpage, HTML Only> to:
+ *
+ *   docs/dependents/@decimalturn_toml-patch - npm.html
+ *
+ * Page URL: https://www.npmjs.com/package/@decimalturn/toml-patch?activeTab=dependents
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';

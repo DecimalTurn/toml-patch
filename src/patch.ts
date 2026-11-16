@@ -2356,7 +2356,8 @@ function applyChanges(
       // sweeps below must look in the REAL container (the AOT entry) or stale
       // children survive the collapse and re-parse fails with "Value already
       // defined" (fuzz seed 1674968).  Resolve it structurally.
-      if (containerParent && isKeyValue(containerParent) &&
+      if (containerParent &&
+          (isKeyValue(containerParent) || isInlineItem(containerParent)) &&
           isPrefixMatchedNode(containerParent, change.path.slice(0, -1))) {
         containerParent = findStructuralParent(original, containerParent);
       }
@@ -2751,6 +2752,27 @@ function applyChanges(
           const tableParent = findStructuralParent(original, existing) ?? findParent(original, change.path);
           const aotOwner = findAotEntryForPath(original, change.path);
 
+          const explicitParent = findDeepestExplicitTable(
+            original,
+            existingTableKey,
+            aotOwner?.key.item.value.length ?? 0,
+            aotOwner
+          );
+          if (explicitParent) {
+            const relativeKey = existingTableKey.slice(explicitParent.key.item.value.length);
+            const hasImplicitParent = relativeKey.length > 1 &&
+              (explicitParent.items as TreeNode[]).some(item =>
+                isKeyValue(item) &&
+                item.key.value.length > 1 &&
+                item.key.value[0] === relativeKey[0]
+              );
+            if (hasImplicitParent && replaceBelowExplicitTable(
+              original, explicitParent, existingTableKey, jsValue, format, commentEligibleNodes, aotOwner
+            )) {
+              return;
+            }
+          }
+
           // The table's key can be a strict prefix of OTHER document sections
           // (e.g. `[""]` collapsing to a scalar while `["".hv8lx]` is also a
           // document-level section extending that prefix).  Those sections
@@ -2784,6 +2806,24 @@ function applyChanges(
               insert(original, scalarParent, freshKV, undefined);
               commentEligibleNodes.add(freshKV);
               return;
+            }
+
+            const relativeParentKey = parentKey.slice(aotOwner.key.item.value.length);
+            const hasImplicitAotParent = relativeParentKey.length > 0 &&
+              (aotOwner.items as TreeNode[]).some(item =>
+                isKeyValue(item) &&
+                item.key.value.length > relativeParentKey.length &&
+                keyStartsWith(item.key.value, relativeParentKey)
+              );
+            if (hasImplicitAotParent) {
+              const relativeKey = existingTableKey.slice(aotOwner.key.item.value.length);
+              const scopedRow = generateExplicitParentRow(relativeKey, jsValue, format);
+              if (scopedRow) {
+                removeMember(original, tableParent, existing);
+                insert(original, aotOwner, scopedRow, undefined);
+                commentEligibleNodes.add(scopedRow);
+                return;
+              }
             }
           }
 
@@ -3459,6 +3499,7 @@ function applyChanges(
             for (const sibling of toRemove) {
               removeMember(original, parent, sibling);
             }
+            removeDocumentItemsExtendingPath(original, change.path, node);
           }
         }
 
@@ -5451,7 +5492,8 @@ function replaceBelowExplicitTable(
   fullKey: string[],
   jsValue: any,
   format: TomlFormat,
-  commentEligibleNodes: WeakSet<TreeNode>
+  commentEligibleNodes: WeakSet<TreeNode>,
+  owner?: TableArray
 ): boolean {
   const relativeKey = fullKey.slice(parent.key.item.value.length);
 
@@ -5468,7 +5510,7 @@ function replaceBelowExplicitTable(
     const sections = Array.from(parseTOML(toTOML(sectionDoc.items, format)));
     if (!sections.every(item => isTable(item) || isTableArray(item))) return false;
 
-    const toRemove = findDocumentItemsByKeyPrefix(document, fullKey);
+    const toRemove = findAotScopedDocumentItems(document, fullKey, owner);
     const removedIndex = toRemove.length > 0 ? document.items.indexOf(toRemove[0]) : -1;
     for (const node of toRemove) removeMember(document, document, node);
     for (const row of parentRows) removeMember(document, parent, row);
@@ -5485,7 +5527,7 @@ function replaceBelowExplicitTable(
   const row = generateExplicitParentRow(relativeKey, jsValue, format);
   if (!row) return false;
 
-  for (const node of findDocumentItemsByKeyPrefix(document, fullKey)) {
+  for (const node of findAotScopedDocumentItems(document, fullKey, owner)) {
     removeMember(document, document, node);
   }
   upsertExplicitParentRow(document, parent, relativeKey, row);
@@ -5586,7 +5628,7 @@ function removeSiblingsExtendingPrefix(
   }
 }
 
-function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: Block): void {
+function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: TreeNode): void {
   const cstPath = stripAotEntryIndices(document, path);
   const owner = findAotEntryForPath(document, path);
   for (const item of findAotScopedDocumentItems(document, cstPath, owner)) {

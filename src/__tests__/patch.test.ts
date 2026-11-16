@@ -4792,6 +4792,559 @@ describe('sub-table replacement known issues', () => {
     expect(patched).toBe(expected);
   });
 
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 1: replace a sub-table that has its own [header] with a scalar
+  test('replaces a sub-table split between a dotted key and a deeper header', () => {
+    const existing = dedent`
+      [fruit]
+      apple.color = "red"
+
+      [fruit.apple.texture]
+      smooth = true
+    ` + '\n';
+
+    const updated = parse(existing);
+    updated.fruit.apple.texture = 'smooth';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [fruit]
+      apple.color = "red"
+      apple.texture = "smooth"
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 2: delete a table whose array-of-tables child has its own [[header]]
+  test('deletes dotted keys and deeper array-of-table headers with their parent table', () => {
+    const existing = dedent`
+      [fruit]
+      apple.color = "red"
+
+      [[fruit.apple.seeds]]
+      size = 2
+    ` + '\n';
+
+    const updated = parse(existing);
+    delete updated.fruit.apple;
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [fruit]
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+    
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 3A: replace a two-level dotted table inside an inline table
+  test('removes sibling dotted keys when replacing a nested inline-table path', () => {
+    const existing = 'x = { a.b.c = 1, a.b.d = 2 }\n';
+    const updated = parse(existing);
+    updated.x.a.b = [1, 2];
+
+    const patched = patch(existing, updated);
+    const expected = 'x = { a.b = [ 1, 2 ] }\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+    
+  });
+
+  // See https://github.com/DecimalTurn/toml-patch/issues/335
+  // Case 3B: replace a two-level dotted table in a block-table TOML document
+  test('removes sibling dotted keys when replacing a nested path in a block table', () => {
+    const existing = dedent`
+      [x]
+      a.b.c = 1
+      a.b.d = 2
+    ` + '\n';
+    const updated = parse(existing);
+    updated.x.a.b = [1, 2];
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [x]
+      a.b = [ 1, 2 ]
+    ` + '\n';
+
+    expect(patched).toBe(expected);
+    expect(parse(patched)).toEqual(updated);
+  });
+
+  // Follow-up ownership and nesting cases for issue #335.
+  describe('issue 335 follow-up ownership and nesting cases', () => {
+
+    // This test was initially failing due to table redefinition issues.
+    // Addressed in 27a02a7
+    test('replaces a dotted/header-defined sub-table in only the selected AOT entry', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit[0].apple.texture = 'matte';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+        apple.texture = "matte"
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes a dotted parent and its nested AOT only from the selected entry', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit[0].apple;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+  test('replaces a header-defined table with a dotted key when its parent was defined by dotted keys', () => {
+    const existing = dedent`
+      [route]
+      args.id = "a"
+      [route.args.deep.leaf]
+      id = "a"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: { args: { id: string; deep: { leaf: { id: string } } | string; other: { z: number } } };
+    };
+    updated.route.args.deep = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [route]
+      args.id = "a"
+      args.deep = "none"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+  test('quotes a dotted parent when replacing its header-defined child with a dotted key', () => {
+    const existing = dedent`
+      ["my.route"]
+      "my.args".id = "a"
+      ["my.route"."my.args".deep.leaf]
+      id = "a"
+      ["my.route"."my.args".other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      'my.route': {
+        'my.args': { id: string; deep: { leaf: { id: string } } | string; other: { z: number } };
+      };
+    };
+    updated['my.route']['my.args'].deep = 'none';
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      ["my.route"]
+      "my.args".id = "a"
+      "my.args".deep = "none"
+      ["my.route"."my.args".other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+  test('replaces multiple header-defined tables with dotted keys under a dotted parent', () => {
+    const existing = dedent`
+      [route]
+      args.id = "a"
+      [route.args.deep.leaf]
+      id = "deep"
+      [route.args.wide.leaf]
+      id = "wide"
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    const updated = parse(existing) as {
+      route: {
+        args: {
+          id: string;
+          deep: { leaf: { id: string } } | string;
+          wide: { leaf: { id: string } } | number;
+          other: { z: number };
+        };
+      };
+    };
+    updated.route.args.deep = 'none';
+    updated.route.args.wide = 2;
+
+    const patched = patch(existing, updated);
+    const expected = dedent`
+      [route]
+      args.id = "a"
+      args.deep = "none"
+      args.wide = 2
+      [route.args.other]
+      z = 1
+    ` + '\n';
+
+    expect(parse(patched)).toEqual(updated);
+    expect(patched).toBe(expected);
+  });
+
+    test('deletes a dotted parent and its descendant headers without recreating the table', () => {
+      const existing = dedent`
+        [route]
+        args.deep.token = "secret"
+
+        [route.args.deep.cache]
+        enabled = true
+
+        [route.meta]
+        name = "api"
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.route.args;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [route]
+
+        [route.meta]
+        name = "api"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deleting a scalar removes its dotted and header descendants', () => {
+      const existing = dedent`
+        value = 2019-06-13T09:28:26
+        value.child.enabled = true
+
+        [value.settings]
+        mode = "old"
+      ` + '\n';
+
+      const updated = parse(existing) as { value?: unknown };
+      delete updated.value;
+
+      const patched = patch(existing, updated);
+
+      expect(patched).toBe('\n');
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes dotted and header descendants from the first AOT entry only', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit[0].apple;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces dotted inline-table children in one array element without changing siblings', () => {
+      const existing =
+        'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+        '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }]\n';
+      const updated = parse(existing);
+      updated.items[0].opts.deep = [1, 2];
+
+      const patched = patch(existing, updated);
+      const expected =
+        'items = [{ id = "a", opts.deep = [1, 2] }, ' +
+        '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }]\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a dotted/header-defined sub-table in the second AOT entry only', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit[1].apple.texture = 'matte';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+        apple.texture = "matte"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes dotted and header-defined descendants only from the selected AOT entry', () => {
+      const existing = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+        apple.color = "green"
+
+        [fruit.apple.texture]
+        smooth = false
+
+        [[fruit.apple.seeds]]
+        size = 2
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit[1].apple;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [[fruit]]
+        id = "red"
+        apple.color = "red"
+
+        [fruit.apple.texture]
+        smooth = true
+
+        [[fruit.apple.seeds]]
+        size = 1
+
+        [[fruit]]
+        id = "green"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces dotted inline-table children in the middle array element only', () => {
+      const existing =
+        'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+        '{ id = "b", opts.deep.left = 3, opts.deep.right = 4 }, ' +
+        '{ id = "c", opts.deep.left = 5, opts.deep.right = 6 }]\n';
+      const updated = parse(existing);
+      updated.items[1].opts.deep = [7, 8];
+
+      const patched = patch(existing, updated);
+      const expected =
+        'items = [{ id = "a", opts.deep.left = 1, opts.deep.right = 2 }, ' +
+        '{ id = "b", opts.deep = [7, 8] }, ' +
+        '{ id = "c", opts.deep.left = 5, opts.deep.right = 6 }]\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a table before an out-of-order sibling header', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit.apple = 'Fuji';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [fruit]
+        apple = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces an out-of-order nested table without moving its sibling headers', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.apple.texture]
+        smooth = true
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.fruit.apple.texture = 'matte';
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        texture = "matte"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('deletes out-of-order descendants without removing unrelated headers', () => {
+      const existing = dedent`
+        [fruit.apple]
+        name = "Fuji"
+        [animal]
+        name = "fox"
+        [fruit.orange]
+        name = "Navel"
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.fruit;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [animal]
+        name = "fox"
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+  });
+
   // See https://github.com/DecimalTurn/toml-patch/issues/330
   test.skip('separates replacement table array entries the same way whether the old sub-table key was explicit', () => {
     // Documents a feature not implemented yet: keeping the document's blank-line

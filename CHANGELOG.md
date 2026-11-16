@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Patching: correctly replace and delete tables split across dotted keys and headers, including nested inline-table paths. ([#335])
+- Patching: keep nested sub-table replacements scoped to the selected array-of-tables entry and prevent table redefinition ([27a02a7]).
+
 ## [3.3.2] - 2026-10-31
 
 ### Fixed
@@ -530,5 +535,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#329]: https://github.com/DecimalTurn/toml-patch/pull/329
 [#332]: https://github.com/DecimalTurn/toml-patch/pull/332
 [#333]: https://github.com/DecimalTurn/toml-patch/pull/333
+[#335]: https://github.com/DecimalTurn/toml-patch/issues/335
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
+[27a02a7]: https://github.com/DecimalTurn/toml-patch/commit/27a02a746533d82026fe6f1fb6771f8e1ba5ac27
