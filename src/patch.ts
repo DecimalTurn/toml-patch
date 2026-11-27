@@ -5055,16 +5055,16 @@ function cleanupOrphanedComments(doc: Document): void {
       const parentContainer = findParent(doc, [kv.key.value[0]]);
       if (!parentContainer || !hasItems(parentContainer)) return;
 
-      const kvStartLine = kv.loc.start.line;
-      const kvEndLine = kv.loc.end.line;
-
-      // Remove any Comment nodes in the parent that fall within the KeyValue's range
+      // Remove comments inside the array, but leave same-line comments after its closing bracket.
       const items = (parentContainer as WithItems).items as TreeNode[];
       for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         if (!isComment(item)) continue;
-        const commentLine = item.loc.start.line;
-        if (commentLine >= kvStartLine && commentLine <= kvEndLine) {
+        const startsWithinArray = item.loc.start.line > value.loc.start.line ||
+          (item.loc.start.line === value.loc.start.line && item.loc.start.column >= value.loc.start.column);
+        const endsWithinArray = item.loc.end.line < value.loc.end.line ||
+          (item.loc.end.line === value.loc.end.line && item.loc.end.column <= value.loc.end.column);
+        if (startsWithinArray && endsWithinArray) {
           items.splice(i, 1);
         }
       }

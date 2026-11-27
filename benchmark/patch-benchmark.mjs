@@ -249,6 +249,8 @@ const reportLines = [
   '',
   'Full and lite patching are compared with smol-toml. The smol-toml method parses the document, updates the object, and stringifies it. Timings include each implementation’s complete operation; fixture creation and correctness checks are outside the timed section.',
   '',
+  '⚠️ These performance numbers can be volatile and are indicative and may vary depending on the environment.',
+  '',
   baseline
     ? 'Current and base-branch full and lite patch builds are compared in the same run.'
     : 'No base build was supplied; the current-versus-baseline performance gate is skipped.',

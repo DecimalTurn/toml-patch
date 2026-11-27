@@ -83,6 +83,296 @@ test('should preserve trailing comment on single-line inline table when deleting
   `);
 });
 
+describe('trailing comments on top-level empty arrays', () => {
+  test('should preserve the comment when another value changes', () => {
+    const src = dedent`
+      a = 1
+      tags = [] # none yet
+    ` + '\n';
+    const updated = { a: 2, tags: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 2
+      tags = [] # none yet
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when another key is added', () => {
+    const src = dedent`
+      a = 1
+      tags = [] # none yet
+    ` + '\n';
+    const updated = { a: 1, tags: [], b: 2 };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 1
+      tags = [] # none yet
+      b = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when a table value changes', () => {
+    const src = dedent`
+      tags = [] # none yet
+
+      [t]
+      a = 1
+    ` + '\n';
+    const updated = { tags: [], t: { a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      tags = [] # none yet
+
+      [t]
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
+describe('comments while emptying inline arrays', () => {
+  test('should preserve a trailing comment in a table when a sibling value changes', () => {
+    const src = dedent`
+      [t]
+      tags = [] # none yet
+      a = 1
+    ` + '\n';
+    const updated = { t: { tags: [], a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [t]
+      tags = [] # none yet
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve another empty array comment when emptying a commented array', () => {
+    const src = dedent`
+      tags = [] # keep this
+      arr = [
+        1, # remove with the element
+      ]
+    ` + '\n';
+    const updated = { tags: [], arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      tags = [] # keep this
+      arr = [
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve a trailing comment after the closing bracket when emptying an array', () => {
+    const src = dedent`
+      arr = [
+        1, # inside the array
+      ] # after the array
+    ` + '\n';
+    const updated = { arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      arr = [
+      ] # after the array
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve a quoted dotted-key comment beside its child table', () => {
+    const src = dedent`
+      service."odd.name".tags = [] # tag note
+
+      [service."odd.name".settings] # settings header
+      enabled = true
+    ` + '\n';
+    const updated = { service: { 'odd.name': { tags: [], settings: { enabled: false } } } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      service."odd.name".tags = [] # tag note
+
+      [service."odd.name".settings] # settings header
+      enabled = false
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should keep comments scoped to repeated table-array entries', () => {
+    const src = dedent`
+      [[servers]]
+      name = "first"
+      tags = [] # first tags
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      tags = [] # second tags
+      [servers.meta]
+      enabled = false
+    ` + '\n';
+    const updated = {
+      servers: [
+        { name: 'first', tags: [], meta: { enabled: true } },
+        { name: 'second', tags: [], meta: { enabled: true } }
+      ]
+    };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [[servers]]
+      name = "first"
+      tags = [] # first tags
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      tags = [] # second tags
+      [servers.meta]
+      enabled = true
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should remove nested-array comments but keep section comments when emptying it', () => {
+    const src = dedent`
+      matrix = [
+        [
+          1, # inner first
+        ],
+        [
+          2, # inner second
+        ],
+      ] # outer note
+
+      [after] # header note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+      ] # outer note
+
+      [after] # header note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve following sections when removing one commented nested array', () => {
+    const src = dedent`
+      matrix = [
+        [
+          1, # remove note
+        ],
+        [
+          2,
+        ],
+      ] # matrix note
+
+      [after] # section note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [[2]], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+        [
+          2,
+        ],
+      ] # matrix note
+
+      [after] # section note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should account for closing brackets after a nested-array comment', () => {
+    const src = dedent`
+      matrix = [
+        [
+          [
+            1, # remove note
+          ],
+          [
+            2,
+          ],
+        ],
+        [
+          [
+            3,
+          ],
+        ],
+      ] # matrix note
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [[[3]]], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+        [
+          [
+            3,
+          ],
+        ],
+      ] # matrix note
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve table offsets when removing one commented nested array', () => {
+    const src = dedent`
+      [settings]
+      matrix = [
+        [
+          1, # remove note
+        ],
+        [
+          2,
+        ],
+      ] # matrix note
+      enabled = true
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { settings: { matrix: [[2]], enabled: false }, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [settings]
+      matrix = [
+        [
+          2,
+        ],
+      ] # matrix note
+      enabled = false
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);
@@ -8081,14 +8371,20 @@ describe('commented multiline array edge cases', () => {
   });
 
   test('should correctly empty a commented multiline array', () => {
-    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
-    const result = patch(src, { arr: [] });
-    // Should produce valid TOML, not mangled output
-    expect(() => parse(result)).not.toThrow();
-    // Should contain the key with an empty array
-    expect(result).toContain('arr');
-    expect(result).toContain('[');
-    expect(result).toContain(']');
+    const src = dedent`
+      arr = [
+        1, # one
+        2, # two
+      ]
+    ` + '\n';
+    const updated = { arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      arr = [
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
   });
 
 });

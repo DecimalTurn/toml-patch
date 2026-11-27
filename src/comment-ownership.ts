@@ -136,6 +136,18 @@ export interface Group {
   endLine: number;
 }
 
+function extendNodeLocToGroup(node: TreeNode, group: Group): void {
+  let end = node.loc.end;
+  for (const item of group.items) {
+    if (item.loc.end.line > end.line ||
+        (item.loc.end.line === end.line && item.loc.end.column > end.column)) {
+      end = item.loc.end;
+    }
+  }
+  node.loc.start = clonePosition(group.items[0].loc.start);
+  node.loc.end = clonePosition(end);
+}
+
 function getMemberKey(member: TreeNode): string | undefined {
   if (isKeyValue(member)) return member.key.value[0];
   if (isTable(member) || isTableArray(member)) return member.key.item.value[0];
@@ -543,8 +555,7 @@ export function removeMember(root: Root, parent: TreeNode, member: TreeNode): vo
         }
 
         if (comments.length) {
-          member.loc.start = group.items[0].loc.start;
-          member.loc.end = last(group.items)!.loc.end;
+          extendNodeLocToGroup(member, group);
         }
 
         remove(root, parent, member, hostContainer.items as TreeNode[]);
@@ -716,8 +727,7 @@ export function moveInlineElement(root: Root, parent: TreeNode, node: TreeNode, 
             // matters for a leading, separate-line comment; a no-op for a
             // same-line trailing one, since that doesn't change the line
             // count (mirrors removeMember's identical trick).
-            node.loc.start = clonePosition(group.items[0].loc.start);
-            node.loc.end = clonePosition(last(group.items)!.loc.end);
+            extendNodeLocToGroup(node, group);
           }
         }
 
