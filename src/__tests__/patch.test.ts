@@ -186,6 +186,88 @@ describe('comments while emptying inline arrays', () => {
     ` + '\n');
     expect(parse(result)).toEqual(updated);
   });
+
+  test('should preserve a quoted dotted-key comment beside its child table', () => {
+    const src = dedent`
+      service."odd.name".tags = [] # tag note
+
+      [service."odd.name".settings] # settings header
+      enabled = true
+    ` + '\n';
+    const updated = { service: { 'odd.name': { tags: [], settings: { enabled: false } } } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      service."odd.name".tags = [] # tag note
+
+      [service."odd.name".settings] # settings header
+      enabled = false
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should keep comments scoped to repeated table-array entries', () => {
+    const src = dedent`
+      [[servers]]
+      name = "first"
+      tags = [] # first tags
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      tags = [] # second tags
+      [servers.meta]
+      enabled = false
+    ` + '\n';
+    const updated = {
+      servers: [
+        { name: 'first', tags: [], meta: { enabled: true } },
+        { name: 'second', tags: [], meta: { enabled: true } }
+      ]
+    };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [[servers]]
+      name = "first"
+      tags = [] # first tags
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      tags = [] # second tags
+      [servers.meta]
+      enabled = true
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should remove nested-array comments but keep section comments when emptying it', () => {
+    const src = dedent`
+      matrix = [
+        [
+          1, # inner first
+        ],
+        [
+          2, # inner second
+        ],
+      ] # outer note
+
+      [after] # header note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+      ] # outer note
+
+      [after] # header note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
 });
 
 test('should remove element from inline array', () => {
