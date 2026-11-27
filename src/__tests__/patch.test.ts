@@ -268,6 +268,109 @@ describe('comments while emptying inline arrays', () => {
     ` + '\n');
     expect(parse(result)).toEqual(updated);
   });
+
+  test('should preserve following sections when removing one commented nested array', () => {
+    const src = dedent`
+      matrix = [
+        [
+          1, # remove note
+        ],
+        [
+          2,
+        ],
+      ] # matrix note
+
+      [after] # section note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [[2]], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+        [
+          2,
+        ],
+      ] # matrix note
+
+      [after] # section note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should account for closing brackets after a nested-array comment', () => {
+    const src = dedent`
+      matrix = [
+        [
+          [
+            1, # remove note
+          ],
+          [
+            2,
+          ],
+        ],
+        [
+          [
+            3,
+          ],
+        ],
+      ] # matrix note
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { matrix: [[[3]]], after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = [
+        [
+          [
+            3,
+          ],
+        ],
+      ] # matrix note
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve table offsets when removing one commented nested array', () => {
+    const src = dedent`
+      [settings]
+      matrix = [
+        [
+          1, # remove note
+        ],
+        [
+          2,
+        ],
+      ] # matrix note
+      enabled = true
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { settings: { matrix: [[2]], enabled: false }, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [settings]
+      matrix = [
+        [
+          2,
+        ],
+      ] # matrix note
+      enabled = false
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
 });
 
 test('should remove element from inline array', () => {
