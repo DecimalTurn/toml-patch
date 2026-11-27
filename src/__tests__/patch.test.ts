@@ -83,6 +83,58 @@ test('should preserve trailing comment on single-line inline table when deleting
   `);
 });
 
+describe('trailing comments on top-level empty arrays', () => {
+  test('should preserve the comment when another value changes', () => {
+    const src = dedent`
+      a = 1
+      tags = [] # none yet
+    ` + '\n';
+    const updated = { a: 2, tags: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 2
+      tags = [] # none yet
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when another key is added', () => {
+    const src = dedent`
+      a = 1
+      tags = [] # none yet
+    ` + '\n';
+    const updated = { a: 1, tags: [], b: 2 };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 1
+      tags = [] # none yet
+      b = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when a table value changes', () => {
+    const src = dedent`
+      tags = [] # none yet
+
+      [t]
+      a = 1
+    ` + '\n';
+    const updated = { tags: [], t: { a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      tags = [] # none yet
+
+      [t]
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);
@@ -8081,14 +8133,20 @@ describe('commented multiline array edge cases', () => {
   });
 
   test('should correctly empty a commented multiline array', () => {
-    const src = 'arr = [\n  1, # one\n  2, # two\n]\n';
-    const result = patch(src, { arr: [] });
-    // Should produce valid TOML, not mangled output
-    expect(() => parse(result)).not.toThrow();
-    // Should contain the key with an empty array
-    expect(result).toContain('arr');
-    expect(result).toContain('[');
-    expect(result).toContain(']');
+    const src = dedent`
+      arr = [
+        1, # one
+        2, # two
+      ]
+    ` + '\n';
+    const updated = { arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      arr = [
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
   });
 
 });
