@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.4] - 2026-11-27
+
 ### Fixed
 
 - Patching: preserve comments after a root-level empty array when another value changes. ([#342])
