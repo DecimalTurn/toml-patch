@@ -135,6 +135,59 @@ describe('trailing comments on top-level empty arrays', () => {
   });
 });
 
+describe('comments while emptying inline arrays', () => {
+  test('should preserve a trailing comment in a table when a sibling value changes', () => {
+    const src = dedent`
+      [t]
+      tags = [] # none yet
+      a = 1
+    ` + '\n';
+    const updated = { t: { tags: [], a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [t]
+      tags = [] # none yet
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve another empty array comment when emptying a commented array', () => {
+    const src = dedent`
+      tags = [] # keep this
+      arr = [
+        1, # remove with the element
+      ]
+    ` + '\n';
+    const updated = { tags: [], arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      tags = [] # keep this
+      arr = [
+      ]
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve a trailing comment after the closing bracket when emptying an array', () => {
+    const src = dedent`
+      arr = [
+        1, # inside the array
+      ] # after the array
+    ` + '\n';
+    const updated = { arr: [] };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      arr = [
+      ] # after the array
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
 test('should remove element from inline array', () => {
   const value = parse(example);
   value.database.ports.splice(1, 1);
