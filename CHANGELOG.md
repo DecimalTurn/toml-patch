@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Parsing: reject redefining a date value as a table, either with dotted keys (`released = 1979-05-27` followed by `released.note = "first"`) or with a `[released.notes]` / `[[released.notes]]` header. This is invalid TOML, and the extra keys were silently dropped from the result. ([#PR])
+- Parsing: reject redefining a date value as a table, either with dotted keys (`released = 1979-05-27` followed by `released.note = "first"`) or with a `[released.notes]` / `[[released.notes]]` header. This is invalid TOML, and the extra keys were silently dropped from the result. ([#344])
 
 ## [3.3.4] - 2026-11-27
 
@@ -550,6 +550,7 @@ This first forked version from [timhall/toml-patch](https://github.com/timhall/t
 [#333]: https://github.com/DecimalTurn/toml-patch/pull/333
 [#335]: https://github.com/DecimalTurn/toml-patch/issues/335
 [#342]: https://github.com/DecimalTurn/toml-patch/issues/342
+[#344]: https://github.com/DecimalTurn/toml-patch/pull/344
 [0e66e68]: https://github.com/DecimalTurn/toml-patch/commit/0e66e68cbf42a07bc44445e46c3ea7bea97f95c1
 [f97d571]: https://github.com/DecimalTurn/toml-patch/commit/f97d57194952b6603f0fcd686c32d3ae52a2c903
 [27a02a7]: https://github.com/DecimalTurn/toml-patch/commit/27a02a746533d82026fe6f1fb6771f8e1ba5ac27
