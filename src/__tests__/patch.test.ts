@@ -135,6 +135,292 @@ describe('trailing comments on top-level empty arrays', () => {
   });
 });
 
+describe('trailing comments on top-level empty inline tables', () => {
+  test('should preserve the comment when another value changes', () => {
+    const src = dedent`
+      a = 1
+      options = {} # none yet
+    ` + '\n';
+    const updated = { a: 2, options: {} };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 2
+      options = {} # none yet
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when another key is added', () => {
+    const src = dedent`
+      a = 1
+      options = {} # none yet
+    ` + '\n';
+    const updated = { a: 1, options: {}, b: 2 };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      a = 1
+      options = {} # none yet
+      b = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve the comment when a table value changes', () => {
+    const src = dedent`
+      options = {} # none yet
+
+      [t]
+      a = 1
+    ` + '\n';
+    const updated = { options: {}, t: { a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      options = {} # none yet
+
+      [t]
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
+describe('comments while emptying inline tables', () => {
+  test('should preserve a trailing comment in a table when a sibling value changes', () => {
+    const src = dedent`
+      [t]
+      options = {} # none yet
+      a = 1
+    ` + '\n';
+    const updated = { t: { options: {}, a: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [t]
+      options = {} # none yet
+      a = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve another empty table comment when emptying a commented table', () => {
+    const src = dedent`
+      options = {} # keep this
+      details = {
+        only = 1, # remove with the key
+      }
+    ` + '\n';
+    const updated = { options: {}, details: {} };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      options = {} # keep this
+      details = {
+      }
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve a trailing comment after the closing brace when emptying a table', () => {
+    const src = dedent`
+      details = {
+        only = 1,
+      } # after the table
+    ` + '\n';
+    const updated = { details: {} };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      details = {
+      } # after the table
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve a quoted dotted-key comment beside its child table', () => {
+    const src = dedent`
+      service."odd.name".options = {} # options note
+
+      [service."odd.name".settings] # settings header
+      enabled = true
+    ` + '\n';
+    const updated = { service: { 'odd.name': { options: {}, settings: { enabled: false } } } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      service."odd.name".options = {} # options note
+
+      [service."odd.name".settings] # settings header
+      enabled = false
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should keep comments scoped to repeated table-array entries', () => {
+    const src = dedent`
+      [[servers]]
+      name = "first"
+      options = {} # first options
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      options = {} # second options
+      [servers.meta]
+      enabled = false
+    ` + '\n';
+    const updated = {
+      servers: [
+        { name: 'first', options: {}, meta: { enabled: true } },
+        { name: 'second', options: {}, meta: { enabled: true } }
+      ]
+    };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [[servers]]
+      name = "first"
+      options = {} # first options
+      [servers.meta]
+      enabled = true
+      [[servers]]
+      name = "second"
+      options = {} # second options
+      [servers.meta]
+      enabled = true
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should remove nested-table comments but keep section comments when emptying it', () => {
+    const src = dedent`
+      matrix = {
+        first = {
+          value = 1, # inner first
+        },
+        second = {
+          value = 2, # inner second
+        },
+      } # outer note
+
+      [after] # header note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: {}, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = {
+      } # outer note
+
+      [after] # header note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve following sections when removing one commented nested table', () => {
+    const src = dedent`
+      matrix = {
+        first = {
+          value = 1, # remove note
+        },
+        second = {
+          value = 2,
+        },
+      } # matrix note
+
+      [after] # section note
+      value = 1
+    ` + '\n';
+    const updated = { matrix: { second: { value: 2 } }, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = {
+        second = {
+          value = 2,
+        },
+      } # matrix note
+
+      [after] # section note
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should account for closing braces after a nested-table comment', () => {
+    const src = dedent`
+      matrix = {
+        outer = {
+          first = {
+            value = 1, # remove note
+          },
+          second = {
+            value = 2,
+          },
+        },
+        keep = {
+          value = 3,
+        },
+      } # matrix note
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { matrix: { keep: { value: 3 } }, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      matrix = {
+        keep = {
+          value = 3,
+        },
+      } # matrix note
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+
+  test('should preserve table offsets when removing one commented nested table', () => {
+    const src = dedent`
+      [settings]
+      matrix = {
+        first = {
+          value = 1, # remove note
+        },
+        second = {
+          value = 2,
+        },
+      } # matrix note
+      enabled = true
+
+      [after]
+      value = 1
+    ` + '\n';
+    const updated = { settings: { matrix: { second: { value: 2 } }, enabled: false }, after: { value: 2 } };
+    const result = patch(src, updated);
+
+    expect(result).toEqual(dedent`
+      [settings]
+      matrix = {
+        second = {
+          value = 2,
+        },
+      } # matrix note
+      enabled = false
+
+      [after]
+      value = 2
+    ` + '\n');
+    expect(parse(result)).toEqual(updated);
+  });
+});
+
 describe('comments while emptying inline arrays', () => {
   test('should preserve a trailing comment in a table when a sibling value changes', () => {
     const src = dedent`
