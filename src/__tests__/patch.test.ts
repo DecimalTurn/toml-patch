@@ -5687,6 +5687,62 @@ describe('sub-table replacement known issues', () => {
       expect(parse(patched)).toEqual(updated);
     });
 
+    test('replaces a root table defined only by a descendant header with an array', () => {
+      const existing = dedent`
+        [config.logging]
+        level = 1
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.config = ['default'];
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        config = [ "default" ]
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a root table defined only by a descendant header with a new table', () => {
+      const existing = dedent`
+        [config.logging]
+        level = 1
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.config = { limits: { max: 1 } };
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [config]
+        limits = { max = 1 }
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a dotted-key table inside an explicit table with an array', () => {
+      const existing = dedent`
+        [app.server]
+        config.tls.mode = "strict"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.app.server.config = ['strict', 1];
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [app.server]
+        config = [ "strict", 1 ]
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
     test('deletes dotted and header descendants from the first AOT entry only', () => {
       const existing = dedent`
         [[fruit]]
