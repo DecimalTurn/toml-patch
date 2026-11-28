@@ -16,6 +16,7 @@ import { parse } from '../';
 import { patch } from '../patch-lite-entry';
 import { PatchLiteError } from '../diff-lite';
 import { deepEqual } from './fuzz-patch';
+import { crossParserMismatch } from './fuzz-cross-parser';
 import { stableStringify } from '../utils';
 import { DateFormatHelper } from '../date-format';
 
@@ -24,7 +25,7 @@ export type LitePath = Array<string | number>;
 export interface PatchLiteFuzzResult {
   seed: number;
   mutations: number;
-  status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'unstable' | 'no-rejection' | 'wrong-error' | 'error';
+  status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'cross-parser-mismatch' | 'unstable' | 'no-rejection' | 'wrong-error' | 'error';
   error?: string;
   originalToml?: string;
   patchedToml?: string;
@@ -197,6 +198,12 @@ export function fuzzOneLite(seed: number, mutationCount: number): PatchLiteFuzzR
       return result;
     }
 
+    // Checked before editing, because the edits below mutate `original` in place.
+    const sourceMismatch = crossParserMismatch(source, original);
+    if (sourceMismatch) {
+      return failed({ ...result, originalToml: source }, 'cross-parser-mismatch', `source: ${sourceMismatch}`);
+    }
+
     const leaves = collectEditableLeaves(original);
     const dateLeaves = collectDateLeaves(original);
     if (leaves.length === 0 && dateLeaves.length === 0) return result;
@@ -255,6 +262,15 @@ export function fuzzOneLite(seed: number, mutationCount: number): PatchLiteFuzzR
         { ...result, ...context, patchedToml: patched, reParsedObj: reParsed },
         'roundtrip-mismatch',
         'Objects differ after patch-lite round-trip'
+      );
+    }
+
+    const outputMismatch = crossParserMismatch(patched, reParsed);
+    if (outputMismatch) {
+      return failed(
+        { ...result, ...context, patchedToml: patched, reParsedObj: reParsed },
+        'cross-parser-mismatch',
+        `output: ${outputMismatch}`
       );
     }
 

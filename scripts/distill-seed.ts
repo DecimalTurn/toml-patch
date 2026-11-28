@@ -32,6 +32,11 @@ const api = await importFromTarget('src/index.ts');
 const fuzz2 = variant === 2 ? await importFromTarget('src/__tests__/fuzz-patch2.ts') : undefined;
 const fuzz3 = variant === 3 ? await importFromTarget('src/__tests__/fuzz-patch3.ts') : undefined;
 const fuzz4 = variant === 4 ? await importFromTarget('src/__tests__/fuzz-patch4.ts') : undefined;
+// Older targets predate the cross-parser check; without it the distiller
+// classifies seeds the way those targets' harnesses did.
+const crossParser = await importFromTarget('src/__tests__/fuzz-cross-parser.ts').catch(() => undefined);
+const crossParserMismatch: ((toml: string, ours: unknown) => string | undefined) | undefined =
+  crossParser?.crossParserMismatch;
 const { randomToml, SeededRandom } = randomizer;
 const { parse, patch } = api;
 const { generateMutation, applyMutation, deepClone, randomTomlFormat } = fuzz;
@@ -145,6 +150,8 @@ function failureStatus(source: string, testMutations: Mutation[] = mutations): s
   } catch {
     return 'invalid-source';
   }
+  // Mirror the harness, which checks the source against smol-toml first.
+  if (crossParserMismatch?.(source, parse(source))) return 'cross-parser-mismatch';
   try {
     for (const mutation of testMutations) {
       if (!canReplay(object, mutation)) return 'invalid-mutations';
@@ -161,9 +168,10 @@ function failureStatus(source: string, testMutations: Mutation[] = mutations): s
     } catch {
       return 'roundtrip-mismatch';
     }
-    return JSON.stringify(normalize(object)) === JSON.stringify(normalize(reparsed))
-      ? 'ok'
-      : 'roundtrip-mismatch';
+    if (JSON.stringify(normalize(object)) !== JSON.stringify(normalize(reparsed))) {
+      return 'roundtrip-mismatch';
+    }
+    return crossParserMismatch?.(result, reparsed) ? 'cross-parser-mismatch' : 'ok';
   } catch {
     return 'patch-fail';
   }

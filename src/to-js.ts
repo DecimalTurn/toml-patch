@@ -340,7 +340,7 @@ function validateKey(
         if (node.kind === 'inline') throw new Error(`Cannot extend inline table at ${name}`);
         if (node.kind === 'array') throw new Error(`Cannot add to static array at ${name}`);
         if (node.kind === 'table-array') throw new Error(`Cannot traverse Array of Tables at ${name}`);
-        if (node.kind === 'value') throw new Error(`Value already defined for ${name}`);
+        if (node.kind === 'value' || node.kind === 'date') throw new Error(`Value already defined for ${name}`);
       }
       for (let index = prefix.length + 1; index <= fullPath.length; index++) {
         const path = fullPath.slice(0, index);
@@ -366,7 +366,7 @@ function validateKey(
     const name = joinKey(path);
     if (node.kind === 'inline') throw new Error(`Cannot extend inline table at ${name}`);
     if (node.kind === 'array') throw new Error(`Cannot add to static array at ${name}`);
-    if (node.kind === 'value') throw new Error(`Value already defined for ${name}`);
+    if (node.kind === 'value' || node.kind === 'date') throw new Error(`Value already defined for ${name}`);
   }
 
   if (target.kind === 'inline') throw new Error(`Cannot extend inline table at ${fullName}`);

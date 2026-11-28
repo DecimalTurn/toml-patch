@@ -385,30 +385,6 @@ test('collapsing a dotted key whose prefix has a section sibling (seed 31662)', 
 });
 
 
-// FIXME(seed 32801): collapsing `""` (a Date that also owns a dotted-key
-// child `"".x`, the parser attaches the child onto the Date) to a scalar
-// string left the `"".x` key-value in place, re-defining `""` on re-parse
-// ("Value already defined").  A single-segment key collapsing to a leaf must
-// drop sibling keys/sections that extend its prefix.  Fixed by sweeping those
-// siblings whenever the new value is a scalar.
-test('collapsing a Date key that owns a dotted-key child (seed 32801)', () => {
-  const src = dedent`
-      [[a]]
-      "" = 1998-03-05T13:50:08Z
-      "".x = 1
-    `;
-
-  const obj = parse(src) as any;
-  obj.a[0][""] = "str";
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [[a]]
-    "" = "str"
-  `);
-});
-
 
 // FIXME(seed 35943): removing one element from a multiline array that holds
 // duplicate scalar values ABOVE a nested multiline array made the diff resolve
@@ -477,23 +453,6 @@ test('regression for fuzz seed 37465', () => {
     `);
 });
 
-
-test('regression for fuzz seed 39363', () => {
-  const src = dedent`
-    "" = 11:43:08
-    ["".g]
-    b = 1
-  `;
-
-  const obj = parse(src) as any;
-  obj[""] = ["h"];
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    "" = [ "h" ]
-    `);
-});
 
 
 test('regression for fuzz seed 40181', () => {
@@ -800,41 +759,6 @@ test('regression for fuzz seed 78079', () => {
     [""]
     b = 1
     i3asc2k3y = "X"
-    `);
-});
-
-test('regression for fuzz seed 79938', () => {
-  const src = dedent`
-    q = 2019-06-13T09:28:26
-    q."X,O{&v6D".kwkxclp2d = true
-
-    [q."Zr%@lBr"]
-    lidz78h = 1
-  `;
-
-  const obj = parse(src) as any;
-  delete obj.q;
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent``);
-});
-
-test('regression for fuzz seed 80004', () => {
-  const src = dedent`
-    [a.b]
-    "" = 11:17:13.346128
-    "".x.y = "v"
-  `;
-
-  const obj = parse(src) as any;
-  obj.a.b[""] = { k60: 1 };
-
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [a.b]
-    "" = { k60 = 1 }
     `);
 });
 
@@ -1965,38 +1889,6 @@ test('collapsing a dotted key to an array beside a section sibling (seed 31662 a
   `);
 });
 
-test('collapsing a Date key with a child into an inline table (seed 32801 alt.1)', () => {
-  const src = dedent`
-    [[a]]
-    "" = 1998-03-05T13:50:08Z
-    "".x = 1
-  `;
-  const obj = parse(src) as any;
-  obj.a[0][""] = { nested: { value: 1 } };
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [[a]]
-    "" = { nested = { value = 1 } }
-  `);
-});
-
-test('collapsing a Date key with a child into an array (seed 32801 alt.2)', () => {
-  const src = dedent`
-    [[a]]
-    "" = 1998-03-05T13:50:08Z
-    "".x = 1
-  `;
-  const obj = parse(src) as any;
-  obj.a[0][""] = ["str", 2];
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [[a]]
-    "" = [ "str", 2 ]
-  `);
-});
-
 test('removing a duplicate after a nested multiline array (seed 35943 alt.1)', () => {
   const src = dedent`
     [[g--]]
@@ -2076,37 +1968,6 @@ test('collapsing an AOT child to an array while its parent table survives (seed 
     [n]
     c = 1
     a = [ 42, false ]
-  `);
-});
-
-test('collapsing an empty key to an inline object with a surviving section (seed 39363 alt.1)', () => {
-  const src = dedent`
-    "" = 11:43:08
-    ["".g]
-    b = 1
-  `;
-  const obj = parse(src) as any;
-  obj[""] = { h: { value: 1 } };
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [""]
-    h = { value = 1 }
-  `);
-});
-
-test('collapsing an empty key to a mixed array with a surviving section (seed 39363 alt.2)', () => {
-  const src = dedent`
-    "" = 11:43:08
-    ["".g]
-    b = 1
-  `;
-  const obj = parse(src) as any;
-  obj[""] = ["h", { value: true }];
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    "" = [ "h", { value = true } ]
   `);
 });
 
@@ -2633,73 +2494,6 @@ test('deleting a section child while adding a nested parent value (seed 78079 al
     [""]
     b = 1
     c = { nested = true }
-  `);
-});
-
-test('collapsing a dated root key with a quoted dotted child to an object (seed 79938 alt.1)', () => {
-  const src = dedent`
-    q = 2019-06-13T09:28:26
-    q."X,O{&v6D".kwkxclp2d = true
-
-    [q."Zr%@lBr"]
-    lidz78h = 1
-  `;
-  const obj = parse(src) as any;
-  obj.q = { replacement: { value: false } };
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [q]
-    replacement = { value = false }
-  `);
-});
-
-test('collapsing a dated root key with a quoted dotted child to an array (seed 79938 alt.2)', () => {
-  const src = dedent`
-    q = 2019-06-13T09:28:26
-    q."X,O{&v6D".kwkxclp2d = true
-
-    [q."Zr%@lBr"]
-    lidz78h = 1
-  `;
-  const obj = parse(src) as any;
-  obj.q = ["replacement", false];
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    q = [ "replacement", false ]
-  `);
-});
-
-test('collapsing an empty-key Date with a child to an array (seed 80004 alt.1)', () => {
-  const src = dedent`
-    [a.b]
-    "" = 11:17:13.346128
-    "".x.y = "v"
-  `;
-  const obj = parse(src) as any;
-  obj.a.b[""] = ["v", 1];
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [a.b]
-    "" = [ "v", 1 ]
-  `);
-});
-
-test('collapsing an empty-key Date with a child to a nested object (seed 80004 alt.2)', () => {
-  const src = dedent`
-    [a.b]
-    "" = 11:17:13.346128
-    "".x.y = "v"
-  `;
-  const obj = parse(src) as any;
-  obj.a.b[""] = { x: { y: "changed" }, z: true };
-  const result = patch(src, obj);
-  expect(parse(result)).toEqual(obj);
-  expect(result).toEqual(dedent`
-    [a.b]
-    "" = { x = { y = "changed" }, z = true }
   `);
 });
 

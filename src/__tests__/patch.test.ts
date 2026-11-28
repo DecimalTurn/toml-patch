@@ -5659,21 +5659,87 @@ describe('sub-table replacement known issues', () => {
       expect(parse(patched)).toEqual(updated);
     });
 
-    test('deleting a scalar removes its dotted and header descendants', () => {
+    test('deletes a root table defined only by dotted keys and descendant headers', () => {
       const existing = dedent`
-        value = 2019-06-13T09:28:26
+        name = "demo"
         value.child.enabled = true
+        value.label = "primary"
 
         [value.settings]
         mode = "old"
+
+        [other]
+        keep = 1
       ` + '\n';
 
-      const updated = parse(existing) as { value?: unknown };
+      const updated = parse(existing);
       delete updated.value;
 
       const patched = patch(existing, updated);
+      const expected = dedent`
+        name = "demo"
 
-      expect(patched).toBe('\n');
+        [other]
+        keep = 1
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a root table defined only by a descendant header with an array', () => {
+      const existing = dedent`
+        [config.logging]
+        level = 1
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.config = ['default'];
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        config = [ "default" ]
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a root table defined only by a descendant header with a new table', () => {
+      const existing = dedent`
+        [config.logging]
+        level = 1
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.config = { limits: { max: 1 } };
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [config]
+        limits = { max = 1 }
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
+    test('replaces a dotted-key table inside an explicit table with an array', () => {
+      const existing = dedent`
+        [app.server]
+        config.tls.mode = "strict"
+      ` + '\n';
+
+      const updated = parse(existing);
+      updated.app.server.config = ['strict', 1];
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        [app.server]
+        config = [ "strict", 1 ]
+      ` + '\n';
+
+      expect(patched).toBe(expected);
       expect(parse(patched)).toEqual(updated);
     });
 

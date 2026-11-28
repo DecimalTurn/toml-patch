@@ -11,6 +11,7 @@ import { randomToml, SeededRandom } from './randomizer';
 import { parse, patch, TomlFormat } from '../';
 import { NodeType } from '../cst';
 import { inspect } from 'util';
+import { crossParserMismatch } from './fuzz-cross-parser';
 
 // ─── Mutation helpers ────────────────────────────────────────────────────
 
@@ -540,7 +541,7 @@ export interface FuzzConfig {
 export interface PatchFuzzResult {
   seed: number;
   mutations: number;
-  status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'error';
+  status: 'ok' | 'patch-fail' | 'roundtrip-mismatch' | 'cross-parser-mismatch' | 'error';
   error?: string;
   originalToml?: string;
   patchedToml?: string;
@@ -705,6 +706,18 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
       return runResultMetadata(baseResult, config, generated);
     }
 
+    // A source smol-toml rejects or reads differently points at a parser
+    // that is too lenient, before patch() is even involved.
+    const sourceMismatch = crossParserMismatch(source, original);
+    if (sourceMismatch) {
+      return runResultMetadata({
+        ...baseResult,
+        status: 'cross-parser-mismatch',
+        error: `source: ${sourceMismatch}`,
+        originalToml: source
+      }, config, generated);
+    }
+
     const updated = deepClone(original) as any;
     const format = (config.generateFormat ?? createFormatGenerator(false, false, false))(context);
     const formatDesc = describeFormat(format);
@@ -758,6 +771,22 @@ export function runFuzz(seed: number, config: FuzzConfig = {}): PatchFuzzResult 
         ...result,
         status: 'roundtrip-mismatch',
         error: 'Objects differ after patch round-trip',
+        originalToml: source,
+        patchedToml,
+        modifiedObj: mutationRun.updated,
+        reParsedObj: reParsed
+      };
+    }
+
+    // The round-trip above only proves toml-patch reads its own output back.
+    // An independent parser catches output that is invalid TOML but that
+    // toml-patch's parser happens to accept.
+    const outputMismatch = crossParserMismatch(patchedToml, reParsed);
+    if (outputMismatch) {
+      return {
+        ...result,
+        status: 'cross-parser-mismatch',
+        error: `output: ${outputMismatch}`,
         originalToml: source,
         patchedToml,
         modifiedObj: mutationRun.updated,
