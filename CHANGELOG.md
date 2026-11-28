@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Parsing: reject redefining a date value as a table, either with dotted keys (`released = 1979-05-27` followed by `released.note = "first"`) or with a `[released.notes]` / `[[released.notes]]` header. This is invalid TOML, and the extra keys were silently dropped from the result. ([#PR])
+
 ## [3.3.4] - 2026-11-27
 
 ### Fixed
