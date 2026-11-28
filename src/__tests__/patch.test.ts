@@ -5659,6 +5659,34 @@ describe('sub-table replacement known issues', () => {
       expect(parse(patched)).toEqual(updated);
     });
 
+    test('deletes a root table defined only by dotted keys and descendant headers', () => {
+      const existing = dedent`
+        name = "demo"
+        value.child.enabled = true
+        value.label = "primary"
+
+        [value.settings]
+        mode = "old"
+
+        [other]
+        keep = 1
+      ` + '\n';
+
+      const updated = parse(existing);
+      delete updated.value;
+
+      const patched = patch(existing, updated);
+      const expected = dedent`
+        name = "demo"
+
+        [other]
+        keep = 1
+      ` + '\n';
+
+      expect(patched).toBe(expected);
+      expect(parse(patched)).toEqual(updated);
+    });
+
     test('deletes dotted and header descendants from the first AOT entry only', () => {
       const existing = dedent`
         [[fruit]]
