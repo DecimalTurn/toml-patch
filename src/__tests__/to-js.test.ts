@@ -245,6 +245,64 @@ describe('validation', () => {
     expect((toJS(parseTOML('d = 1979-05-27')).d as Date).toISOString()).toBe('1979-05-27');
   });
 
+  describe('rejects redefining a date value as a table', () => {
+    // Every date kind is a JS Date at runtime, so a check that only looked for
+    // scalar values let these through and stored the extra keys on the Date.
+    test.each([
+      ['offset datetime', '1979-05-27T07:32:00Z'],
+      ['local datetime', '1979-05-27T07:32:00'],
+      ['local date', '1979-05-27'],
+      ['local time', '07:32:00']
+    ])('%s extended with a dotted key', (_kind, date) => {
+      const src = `
+        released = ${date}
+        released.note = "first"
+      `;
+
+      expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for released/);
+    });
+
+    test('nested date extended with a dotted key', () => {
+      const src = `
+        package.released = 1979-05-27
+        package.released.note = "first"
+      `;
+
+      expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for package\.released/);
+    });
+
+    test('date extended by a sub-table header', () => {
+      const src = `
+        released = 1979-05-27
+        [released.notes]
+        text = "first"
+      `;
+
+      expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for released/);
+    });
+
+    test('date in a table extended by a sub-table header', () => {
+      const src = `
+        [package]
+        released = 1979-05-27
+        [package.released.notes]
+        text = "first"
+      `;
+
+      expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for package\.released/);
+    });
+
+    test('date extended by an array of tables header', () => {
+      const src = `
+        released = 1979-05-27
+        [[released.notes]]
+        text = "first"
+      `;
+
+      expect(() => toJS(parseTOML(src))).toThrow(/Value already defined for released/);
+    });
+  });
+
   test('rejects an array of tables when its implicit parent already has children', () => {
     const src = `
       [a.b]
