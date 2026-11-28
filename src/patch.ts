@@ -2430,22 +2430,6 @@ function applyChanges(
           }
         }
 
-        // A single-segment key whose value becomes a non-block-table while a
-        // sibling dotted-key or section still extends its prefix (e.g.
-        // `"" = <date>` next to `"".x = 1` collapsing to `"" = "str"`) must
-        // drop those siblings — neither a leaf, an array, nor an inline table
-        // can hold them, and leaving them in place re-defines the key on
-        // re-parse ("Value already defined" for scalars, fuzz seed 32801;
-        // "Cannot add to static array" for arrays, fuzz seed 39363; "Cannot
-        // extend inline table" for inline tables, fuzz seed 80004).  In this
-        // branch `replacement` is always a KeyValue, so its value can never be
-        // a block Table/TableArray — every value shape needs the sibling sweep.
-        if (!keyTruncated && isKeyValue(replacement)) {
-          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
-          }
-        }
-        
         preserveFormatting(existing.value, replacement.value, format.escapeSequenceUpperCase, format.minimumTimeDecimals ?? 0);
         if (containerParent) {
           preserveAlignedInlineCommentColumn(containerParent, existing, existing.value, replacement.value);
@@ -2521,16 +2505,6 @@ function applyChanges(
               }
             }
             removeDocumentItemsExtendingPath(original, change.path, existing);
-          }
-        }
-
-        // Single-segment key collapsing to a non-block-table with siblings
-        // extending its prefix (fuzz seeds 32801, 39363, 80004) — same as the
-        // isKeyValue/isKeyValue branch; every value shape in this branch
-        // (leaf, array, inline table) must drop prefix-extending siblings.
-        if (!keyTruncated && isKeyValue(replacement.item)) {
-          if (containerParent && (isTable(containerParent) || isDocument(containerParent) || isTableArray(containerParent))) {
-            removeSiblingsExtendingPrefix(original, containerParent as Table | Document | TableArray, existing.key.value, existing);
           }
         }
 
@@ -3500,37 +3474,6 @@ function applyChanges(
               removeMember(original, parent, sibling);
             }
             removeDocumentItemsExtendingPath(original, change.path, node);
-          }
-        }
-
-        // When a key at this path is removed outright (the path exactly
-        // matches the node's key), any sibling whose key EXTENDS this prefix
-        // (a longer dotted key or a [table]/[[array]] section) re-defines
-        // the key on re-parse.  E.g. `q = <date>` alongside `q."X".y = true`
-        // and `[q."Z"]` (a leniently-accepted collision) leaves those
-        // extensions behind when only `q = <date>` is removed, and the
-        // re-parse revives `q` as a table (fuzz seed 79938).  Drop them too.
-        if (removePrefixKv && nodeAbsolutePath && hasItems(parent)) {
-          const key = removePrefixKv.key.value;
-          const siblings = (parent as { items: TreeNode[] }).items;
-          const extending: TreeNode[] = [];
-          for (const sibling of siblings) {
-            if (sibling === node) continue;
-            const siblingKey = isKeyValue(sibling)
-              ? sibling.key.value
-              : isInlineItem(sibling) && isKeyValue(sibling.item)
-                ? sibling.item.key.value
-                : isTable(sibling) || isTableArray(sibling)
-                  ? sibling.key.item.value
-                  : undefined;
-            if (siblingKey
-                && siblingKey.length > key.length
-                && arraysEqual(siblingKey.slice(0, key.length), key)) {
-              extending.push(sibling);
-            }
-          }
-          for (const sibling of extending) {
-            removeMember(original, parent, sibling);
           }
         }
 
@@ -5593,39 +5536,6 @@ function stripAotEntryIndices(original: Document, jsPath: Path): Path {
     cstPath.push(seg);
   }
   return cstPath;
-}
-
-/**
- * Removes sibling key-values and table/table-array sections whose key extends
- * `prefix` (i.e. `prefix` is a strict prefix of the sibling's key) from
- * `container`'s items, leaving `keep` untouched.  Used when a key collapses to
- * a scalar: any dotted-key or section that still nests under it would re-define
- * the key on re-parse ("Value already defined").
- *
- * Iterates a snapshot of the items because `removeMember` splices the live
- * array (fuzz seed 31662).
- */
-function removeSiblingsExtendingPrefix(
-  original: Document,
-  container: Table | Document | TableArray,
-  prefix: Array<string | number>,
-  keep: TreeNode
-): void {
-  const parentItems = [...container.items] as Block[];
-  for (let si = parentItems.length - 1; si >= 0; si--) {
-    const sibling = parentItems[si];
-    if (sibling === keep) continue;
-    const siblingKey = isKeyValue(sibling)
-      ? sibling.key.value
-      : isTable(sibling) || isTableArray(sibling)
-        ? sibling.key.item.value
-        : undefined;
-    if (siblingKey
-        && siblingKey.length > prefix.length
-        && arraysEqual(siblingKey.slice(0, prefix.length), prefix)) {
-      removeMember(original, container, sibling);
-    }
-  }
 }
 
 function removeDocumentItemsExtendingPath(document: Document, path: Path, keep: TreeNode): void {
