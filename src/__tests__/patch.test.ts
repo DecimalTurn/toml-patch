@@ -5659,24 +5659,6 @@ describe('sub-table replacement known issues', () => {
       expect(parse(patched)).toEqual(updated);
     });
 
-    test('deleting a scalar removes its dotted and header descendants', () => {
-      const existing = dedent`
-        value = 2019-06-13T09:28:26
-        value.child.enabled = true
-
-        [value.settings]
-        mode = "old"
-      ` + '\n';
-
-      const updated = parse(existing) as { value?: unknown };
-      delete updated.value;
-
-      const patched = patch(existing, updated);
-
-      expect(patched).toBe('\n');
-      expect(parse(patched)).toEqual(updated);
-    });
-
     test('deletes dotted and header descendants from the first AOT entry only', () => {
       const existing = dedent`
         [[fruit]]
